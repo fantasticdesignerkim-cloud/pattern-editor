@@ -1,0 +1,2715 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>문화식 원형 에디터</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,sans-serif;background:#fff;height:100vh;overflow:hidden;display:flex}
+.sidebar{width:220px;min-width:220px;height:100vh;background:#f7f7f4;border-right:1px solid #ddd;display:flex;flex-direction:column;overflow-y:auto;padding:12px 12px 60px;gap:8px;flex-shrink:0}
+.sidebar-title{font-weight:800;color:#185FA5;font-size:14px;padding-bottom:6px;border-bottom:1px solid #ddd}
+.sec{font-size:10px;font-weight:700;color:#888;margin-top:4px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.row label{font-size:12px;font-weight:700;color:#444}
+.row input[type=number]{width:72px;padding:5px 7px;border:1px solid #ccc;border-radius:7px;text-align:right;font-size:13px;background:#fff}
+.row input[type=number]:focus{outline:none;border-color:#185FA5}
+.row input[type=checkbox]{width:16px;height:16px;accent-color:#185FA5}
+.btn{border:0;border-radius:8px;background:#185FA5;color:#fff;font-weight:800;padding:8px;cursor:pointer;font-size:12px;width:100%}
+.btn:active{filter:brightness(.9)}
+hr{border:none;border-top:1px solid #eee;margin:2px 0}
+.canvas-wrap{flex:1;position:relative;overflow:hidden}
+svg#cv{width:100%;height:100%;touch-action:none;background:#fff;display:block}
+.sb{position:absolute;bottom:0;left:0;right:0;background:rgba(245,245,242,.95);border-top:1px solid #ddd;font-size:11px;color:#666;padding:4px 10px;white-space:nowrap;overflow:hidden}
+.grid-m{stroke:#f0f0ec;stroke-width:0.5}
+.grid-M{stroke:#e4e4de;stroke-width:0.9}
+.base{stroke:#888;stroke-width:0.9;fill:none}
+.pattern{stroke:#111;stroke-width:2.5;fill:none}
+.dep{stroke:#8a5cf6;stroke-width:0.9;stroke-dasharray:4,3;fill:none}
+.dim{stroke:#e07800;stroke-width:0.8;fill:none}
+.rBL{stroke:#a0c4e8;stroke-width:1;stroke-dasharray:6,3;fill:none}
+.rWL{stroke:#f0a888;stroke-width:1;stroke-dasharray:6,3;fill:none}
+.pt{fill:#185FA5;stroke:white;stroke-width:1.2}
+.pt-dep{fill:#8a5cf6;stroke:white;stroke-width:1.2}
+.pt-main{fill:#cc3333;stroke:white;stroke-width:1.2}
+.dart{stroke:#cc3333;stroke-width:1.4;fill:none}
+.dart-b{stroke:#0F6E56;stroke-width:1.4;fill:none}
+.dart-c{stroke:#185FA5;stroke-width:1.4;fill:none}
+.dart-d{stroke:#9933cc;stroke-width:1.4;fill:none}
+.dart-e{stroke:#ff8800;stroke-width:1.4;fill:none}
+.dart-f{stroke:#111;stroke-width:1.4;fill:none}
+.dart-guide{stroke:#aaa;stroke-width:.8;stroke-dasharray:4,3;fill:none}
+.row input[type=range]{width:80px;accent-color:#185FA5}
+.slv{font-size:11px;color:#185FA5;font-weight:700;min-width:28px;text-align:right}
+
+.sleeve-front-guide{stroke:#0F6E56;stroke-width:1.1;stroke-dasharray:6,4;fill:none;opacity:.68}
+.sleeve-back-guide{stroke:#185FA5;stroke-width:1.1;stroke-dasharray:6,4;fill:none;opacity:.68}
+.sleeve-guide-label{font-size:9px;fill:#666;font-weight:700}
+.sleeve-cap{stroke:#111;stroke-width:2.2;fill:none}
+.sleeve-sch-culture{stroke:#9933cc;stroke-width:1.1;stroke-dasharray:4,3;fill:none;opacity:.8}
+.sleeve-sch-reco{stroke:#e07800;stroke-width:1.1;stroke-dasharray:4,3;fill:none;opacity:.8}
+.sleeve-front-circ{stroke:#0F6E56;stroke-width:1.3;stroke-dasharray:5,3;fill:none;opacity:.85}
+.sleeve-front-circ-light{stroke:#0F6E56;stroke-width:.9;stroke-dasharray:2,3;fill:none;opacity:.45}
+.sleeve-back-circ{stroke:#185FA5;stroke-width:1.3;stroke-dasharray:5,3;fill:none;opacity:.85}
+.sleeve-back-circ-light{stroke:#185FA5;stroke-width:.9;stroke-dasharray:2,3;fill:none;opacity:.45}
+.sleeve-culture-aux{stroke:#9933cc;stroke-width:1.2;stroke-dasharray:4,3;fill:none;opacity:.9}
+.sleeve-culture-aux-point{fill:#9933cc;stroke:white;stroke-width:1.2}
+.sleeve-culture-aux-copy{stroke:#9933cc;stroke-width:1;stroke-dasharray:2,3;fill:none;opacity:.7}
+.sleeve-pattern-line{stroke:#111;stroke-width:2.4;fill:none}
+.sleeve-pattern-handle{stroke:#777;stroke-width:.8;stroke-dasharray:3,2;fill:none;opacity:.72}
+.sleeve-pattern-handle-pt{fill:#fff;stroke:#777;stroke-width:1}
+.sleeve-pattern-anchor{fill:#111;stroke:white;stroke-width:1.2}
+.mode-btn{border:0;border-radius:7px;background:#ddd;color:#333;font-weight:800;padding:6px;cursor:pointer;font-size:11px;flex:1}
+.mode-btn.active{background:#185FA5;color:#fff}
+
+.txt-dep{font-size:9px;fill:#8a5cf6;font-weight:700}
+.txt-dark{font-size:9px;fill:#333;font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-title">문화식 원형 에디터</div>
+
+  <div class="sec">실측 치수 (cm)</div>
+  <div class="row"><label>B 가슴둘레</label><input type="number" id="inpB" value="0" step="0.5" oninput="markDirty()"></div>
+  <div class="row"><label>W 허리둘레</label><input type="number" id="inpW" value="0" step="0.5" oninput="markDirty()"></div>
+  <div class="row"><label>BL 등길이</label><input type="number" id="inpBL" value="0" step="0.5" oninput="markDirty()"></div>
+  <div class="row"><label>소매길이</label><input type="number" id="inpSL" value="0" step="0.5" oninput="markDirty()"></div>
+  <div class="row"><label>소매단둘레</label><input type="number" id="inpHem" value="0" step="0.5" oninput="markDirty()"></div>
+  <div class="row"><button class="btn" id="btnGenerate" style="background:#0F6E56" onclick="generatePattern()">패턴 생성 / 다시 계산</button></div>
+  <div class="row" id="dirtyState" style="font-size:11px;color:#888">치수를 입력한 뒤 생성하세요</div>
+  <div class="row"><label>소매산 공식</label><select id="selCapFormula" onchange="render()" style="width:96px;padding:5px;border:1px solid #ccc;border-radius:7px;font-size:12px;background:#fff"><option value="culture" selected>문화식</option><option value="recommended">추천식</option></select></div>
+  <div class="row"><label>소매산 보정</label><input type="range" id="inpCapAdj" min="-3" max="3" step="0.1" value="0" oninput="render()"><span class="slv" id="capAdjVal">0.0</span></div>
+
+  <hr class="divider">
+  <div class="sec">다트</div>
+  <div class="row"><label>총량 (cm)</label><input type="number" id="inpDart" value="12.5" step="0.5" oninput="render()"></div>
+
+  <hr class="divider">
+  <div class="sec">표시 옵션</div>
+  <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="render()"></div>
+  <div class="row"><label>다트</label><input type="checkbox" id="chkDart" checked onchange="render()"></div>
+  <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="render()"></div>
+  <div class="row"><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="render()"></div>
+  <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" onchange="render()"></div>
+  <div class="row"><label>종속선</label><input type="checkbox" id="chkDep" onchange="render()"></div>
+
+  <hr class="divider">
+  <div class="sec">작업 모드</div>
+  <div class="row" style="gap:4px">
+    <button class="mode-btn active" id="modeAll" onclick="setWorkMode('all')">전체</button>
+    <button class="mode-btn" id="modeBody" onclick="setWorkMode('body')">몸판</button>
+    <button class="mode-btn" id="modeSleeve" onclick="setWorkMode('sleeve')">소매</button>
+  </div>
+  <div class="row" style="gap:4px">
+    <button class="btn" style="background:#777" onclick="undoEdit()">실행취소</button>
+    <button class="btn" style="background:#777" onclick="redoEdit()">다시실행</button>
+  </div>
+
+  <div class="row"><label>진동선 편집모드</label><button class="btn" id="btnArmEdit" style="background:#3399ff" onclick="toggleArmEdit()">편집 시작</button></div>
+  <div class="row"><label>네크라인 편집모드</label><button class="btn" id="btnNeckEdit" style="background:#aa44cc" onclick="toggleNeckEdit()">편집 시작</button></div>
+  <div class="row"><label>소매산 편집모드</label><button class="btn" id="btnSleeveEdit" style="background:#ff8800" onclick="toggleSleeveEdit()">편집 시작</button></div>
+  <div class="row"><label>곡선핸들 전체리셋</label><button class="btn" onclick="resetCurveHandles();render()">리셋</button></div>
+  <div class="row"><label>곡선 저장</label><button class="btn" style="background:#0F6E56" onclick="saveCurveData()">저장</button></div>
+  <div class="row"><label>마지막 저장선</label><button class="btn" style="background:#666" onclick="loadSavedCurveForCurrentMeasurements(true)">불러오기</button></div>
+  <div class="row"><label>데이터 내보내기</label><button class="btn" style="background:#9933cc" onclick="exportData()">JSON 다운로드</button></div>
+  <div class="row" id="saveCount" style="font-size:11px;color:#888">저장 0건</div>
+  <hr class="divider">
+  <button class="btn" onclick="resetView()">화면 초기화</button>
+</div>
+
+<div class="canvas-wrap">
+  <svg id="cv" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="sb" id="sb"></div>
+</div>
+
+<script>
+// 베지어 곡선 길이 계산 (수치적분)
+function bezierLen(pts, n=100){
+  let len=0, prev=pts[0];
+  for(let i=1;i<=n;i++){
+    const t=i/n, mt=1-t;
+    const x=mt*mt*mt*pts[0][0]+3*mt*mt*t*pts[1][0]+3*mt*t*t*pts[2][0]+t*t*t*pts[3][0];
+    const y=mt*mt*mt*pts[0][1]+3*mt*mt*t*pts[1][1]+3*mt*t*t*pts[2][1]+t*t*t*pts[3][1];
+    len+=Math.hypot(x-prev[0],y-prev[1]); prev=[x,y];
+  }
+  return len;
+}
+
+// ── 전역 좌표 변환 함수 ───────────────────────
+// 화면(px) → 패턴(cm) 좌표 변환
+function p2c_(sx, sy){ return [(sx-MX-viewX)/(SC*viewZ), (sy-MY-viewY)/(SC*viewZ)]; }
+// 마우스 이벤트 → 패턴 좌표
+function eventToPatternPoint(mv){
+  const r = svg.getBoundingClientRect();
+  return p2c_(mv.clientX - r.left, mv.clientY - r.top);
+}
+
+
+const state = {
+  armH:         null,  // 뒤진동선 핸들
+  fArmH:        null,  // 앞진동선 핸들
+  bNeckH:       null,  // 뒤목선 핸들
+  fNeckH:       null,  // 앞목선 핸들
+  sleeveH:      null,  // 소매산 패턴선 핸들
+  armEditMode:  false, // 진동선 편집 모드
+  neckEditMode: false, // 네크라인 편집 모드
+  sleeveEditMode:false, // 소매산 편집 모드
+  workMode:     "all", // all/body/sleeve
+  undoStack:    [],
+  redoStack:    [],
+  autoSaveTimer:null
+};
+
+"use strict";
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("cv");
+
+let SC=11, MX=80, MY=100, viewX=0, viewY=0, viewZ=1;
+let lastBodyMeasureKey = "";
+let lastSleeveMeasureKey = "";
+
+function resetBodyCurveHandles(){
+  state.armH = null;
+  state.fArmH = null;
+  state.bNeckH = null;
+  state.fNeckH = null;
+}
+function resetSleeveCurveHandles(){
+  state.sleeveH = null;
+}
+function resetCurveHandles(){
+  resetBodyCurveHandles();
+  resetSleeveCurveHandles();
+}
+
+function serializeEditState(){
+  return JSON.stringify({
+    armH: state.armH, fArmH: state.fArmH, bNeckH: state.bNeckH, fNeckH: state.fNeckH, sleeveH: state.sleeveH,
+    capFormula: document.getElementById("selCapFormula")?.value || "culture",
+    inputs: { SL:n("inpSL"), Hem:n("inpHem"), CapAdj:n("inpCapAdj") }
+  });
+}
+function applyEditSnapshot(snap){
+  if(!snap) return;
+  const s = typeof snap === "string" ? JSON.parse(snap) : snap;
+  state.armH=s.armH||null; state.fArmH=s.fArmH||null; state.bNeckH=s.bNeckH||null; state.fNeckH=s.fNeckH||null; state.sleeveH=s.sleeveH||null;
+  if(s.capFormula && document.getElementById("selCapFormula")) document.getElementById("selCapFormula").value=s.capFormula;
+  if(s.inputs){
+    if(document.getElementById("inpSL")) document.getElementById("inpSL").value=s.inputs.SL||n("inpSL");
+    if(document.getElementById("inpHem")) document.getElementById("inpHem").value=s.inputs.Hem||n("inpHem");
+    if(document.getElementById("inpCapAdj")) document.getElementById("inpCapAdj").value=s.inputs.CapAdj||0;
+  }
+}
+function pushUndoSnapshot(){
+  const snap = serializeEditState();
+  if(state.undoStack[state.undoStack.length-1] !== snap){
+    state.undoStack.push(snap);
+    if(state.undoStack.length>60) state.undoStack.shift();
+    state.redoStack.length=0;
+  }
+}
+function undoEdit(){
+  if(state.undoStack.length===0) return;
+  const cur = serializeEditState();
+  const prev = state.undoStack.pop();
+  state.redoStack.push(cur);
+  applyEditSnapshot(prev);
+  render();
+}
+function redoEdit(){
+  if(state.redoStack.length===0) return;
+  const cur = serializeEditState();
+  const next = state.redoStack.pop();
+  state.undoStack.push(cur);
+  applyEditSnapshot(next);
+  render();
+}
+function markAutoSave(){
+  clearTimeout(state.autoSaveTimer);
+  state.autoSaveTimer = setTimeout(()=>autoSaveCurveData(), 250);
+}
+function setWorkMode(mode){
+  state.workMode = mode;
+  ["All","Body","Sleeve"].forEach(k=>{
+    const el=document.getElementById("mode"+k);
+    if(el) el.classList.toggle("active", mode.toLowerCase()===k.toLowerCase());
+  });
+  render();
+}
+
+// 몸판 암홀은 B/W/BL 기준으로만 리셋한다.
+// 소매단둘레나 소매길이를 바꿔도 몸판 암홀 핸들이 움직이면 안 된다.
+function getBodyMeasureKey(){
+  return `${n("inpB")}-${n("inpW")}-${n("inpBL")}`;
+}
+// 소매산 패턴선은 소매산/기장 관련 기준이 바뀔 때만 리셋한다.
+// 소매단둘레는 하단 폭만 바꾸므로 소매산 핸들을 리셋하지 않는다.
+function getSleeveMeasureKey(){
+  const capMode = document.getElementById("selCapFormula")?.value || "culture";
+  return `${getBodyMeasureKey()}-${n("inpSL")}-${n("inpCapAdj")}-${capMode}`;
+}
+
+function n(id){return+(document.getElementById(id)?.value||0);}
+function c2p(x,y){return[MX+x*SC*viewZ+viewX, MY+y*SC*viewZ+viewY];}
+function svgPt(e){const r=svg.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top];}
+function E(tag,a={},txt){
+  const el=document.createElementNS(NS,tag);
+  for(const[k,v]of Object.entries(a))el.setAttribute(k,v);
+  if(txt!==undefined)el.textContent=txt;
+  return el;
+}
+function line(x1,y1,x2,y2,cls){return E("line",{x1,y1,x2,y2,class:cls});}
+function Ln(a,b,cls){const[x1,y1]=c2p(a.x,a.y),[x2,y2]=c2p(b.x,b.y);return line(x1,y1,x2,y2,cls);}
+function dot(p,cls="pt",r=3.2){const[x,y]=c2p(p.x,p.y);return E("circle",{cx:x,cy:y,r,class:cls});}
+function lbl(p,t,cls="txt",dx=5,dy=-5){const[x,y]=c2p(p.x,p.y);return E("text",{x:x+dx,y:y+dy,class:cls},t);}
+
+
+// ── 구조 안정화: 표시 레이어 분류/제어 ─────────────────────
+function getUiOptions(){
+  return {
+    base:    document.getElementById("chkBase")?.checked    !== false,
+    dart:    document.getElementById("chkDart")?.checked    !== false,
+    dim:     document.getElementById("chkDim")?.checked     === true,
+    pattern: document.getElementById("chkPattern")?.checked !== false,
+    dep:     document.getElementById("chkDep")?.checked     === true,
+    guide:   document.getElementById("chkGuide")?.checked   === true,
+    body:    state.workMode !== "sleeve",
+    sleeve:  state.workMode !== "body",
+    edit:    !!(state.armEditMode || state.neckEditMode || state.sleeveEditMode)
+  };
+}
+
+function classifyVisualElement(el){
+  const cls = el.getAttribute("class") || "";
+  const tag = el.tagName.toLowerCase();
+  const txt = (el.textContent || "").trim();
+  const dash = el.getAttribute("strokeDasharray") || el.getAttribute("stroke-dasharray") || "";
+  const hasGrab = (el.getAttribute("style") || "").includes("cursor:grab") || (el.getAttribute("style") || "").includes("cursor: grab");
+
+  if(/grid-m|grid-M/.test(cls)) return "grid";
+  if(hasGrab || /sleeve-pattern-handle|sleeve-pattern-handle-pt/.test(cls) || dash === "3,2") return "handle";
+  if(/dim/.test(cls) || /^(-?\d+(\.\d+)?|뒤암홀|앞암홀|총이세|뒤이세|앞이세|뒤AH|앞AH|EL|SL)/.test(txt)) return "dimension";
+  if(/dart|dart-guide/.test(cls)) return "dart";
+  if(/base/.test(cls)) return "base";
+  if(/pattern|sleeve-pattern-line|sleeve-cap/.test(cls)) return "pattern";
+  if(/dep|rBL|rWL|sleeve-front-guide|sleeve-back-guide|sleeve-sch|sleeve-front-circ|sleeve-back-circ|sleeve-culture|sleeve-guide-label|txt-dep/.test(cls)) return "guide";
+  if(tag === "circle" || /pt|txt-dark/.test(cls)) return "point";
+  if(tag === "text") return "point";
+  return "misc";
+}
+
+function applyLayerVisibility(){
+  const opt = getUiOptions();
+  const visible = {
+    grid: true,
+    base: opt.base,
+    dart: opt.dart,
+    pattern: opt.pattern,
+    guide: opt.dep,
+    point: opt.guide,
+    dimension: opt.dim,
+    handle: opt.edit,
+    misc: true
+  };
+
+  svg.querySelectorAll("path,line,circle,text").forEach(el=>{
+    const layer = classifyVisualElement(el);
+    el.setAttribute("data-layer", layer);
+    el.style.display = visible[layer] ? "" : "none";
+  });
+}
+
+let isMeasureDirty = false;
+function markDirty(){
+  isMeasureDirty = true;
+  const el = document.getElementById("dirtyState");
+  if(el){
+    el.textContent = "치수 변경됨 · 패턴 생성 버튼을 누르세요";
+    el.style.color = "#e07800";
+    el.style.fontWeight = "700";
+  }
+}
+function generatePattern(){
+  isMeasureDirty = false;
+  const el = document.getElementById("dirtyState");
+  if(el){
+    el.textContent = "패턴 생성 완료";
+    el.style.color = "#0F6E56";
+    el.style.fontWeight = "700";
+  }
+  render();
+}
+
+// ── 치수선 ────────────────────────────────────
+function dimLine(a,b,off=14){
+  const g=E("g");
+  const[x1,y1]=c2p(a.x,a.y),[x2,y2]=c2p(b.x,b.y);
+  const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy);
+  if(len<1)return g;
+  const nx=-dy/len,ny=dx/len,ox=nx*off,oy=ny*off;
+  g.appendChild(line(x1+ox,y1+oy,x2+ox,y2+oy,"dim"));
+  [[x1,y1],[x2,y2]].forEach(([px,py])=>{
+    g.appendChild(line(px,py,px+ox,py+oy,"dim"));
+    g.appendChild(line(px+ox-nx*4,py+oy-ny*4,px+ox+nx*4,py+oy+ny*4,"dim"));
+  });
+  const dist=Math.hypot(b.x-a.x,b.y-a.y);
+  g.appendChild(E("text",{
+    x:(x1+x2)/2+ox*1.5,y:(y1+y2)/2+oy*1.5,
+    "font-size":9,fill:"#e07800","text-anchor":"middle","font-weight":"700"
+  },dist.toFixed(1)));
+  return g;
+}
+
+// ══════════════════════════════════════════════
+// 소매 원형 엔진
+// ══════════════════════════════════════════════
+function createSleeveDraft(B, sleeveLen, bAH, fAH, sleeveCapHeight){
+  // bAH: 뒤진동 길이, fAH: 앞진동 길이
+  const SL = sleeveLen;  // 소매길이 (52cm)
+
+  // ── 소매 배치 기준점 ─────────────────────────
+  // 몸판 좌표계 그대로 사용, 소매는 WL 아래 5cm에 배치
+  // 소매 중심선 x = 몸판 신폭/2 (가운데)
+  const sw = B/2+6;
+  const ox = sw/2;    // 소매 중심 x
+  const oy_margin = 5; // WL 아래 여백
+
+  // ── 소매산 높이 ──────────────────────────────
+  // 몸판의 앞/뒤 어깨점 높이에서 계산한 값을 우선 사용한다.
+  const SCH = sleeveCapHeight ?? ((bAH + fAH) / 4 - 1);
+
+  // ── 소매폭 ───────────────────────────────────
+  // 뒤소매폭: bAH + 1 (+ ★은 이세량, 일단 0)
+  // 앞소매폭: fAH / 4 × 비율 → 실제로는 전체에서 뒤를 뺀 값
+  const bSW = bAH + 1;  // 뒤소매폭
+  const fSW = fAH;      // 앞소매폭
+  const totalSW = bSW + fSW; // 전체 소매폭
+
+  // ── 기준점 ───────────────────────────────────
+  // 소매산점 (SP): 중심선 위
+  // BL선: 소매산점에서 SCH 아래
+  // 소매구선: 소매산점에서 SL 아래
+  // 팔꿈치선: SL/2 + 2.5
+
+  const formula = {
+    ox()    { return ox; },           // 소매 중심 x
+    SCH()   { return SCH; },          // 소매산 높이
+    bSW()   { return bSW; },          // 뒤소매폭
+    fSW()   { return fSW; },          // 앞소매폭
+    totalSW(){ return totalSW; },     // 전체 소매폭
+    EL()    { return SL/2 + 2.5; },  // 팔꿈치선 y (소매산점 기준)
+    SL()    { return SL; },           // 소매길이
+  };
+
+  return { formula };
+}
+
+
+function createDraft(B,W,BL){
+
+  // ── 공식 (교재 86~87p) ─────────────────────
+  const formula={
+    FL()  { return B/5+8.3;  },   // ⑨ 앞길이
+    cd()  { return B/12+13.7;},   // ③ 진동깊이→BL선
+    bw()  { return B/8+7.4;  },   // ⑤ 뒤품
+    fw()  { return B/8+6.2;  },   // ⑪ 앞품
+    sw()  { return B/2+6;    },   // ② 신폭
+    yBL() { return this.cd();},   // BL선 y
+    yWL() { return BL;        },  // WL선 y
+    yB()  { return this.yBL()-this.FL(); }, // ⑨ B점 y
+    yD()  { return 8;         },  // ⑧ D점 y = 8cm 고정 (교재)
+    xD()  { return this.bw(); },  // D점 x = 배폭선
+    xE()  { return this.bw()/2+1;}, // ⑧ E점 x
+    xF()  { return this.sw()-this.fw()-B/32; }, // ⑬ F점 x
+    yG()  { return (this.yBL()+this.yD())/2+0.5; }, // ⑬ G점 y
+    sideX(){ return (this.bw()+this.xF())/2; }, // ⑭ 옆선 x
+    bpX() { return this.sw()-this.fw()/2-0.7; }, // ⑪ BP x
+    totalDart(){ return n("inpDart")||12.5; },
+    // 뒤목 공식 (교재 87p: B/24+3.4+0.2)
+    bnw() { return B/24+3.4+0.2; }, // 뒤목너비
+    bnd() { return this.bnw()/3;  }, // 뒤목깊이 = bnw/3
+    // 앞목 공식
+    fnw() { return B/24+3.4;      }, // 앞목너비 ◎
+    fnd() { return this.fnw()+0.5;}, // 앞목깊이 = ◎+0.5
+  };
+
+  // ── 포인트 (공식으로 계산) ──────────────────
+  const pts={
+    A:   {x:0,              y:0           },
+    B:   {x:formula.sw(),   y:formula.yB()},  // ⑨
+    C:   {x:formula.bw(),   y:formula.yBL()}, // ⑤
+    D:   {x:formula.xD(),   y:formula.yD()},  // ⑧
+    E:   {x:formula.xE(),   y:formula.yD()},  // ⑧
+    F:   {x:formula.xF(),   y:formula.yBL()}, // ⑬
+    G:   {x:formula.xF(),   y:formula.yG()},  // ⑬
+    BP:  {x:formula.bpX(),  y:formula.yBL()}, // ⑪
+    SIDE_TOP:   {x:formula.sideX(), y:formula.yBL()}, // ⑭
+    SIDE_BTM:   {x:formula.sideX(), y:formula.yWL()}, // ⑭
+    BACK_WL:    {x:0,               y:formula.yWL()},
+    FRONT_WL:   {x:formula.sw(),    y:formula.yWL()},
+    FRONT_TL:   {x:formula.sw()-formula.fw(), y:formula.yB()},  // ⑩ 끝점
+    FRONT_ARM:  {x:formula.sw()-formula.fw(), y:formula.yBL()}, // ⑫ 앞품선 하단
+
+  };
+
+  // ── 패턴선 공식은 formula 안으로 통합됨 ────────
+  const deg = r => r * Math.PI / 180;
+
+  // ── 패턴 포인트 계산 ────────────────────────
+  // 뒤목
+  const BNW  = formula.bnw();  // B/24+3.4+0.2
+  const BND_ = formula.bnd();  // BNW/3
+  const bSNP   = { x: BNW, y: 0      }; // A점에서 오른쪽 BNW
+  const bNeckD = { x: BNW, y: -BND_  }; // bSNP에서 위로 BND_ = 뒤옆목점
+
+  // 뒤어깨선: SNP → 18° 아래-오른쪽 방향
+  // 앞어깨 길이를 먼저 구함: SNP에서 22° → FRONT_ARM.x에서 수직선과의 교점 + 1.8
+  const FNW = formula.fnw();
+  const FND_ = formula.fnd();
+  const fSNP = { x: formula.sw() - FNW, y: formula.yB() }; // 앞 SNP
+  // 앞어깨: SNP에서 22° 아래-왼쪽(-x)방향, FRONT_ARM.x(=sw-fw)까지 x 이동 거리
+  const fSh_dx = fSNP.x - (formula.sw() - formula.fw()); // SNP.x - 앞품선x
+  const fSh_len = fSh_dx / Math.cos(deg(22));            // 어깨선 길이 (앞품선까지)
+  const fSh_total = fSh_len + 1.8;                        // +1.8cm 연장
+  const fSP = {
+    x: fSNP.x - fSh_total * Math.cos(deg(22)),
+    y: fSNP.y + fSh_total * Math.sin(deg(22))
+  };
+
+  // 뒤어깨 길이 = 앞어깨 전체길이 + B/32 - 0.8
+  const bSh_len = fSh_total + B/32 - 0.8;
+  const bSP = {
+    x: bSNP.x + bSh_len * Math.cos(deg(18)),
+    y: bSNP.y + bSh_len * Math.sin(deg(18))
+  };
+
+  // 뒤진동 안내점: C점(=bw, BL)에서 45° 방향으로 ▲+0.8
+  // ▲ = C점에서 옆선까지 거리의 1/4 (교재 관례) → 실제로는 (C→SIDE_TOP 거리)/4
+  const bArm_dist = formula.sideX() - formula.bw(); // C~옆선 수평거리
+  const bArm_guide_r = bArm_dist / 4 + 0.8;
+  const bAH = {  // 뒤진동 안내점
+    x: formula.bw() + bArm_guide_r * Math.cos(deg(45)),
+    y: formula.yBL() - bArm_guide_r * Math.sin(deg(45))
+  };
+
+  // 앞진동 안내점: G점(=F.x, G.y) 기준 45° 방향 ▲+0.5
+  const fArm_dist = formula.sideX() - formula.xF();
+  const fArm_guide_r = fArm_dist / 4 + 0.5;
+  const fAH = {  // 앞진동 안내점
+    x: formula.xF() - fArm_guide_r * Math.cos(deg(45)),
+    y: formula.yBL() - fArm_guide_r * Math.sin(deg(45))
+  };
+
+  // 앞목선 안내점: 직사각형(FNW × FND) 대각선을 3등분, 하단에서 0.5 내린 점
+  // 대각선 = FNW 방향, 3등분 하단 1/3 점
+  const fNeck_guide = {
+    x: fSNP.x + FNW * (1/3),            // 대각선 1/3: x는 SNP에서 +FNW/3
+    y: fSNP.y + FND_ * (2/3) + 0.5      // y는 2/3 아래 + 0.5
+  };
+
+  // ── 패턴 포인트 등록 ────────────────────────
+  pts.bSNP  = bSNP;
+  pts.bNeckD= bNeckD;
+  pts.bSP   = bSP;
+  pts.bAH   = bAH;
+  pts.fSNP  = fSNP;
+  pts.fNeckBot = { x: formula.sw(), y: fSNP.y + FND_ }; // 앞목 최하점
+  pts.fNeckG = fNeck_guide;
+  pts.fSP   = fSP;
+  pts.fAH   = fAH;
+
+  // ── 허리다트 (a~f) ─────────────────────────
+  const total=formula.totalDart();
+  const darts={
+    total,
+    a: total*0.14,  // BP 아래
+    b: total*0.15,  // F점 1.5cm 전중심쪽
+    c: total*0.11,  // 옆선
+    d: total*0.35,  // 뒤품선~옆선 1cm 뒤중심
+    e: total*0.18,  // E점 0.5cm 뒤중심
+    f: total*0.07,  // 뒤중심
+  };
+
+  return {formula, pts, darts};
+}
+
+// ── 다트 헬퍼 ────────────────────────────────────
+function makeDart(amount, apex, yWL){
+  const center={x:apex.x, y:yWL};
+  return {
+    amount, apex, center,
+    left:  {x:apex.x-amount/2, y:yWL},
+    right: {x:apex.x+amount/2, y:yWL}
+  };
+}
+function drawDart(g, d, cls){
+  g.appendChild(Ln(d.center, d.apex, "dart-guide"));
+  g.appendChild(Ln(d.left,   d.apex, cls));
+  g.appendChild(Ln(d.right,  d.apex, cls));
+  g.appendChild(dot(d.apex, "pt-main", 4));
+}
+
+// ── 렌더 ──────────────────────────────────────
+function render(){
+  const W_=svg.clientWidth||900, H_=svg.clientHeight||700;
+  svg.innerHTML="";
+
+  // 격자: 치수를 입력하기 전에도 빈 작업장처럼 항상 표시
+  const gg=E("g");
+  const step=SC*viewZ;
+  for(let x=0;x<W_;x+=step)gg.appendChild(line(x,0,x,H_,"grid-m"));
+  for(let y=0;y<H_;y+=step)gg.appendChild(line(0,y,W_,y,"grid-m"));
+  for(let x=0;x<W_;x+=step*5)gg.appendChild(line(x,0,x,H_,"grid-M"));
+  for(let y=0;y<H_;y+=step*5)gg.appendChild(line(0,y,W_,y,"grid-M"));
+  svg.appendChild(gg);
+
+  const B=n("inpB"), W=n("inpW"), BL=n("inpBL");
+  if(!B||!W||!BL){
+    const capAdjVal = document.getElementById("capAdjVal");
+    if(capAdjVal) capAdjVal.textContent = n("inpCapAdj").toFixed(1);
+    const sb = document.getElementById("sb");
+    if(sb) sb.textContent = "치수를 입력하면 패턴이 생성됩니다.";
+    return;
+  }
+
+  const bodyMeasureKey = getBodyMeasureKey();
+  const sleeveMeasureKey = getSleeveMeasureKey();
+  if(lastBodyMeasureKey && lastBodyMeasureKey !== bodyMeasureKey){
+    resetCurveHandles();
+    loadSavedCurveForCurrentMeasurements(false);
+  } else if(lastSleeveMeasureKey && lastSleeveMeasureKey !== sleeveMeasureKey){
+    resetSleeveCurveHandles();
+    restoreSavedSleevePatternForCurrentSleeve(false);
+  }
+  lastBodyMeasureKey = bodyMeasureKey;
+  lastSleeveMeasureKey = sleeveMeasureKey;
+
+  const d=createDraft(B,W,BL);
+  const{formula:f, pts:p, darts:dr}=d;
+
+
+  // 기준선
+  const gRef=E("g");
+  gRef.appendChild(Ln({x:0,y:f.yBL()},{x:f.sw(),y:f.yBL()},"rBL"));
+  gRef.appendChild(Ln({x:0,y:f.yWL()},{x:f.sw(),y:f.yWL()},"rWL"));
+  // 레이블
+  {const[,py]=c2p(0,f.yBL());gRef.appendChild(E("text",{x:70,y:py+4,"font-size":9,fill:"#a0c4e8","text-anchor":"end"},"BL"));}
+  {const[,py]=c2p(0,f.yWL());gRef.appendChild(E("text",{x:70,y:py+4,"font-size":9,fill:"#f0a888","text-anchor":"end"},"WL"));}
+  svg.appendChild(gRef);
+
+  // ── 체크박스 상태 (한 번만 읽기) ─────────────
+  const showBase    = document.getElementById("chkBase")?.checked    !== false;
+  const showDart    = document.getElementById("chkDart")?.checked    !== false;
+  const showDep     = document.getElementById("chkDep")?.checked     === true;
+  const showPattern = document.getElementById("chkPattern")?.checked !== false;
+  const showGuide   = document.getElementById("chkGuide")?.checked   === true;
+  window.__showGuide = showGuide;
+  const showDim     = document.getElementById("chkDim")?.checked     === true;
+
+  // ── 다트 미리 계산 ───────────────────────────
+  const WL_y = f.yWL();
+  const darts_ = {
+    a: makeDart(dr.a, {x:p.BP.x,        y:p.BP.y+2      }, WL_y),
+    b: makeDart(dr.b, {x:p.F.x+1.5,     y:p.G.y         }, WL_y),
+    c: makeDart(dr.c, {x:p.SIDE_TOP.x,  y:p.SIDE_TOP.y  }, WL_y),
+    d: makeDart(dr.d, {x:p.C.x-1,       y:p.G.y         }, WL_y),
+    e: makeDart(dr.e, {x:p.E.x-0.5,     y:f.yBL()-2     }, WL_y),
+    f: makeDart(dr.f, {x:0, y:f.yBL()-(f.yBL()-f.yD())*2/3}, WL_y),
+  };
+
+  const showBody = state.workMode !== "sleeve";
+  const showSleeve = state.workMode !== "body";
+  if(showBody){
+    drawBaseLines(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
+    drawDepLines(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
+    drawPatternLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
+    drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
+    drawDimLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
+    drawPoints(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
+  }
+  if(showSleeve) drawSleeve(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
+  applyLayerVisibility();
+  updateStatusBar(f,p,dr,B,W,BL);
+}
+
+function drawBaseLines(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim){
+  // ── 기초선 ①~⑭ ─────────────────────────────
+  const g=E("g");
+  g.appendChild(Ln(p.A,      p.BACK_WL,  "base")); // ① 뒤중심
+  g.appendChild(Ln(p.BACK_WL,p.FRONT_WL, "base")); // ② WL
+  g.appendChild(Ln(p.B,      p.FRONT_WL, "base")); // ④ 앞중심
+  g.appendChild(Ln({x:f.bw(),y:0},p.C,   "base")); // ⑥ 배폭선
+  g.appendChild(Ln(p.A,{x:f.bw(),y:0},   "base")); // ⑦ A 수평선
+  g.appendChild(Ln({x:0,y:f.yD()},p.D,   "base")); // ⑧ 8cm 수평선
+  g.appendChild(Ln(p.FRONT_TL,p.B,        "base")); // ⑩ B점 수평선
+  g.appendChild(Ln(p.FRONT_TL,p.FRONT_ARM,"base")); // ⑫ 앞품 수직선
+  // ③ BL선 (base)
+  g.appendChild(Ln({x:0,y:f.yBL()},{x:f.sw(),y:f.yBL()},"base"));
+  // ⑬ G→F 수직, G→배폭선 수평
+  g.appendChild(Ln(p.G,p.F,              "base")); // G→F 수직
+  g.appendChild(Ln(p.G,{x:f.bw(),y:f.yG()},"base")); // G→배폭선 수평
+  // ⑭ 옆선
+  g.appendChild(Ln(p.SIDE_TOP,p.SIDE_BTM,"base"));
+  if(showBase)svg.appendChild(g);
+
+}
+
+function drawDepLines(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim){
+  // ── 종속선 ───────────────────────────────────
+  if(showDep){
+    const dep=E("g");
+    dep.appendChild(Ln(p.C,p.F,"dep"));
+    dep.appendChild(lbl({x:(p.C.x+p.F.x)/2,y:p.C.y},"C-F → ⑭옆선","txt-dep",0,14));
+    dep.appendChild(Ln(p.D,p.E,"dep"));
+    dep.appendChild(lbl({x:(p.D.x+p.E.x)/2,y:p.D.y},"E=뒤품/2+1","txt-dep",0,-10));
+    dep.appendChild(Ln(p.F,p.G,"dep"));
+    dep.appendChild(lbl({x:p.F.x,y:(p.F.y+p.G.y)/2},"G depends F.x","txt-dep",6,0));
+    svg.appendChild(dep);
+  }
+
+}
+
+function drawPatternLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim){
+  if(!showPattern) return;
+  const gPat=E("g");
+
+  // ── 공통 변수 계산 ───────────────────────────
+  const circ = f.fnw(), fnd = f.fnd();
+  const nTR = { x: f.sw(),      y: f.yB()     };
+  const nTL = { x: f.sw()-circ, y: f.yB()     };
+  const nBR = { x: f.sw(),      y: f.yB()+fnd };
+  const nBL = { x: f.sw()-circ, y: f.yB()+fnd };
+  const deg22 = 22 * Math.PI / 180;
+  const shLen_ = (nTL.x-(f.sw()-f.fw())) / Math.cos(deg22);
+  const FSP = {
+    x: nTL.x - (shLen_+1.8)*Math.cos(deg22),
+    y: nTL.y + (shLen_+1.8)*Math.sin(deg22)
+  };
+  const vx_=p.BP.x-p.G.x, vy_=p.BP.y-p.G.y;
+  const len_=Math.hypot(vx_,vy_);
+  const ux_=-vx_/len_, uy_=-vy_/len_;
+  const da_=(B/4-2.5)*Math.PI/180;
+  const GG = {
+    x: p.BP.x+(ux_*Math.cos(da_)-uy_*Math.sin(da_))*len_,
+    y: p.BP.y+(ux_*Math.sin(da_)+uy_*Math.cos(da_))*len_
+  };
+  // ── 뒤판 공통변수 ──────────────────────────
+  const deg18 = 18 * Math.PI / 180;
+  const bSNP  = { x: f.bnw(), y: 0        };
+  const bND   = { x: f.bnw(), y: -f.bnd() };
+  const _fSNP_x2 = f.sw() - f.fnw();
+  const _armX2   = f.sw() - f.fw();
+  const _fShLen2 = (_fSNP_x2 - _armX2) / Math.cos(deg22) + 1.8;
+  const _bShLen2 = _fShLen2 + B/32 - 0.8;
+  const bSP = {
+    x: bND.x + _bShLen2 * Math.cos(deg18),
+    y: bND.y + _bShLen2 * Math.sin(deg18)
+  };
+  const shDx=Math.cos(deg18), shDy=Math.sin(deg18);
+  const t_=(p.E.x-bND.x)/shDx;
+  const dartCenterT=t_+1.5;
+  const dartCenter={ x:bND.x+dartCenterT*shDx, y:bND.y+dartCenterT*shDy };
+  const dartLen_=B/32-0.8;
+  const dartEnd_={ x:dartCenter.x+dartLen_*shDx, y:dartCenter.y+dartLen_*shDy };
+  const eOnSh={ x:bND.x+t_*shDx, y:bND.y+t_*shDy };
+
+  const segLen  = (p.F.x - p.SIDE_TOP.x) / 3 + 0.5;
+  const segLen2 = (p.F.x - p.SIDE_TOP.x) / 3 + 0.8;
+  const fAux = {
+    x: p.F.x - segLen  * Math.cos(45 * Math.PI / 180),
+    y: p.F.y - segLen  * Math.sin(45 * Math.PI / 180)
+  };
+  const cAux = {
+    x: p.C.x + segLen2 * Math.cos(45 * Math.PI / 180),
+    y: p.C.y - segLen2 * Math.sin(45 * Math.PI / 180)
+  };
+
+  const cv = {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux};
+
+  drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv);
+  drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv);
+  drawBackNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv);
+  drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv);
+  drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv);
+
+  // 표시옵션 정리: 패턴선은 완성 외곽선만 남긴다.
+  // 종속선/치수/편집 핸들은 각 옵션 또는 편집모드에서만 보이게 한다.
+  if(!showDep){
+    gPat.querySelectorAll('.dep,.pt-dep,.txt-dep').forEach(el=>el.remove());
+  }
+  if(!showDim){
+    gPat.querySelectorAll('.dim').forEach(el=>el.remove());
+    gPat.querySelectorAll('text').forEach(el=>{
+      const fill = el.getAttribute('fill') || '';
+      const txt = el.textContent || '';
+      if(fill === '#e07800' || /^(\d+\.\d+)$/.test(txt)) el.remove();
+    });
+  }
+  // 안내점 옵션: FSP/GG/G/F/BSP/SNP/BND/다트시작/다트끝/안내점 같은 점·라벨은 별도 옵션에서만 보인다.
+  if(window.__showGuide !== true){
+    gPat.querySelectorAll('.pt-main,.pt-dep').forEach(el=>el.remove());
+    gPat.querySelectorAll('text').forEach(el=>{
+      const fill = el.getAttribute('fill') || '';
+      const txt = (el.textContent || '').trim();
+      const isDimText = fill === '#e07800' || /^-?\d+(\.\d+)?$/.test(txt);
+      const isGuideText = /^(FSP|GG|G|F|BSP|SNP|BND|BP|다트시작|다트끝|안내점|A|B|C|D|E)$/.test(txt);
+      if(!isDimText || isGuideText) el.remove();
+    });
+  }
+  // 편집 모드가 아닐 때는 핸들과 핸들 연결선을 숨긴다.
+  if(!state.armEditMode && !state.neckEditMode){
+    gPat.querySelectorAll('circle[style*="cursor:grab"],circle[style*="cursor: grab"]').forEach(el=>el.remove());
+    gPat.querySelectorAll('line').forEach(el=>{
+      const sw = String(el.getAttribute('strokeWidth') || el.getAttribute('stroke-width') || '');
+      const dash = el.getAttribute('strokeDasharray') || el.getAttribute('stroke-dasharray') || '';
+      if(dash === '3,2' && (sw === '0.8' || sw === '.8')) el.remove();
+    });
+  }
+  svg.appendChild(gPat);
+}
+
+function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
+  const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
+
+
+    // 직사각형 4변
+    gPat.appendChild(Ln(nTR, nTL, "dep")); // 상단
+    gPat.appendChild(Ln(nTR, nBR, "dep")); // 우측 (앞중심선)
+    gPat.appendChild(Ln(nTL, nBL, "dep")); // 좌측
+    gPat.appendChild(Ln(nBR, nBL, "dep")); // 하단
+
+    // 대각선: B점(nTR) ↔ 왼쪽하단(nBL)
+    gPat.appendChild(Ln(nTR, nBL, "dep"));
+
+    // 대각선 3등분점
+    const div1 = {
+      x: nTR.x + (nBL.x - nTR.x) * (1/3),
+      y: nTR.y + (nBL.y - nTR.y) * (1/3)
+    };
+    const div2 = {
+      x: nTR.x + (nBL.x - nTR.x) * (2/3),
+      y: nTR.y + (nBL.y - nTR.y) * (2/3)
+    };
+
+    // 대각선 단위벡터 (nTR→nBL 방향)
+    const diagLen = Math.hypot(nBL.x - nTR.x, nBL.y - nTR.y);
+    const diagUx  = (nBL.x - nTR.x) / diagLen;
+    const diagUy  = (nBL.y - nTR.y) / diagLen;
+
+    // div2에서 nBL 방향으로 0.5cm 이동한 안내점
+    const guideP = {
+      x: div2.x + diagUx * 0.5,
+      y: div2.y + diagUy * 0.5
+    };
+
+    // 3등분점 표시
+    [div1, div2].forEach(pt => {
+      gPat.appendChild(dot(pt, "pt-dep", 3));
+    });
+
+    // 안내점 표시
+    gPat.appendChild(dot(guideP, "pt-main", 4));
+    gPat.appendChild(lbl(guideP, "안내점", "txt-dark", 6, -6));
+
+    // ─ 앞목선: FND → 안내점 통과 → SNP (핸들 포함) ─
+    {
+      const[x1,y1]=c2p(nBR.x,    nBR.y);    // FND (시작)
+      const[xg,yg]=c2p(guideP.x, guideP.y); // 안내점
+      const[x2,y2]=c2p(nTL.x,    nTL.y);    // SNP (끝)
+      const[bx,by]=c2p(nTR.x,    nTR.y);    // B점
+
+      // 안내점 접선
+      const tgx=-(yg-by), tgy=(xg-bx);
+      const tgLen=Math.hypot(tgx,tgy);
+      const tx=tgx/tgLen, ty=tgy/tgLen;
+      const d1=Math.hypot(xg-x1,yg-y1)*0.25;
+      const d2=Math.hypot(x2-xg,y2-yg)*0.25;
+
+      if(!state.fNeckH){
+        state.fNeckH = {
+          h0: { x: nBR.x - d1/SC/viewZ, y: nBR.y        }, // FND 핸들 (수평)
+          h1: { x: nTL.x,               y: nTL.y + d2/SC/viewZ }, // SNP 핸들 (수직)
+        };
+      }
+      const FN = state.fNeckH;
+      const[fhx0,fhy0]=c2p(FN.h0.x, FN.h0.y);
+      const[fhx1,fhy1]=c2p(FN.h1.x, FN.h1.y);
+
+      // 안내점 앞뒤 핸들은 기존 접선 유지
+      const c2x=xg-tx*d1, c2y=yg-ty*d1;
+      const c3x=xg+tx*d2, c3y=yg+ty*d2;
+
+      gPat.appendChild(E("path",{
+        d:`M${x1},${y1} C${fhx0},${fhy0} ${c2x},${c2y} ${xg},${yg}`+
+          ` C${c3x},${c3y} ${fhx1},${fhy1} ${x2},${y2}`,
+        class:"pattern"
+      }));
+
+      // 핸들 드래그
+      const mkFN=(hx,hy,ax,ay,col,key)=>{
+        gPat.appendChild(E("line",{x1:ax,y1:ay,x2:hx,y2:hy,stroke:col,strokeWidth:0.8,strokeDasharray:"3,2"}));
+        const h=E("circle",{cx:hx,cy:hy,r:5,fill:col,stroke:"#fff",strokeWidth:1.5,style:"cursor:grab"});
+        h.addEventListener("mousedown",ev=>{
+          ev.stopPropagation();
+          const onMove=mv=>{
+            const[nx,ny]=eventToPatternPoint(mv);
+            state.fNeckH[key].x=nx; state.fNeckH[key].y=ny; render();
+          };
+          const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+          window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+        });
+        gPat.appendChild(h);
+      };
+
+      mkFN(fhx0,fhy0, x1,y1, "#185FA5","h0"); // FND 핸들
+      mkFN(fhx1,fhy1, x2,y2, "#185FA5","h1"); // SNP 핸들
+    }
+
+    // ─ 앞어깨선 ──────────────────────────────────
+    gPat.appendChild(Ln(nTL, FSP, "pattern"));
+    if(showDim) gPat.appendChild(dimLine(nTL, FSP, 12));
+    gPat.appendChild(dot(FSP, "pt-main", 3));
+    gPat.appendChild(lbl(FSP, "FSP", "txt-dark", 6, 10));
+
+    // ─ G점 → BP 직선 + 다트선 ───────────────────
+    gPat.appendChild(Ln(p.G, p.BP, "pattern"));
+    gPat.appendChild(Ln(p.BP, GG,  "pattern"));
+    gPat.appendChild(dot(GG, "pt-main", 3));
+    gPat.appendChild(lbl(GG, "GG", "txt-dark", 6, -6));
+}
+
+function drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
+  const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
+    // ── 앞진동선: G → GG → FSP (뒤진동선과 연결) ──
+    {
+      const dGG = Math.hypot(GG.x-p.G.x, GG.y-p.G.y) * 0.4;
+      const dF  = Math.hypot(FSP.x-GG.x, FSP.y-GG.y) * 0.4;
+      const perpFx = Math.sin(deg22), perpFy = Math.cos(deg22);
+
+      if(!state.fArmH){
+        state.fArmH = {
+          hGa: { x: p.G.x,                        y: p.G.y - dGG                       }, // G 출발 핸들 (위)
+          hGb: { x: GG.x + (p.G.x-GG.x)*0.3,     y: GG.y + (p.G.y-GG.y)*0.3          }, // GG 도착 핸들
+          hFa: { x: GG.x - (FSP.x-GG.x)*0.3,     y: GG.y - (FSP.y-GG.y)*0.3          }, // GG 출발 핸들
+          hFb: { x: FSP.x + perpFx*dF,             y: FSP.y + perpFy*dF                }, // FSP 도착 핸들
+        };
+      }
+      const FH = state.fArmH;
+
+      const[ggx,ggy]=c2p(GG.x,   GG.y);
+      const[fx, fy] =c2p(FSP.x,  FSP.y);
+      const[hfax,hfay]=c2p(FH.hFa.x, FH.hFa.y);
+      const[hfbx,hfby]=c2p(FH.hFb.x, FH.hFb.y);
+
+      gPat.appendChild(E("path",{
+        d:`M${ggx},${ggy} C${hfax},${hfay} ${hfbx},${hfby} ${fx},${fy}`,
+        class:"pattern"
+      }));
+
+      // 핸들 드래그
+      const mkFH=(hx,hy,ax,ay,col,key)=>{
+        gPat.appendChild(E("line",{x1:ax,y1:ay,x2:hx,y2:hy,stroke:col,strokeWidth:0.8,strokeDasharray:"3,2"}));
+        const h=E("circle",{cx:hx,cy:hy,r:5,fill:col,stroke:"#fff",strokeWidth:1.5,style:"cursor:grab"});
+        h.addEventListener("mousedown",ev=>{
+          ev.stopPropagation();
+          const onMove=mv=>{
+            const[nx,ny]=eventToPatternPoint(mv);
+            state.fArmH[key].x=nx; state.fArmH[key].y=ny; render();
+          };
+          const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+          window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+        });
+        gPat.appendChild(h);
+      };
+
+      mkFH(hfax,hfay, ggx,ggy, "#0cf","hFa"); // GG 출발 핸들
+      mkFH(hfbx,hfby, fx, fy,  "#e44","hFb"); // FSP 도착 핸들
+
+      gPat.appendChild(E("circle",{cx:ggx,cy:ggy,r:5,fill:"#0cf",stroke:"#fff",strokeWidth:2}));
+      gPat.appendChild(E("circle",{cx:fx, cy:fy, r:5,fill:"#e44",stroke:"#fff",strokeWidth:2}));
+    }
+
+
+
+
+    // ── 뒤목선 안내선 ─────────────────────────────
+}
+
+function drawBackNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
+  const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
+    gPat.appendChild(Ln(p.A,  bSNP, "dep"));
+    gPat.appendChild(Ln(bSNP, bND,  "dep"));
+    gPat.appendChild(dot(bSNP, "pt-main", 3));
+    gPat.appendChild(lbl(bSNP, "SNP", "txt-dark", 4, 10));
+    gPat.appendChild(dot(bND,  "pt-main", 3));
+    gPat.appendChild(lbl(bND,  "BND", "txt-dark", 4, -4));
+
+    // ── 뒤목선 곡선: A → bND (핸들 포함) ────────────
+    {
+      const[x1,y1]=c2p(p.A.x, p.A.y);
+      const[x2,y2]=c2p(bND.x, bND.y);
+      const d=Math.hypot(x2-x1,y2-y1)*0.5;
+
+      if(!state.bNeckH){
+        state.bNeckH = {
+          h0: { x: p.A.x  + d/SC/viewZ,  y: p.A.y        }, // A점 핸들 (수평)
+          h1: { x: bND.x,                 y: bND.y + d/SC/viewZ }, // bND 핸들 (수직)
+        };
+      }
+      const NH = state.bNeckH;
+      const[hx0,hy0]=c2p(NH.h0.x, NH.h0.y);
+      const[hx1,hy1]=c2p(NH.h1.x, NH.h1.y);
+
+      gPat.appendChild(E("path",{
+        d:`M${x1},${y1} C${hx0},${hy0} ${hx1},${hy1} ${x2},${y2}`,
+        class:"pattern"
+      }));
+
+      // 핸들 드래그
+      const mkNH=(hx,hy,ax,ay,col,key)=>{
+        gPat.appendChild(E("line",{x1:ax,y1:ay,x2:hx,y2:hy,stroke:col,strokeWidth:0.8,strokeDasharray:"3,2"}));
+        const h=E("circle",{cx:hx,cy:hy,r:5,fill:col,stroke:"#fff",strokeWidth:1.5,style:"cursor:grab"});
+        h.addEventListener("mousedown",ev=>{
+          ev.stopPropagation();
+          const onMove=mv=>{
+            const[nx,ny]=eventToPatternPoint(mv);
+            state.bNeckH[key].x=nx; state.bNeckH[key].y=ny; render();
+          };
+          const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+          window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+        });
+        gPat.appendChild(h);
+      };
+
+      mkNH(hx0,hy0, x1,y1, "#a44","h0"); // A점 핸들
+      mkNH(hx1,hy1, x2,y2, "#a44","h1"); // bND 핸들
+    }
+
+    // ── 뒤어깨선 ──────────────────────────────────
+}
+
+function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
+  const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
+
+
+
+
+
+
+
+
+    gPat.appendChild(Ln(bND,      dartCenter, "pattern"));
+    gPat.appendChild(Ln(dartEnd_, bSP,        "pattern"));
+    gPat.appendChild(dot(bSP, "pt-main", 3));
+    gPat.appendChild(lbl(bSP, "BSP", "txt-dark", 4, 10));
+    gPat.appendChild(Ln(p.E, eOnSh, "dep"));
+    gPat.appendChild(dot(eOnSh, "pt-main", 4));
+    gPat.appendChild(dot(dartCenter, "pt-main", 4));
+    gPat.appendChild(lbl(dartCenter, "다트시작", "txt-dark", 4, -6));
+    gPat.appendChild(dot(dartEnd_, "pt-main", 4));
+    gPat.appendChild(lbl(dartEnd_, "다트끝", "txt-dark", 4, -6));
+    gPat.appendChild(Ln(dartCenter, p.E, "pattern"));
+    gPat.appendChild(Ln(p.E, dartEnd_,   "pattern"));
+    if(showDim) gPat.appendChild(dimLine(bND, bSP, 12));
+
+    gPat.appendChild(Ln(p.F, fAux, "dep"));
+    gPat.appendChild(dot(fAux, "pt-dep", 3));
+    gPat.appendChild(Ln(p.C, cAux, "dep"));
+    gPat.appendChild(dot(cAux, "pt-dep", 3));
+
+    // ── 진동선 (5포인트 cubic bezier 핸들) ──────────
+}
+
+function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
+  const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
+    {
+      const perpX = Math.sin(deg18), perpY = -Math.cos(deg18);
+      // 5개 앵커점 (고정 2 + 조절 3)
+      const A0 = { x: bSP.x,        y: bSP.y        }; // BSP (고정)
+      const A1 = { x: cAux.x,       y: cAux.y       }; // C안내
+      const A2 = { x: p.SIDE_TOP.x, y: p.SIDE_TOP.y }; // 옆가슴
+      const A3 = { x: fAux.x,       y: fAux.y       }; // F안내
+      const A4 = { x: p.G.x,        y: p.G.y        }; // G (고정)
+
+      // 핸들 초기값: [앵커x, 앵커y, h1x, h1y, h2x, h2y]
+      // BSP: 핸들1개(어깨수직방향), A1~A3: 앞뒤 2개, G: 핸들1개(수직아래)
+      if(!state.armH){
+        const d01 = Math.hypot(A1.x-A0.x, A1.y-A0.y)*0.4;
+        const d12 = Math.hypot(A2.x-A1.x, A2.y-A1.y)*0.4;
+        const d23 = Math.hypot(A3.x-A2.x, A3.y-A2.y)*0.4;
+        const d34 = Math.hypot(A4.x-A3.x, A4.y-A3.y)*0.4;
+        state.armH = {
+          h0:  { x: A0.x - perpX*d01,    y: A0.y - perpY*d01   }, // BSP 핸들
+          h1a: { x: A1.x + perpX*d01,    y: A1.y + perpY*d01   }, // C안내 앞
+          h1b: { x: A1.x - (A2.x-A1.x)*0.3, y: A1.y - (A2.y-A1.y)*0.3 }, // C안내 뒤
+          h2a: { x: A2.x + (A1.x-A2.x)*0.3, y: A2.y + (A1.y-A2.y)*0.3 }, // 옆가슴 앞
+          h2b: { x: A2.x - (A3.x-A2.x)*0.3, y: A2.y - (A3.y-A2.y)*0.3 }, // 옆가슴 뒤
+          h3a: { x: A3.x + (A2.x-A3.x)*0.3, y: A3.y + (A2.y-A3.y)*0.3 }, // F안내 앞
+          h3b: { x: A3.x - (A4.x-A3.x)*0.3, y: A3.y - (A4.y-A3.y)*0.3 }, // F안내 뒤
+          h4:  { x: A4.x,                    y: A4.y + d34              }, // G 핸들
+          // 중간 앵커 조절가능
+          a1: {...A1}, a2: {...A2}, a3: {...A3},
+        };
+      }
+      const H = state.armH;
+
+      // 화면→패턴 좌표 변환
+
+      // 곡선 그리기 (4구간 cubic bezier)
+      const[bx0,by0]=c2p(A0.x,   A0.y);
+      const[bx1,by1]=c2p(H.a1.x, H.a1.y);
+      const[bx2,by2]=c2p(H.a2.x, H.a2.y);
+      const[bx3,by3]=c2p(H.a3.x, H.a3.y);
+      const[bx4,by4]=c2p(A4.x,   A4.y);
+      const[hx0,hy0]=c2p(H.h0.x,  H.h0.y);
+      const[hx1a,hy1a]=c2p(H.h1a.x,H.h1a.y);
+      const[hx1b,hy1b]=c2p(H.h1b.x,H.h1b.y);
+      const[hx2a,hy2a]=c2p(H.h2a.x,H.h2a.y);
+      const[hx2b,hy2b]=c2p(H.h2b.x,H.h2b.y);
+      const[hx3a,hy3a]=c2p(H.h3a.x,H.h3a.y);
+      const[hx3b,hy3b]=c2p(H.h3b.x,H.h3b.y);
+      const[hx4,hy4]=c2p(H.h4.x,  H.h4.y);
+
+      gPat.appendChild(E("path",{
+        d:`M${bx0},${by0} C${hx0},${hy0} ${hx1a},${hy1a} ${bx1},${by1}`+
+          ` C${hx1b},${hy1b} ${hx2a},${hy2a} ${bx2},${by2}`+
+          ` C${hx2b},${hy2b} ${hx3a},${hy3a} ${bx3},${by3}`+
+          ` C${hx3b},${hy3b} ${hx4},${hy4} ${bx4},${by4}`,
+        class:"pattern"
+      }));
+
+      // 핸들선 + 핸들점 그리기 헬퍼
+      const mkHandle=(hx,hy,ax,ay,col,key)=>{
+        gPat.appendChild(E("line",{x1:ax,y1:ay,x2:hx,y2:hy,stroke:col,strokeWidth:0.8,strokeDasharray:"3,2",opacity:0.7}));
+        const h=E("circle",{cx:hx,cy:hy,r:5,fill:col,stroke:"#fff",strokeWidth:1.5,style:"cursor:grab"});
+        h.addEventListener("mousedown",ev=>{
+          ev.stopPropagation();
+          const onMove=mv=>{
+            const[nx,ny]=eventToPatternPoint(mv);
+            state.armH[key].x=nx; state.armH[key].y=ny;
+            render();
+          };
+          const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+          window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+        });
+        gPat.appendChild(h);
+      };
+
+      // 앵커점 드래그 헬퍼
+      const mkAnchor=(ax,ay,col,akey)=>{
+        const h=E("circle",{cx:ax,cy:ay,r:7,fill:col,stroke:"#fff",strokeWidth:2,style:"cursor:grab"});
+        h.addEventListener("mousedown",ev=>{
+          ev.stopPropagation();
+          const[ox,oy]=p2c_(ax,ay);
+          const onMove=mv=>{
+            const[nx,ny]=eventToPatternPoint(mv);
+            const dx=nx-ox, dy=ny-oy;
+            // 앵커 + 연결된 핸들 같이 이동
+            state.armH[akey].x=nx; state.armH[akey].y=ny;
+            if(akey==='a1'){ state.armH.h1a.x+=dx; state.armH.h1a.y+=dy; state.armH.h1b.x+=dx; state.armH.h1b.y+=dy; }
+            if(akey==='a2'){ state.armH.h2a.x+=dx; state.armH.h2a.y+=dy; state.armH.h2b.x+=dx; state.armH.h2b.y+=dy; }
+            if(akey==='a3'){ state.armH.h3a.x+=dx; state.armH.h3a.y+=dy; state.armH.h3b.x+=dx; state.armH.h3b.y+=dy; }
+            render();
+          };
+          const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+          window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+        });
+        gPat.appendChild(h);
+      };
+
+      // BSP 핸들
+      mkHandle(hx0,hy0, bx0,by0, "#0af","h0");
+      // C안내 앵커+핸들
+      mkHandle(hx1a,hy1a, bx1,by1, "#0cf","h1a");
+      mkHandle(hx1b,hy1b, bx1,by1, "#0cf","h1b");
+      mkAnchor(bx1,by1, "#0cf","a1");
+      // 옆가슴 앵커+핸들
+      mkHandle(hx2a,hy2a, bx2,by2, "#0f9","h2a");
+      mkHandle(hx2b,hy2b, bx2,by2, "#0f9","h2b");
+      mkAnchor(bx2,by2, "#0f9","a2");
+      // F안내 앵커+핸들
+      mkHandle(hx3a,hy3a, bx3,by3, "#fa0","h3a");
+      mkHandle(hx3b,hy3b, bx3,by3, "#fa0","h3b");
+      mkAnchor(bx3,by3, "#fa0","a3");
+      // G 핸들
+      mkHandle(hx4,hy4, bx4,by4, "#f90","h4");
+
+      // BSP, G 고정점
+      gPat.appendChild(E("circle",{cx:bx0,cy:by0,r:5,fill:"#0af",stroke:"#fff",strokeWidth:2}));
+      gPat.appendChild(E("circle",{cx:bx4,cy:by4,r:5,fill:"#f90",stroke:"#fff",strokeWidth:2}));
+    }
+
+
+    // ── 옆선 (앞판 + 뒤판) ───────────────────────
+    const _dartC = darts_.c;
+    gPat.appendChild(Ln(p.SIDE_TOP, _dartC.right, "pattern")); // 앞판 옆선 상단
+    gPat.appendChild(Ln(_dartC.right, p.SIDE_BTM, "pattern")); // 앞판 옆선 하단
+    gPat.appendChild(Ln(p.SIDE_TOP, _dartC.left,  "pattern")); // 뒤판 옆선 상단
+    gPat.appendChild(Ln(_dartC.left,  p.SIDE_BTM, "pattern")); // 뒤판 옆선 하단
+
+
+    const FND = { x: f.sw(), y: f.yB() + f.fnd() };
+    gPat.appendChild(Ln(FND,         p.FRONT_WL,   "pattern")); // FND → 앞중심 허리
+    gPat.appendChild(Ln(p.FRONT_WL,  p.BACK_WL,    "pattern")); // 앞중심허리 → 뒤중심허리
+    gPat.appendChild(Ln(p.BACK_WL,   p.A,          "pattern")); // 뒤중심허리 → A점
+
+    // ── FRONT_ARM → BP (절개선) ────────────────────
+    gPat.appendChild(Ln(p.FRONT_ARM, p.BP, "dep"));
+
+    // ── 진동선 편집 모드: 앞판 회전 ─────────────────
+    if(state.armEditMode){
+      // GG → G 방향으로 회전 (음수 = 시계방향)
+      const rotAngle = -(B/4 - 2.5) * Math.PI / 180;
+
+      // BP를 중심으로 회전
+      const rot = (pt) => {
+        const dx = pt.x - p.BP.x, dy = pt.y - p.BP.y;
+        return {
+          x: p.BP.x + dx*Math.cos(rotAngle) - dy*Math.sin(rotAngle),
+          y: p.BP.y + dx*Math.sin(rotAngle) + dy*Math.cos(rotAngle)
+        };
+      };
+
+      // 회전된 앞판 외곽선
+      const rFND    = rot(FND);
+      const rFSP    = rot(FSP);
+      const rSNP    = rot(nTL);
+      const rGG     = rot(GG);      // GG → G점 위치로
+      const rG      = rot(p.G);     // G → GG 위치로 (확인용)
+      const rFRONT_WL = rot(p.FRONT_WL);
+      const rFRONT_ARM = rot(p.FRONT_ARM);
+
+      // 회전된 앞판 외곽 (반투명 파란선)
+      const gRot = E("g",{opacity:0.7});
+      const rotLine = (a,b) => { const l=Ln(a,b,"pattern"); l.setAttribute("stroke","#3399ff"); l.setAttribute("stroke-dasharray","4,2"); return l; };
+      gRot.appendChild(rotLine(rFND,     rSNP));
+      gRot.appendChild(rotLine(rFND,     rFRONT_WL));
+      gRot.appendChild(rotLine(rFSP,     rSNP));
+      gRot.appendChild(rotLine(rFRONT_ARM, p.BP));
+
+      // 회전된 진동선 (GG→FSP 구간)
+      if(state.fArmH){
+        const FH = state.fArmH;
+        const rGGpt = rot(GG);
+        const rFSPpt = rot(FSP);
+        const rhFa = rot(FH.hFa);
+        const rhFb = rot(FH.hFb);
+        const[rx1,ry1]=c2p(rGGpt.x, rGGpt.y);
+        const[rx2,ry2]=c2p(rFSPpt.x,rFSPpt.y);
+        const[rhx1,rhy1]=c2p(rhFa.x, rhFa.y);
+        const[rhx2,rhy2]=c2p(rhFb.x, rhFb.y);
+        const rPath=E("path",{d:`M${rx1},${ry1} C${rhx1},${rhy1} ${rhx2},${rhy2} ${rx2},${ry2}`,stroke:"#3399ff",strokeWidth:2.5,fill:"none",strokeDasharray:"4,2"});
+        gRot.appendChild(rPath);
+      }
+
+      svg.appendChild(gRot);
+
+      // 연결 상태 표시
+      const connDist = Math.hypot(rG.x-GG.x, rG.y-GG.y)*SC*viewZ;
+      const info = E("text",{x:20,y:40,fill:"#3399ff","font-size":11,"font-weight":"700"});
+      info.textContent = `진동 편집 모드 | G→GG 거리: ${(connDist/SC/viewZ).toFixed(2)}cm`;
+      svg.appendChild(info);
+    }
+
+    // ── 네크라인 편집 모드 ────────────────────────
+    if(state.neckEditMode){
+      // bND(뒤옆목점) → nTL(앞옆목점) 기준으로 뒤판 조각 이동+회전
+      // 뒤어깨선 방향각 (bND → bSP)
+      const bShAngle = Math.atan2(bSP.y - bND.y, bSP.x - bND.x);
+      // 앞어깨선 방향각 (nTL → FSP) → 반대방향으로 붙이므로 +180°
+      const fShAngle = Math.atan2(FSP.y - nTL.y, FSP.x - nTL.x) + Math.PI;
+      const rotA = fShAngle - bShAngle + Math.PI;
+
+      // bND 기준 회전 후 nTL 위치로 이동
+      const transform = (pt) => {
+        const dx = pt.x - bND.x, dy = pt.y - bND.y;
+        const rx = dx*Math.cos(rotA) - dy*Math.sin(rotA);
+        const ry = dx*Math.sin(rotA) + dy*Math.cos(rotA);
+        return { x: nTL.x + rx, y: nTL.y + ry };
+      };
+
+      // 뒤판 조각 꼭짓점
+      const tA     = transform(p.A);
+      const tbND   = transform(bND);
+      const tbSNP  = transform(bSNP);
+      const tDS    = transform(dartCenter);   // 다트시작
+      const tDE    = transform(dartEnd_);     // 다트끝
+      const tBSP   = transform(bSP);           // BSP 이동된 위치
+      const tE     = transform(p.E);          // E점
+      const tE0    = transform({ x: 0, y: p.E.y }); // x=0, y=E높이
+
+      const gNeck = E("g");
+      const nCol  = "#aa44cc";
+
+      const nLn=(a,b)=>{
+        const[x1,y1]=c2p(a.x,a.y);
+        const[x2,y2]=c2p(b.x,b.y);
+        return E("line",{x1,y1,x2,y2,stroke:nCol,strokeWidth:1.5,strokeDasharray:"4,2"});
+      };
+
+      // 외곽선
+      gNeck.appendChild(nLn(tE0,   tA));      // 뒤중심선
+      gNeck.appendChild(nLn(tE0,   tE));      // E수평선 왼쪽
+      gNeck.appendChild(nLn(tE,    tBSP));    // E → BSP
+      // 어깨선 (다트 포함)
+      gNeck.appendChild(nLn(tBSP,  tDE));     // BSP → 다트끝
+      gNeck.appendChild(nLn(tDE,   tDS));     // 다트구간
+      gNeck.appendChild(nLn(tDS,   tbSNP));   // 다트시작 → bSNP
+
+      // 뒤목선 곡선
+      if(state.bNeckH){
+        const tH0 = transform(state.bNeckH.h0);
+        const tH1 = transform(state.bNeckH.h1);
+        const[x1,y1] =c2p(tA.x,   tA.y);
+        const[x2,y2] =c2p(tbND.x, tbND.y);
+        const[hx0,hy0]=c2p(tH0.x,  tH0.y);
+        const[hx1,hy1]=c2p(tH1.x,  tH1.y);
+        gNeck.appendChild(E("path",{
+          d:`M${x1},${y1} C${hx0},${hy0} ${hx1},${hy1} ${x2},${y2}`,
+          stroke:nCol,strokeWidth:2.5,fill:"none"
+        }));
+      } else {
+        gNeck.appendChild(nLn(tA, tbND));
+      }
+      // bNeckD → bSNP
+      gNeck.appendChild(nLn(tbND, tbSNP));
+      // bND → 다트시작 (어깨선)
+      gNeck.appendChild(nLn(tbND, tDS));
+
+      // 역변환: 이동된 화면좌표 → 원래 패턴좌표
+      const inverseTransform = (pt) => {
+        const dx = pt.x - nTL.x, dy = pt.y - nTL.y;
+        const rx = dx*Math.cos(-rotA) - dy*Math.sin(-rotA);
+        const ry = dx*Math.sin(-rotA) + dy*Math.cos(-rotA);
+        return { x: bND.x + rx, y: bND.y + ry };
+      };
+
+      // 핸들 드래그 헬퍼 (이동된 위치에서 드래그 → 역변환해서 저장)
+      const mkNeckH=(hx,hy,ax,ay,col,store,key)=>{
+        gNeck.appendChild(E("line",{x1:ax,y1:ay,x2:hx,y2:hy,stroke:col,strokeWidth:0.8,strokeDasharray:"3,2"}));
+        const h=E("circle",{cx:hx,cy:hy,r:6,fill:col,stroke:"#fff",strokeWidth:2,style:"cursor:grab"});
+        h.addEventListener("mousedown",ev=>{
+          ev.stopPropagation();
+          const onMove=mv=>{
+            const[nx,ny]=eventToPatternPoint(mv);
+            // 역변환해서 원래 좌표계에 저장
+            const orig = inverseTransform({x:nx, y:ny});
+            state[store][key].x = orig.x;
+            state[store][key].y = orig.y;
+            render();
+          };
+          const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+          window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+        });
+        gNeck.appendChild(h);
+      };
+
+      // 뒤목선 핸들 (이동된 위치에서 드래그)
+      if(state.bNeckH){
+        const tH0 = transform(state.bNeckH.h0);
+        const tH1 = transform(state.bNeckH.h1);
+        const[ax0,ay0]=c2p(tA.x,   tA.y);
+        const[ax1,ay1]=c2p(tbND.x, tbND.y);
+        const[hx0,hy0]=c2p(tH0.x,  tH0.y);
+        const[hx1,hy1]=c2p(tH1.x,  tH1.y);
+        mkNeckH(hx0,hy0, ax0,ay0, "#e44","bNeckH","h0");
+        mkNeckH(hx1,hy1, ax1,ay1, "#e44","bNeckH","h1");
+      }
+
+      // 앞목선 핸들 (이동 없이 원위치에서 드래그 - 앞판은 그대로)
+      if(state.fNeckH){
+        const[fx0,fy0]=c2p(nBR.x,  nBR.y);
+        const[fx1,fy1]=c2p(nTL.x,  nTL.y);
+        const[fhx0,fhy0]=c2p(state.fNeckH.h0.x, state.fNeckH.h0.y);
+        const[fhx1,fhy1]=c2p(state.fNeckH.h1.x, state.fNeckH.h1.y);
+        const mkFNH=(hx,hy,ax,ay,key)=>{
+          gNeck.appendChild(E("line",{x1:ax,y1:ay,x2:hx,y2:hy,stroke:"#185FA5",strokeWidth:0.8,strokeDasharray:"3,2"}));
+          const h=E("circle",{cx:hx,cy:hy,r:6,fill:"#185FA5",stroke:"#fff",strokeWidth:2,style:"cursor:grab"});
+          h.addEventListener("mousedown",ev=>{
+            ev.stopPropagation();
+            const onMove=mv=>{
+              const[nx,ny]=eventToPatternPoint(mv);
+              state.fNeckH[key].x=nx; state.fNeckH[key].y=ny; render();
+            };
+            const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+            window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+          });
+          gNeck.appendChild(h);
+        };
+        mkFNH(fhx0,fhy0, fx0,fy0, "h0");
+        mkFNH(fhx1,fhy1, fx1,fy1, "h1");
+      }
+
+      // 주요점 표시
+      [[tBSP,"BSP"],[{x:nTL.x,y:nTL.y},"SNP(기준)"],[tA,"A"]].forEach(([pt,nm])=>{
+        const[px,py]=c2p(pt.x,pt.y);
+        gNeck.appendChild(E("circle",{cx:px,cy:py,r:4,fill:nCol,stroke:"#fff",strokeWidth:1.5}));
+        const t_=E("text",{x:px+6,y:py-4,fill:nCol,"font-size":9,"font-weight":"700"});
+        t_.textContent=nm; gNeck.appendChild(t_);
+      });
+
+      svg.appendChild(gNeck);
+
+      const info=E("text",{x:20,y:55,fill:nCol,"font-size":11,"font-weight":"700"});
+      info.textContent="네크라인 편집 모드 | bND → SNP(앞옆목점) 기준";
+      svg.appendChild(info);
+    }
+
+}
+
+function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim){
+  // ── 다트 a~f ─────────────────────────────────
+  const gDart=E("g");
+  drawDart(gDart, darts_.a, "dart");
+  drawDart(gDart, darts_.b, "dart-b");
+  drawDart(gDart, darts_.c, "dart-c");
+  drawDart(gDart, darts_.d, "dart-d");
+  drawDart(gDart, darts_.e, "dart-e");
+  // f 다트: 뒤중심선이라 오른쪽만
+  gDart.appendChild(Ln(darts_.f.right, darts_.f.apex, "dart-f"));
+  gDart.appendChild(dot(darts_.f.apex, "pt-main", 4));
+  if(showDart)svg.appendChild(gDart);
+}
+
+
+function drawDimLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim){
+  // ── 치수선 ───────────────────────────────────
+  if(showDim){
+    const gd=E("g");
+    gd.appendChild(dimLine(p.A,          p.BACK_WL,            -22)); // ① 등길이
+    gd.appendChild(dimLine(p.BACK_WL,    p.FRONT_WL,            16)); // ② 신폭
+    gd.appendChild(dimLine(p.A,          {x:0,y:f.yBL()},      -38)); // ③ 진동깊이
+    gd.appendChild(dimLine({x:0,y:f.yBL()},p.BACK_WL,          -54)); // BL~WL
+    gd.appendChild(dimLine({x:0,y:f.yBL()},p.C,                 16)); // ⑤ 뒤품
+    gd.appendChild(dimLine({x:f.bw(),y:0},p.C,                  14)); // ⑥ 배폭선 높이
+    gd.appendChild(dimLine(p.A,          {x:f.bw(),y:0},        -14)); // ⑦ A 수평선
+    gd.appendChild(dimLine({x:0,y:f.yD()},p.D,                  -14)); // ⑧ 수평선
+    gd.appendChild(dimLine({x:f.bw(),y:0},p.D,                   16)); // ⑧ A→D 세로
+    gd.appendChild(dimLine(p.B,          p.FRONT_WL,             22)); // ⑨ 앞길이
+    gd.appendChild(dimLine(p.FRONT_TL,   p.B,                   -14)); // ⑩ B수평선
+    gd.appendChild(dimLine(p.FRONT_ARM,  {x:f.sw(),y:f.yBL()},  16)); // ⑪ 앞품
+    gd.appendChild(dimLine(p.FRONT_TL,   p.FRONT_ARM,            14)); // ⑫ 앞품선 세로
+    gd.appendChild(dimLine(p.F,          {x:f.sw(),y:f.yBL()},  30)); // ⑬ F~앞중심
+    gd.appendChild(dimLine(p.G,          p.F,                    16)); // ⑬ G→F
+    gd.appendChild(dimLine({x:f.bw(),y:f.yG()},p.G,             -14)); // ⑬ G선 가로
+    gd.appendChild(dimLine(p.C,          p.F,                    32)); // ⑭ C~F
+    gd.appendChild(dimLine(p.SIDE_TOP,   p.SIDE_BTM,             16)); // ⑭ 옆선 세로
+    // 다트 너비
+    [darts_.a,darts_.b,darts_.c,darts_.d,darts_.e,darts_.f].forEach((d,i)=>{
+      gd.appendChild(dimLine(d.left, d.right, -16-i*6));
+    });
+    svg.appendChild(gd);
+  }
+
+}
+
+function drawPoints(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim){
+  // ── 포인트 & 레이블 ──────────────────────────
+  // 표시옵션과 점/라벨을 같은 기준으로 묶는다.
+  // - 기초선 OFF: A/B/C/D/E 같은 기초점 숨김
+  // - 종속선 OFF: G/⑭ 같은 종속점 숨김
+  // - 패턴선 OFF: F/BP 같은 패턴 기준점 숨김
+  // - 다트 OFF: a~f 다트점 숨김
+  const gp=E("g");
+
+  const addPoint = (pt, name, cls, enabled=true) => {
+    if(!enabled) return;
+    gp.appendChild(dot(pt,cls));
+    gp.appendChild(lbl(pt,name,cls==="pt-dep"?"txt-dep":cls==="pt-main"?"txt-dark":"txt"));
+  };
+
+  // 기초점
+  [
+    [p.A, "A"], [p.B, "B"], [p.C, "C"], [p.D, "D"], [p.E, "E"]
+  ].forEach(([pt,name]) => addPoint(pt, name, "pt", showBase));
+
+  // 패턴 기준점
+  addPoint(p.F,  "F",  "pt-main", showPattern);
+  addPoint(p.BP, "BP", "pt-main", showPattern);
+
+  // 종속 기준점
+  addPoint(p.G,        "G",  "pt-dep", showDep);
+  addPoint(p.SIDE_TOP, "⑭", "pt-dep", showDep);
+
+  // 다트 apex 포인트
+  if(showDart){
+    [darts_.a,darts_.b,darts_.c,darts_.d,darts_.e,darts_.f].forEach((d,i)=>{
+      const names=["a","b","c","d","e","f"];
+      gp.appendChild(dot(d.apex,"pt-main",3.5));
+      gp.appendChild(lbl(d.apex,names[i],"txt-dark",5,-5));
+    });
+  }
+
+  // B/F 판 이름은 패턴선 표시가 켜져 있을 때만 보이게 한다.
+  if(showPattern){
+    {const[px,py]=c2p(f.bw()*0.4, f.yWL()*0.45);
+     gp.appendChild(E("text",{x:px,y:py,"font-size":22,"font-weight":"700",fill:"#ddd","text-anchor":"middle"},"B"));}
+    {const[px,py]=c2p(f.sw()-f.fw()*0.4, f.yWL()*0.45);
+     gp.appendChild(E("text",{x:px,y:py,"font-size":22,"font-weight":"700",fill:"#ddd","text-anchor":"middle"},"F"));}
+  }
+
+  svg.appendChild(gp);
+}
+
+
+function calcArmholeLengths(f,p,B){
+  let bAH = 0, fAH = 0;
+
+  if(state.armH){
+    const H = state.armH;
+    const bND = {x:f.bnw(), y:-f.bnd()};
+    const fSNP = {x:f.sw()-f.fnw(), y:f.yB()};
+    const armX = f.sw()-f.fw();
+    const fSh = (fSNP.x-armX)/Math.cos(22*Math.PI/180)+1.8;
+    const bSh = fSh+B/32-0.8;
+    const d18 = 18*Math.PI/180;
+    const bSP = {x:bND.x+bSh*Math.cos(d18), y:bND.y+bSh*Math.sin(d18)};
+    const sc = SC*viewZ;
+    const cp = pt => [MX+viewX+pt.x*sc, MY+viewY+pt.y*sc];
+    const anchors = [bSP, H.a1, H.a2, H.a3, p.G];
+    const ghost0 = {x:anchors[0].x-Math.sin(d18)*3, y:anchors[0].y+Math.cos(d18)*3};
+    const ghostN = {x:anchors[4].x, y:anchors[4].y+3};
+    const pts = [ghost0, ...anchors, ghostN];
+    const alpha = 0.5;
+
+    for(let i=1; i<pts.length-2; i++){
+      const [ax,ay] = cp(pts[i-1]);
+      const [bx,by] = cp(pts[i]);
+      const [cx,cy] = cp(pts[i+1]);
+      const [dx,dy] = cp(pts[i+2]);
+      const cp1x = bx+(cx-ax)*alpha/3, cp1y = by+(cy-ay)*alpha/3;
+      const cp2x = cx-(dx-bx)*alpha/3, cp2y = cy-(dy-by)*alpha/3;
+      const seg = bezierLen([[bx,by],[cp1x,cp1y],[cp2x,cp2y],[cx,cy]])/sc;
+      if(i<=2) bAH += seg; else fAH += seg;
+    }
+  }
+
+  if(state.fArmH){
+    const FH = state.fArmH;
+    const nTL = {x:f.sw()-f.fnw(), y:f.yB()};
+    const armX = f.sw()-f.fw();
+    const sh = (nTL.x-armX)/Math.cos(22*Math.PI/180);
+    const FSP = {x:nTL.x-(sh+1.8)*Math.cos(22*Math.PI/180), y:nTL.y+(sh+1.8)*Math.sin(22*Math.PI/180)};
+    const vx = p.BP.x-p.G.x, vy = p.BP.y-p.G.y;
+    const len = Math.hypot(vx,vy);
+    const ux = -vx/len, uy = -vy/len;
+    const da = (B/4-2.5)*Math.PI/180;
+    const GG = {x:p.BP.x+(ux*Math.cos(da)-uy*Math.sin(da))*len, y:p.BP.y+(ux*Math.sin(da)+uy*Math.cos(da))*len};
+    const sc = SC*viewZ;
+    const cp = pt => [MX+viewX+pt.x*sc, MY+viewY+pt.y*sc];
+    const [gx,gy] = cp(GG);
+    const [fx,fy] = cp(FSP);
+    const [hfax,hfay] = cp(FH.hFa);
+    const [hfbx,hfby] = cp(FH.hFb);
+    fAH += bezierLen([[gx,gy],[hfax,hfay],[hfbx,hfby],[fx,fy]])/sc;
+  }
+
+  return { bAH: bAH || 19, fAH: fAH || 17 };
+}
+
+function calcSleeveShoulderMetrics(f,p,B){
+  const dartAngle = (B/4 - 2.5) * Math.PI / 180;
+  const fSNP = {x: f.sw()-f.fnw(), y: f.yB()};
+  const armX = f.sw()-f.fw();
+  const shLen = (fSNP.x-armX)/Math.cos(22*Math.PI/180);
+  const FSP = {
+    x: fSNP.x - (shLen+1.8)*Math.cos(22*Math.PI/180),
+    y: fSNP.y + (shLen+1.8)*Math.sin(22*Math.PI/180)
+  };
+  const dx = FSP.x - p.BP.x, dy = FSP.y - p.BP.y;
+  const FSP_closed = {
+    x: p.BP.x + dx*Math.cos(dartAngle) - dy*Math.sin(dartAngle),
+    y: p.BP.y + dx*Math.sin(dartAngle) + dy*Math.cos(dartAngle)
+  };
+
+  const bND = {x:f.bnw(), y:-f.bnd()};
+  const fSh = (fSNP.x-armX)/Math.cos(22*Math.PI/180)+1.8;
+  const bSh = fSh + B/32 - 0.8;
+  const d18 = 18*Math.PI/180;
+  const BSP = {
+    x: bND.x + bSh*Math.cos(d18),
+    y: bND.y + bSh*Math.sin(d18)
+  };
+
+  // 문화식 소매산 높이는 앞다트 닫힘 후 회전점이 아니라
+  // 원형 제도 상태의 앞어깨점(FSP)과 뒤어깨점(BSP) 높이 기준으로 계산한다.
+  const fSH = f.yBL() - FSP.y;
+  const bSH = f.yBL() - BSP.y;
+  // 문화식 소매산 높이: B/12 + 3.5
+  // 이전의 어깨높이 평균×5/6 방식은 추천식/변형식에 가까워서 문화식에서 제외
+  const SCH = B / 12 + 3.5;
+  return { FSP_closed, FSP, BSP, fSH, bSH, SCH };
+}
+
+
+function getSleeveAlpha(B){
+  // 문화식 표 기준 ★(알파) 값: B가 커질수록 뒤소매 여유를 추가한다.
+  // 표 기준: 77~84=0.0, 85~89=0.1, 90~94=0.2, 95~99=0.3, 100~104=0.4
+  if(B < 85) return 0.0;
+  if(B < 90) return 0.1;
+  if(B < 95) return 0.2;
+  if(B < 100) return 0.3;
+  return 0.4;
+}
+
+function calcBackSleeveTargetLength(B, backArmholeLen){
+  const alpha = getSleeveAlpha(B);
+  return { alpha, target: backArmholeLen + 1 + alpha };
+}
+
+function calcSleeveCapHeights(f,p,B,bAH,fAH){
+  const metrics = calcSleeveShoulderMetrics(f,p,B);
+  const culture = metrics.SCH;                         // 문화식: B/12 + 3.5
+  const recommended = (bAH + fAH) / 4 - 1;             // 추천식: 앞/뒤 진동길이 반응형 공식
+  return { culture, recommended, metrics };
+}
+
+function getSelectedSleeveCapHeight(f,p,B,bAH,fAH){
+  const cap = calcSleeveCapHeights(f,p,B,bAH,fAH);
+  const mode = document.getElementById("selCapFormula")?.value || "culture";
+  const capAdj = +document.getElementById("inpCapAdj")?.value || 0;
+  const base = mode === "culture" ? cap.culture : cap.recommended;
+  return { ...cap, mode, capAdj, base, final: Math.max(4, base + capAdj) };
+}
+
+function calcFrontClosedSleeveGuideLine(f,p,B){
+  // 앞진동은 두 구간을 함께 복사해야 한다.
+  // 1) 옆가슴점(SIDE_TOP) → G : 몸판 진동선의 앞쪽 하부 곡선
+  // 2) GG → 앞옆어깨점(FSP) : 앞다트를 닫은 뒤의 앞쪽 상부 곡선
+  const deg22 = 22 * Math.PI / 180;
+  const fSNP = { x: f.sw() - f.fnw(), y: f.yB() };
+  const armX = f.sw() - f.fw();
+  const shLen = (fSNP.x - armX) / Math.cos(deg22);
+  const FSP = {
+    x: fSNP.x - (shLen + 1.8) * Math.cos(deg22),
+    y: fSNP.y + (shLen + 1.8) * Math.sin(deg22)
+  };
+
+  const dartAngle = (B / 4 - 2.5) * Math.PI / 180;
+  const vx = p.BP.x - p.G.x;
+  const vy = p.BP.y - p.G.y;
+  const len = Math.hypot(vx, vy);
+  const ux = -vx / len;
+  const uy = -vy / len;
+  const GG = {
+    x: p.BP.x + (ux * Math.cos(dartAngle) - uy * Math.sin(dartAngle)) * len,
+    y: p.BP.y + (ux * Math.sin(dartAngle) + uy * Math.cos(dartAngle)) * len
+  };
+
+  // 앞 다트를 닫는 회전. GG가 G 위치로 닫히는 방향이다.
+  const closeAngle = -dartAngle;
+  const rot = (pt) => {
+    const dx = pt.x - p.BP.x;
+    const dy = pt.y - p.BP.y;
+    return {
+      x: p.BP.x + dx * Math.cos(closeAngle) - dy * Math.sin(closeAngle),
+      y: p.BP.y + dx * Math.sin(closeAngle) + dy * Math.cos(closeAngle)
+    };
+  };
+
+  const closedG = rot(GG);
+  const closedFSP = rot(FSP);
+
+  // 하부 앞진동: 옆가슴점 → F안내점 → G 구간은 state.armH의 a2→a3→G를 사용한다.
+  const H = state.armH;
+  const lowerFrontArmhole = H ? {
+    sideTop: H.a2,
+    h2b: H.h2b,
+    h3a: H.h3a,
+    a3: H.a3,
+    h3b: H.h3b,
+    h4: H.h4,
+    G: p.G
+  } : null;
+
+  // 상부 앞진동: GG → FSP 구간은 state.fArmH를 앞다트 닫힘 상태로 회전해서 사용한다.
+  const FH = state.fArmH;
+  const upperFrontArmhole = FH ? {
+    start: closedG,
+    hFa: rot(FH.hFa),
+    hFb: rot(FH.hFb),
+    end: closedFSP
+  } : null;
+
+  return {
+    G: p.G,
+    GG,
+    FSP,
+    start: closedG,
+    end: closedFSP,
+    lowerFrontArmhole,
+    upperFrontArmhole
+  };
+}
+
+function calcBackSleeveGuideLine(f,p,B){
+  // 뒤판의 다트끝 → 뒤어깨점(BSP) → 옆가슴점(SIDE_TOP)을
+  // 소매 패턴 보조선으로 복사하기 위한 기준점 계산
+  // 주의: BSP → 옆가슴점은 직선이 아니라, 마지막으로 저장된 뒤진동선 베지어를 그대로 사용한다.
+  const deg18 = 18 * Math.PI / 180;
+  const bND = { x: f.bnw(), y: -f.bnd() };
+  const fSNP = { x: f.sw() - f.fnw(), y: f.yB() };
+  const armX = f.sw() - f.fw();
+  const fShLen = (fSNP.x - armX) / Math.cos(22 * Math.PI / 180) + 1.8;
+  const bShLen = fShLen + B / 32 - 0.8;
+  const BSP = {
+    x: bND.x + bShLen * Math.cos(deg18),
+    y: bND.y + bShLen * Math.sin(deg18)
+  };
+
+  const shDx = Math.cos(deg18);
+  const shDy = Math.sin(deg18);
+  const t = (p.E.x - bND.x) / shDx;
+  const dartCenterT = t + 1.5;
+  const dartCenter = {
+    x: bND.x + dartCenterT * shDx,
+    y: bND.y + dartCenterT * shDy
+  };
+  const dartLen = B / 32 - 0.8;
+  const dartEnd = {
+    x: dartCenter.x + dartLen * shDx,
+    y: dartCenter.y + dartLen * shDy
+  };
+
+  // state.armH가 있으면 사용자가 마지막으로 저장/조정한 뒤진동선의
+  // BSP → C안내(a1) → 옆가슴점(a2) 구간을 그대로 복사한다.
+  // 없으면 초기값 기준으로만 fallback한다.
+  const H = state.armH;
+  const sideTop = H?.a2 ? H.a2 : p.SIDE_TOP;
+  const backArmhole = H ? {
+    start: BSP,
+    h0: H.h0,
+    h1a: H.h1a,
+    a1: H.a1,
+    h1b: H.h1b,
+    h2a: H.h2a,
+    end: sideTop
+  } : null;
+
+  return { dartEnd, BSP, sideTop, backArmhole };
+}
+
+// ── 소매 그리기 ──────────────────────────────
+function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,showPattern=true,showDim=true){
+  const SL = n("inpSL");
+  const hemCirc = n("inpHem");
+  const capAdjVal = document.getElementById("capAdjVal");
+  if(capAdjVal) capAdjVal.textContent = n("inpCapAdj").toFixed(1);
+  if(!SL || !hemCirc) return;
+
+  const { bAH, fAH } = calcArmholeLengths(f,p,B);
+  const capInfo = getSelectedSleeveCapHeight(f,p,B,bAH,fAH);
+  const { FSP_closed, BSP, fSH, bSH } = capInfo.metrics;
+  const hemHalf = hemCirc / 2;
+  const capAdj = capInfo.capAdj;
+  const baseCapHeight = capInfo.base;
+  const finalCapHeight = capInfo.final;
+  if(capAdjVal) capAdjVal.textContent = capAdj.toFixed(1);
+  const sd = createSleeveDraft(B, SL, bAH, fAH, finalCapHeight);
+  const sf = sd.formula;
+
+  // ── 소매 배치: WL 아래 15cm ─────────────────
+  const sy_SP   = f.yWL() + 15;
+  const sy_base = sy_SP + sf.SCH();
+  const sx_C = sf.ox();
+  const sx_B = sx_C - sf.bSW();
+  const sx_F = sx_C + sf.fSW();
+
+  const g = E("g");
+  const sy_EL   = sy_SP + sf.EL(); // EL = 소매산점에서 아래로 소매길이/2 + 2.5
+  const sy_HEM  = sy_SP + sf.SL(); // 소매길이선 = 소매산점에서 아래로 소매길이
+
+  // ── 기초선 ──────────────────────────────────
+  g.appendChild(Ln({x:sx_B,y:sy_base},{x:sx_F,y:sy_base},"base"));
+  g.appendChild(Ln({x:sx_C,y:sy_SP},{x:sx_C,y:sy_HEM},"base"));
+  g.appendChild(Ln({x:sx_B,y:sy_EL},{x:sx_F,y:sy_EL},"base"));
+  g.appendChild(lbl({x:sx_F+1,y:sy_EL},`EL ${sf.EL().toFixed(1)}cm`,"txt-dark",4,3));
+  g.appendChild(Ln({x:sx_B,y:sy_HEM},{x:sx_F,y:sy_HEM},"base"));
+  g.appendChild(lbl({x:sx_F+1,y:sy_HEM},`SL ${sf.SL().toFixed(1)}cm`,"txt-dark",4,3));
+  g.appendChild(Ln({x:sx_B,y:sy_base},{x:sx_B,y:sy_HEM},"base"));
+  g.appendChild(Ln({x:sx_F,y:sy_base},{x:sx_F,y:sy_HEM},"base"));
+
+  const SP = {x:sx_C, y:sy_SP};
+  g.appendChild(dot(SP,"pt-main",3));
+  g.appendChild(lbl(SP,"소매산","txt-dark",5,-5));
+
+  const SG = {x:sx_C, y:sy_base};
+  g.appendChild(dot(SG,"pt-dep",3));
+  g.appendChild(lbl(SG,"G","txt-dep",5,-5));
+
+  const cubicAt = (p0,h1,h2,p1,t) => {
+    const mt = 1 - t;
+    return {
+      x: mt*mt*mt*p0.x + 3*mt*mt*t*h1.x + 3*mt*t*t*h2.x + t*t*t*p1.x,
+      y: mt*mt*mt*p0.y + 3*mt*mt*t*h1.y + 3*mt*t*t*h2.y + t*t*t*p1.y
+    };
+  };
+  let sleeveBackCurveSamples = null;
+  let sleeveBackCircPt = null;
+  const sleevePatPts = {}; // 실제 소매 패턴선 기준 앵커 모음
+
+  // ── 문화식 앞소매 둘레 구하기 보조선 ─────────────
+  // 공식 개념: 소매산점(SP)에서 앞진동길이(fAH)를 반지름처럼 잡고,
+  // 소매 BL 라인(sy_base)과 만나는 점을 앞소매 둘레점으로 본다.
+  // 수평거리 = √(앞진동길이² - 소매산높이²)
+  {
+    const capH = sf.SCH();
+    const frontRadius = fAH;
+    const frontDx = Math.sqrt(Math.max(0, frontRadius*frontRadius - capH*capH));
+    const frontCircPt = { x: sx_C + frontDx, y: sy_base };
+    sleevePatPts.frontCircPt = frontCircPt;
+
+    g.appendChild(Ln(SP, frontCircPt, "sleeve-front-circ"));
+    g.appendChild(Ln({x:frontCircPt.x,y:sy_base-1.2},{x:frontCircPt.x,y:sy_base+1.2},"sleeve-front-circ-light"));
+    g.appendChild(dot(frontCircPt,"pt-main",3.5));
+    g.appendChild(lbl(frontCircPt,`앞둘레점`,"txt-dark",5,-7));
+    g.appendChild(lbl({x:(SP.x+frontCircPt.x)/2,y:(SP.y+frontCircPt.y)/2},`앞진동 ${fAH.toFixed(1)}cm`,"sleeve-guide-label",5,-5));
+    g.appendChild(lbl({x:(SG.x+frontCircPt.x)/2,y:sy_base+1.2},`BL교점 폭 ${frontDx.toFixed(1)}cm`,"sleeve-guide-label",-20,10));
+
+    if(frontRadius <= capH){
+      g.appendChild(lbl({x:frontCircPt.x,y:frontCircPt.y+2.4},"앞진동길이가 소매산높이보다 짧음", "txt-dark",5,8));
+    }
+  }
+
+  // ── 문화식 앞소매산 보조점: 앞암홀/4 지점에서 바깥직각 1.9cm ──
+  // 기준: 소매산점(SP)에서 앞방향 보조선(SP→앞둘레점) 위로 앞암홀/4만큼 이동,
+  // 그 점에서 바깥방향 직각으로 1.9cm 이동한 점을 만든다.
+  {
+    const capH = sf.SCH();
+    const frontRadius = fAH;
+    const frontDx = Math.sqrt(Math.max(0, frontRadius*frontRadius - capH*capH));
+    const frontCircPt = { x: sx_C + frontDx, y: sy_base };
+    sleevePatPts.frontCircPt = frontCircPt;
+
+    const vx = frontCircPt.x - SP.x;
+    const vy = frontCircPt.y - SP.y;
+    const vLen = Math.hypot(vx, vy) || 1;
+    const ux = vx / vLen;
+    const uy = vy / vLen;
+
+    // 앞방향 보조선 위에서 앞암홀/4 지점
+    const qDist = fAH / 4;
+    const q = { x: SP.x + ux*qDist, y: SP.y + uy*qDist };
+
+    // 바깥방향 직각: 앞소매 기준 오른쪽/위쪽 방향
+    const out = { x: uy, y: -ux };
+    const qOut = { x: q.x + out.x*1.9, y: q.y + out.y*1.9 };
+    sleevePatPts.frontQOut = qOut;
+
+    g.appendChild(Ln(SP, q, "sleeve-culture-aux"));
+    g.appendChild(Ln(q, qOut, "sleeve-culture-aux"));
+    const [qx,qy] = c2p(q.x,q.y);
+    const [qox,qoy] = c2p(qOut.x,qOut.y);
+    g.appendChild(E("circle",{cx:qx,cy:qy,r:3.2,class:"sleeve-culture-aux-point"}));
+    g.appendChild(E("circle",{cx:qox,cy:qoy,r:3.8,class:"sleeve-culture-aux-point"}));
+    g.appendChild(lbl(q, `앞AH/4 ${(qDist).toFixed(1)}`, "txt-dark", 5, -5));
+    g.appendChild(lbl(qOut, "직각 1.9", "txt-dark", 5, -5));
+  }
+
+  // ── 문화식 뒤소매 둘레 구하기 보조선 ─────────────
+  // 공식 개념: 뒤소매 목표길이 = 뒤진동길이 + 1cm + α
+  // 소매산점(SP)에서 목표길이를 반지름처럼 잡고,
+  // 소매 BL 라인(sy_base)과 만나는 점을 뒤둘레점으로 본다.
+  {
+    const capH = sf.SCH();
+    const backTargetInfo = calcBackSleeveTargetLength(B, bAH);
+    const backRadius = backTargetInfo.target;
+    const backDx = Math.sqrt(Math.max(0, backRadius*backRadius - capH*capH));
+    const backCircPt = { x: sx_C - backDx, y: sy_base };
+    sleeveBackCircPt = backCircPt;
+    sleevePatPts.backCircPt = backCircPt;
+
+    g.appendChild(Ln(SP, backCircPt, "sleeve-back-circ"));
+    g.appendChild(Ln({x:backCircPt.x,y:sy_base-1.2},{x:backCircPt.x,y:sy_base+1.2},"sleeve-back-circ-light"));
+    g.appendChild(dot(backCircPt,"pt-main",3.5));
+    g.appendChild(lbl(backCircPt,`뒤둘레점`,"txt-dark",-38,-7));
+    g.appendChild(lbl({x:(SP.x+backCircPt.x)/2,y:(SP.y+backCircPt.y)/2},`뒤진동 ${bAH.toFixed(1)} +1 +α${backTargetInfo.alpha.toFixed(1)} = ${backRadius.toFixed(1)}cm`,"sleeve-guide-label",-65,-5));
+    g.appendChild(lbl({x:(SG.x+backCircPt.x)/2,y:sy_base+1.2},`BL교점 폭 ${backDx.toFixed(1)}cm`,"sleeve-guide-label",-24,10));
+
+    // 문화식 뒤소매산 보조점: 소매산에서 앞암홀/4 지점, 바깥 직각 2cm
+    {
+      const vx = backCircPt.x - SP.x;
+      const vy = backCircPt.y - SP.y;
+      const vLen = Math.hypot(vx, vy) || 1;
+      const ux = vx / vLen;
+      const uy = vy / vLen;
+      const qDist = fAH / 4;
+      const q = { x: SP.x + ux*qDist, y: SP.y + uy*qDist };
+      // 뒤소매 기준 바깥방향 = 왼쪽/위쪽 직각
+      const out = { x: -uy, y: ux };
+      const qOut = { x: q.x + out.x*2.0, y: q.y + out.y*2.0 };
+      sleevePatPts.backQOut = qOut;
+      g.appendChild(Ln(SP, q, "sleeve-culture-aux"));
+      g.appendChild(Ln(q, qOut, "sleeve-culture-aux"));
+      const [qx,qy] = c2p(q.x,q.y);
+      const [qox,qoy] = c2p(qOut.x,qOut.y);
+      g.appendChild(E("circle",{cx:qx,cy:qy,r:3.2,class:"sleeve-culture-aux-point"}));
+      g.appendChild(E("circle",{cx:qox,cy:qoy,r:3.8,class:"sleeve-culture-aux-point"}));
+      g.appendChild(lbl(q, `뒤보조 앞AH/4 ${(qDist).toFixed(1)}`, "txt-dark", -55, -5));
+      g.appendChild(lbl(qOut, "직각 2.0", "txt-dark", -45, -5));
+    }
+
+    if(backRadius <= capH){
+      g.appendChild(lbl({x:backCircPt.x,y:backCircPt.y+2.4},"뒤목표길이가 소매산높이보다 짧음", "txt-dark",-65,8));
+    }
+  }
+
+  g.appendChild(lbl({x:sx_C,y:sy_SP-1.5},"소매산 진동 복사 보조선", "sleeve-guide-label",-45,-5));
+
+  // ── 소매 보조선: 뒤판 다트끝 → 뒤어깨점 → 옆가슴점을 복사해서 G점으로 이동
+  {
+    const guide = calcBackSleeveGuideLine(f,p,B);
+    const moveX = SG.x - guide.sideTop.x;
+    const moveY = SG.y - guide.sideTop.y;
+    const toSleeve = pt => ({ x: pt.x + moveX, y: pt.y + moveY });
+    const sDartEnd = toSleeve(guide.dartEnd);
+    const sBSP = toSleeve(guide.BSP);
+
+    // 다트끝 → BSP는 원래 직선, BSP → 옆가슴점은 저장된 뒤진동선 곡선으로 복사
+    g.appendChild(Ln(sDartEnd, sBSP, "dep"));
+
+    if(guide.backArmhole){
+      const bh = guide.backArmhole;
+      // 뒤진동도 소매에서는 "옆가슴점(SG) → 뒤어깨점(BSP)" 방향으로 보여야 한다.
+      // 원본 저장선은 BSP → a1 → 옆가슴점 방향이므로 베지어를 역순으로 복사한다.
+      const p0  = SG;                 // 공통 시작점 = 소매 옆가슴점
+      const h0  = toSleeve(bh.h2a);   // reverse control 1
+      const h1  = toSleeve(bh.h1b);   // reverse control 2
+      const a1  = toSleeve(bh.a1);
+      const h2  = toSleeve(bh.h1a);   // reverse control 1
+      const h3  = toSleeve(bh.h0);    // reverse control 2
+      const p2  = toSleeve(bh.start); // 끝점 = 뒤어깨점(BSP)
+      const [x0,y0] = c2p(p0.x,p0.y);
+      const [h0x,h0y] = c2p(h0.x,h0.y);
+      const [h1x,h1y] = c2p(h1.x,h1.y);
+      const [a1x,a1y] = c2p(a1.x,a1.y);
+      const [h2x,h2y] = c2p(h2.x,h2.y);
+      const [h3x,h3y] = c2p(h3.x,h3.y);
+      const [x2,y2] = c2p(p2.x,p2.y);
+      const dBack = `M${x0},${y0} C${h0x},${h0y} ${h1x},${h1y} ${a1x},${a1y}`+
+                    ` C${h2x},${h2y} ${h3x},${h3y} ${x2},${y2}`;
+      g.appendChild(E("path",{d:dBack,class:"sleeve-back-guide"}));
+      sleeveBackCurveSamples = [];
+      for(let i=0;i<=90;i++) sleeveBackCurveSamples.push(cubicAt(p0,h0,h1,a1,i/90));
+      for(let i=1;i<=90;i++) sleeveBackCurveSamples.push(cubicAt(a1,h2,h3,p2,i/90));
+    } else {
+      // fallback: 핸들이 아직 없을 때도 시작점은 SG, 끝점은 BSP로 맞춘다.
+      g.appendChild(Ln(SG, sBSP, "sleeve-back-guide"));
+      sleeveBackCurveSamples = [SG, sBSP];
+    }
+
+    g.appendChild(dot(sDartEnd, "pt-dep", 3));
+    g.appendChild(dot(sBSP, "pt-dep", 3));
+    g.appendChild(lbl(sDartEnd, "뒤다트끝 복사", "txt-dep", 5, -5));
+    g.appendChild(lbl(sBSP, "BSP 복사", "txt-dep", 5, -5));
+  }
+
+  // ── 소매 보조선: 앞진동 두 구간을 함께 복사
+  // 기준: 앞/뒤진동 모두 시작점은 같은 소매 옆가슴점(SG)이다.
+  // 앞진동은 "옆가슴점 → G" 하부 구간과 "닫힌 GG → FSP" 상부 구간을 연결해서 가져온다.
+  {
+    const guide = calcFrontClosedSleeveGuideLine(f,p,B);
+    const sideTop0 = guide.lowerFrontArmhole?.sideTop || p.SIDE_TOP;
+
+    // 앞진동은 소매의 앞쪽으로 펼쳐지도록 옆가슴점을 SG에 붙여 평행이동한다.
+    // 여기서 붙는 기준점은 G/GG가 아니라 항상 옆가슴점이다.
+    const toFrontFromSide = pt => ({
+      x: SG.x + (pt.x - sideTop0.x),
+      y: SG.y + (pt.y - sideTop0.y)
+    });
+
+    let frontJoin = toFrontFromSide(guide.G); // 하부 끝 = G 복사점
+
+    // ① 옆가슴점 → G 구간: 원본 방향 그대로 SG에서 시작한다.
+    if(guide.lowerFrontArmhole){
+      const lh = guide.lowerFrontArmhole;
+      const p0 = SG;
+      const h1 = toFrontFromSide(lh.h2b);
+      const h2 = toFrontFromSide(lh.h3a);
+      const a3 = toFrontFromSide(lh.a3);
+      const h3 = toFrontFromSide(lh.h3b);
+      const h4 = toFrontFromSide(lh.h4);
+      const p2 = toFrontFromSide(lh.G);
+      frontJoin = p2;
+
+      const [x0,y0] = c2p(p0.x,p0.y);
+      const [h1x,h1y] = c2p(h1.x,h1.y);
+      const [h2x,h2y] = c2p(h2.x,h2.y);
+      const [a3x,a3y] = c2p(a3.x,a3.y);
+      const [h3x,h3y] = c2p(h3.x,h3.y);
+      const [h4x,h4y] = c2p(h4.x,h4.y);
+      const [x2,y2] = c2p(p2.x,p2.y);
+
+      const dLower = `M${x0},${y0} C${h1x},${h1y} ${h2x},${h2y} ${a3x},${a3y}`+
+                     ` C${h3x},${h3y} ${h4x},${h4y} ${x2},${y2}`;
+      g.appendChild(E("path",{d:dLower,class:"sleeve-front-guide"}));
+    } else {
+      frontJoin = toFrontFromSide(p.G);
+      g.appendChild(Ln(SG, frontJoin, "sleeve-front-guide"));
+    }
+
+    // ② 닫힌 GG → 앞옆어깨점(FSP) 구간:
+    // 다트를 닫은 뒤의 GG 시작점을 방금 복사한 G점(frontJoin)에 붙인다.
+    const toFrontFromClosedG = pt => ({
+      x: frontJoin.x + (pt.x - guide.start.x),
+      y: frontJoin.y + (pt.y - guide.start.y)
+    });
+
+    if(guide.upperFrontArmhole){
+      const uh = guide.upperFrontArmhole;
+      const p0 = frontJoin;
+      const h1 = toFrontFromClosedG(uh.hFa);
+      const h2 = toFrontFromClosedG(uh.hFb);
+      const p1 = toFrontFromClosedG(uh.end);
+      const [x0,y0] = c2p(p0.x, p0.y);
+      const [h1x,h1y] = c2p(h1.x, h1.y);
+      const [h2x,h2y] = c2p(h2.x, h2.y);
+      const [x1,y1] = c2p(p1.x, p1.y);
+      const dUpper = `M${x0},${y0} C${h1x},${h1y} ${h2x},${h2y} ${x1},${y1}`;
+      g.appendChild(E("path",{d:dUpper,class:"sleeve-front-guide"}));
+      g.appendChild(dot(p1, "pt-dep", 3));
+      g.appendChild(lbl(p1, "FSP 복사", "txt-dep", 5, -5));
+    } else {
+      const p1 = toFrontFromClosedG(guide.end);
+      g.appendChild(Ln(frontJoin, p1, "sleeve-front-guide"));
+      g.appendChild(dot(p1, "pt-dep", 3));
+      g.appendChild(lbl(p1, "FSP 복사", "txt-dep", 5, -5));
+    }
+
+    g.appendChild(dot(frontJoin, "pt-dep", 3));
+    g.appendChild(lbl(SG, "공통 옆가슴점", "txt-dep", 5, 12));
+    g.appendChild(lbl(frontJoin, "G/닫힌GG 연결", "txt-dep", 5, -5));
+    sleevePatPts.gY = frontJoin.y;
+
+    // ── 문화식 앞소매 추가 보조선 ─────────────────
+    // 1) G점 높이의 수평보조선
+    // 2) 앞소매 보조선(SP→앞둘레점)과 G수평선의 교점에서 소매산 방향 1cm 점
+    // 3) 공통옆가슴점→G의 x길이 2/3 지점 vertical을 만들고, 앞둘레점 쪽에도 복사
+    {
+      const capH = sf.SCH();
+      const frontDx = Math.sqrt(Math.max(0, fAH*fAH - capH*capH));
+      const frontCircPt = { x: sx_C + frontDx, y: sy_base };
+
+      // 1. G점 높이 수평선
+      g.appendChild(Ln({x:SG.x, y:frontJoin.y}, {x:frontCircPt.x, y:frontJoin.y}, "sleeve-culture-aux-copy"));
+      g.appendChild(lbl({x:frontCircPt.x, y:frontJoin.y}, "G높이", "sleeve-guide-label", 5, 3));
+
+      // 2. 앞 보조선과 G수평선의 교점 → 소매산 방향 1cm
+      const denomY = frontCircPt.y - SP.y || 1;
+      const tMeet = Math.max(0, Math.min(1, (frontJoin.y - SP.y) / denomY));
+      const meet = {
+        x: SP.x + (frontCircPt.x - SP.x) * tMeet,
+        y: SP.y + (frontCircPt.y - SP.y) * tMeet
+      };
+      const toSP = { x: SP.x - meet.x, y: SP.y - meet.y };
+      const toSPLen = Math.hypot(toSP.x, toSP.y) || 1;
+      const meetIn = { x: meet.x + toSP.x/toSPLen * 1, y: meet.y + toSP.y/toSPLen * 1 };
+      sleevePatPts.frontGUp = meetIn;
+      g.appendChild(Ln(meet, meetIn, "sleeve-culture-aux"));
+      {
+        const [mx,my] = c2p(meet.x, meet.y);
+        const [ix,iy] = c2p(meetIn.x, meetIn.y);
+        g.appendChild(E("circle",{cx:mx,cy:my,r:3,class:"sleeve-culture-aux-point"}));
+        g.appendChild(E("circle",{cx:ix,cy:iy,r:3.6,class:"sleeve-culture-aux-point"}));
+      }
+      g.appendChild(lbl(meetIn, "G수평∩앞보조 +1", "txt-dark", 5, -5));
+
+      // 3. SG→G x길이의 2/3 지점(aaa)에서 앞진동선까지 수직선
+      const gXLen = frontJoin.x - SG.x;
+      const aaaLen = gXLen * 2/3;
+      const aaaX = SG.x + aaaLen;
+
+      const cubicPoint = (p0,h1,h2,p1,t) => {
+        const mt = 1 - t;
+        return {
+          x: mt*mt*mt*p0.x + 3*mt*mt*t*h1.x + 3*mt*t*t*h2.x + t*t*t*p1.x,
+          y: mt*mt*mt*p0.y + 3*mt*mt*t*h1.y + 3*mt*t*t*h2.y + t*t*t*p1.y
+        };
+      };
+      let hit = null;
+      if(guide.lowerFrontArmhole){
+        const lh = guide.lowerFrontArmhole;
+        const h1 = toFrontFromSide(lh.h2b);
+        const h2 = toFrontFromSide(lh.h3a);
+        const a3 = toFrontFromSide(lh.a3);
+        const h3 = toFrontFromSide(lh.h3b);
+        const h4 = toFrontFromSide(lh.h4);
+        const p2 = toFrontFromSide(lh.G);
+        const samples = [];
+        for(let i=0;i<=80;i++) samples.push(cubicPoint(SG,h1,h2,a3,i/80));
+        for(let i=1;i<=80;i++) samples.push(cubicPoint(a3,h3,h4,p2,i/80));
+        hit = samples.reduce((best,pt)=>{
+          if(!best) return pt;
+          return Math.abs(pt.x-aaaX) < Math.abs(best.x-aaaX) ? pt : best;
+        }, null);
+      }
+      if(!hit) hit = { x: aaaX, y: SG.y + (frontJoin.y-SG.y)*2/3 };
+
+      const aaaBase = { x: aaaX, y: sy_base };
+      const aaaTop  = { x: aaaX, y: hit.y };
+      g.appendChild(Ln(aaaBase, aaaTop, "sleeve-culture-aux"));
+      {
+        const [ax,ay] = c2p(aaaBase.x, aaaBase.y);
+        g.appendChild(E("circle",{cx:ax,cy:ay,r:3,class:"sleeve-culture-aux-point"}));
+      }
+      g.appendChild(lbl(aaaBase, "aaa 2/3", "txt-dark", 5, 12));
+
+      // 앞둘레점에서 aaa 길이만큼 공통옆가슴점 방향으로 이동한 곳에 수직선 복사
+      const copyX = frontCircPt.x - Math.abs(aaaLen);
+      const copyBase = { x: copyX, y: sy_base };
+      const copyTop  = { x: copyX, y: sy_base - (sy_base - hit.y) };
+      sleevePatPts.frontCopyTop = copyTop;
+      g.appendChild(Ln(copyBase, copyTop, "sleeve-culture-aux-copy"));
+      g.appendChild(lbl(copyBase, "aaa 복사", "sleeve-guide-label", 5, 12));
+    }
+
+    // ── 문화식 뒤소매 추가 보조선 ─────────────────
+    // 기준 재정의:
+    // 1) G높이 수평선과 뒤소매산선(SP→뒤둘레점)의 교점에서 1cm 아래 보조점
+    // 2) 뒤암홀선보조선(복사된 뒤진동 곡선)과 G높이 수평선의 교점 = ccc
+    // 3) SG→ccc x거리의 2/3 지점에서 수직선을 올려 뒤암홀선보조선과 만나는 선 표시
+    // 4) 그 수직선을 뒤둘레점에서 2/3만큼 들어온 위치에 복사
+    {
+      const yG = frontJoin.y;
+
+      // 뒤소매산선 = 소매산점(SP) → 뒤둘레점(sleeveBackCircPt)
+      const backSleeveCapEnd = sleeveBackCircPt || { x: sx_C - Math.abs(frontJoin.x-SG.x), y: sy_base };
+
+      const pointOnSegmentByY = (a, b, targetY) => {
+        const dy = b.y - a.y;
+        const t = dy ? (targetY - a.y) / dy : 0;
+        const tt = Math.max(0, Math.min(1, t));
+        return {
+          x: a.x + (b.x - a.x) * tt,
+          y: a.y + (b.y - a.y) * tt
+        };
+      };
+
+      const closestSampleByY = (samples, targetY) => {
+        if(!samples || !samples.length) return null;
+        return samples.reduce((best, pt) => {
+          if(!best) return pt;
+          return Math.abs(pt.y - targetY) < Math.abs(best.y - targetY) ? pt : best;
+        }, null);
+      };
+
+      const closestSampleByX = (samples, targetX) => {
+        if(!samples || !samples.length) return null;
+        return samples.reduce((best, pt) => {
+          if(!best) return pt;
+          return Math.abs(pt.x - targetX) < Math.abs(best.x - targetX) ? pt : best;
+        }, null);
+      };
+
+      // 1. G높이 수평선과 뒤소매산선의 교점 → 아래 1cm 보조점
+      const backCapMeet = pointOnSegmentByY(SP, backSleeveCapEnd, yG);
+      g.appendChild(Ln({x:backCapMeet.x, y:yG}, {x:SG.x, y:yG}, "sleeve-culture-aux-copy"));
+      g.appendChild(dot(backCapMeet, "pt-main", 3));
+      g.appendChild(lbl(backCapMeet, "뒤소매산∩G높이", "txt-dark", -72, -5));
+
+      // 뒤소매산선 위에서 뒤둘레점 방향으로 1cm 이동한 보조점
+      const backCapDir = { x: backSleeveCapEnd.x - backCapMeet.x, y: backSleeveCapEnd.y - backCapMeet.y };
+      const backCapDirLen = Math.hypot(backCapDir.x, backCapDir.y) || 1;
+      const backCapDown = {
+        x: backCapMeet.x + backCapDir.x / backCapDirLen * 1,
+        y: backCapMeet.y + backCapDir.y / backCapDirLen * 1
+      };
+      sleevePatPts.backOneDown = backCapDown;
+      g.appendChild(Ln(backCapMeet, backCapDown, "sleeve-culture-aux"));
+      {
+        const [dx,dy] = c2p(backCapDown.x, backCapDown.y);
+        g.appendChild(E("circle",{cx:dx,cy:dy,r:3.6,class:"sleeve-culture-aux-point"}));
+      }
+      g.appendChild(lbl(backCapDown, "아래 1", "txt-dark", -42, 10));
+
+      // 2. 뒤암홀선보조선과 G높이 수평선의 교점 = ccc
+      const ccc = closestSampleByY(sleeveBackCurveSamples, yG) || backCapMeet;
+      g.appendChild(dot(ccc, "pt-main", 3));
+      g.appendChild(lbl(ccc, "ccc", "txt-dark", -22, -6));
+      g.appendChild(Ln({x:ccc.x, y:yG}, {x:SG.x, y:yG}, "sleeve-culture-aux-copy"));
+
+      // 3. SG→ccc x축 거리의 2/3 지점에서 수직선을 올려 뒤암홀선보조선과 만나는 선
+      const cccXLen = ccc.x - SG.x; // 뒤쪽이므로 보통 음수
+      const cccTwoThird = cccXLen * 2/3;
+      const bbbX = SG.x + cccTwoThird;
+      const hit = closestSampleByX(sleeveBackCurveSamples, bbbX) || pointOnSegmentByY(SP, backSleeveCapEnd, yG);
+
+      const bbbBase = { x: bbbX, y: sy_base };
+      const bbbTop  = { x: bbbX, y: hit.y };
+      g.appendChild(Ln(bbbBase, bbbTop, "sleeve-culture-aux"));
+      g.appendChild(dot(bbbTop, "pt-dep", 3));
+      g.appendChild(lbl(bbbBase, "ccc 2/3", "txt-dark", -45, 12));
+
+      // 4. 뒤둘레점에서 2/3 길이만큼 공통옆가슴점 방향으로 이동한 위치에 복사
+      if(sleeveBackCircPt){
+        const copyX = sleeveBackCircPt.x + Math.abs(cccTwoThird);
+        const copyBase = { x: copyX, y: sy_base };
+        const copyTop  = { x: copyX, y: sy_base - (sy_base - hit.y) };
+        sleevePatPts.backCopyTop = copyTop;
+        g.appendChild(Ln(copyBase, copyTop, "sleeve-culture-aux-copy"));
+        g.appendChild(lbl(copyBase, "ccc 복사", "sleeve-guide-label", -45, 12));
+      }
+    }
+  }
+
+
+  // ── 실제 소매 패턴선: 뒤둘레점 → 보조점들 → 소매산 → 보조점들 → 앞둘레점 ──
+  // 소매산 편집모드에서는 암홀처럼 베지어 핸들을 직접 드래그할 수 있고, 저장 데이터에도 포함된다.
+  {
+    const anchors = [
+      sleevePatPts.backCircPt,     // 1. 뒤둘레점
+      sleevePatPts.backCopyTop,    // 2. 가까운 수직 복사점
+      sleevePatPts.backOneDown,    // 3. 뒤소매산선 위 1cm점
+      sleevePatPts.backQOut,       // 4. 소매산에서 직각 2cm점
+      SP,                          // 5. 소매산
+      sleevePatPts.frontQOut,      // 6. 직각 1.9cm점
+      sleevePatPts.frontGUp,       // 7. G점에서 소매산방향 1cm점
+      sleevePatPts.frontCopyTop,   // 8. aaa 복사 직각끝점
+      sleevePatPts.frontCircPt     // 9. 앞둘레점
+    ].filter(Boolean);
+
+    if(anchors.length >= 2){
+      const pxy = pt => c2p(pt.x, pt.y);
+      const clonePt = pt => ({x:+pt.x, y:+pt.y});
+      const catCtrl = (p0,p1,p2,p3) => ({
+        c1: { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 },
+        c2: { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 }
+      });
+      const makeDefaultSleeveH = () => {
+        const segs = [];
+        for(let i=0;i<anchors.length-1;i++){
+          const p0 = anchors[Math.max(0,i-1)];
+          const p1 = anchors[i];
+          const p2 = anchors[i+1];
+          const p3 = anchors[Math.min(anchors.length-1,i+2)];
+          const {c1,c2} = catCtrl(p0,p1,p2,p3);
+          segs.push({c1:clonePt(c1), c2:clonePt(c2)});
+        }
+        return { anchorCount: anchors.length, segments: segs };
+      };
+
+      if(!state.sleeveH || state.sleeveH.anchorCount !== anchors.length || !state.sleeveH.segments || state.sleeveH.segments.length !== anchors.length-1){
+        restoreSavedSleevePatternForAnchorCount(anchors.length);
+      }
+      if(!state.sleeveH || state.sleeveH.anchorCount !== anchors.length || !state.sleeveH.segments || state.sleeveH.segments.length !== anchors.length-1){
+        state.sleeveH = makeDefaultSleeveH();
+      }
+      const SH = state.sleeveH;
+
+      let d = '';
+      const [mx,my] = pxy(anchors[0]);
+      d = `M${mx},${my}`;
+      for(let i=0;i<anchors.length-1;i++){
+        const seg = SH.segments[i];
+        const [c1x,c1y] = pxy(seg.c1);
+        const [c2x,c2y] = pxy(seg.c2);
+        const [x2,y2] = pxy(anchors[i+1]);
+        d += ` C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`;
+      }
+      g.appendChild(E("path",{d,class:"sleeve-pattern-line"}));
+
+      // ── 이세량 실시간 계산: 몸판 암홀 길이 vs 소매 패턴선 길이 ──
+      const segLen = (i) => {
+        const seg = SH.segments[i];
+        return bezierLen([
+          [anchors[i].x, anchors[i].y],
+          [seg.c1.x, seg.c1.y],
+          [seg.c2.x, seg.c2.y],
+          [anchors[i+1].x, anchors[i+1].y]
+        ], 80);
+      };
+      const spIndex = anchors.findIndex(pt => Math.abs(pt.x - SP.x) < 0.001 && Math.abs(pt.y - SP.y) < 0.001);
+      if(spIndex > 0 && spIndex < anchors.length-1){
+        let sleeveBackLen = 0;
+        for(let i=0;i<spIndex;i++) sleeveBackLen += segLen(i);
+        let sleeveFrontLen = 0;
+        for(let i=spIndex;i<anchors.length-1;i++) sleeveFrontLen += segLen(i);
+        const backEase = sleeveBackLen - bAH;
+        const frontEase = sleeveFrontLen - fAH;
+        const totalEase = backEase + frontEase;
+        const panelX = sx_F + 7;
+        const panelY = sy_SP + 4;
+        const rows = [
+          `뒤암홀 ${bAH.toFixed(2)} / 뒤소매 ${sleeveBackLen.toFixed(2)} / 뒤이세 ${backEase>=0?"+":""}${backEase.toFixed(2)}`,
+          `앞암홀 ${fAH.toFixed(2)} / 앞소매 ${sleeveFrontLen.toFixed(2)} / 앞이세 ${frontEase>=0?"+":""}${frontEase.toFixed(2)}`,
+          `총이세 ${totalEase>=0?"+":""}${totalEase.toFixed(2)}cm`
+        ];
+        rows.forEach((msg, idx)=>{
+          const [tx,ty] = c2p(panelX, panelY + idx*1.25);
+          const t = E("text",{x:tx,y:ty,fill:idx===2?"#cc3333":"#333","font-size":9,"font-weight":"700"});
+          t.textContent = msg;
+          g.appendChild(t);
+        });
+      }
+
+      const moveSleeveHandle = (segIndex, which, ev) => {
+        ev.stopPropagation();
+        const onMove = mv => {
+          const [nx,ny] = eventToPatternPoint(mv);
+          state.sleeveH.segments[segIndex][which].x = nx;
+          state.sleeveH.segments[segIndex][which].y = ny;
+          render();
+        };
+        const onUp = () => {
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      };
+
+      // 핸들 표시: 시작/끝은 하나, 중간점은 양쪽 핸들.
+      SH.segments.forEach((seg,i)=>{
+        const from = anchors[i];
+        const to   = anchors[i+1];
+        const [x1,y1] = pxy(from), [x2,y2] = pxy(to);
+        const [c1x,c1y] = pxy(seg.c1), [c2x,c2y] = pxy(seg.c2);
+        g.appendChild(E("line",{x1,y1,x2:c1x,y2:c1y,class:"sleeve-pattern-handle"}));
+        g.appendChild(E("line",{x1:x2,y1:y2,x2:c2x,y2:c2y,class:"sleeve-pattern-handle"}));
+
+        const h1 = E("circle",{cx:c1x,cy:c1y,r:state.sleeveEditMode?5:2.7,class:"sleeve-pattern-handle-pt",style:state.sleeveEditMode?"cursor:grab":""});
+        const h2 = E("circle",{cx:c2x,cy:c2y,r:state.sleeveEditMode?5:2.7,class:"sleeve-pattern-handle-pt",style:state.sleeveEditMode?"cursor:grab":""});
+        if(state.sleeveEditMode){
+          h1.addEventListener("mousedown", ev => moveSleeveHandle(i, "c1", ev));
+          h2.addEventListener("mousedown", ev => moveSleeveHandle(i, "c2", ev));
+        }
+        g.appendChild(h1);
+        g.appendChild(h2);
+      });
+
+      anchors.forEach((pt,idx)=>{
+        const [ax,ay]=pxy(pt);
+        g.appendChild(E("circle",{cx:ax,cy:ay,r:3.2,class:"sleeve-pattern-anchor"}));
+        if(idx===0) g.appendChild(lbl(pt,"뒤둘레 시작","txt-dark",-44,-8));
+        if(idx===anchors.length-1) g.appendChild(lbl(pt,"앞둘레 끝","txt-dark",5,-8));
+      });
+      g.appendChild(lbl(SP,state.sleeveEditMode?"소매산 편집중":"실제 소매산 패턴선","txt-dark",8,-18));
+    }
+  }
+
+
+  // ── 소매단 수정 기능: 앞둘레점-뒤둘레점의 중간을 중심으로 소매단둘레/2씩 이동 ──
+  // 기준: 소매단 중심은 소매산 중심선이 아니라, 앞둘레점과 뒤둘레점의 중간점에서 수직 하강한 지점이다.
+  if(sleevePatPts.backCircPt && sleevePatPts.frontCircPt){
+    const sleeveMidX = (sleevePatPts.backCircPt.x + sleevePatPts.frontCircPt.x) / 2;
+    const hemCenter  = { x: sleeveMidX, y: sy_HEM };
+    const backHemPt  = { x: sleeveMidX - hemHalf, y: sy_HEM };
+    const frontHemPt = { x: sleeveMidX + hemHalf, y: sy_HEM };
+
+    // 뒤/앞 옆선: 둘레점에서 조절된 소매단으로 연결
+    g.appendChild(Ln(sleevePatPts.backCircPt,  backHemPt,  "sleeve-pattern-line"));
+    g.appendChild(Ln(sleevePatPts.frontCircPt, frontHemPt, "sleeve-pattern-line"));
+
+    // 조절된 소매단선
+    g.appendChild(Ln(backHemPt, frontHemPt, "sleeve-pattern-line"));
+
+    // 소매단 중심 및 기준 표시
+    g.appendChild(dot(backHemPt,  "pt-main", 3.2));
+    g.appendChild(dot(frontHemPt, "pt-main", 3.2));
+    g.appendChild(dot(hemCenter,  "pt-dep", 3));
+    g.appendChild(lbl(backHemPt,  `뒤소매단`, "txt-dark", -48, 12));
+    g.appendChild(lbl(frontHemPt, `앞소매단`, "txt-dark", 5, 12));
+    g.appendChild(lbl(hemCenter,  `소매단 중심 / 단둘레 ${hemCirc.toFixed(1)}`, "txt-dep", -52, 14));
+
+    // 소매단 반폭 치수 표시: 중심선 기준 좌/우 = 소매단둘레/2
+    g.appendChild(dimLine(backHemPt, hemCenter, -12));
+    g.appendChild(dimLine(hemCenter, frontHemPt, -12));
+  }
+
+  const SB = {x:sx_B, y:sy_base};
+  const SF = {x:sx_F, y:sy_base};
+  g.appendChild(dot(SB,"pt-dep",3));
+  g.appendChild(dot(SF,"pt-dep",3));
+
+  g.appendChild(dimLine(SB, SG, -10));
+  {
+    const[x,y]=c2p((sx_B+sx_C)/2, sy_base-1.5);
+    const t=E("text",{x,y,fill:"#185FA5","font-size":8,"text-anchor":"middle","font-weight":"700"});
+    t.textContent=`뒤AH=${bAH.toFixed(1)}`;
+    g.appendChild(t);
+  }
+
+  g.appendChild(dimLine(SG, SF, -10));
+  {
+    const[x,y]=c2p((sx_C+sx_F)/2, sy_base-1.5);
+    const t=E("text",{x,y,fill:"#0F6E56","font-size":8,"text-anchor":"middle","font-weight":"700"});
+    t.textContent=`앞AH=${fAH.toFixed(1)}`;
+    g.appendChild(t);
+  }
+
+  g.appendChild(dimLine(SP, SG, 8));
+
+  // 사용성 정리: 재도용 보라/주황 보조선은 기본 화면에서 숨기고, G높이 수평선만 다시 표시한다.
+  Array.from(g.querySelectorAll('.sleeve-culture-aux,.sleeve-culture-aux-copy,.sleeve-culture-aux-point')).forEach(el=>el.remove());
+  if(sleevePatPts.gY !== undefined && sleevePatPts.frontCircPt && sleevePatPts.backCircPt){
+    g.appendChild(Ln({x:sleevePatPts.backCircPt.x,y:sleevePatPts.gY},{x:sleevePatPts.frontCircPt.x,y:sleevePatPts.gY},"dep"));
+    g.appendChild(lbl({x:sleevePatPts.frontCircPt.x,y:sleevePatPts.gY},"G높이","sleeve-guide-label",5,3));
+  }
+
+  // 표시옵션 통합: 몸판 체크박스가 소매에도 같이 적용된다.
+  // 패턴선 옵션은 실제 소매 외곽선만 남기고, 편집 핸들/앵커/라벨은 편집모드에서만 표시한다.
+  if(!showPattern){
+    g.querySelectorAll('.sleeve-pattern-line,.sleeve-pattern-handle,.sleeve-pattern-handle-pt,.sleeve-pattern-anchor').forEach(el=>el.remove());
+  } else if(!state.sleeveEditMode){
+    g.querySelectorAll('.sleeve-pattern-handle,.sleeve-pattern-handle-pt,.sleeve-pattern-anchor').forEach(el=>el.remove());
+    g.querySelectorAll('text').forEach(el=>{
+      const txt = el.textContent || '';
+      if(/실제 소매산|소매산 편집중|뒤둘레 시작|앞둘레 끝|뒤소매단|앞소매단|소매단 중심/.test(txt)) el.remove();
+    });
+    g.querySelectorAll('.pt-main,.pt-dep').forEach(el=>{
+      // 소매산/보조점/단점 등 패턴 검토용 점은 패턴선만 볼 때 숨김
+      el.remove();
+    });
+  }
+  if(window.__showGuide !== true){
+    g.querySelectorAll('.pt-main,.pt-dep,.sleeve-culture-aux-point,.sleeve-pattern-anchor').forEach(el=>el.remove());
+    g.querySelectorAll('text').forEach(el=>{
+      const fill = el.getAttribute('fill') || '';
+      const txt = (el.textContent || '').trim();
+      const isDimOrEase = fill === '#e07800' || /^(뒤암홀|앞암홀|총이세|뒤이세|앞이세)/.test(txt);
+      const isGuideText = /^(G높이|BL교점|앞진동|뒤진동|EL|SL|소매산|소매BL|뒤둘레 시작|앞둘레 끝|소매단 중심|실제 소매산 패턴선)/.test(txt);
+      if(!isDimOrEase || isGuideText) el.remove();
+    });
+  }
+  if(!showDep){
+    g.querySelectorAll('.sleeve-front-guide,.sleeve-back-guide,.sleeve-sch-culture,.sleeve-sch-reco,.sleeve-front-circ,.sleeve-front-circ-light,.sleeve-back-circ,.sleeve-back-circ-light,.sleeve-culture-aux,.sleeve-culture-aux-copy,.sleeve-culture-aux-point,.dep,.rBL,.rWL,.pt-dep,.txt-dep,.sleeve-guide-label').forEach(el=>el.remove());
+  }
+  if(!showBase){
+    g.querySelectorAll('.base').forEach(el=>el.remove());
+  }
+  if(!showDim){
+    g.querySelectorAll('.dim,.sleeve-guide-label').forEach(el=>el.remove());
+    g.querySelectorAll('text').forEach(el=>{
+      const fill = el.getAttribute('fill') || '';
+      const txt = el.textContent || '';
+      if(fill === '#e07800' || /^(EL|SL|뒤AH|앞AH|BL교점|앞진동|뒤진동|총이세|앞암홀|뒤암홀)/.test(txt)) el.remove();
+    });
+  }
+
+  svg.appendChild(g);
+}
+
+function updateStatusBar(f,p,dr,B,W,BL){
+  const fSNP_x  = f.sw() - (B/24+3.4);
+  const armX    = f.sw() - f.fw();
+  const fShLen  = (fSNP_x - armX) / Math.cos(22 * Math.PI / 180) + 1.8;
+  const bShReal = fShLen;
+  const { bAH, fAH } = calcArmholeLengths(f,p,B);
+
+  const capInfo = getSelectedSleeveCapHeight(f,p,B,bAH,fAH);
+  const capAdj = capInfo.capAdj;
+  const baseCapHeight = capInfo.base;
+  const finalCapHeight = capInfo.final;
+  const backTargetInfo = calcBackSleeveTargetLength(B, bAH);
+  document.getElementById("sb").textContent=
+    `B=${B} W=${W} BL=${BL} | 앞어깨=${fShLen.toFixed(2)}cm 뒤어깨=${bShReal.toFixed(2)}cm | 뒤진동=${bAH.toFixed(2)}cm 앞진동=${fAH.toFixed(2)}cm 합계=${(bAH+fAH).toFixed(2)}cm | 뒤소매목표=뒤진동+1+α(${backTargetInfo.alpha.toFixed(1)})=${backTargetInfo.target.toFixed(2)}cm | 소매산 문화식=${capInfo.culture.toFixed(2)} 추천식=${capInfo.recommended.toFixed(2)} 적용(${capInfo.mode==="culture"?"문화식":"추천식"})=${baseCapHeight.toFixed(2)}${capAdj>=0?"+":""}${capAdj.toFixed(1)}=${finalCapHeight.toFixed(2)}cm | 다트총량=${dr.total.toFixed(2)} a=${dr.a.toFixed(2)} b=${dr.b.toFixed(2)} c=${dr.c.toFixed(2)} d=${dr.d.toFixed(2)} e=${dr.e.toFixed(2)} f=${dr.f.toFixed(2)}`;
+}
+
+
+function toggleNeckEdit(){
+  if(!state.neckEditMode) setWorkMode("body");
+  state.neckEditMode = !state.neckEditMode;
+  const btn = document.getElementById("btnNeckEdit");
+  btn.textContent  = state.neckEditMode ? "편집 종료" : "편집 시작";
+  btn.style.background = state.neckEditMode ? "#cc3333" : "#aa44cc";
+  render();
+}
+
+function toggleSleeveEdit(){
+  if(!state.sleeveEditMode) setWorkMode("sleeve");
+  state.sleeveEditMode = !state.sleeveEditMode;
+  const btn = document.getElementById("btnSleeveEdit");
+  btn.textContent  = state.sleeveEditMode ? "편집 종료" : "편집 시작";
+  btn.style.background = state.sleeveEditMode ? "#cc3333" : "#ff8800";
+  render();
+}
+
+// ── 진동선 편집 모드 ──────────────────────────
+function toggleArmEdit(){
+  if(!state.armEditMode) setWorkMode("body");
+  state.armEditMode = !state.armEditMode;
+  const btn = document.getElementById("btnArmEdit");
+  btn.textContent  = state.armEditMode ? "편집 종료" : "편집 시작";
+  btn.style.background = state.armEditMode ? "#cc3333" : "#3399ff";
+  render();
+}
+
+// ── 진동선 데이터 저장/내보내기 ──────────────────
+function saveCurveData(){
+  if(!state.armH && !state.sleeveH){ alert('저장할 곡선 데이터가 없습니다.'); return; }
+  const B  = +document.getElementById('inpB').value;
+  const W  = +document.getElementById('inpW').value;
+  const BL = +document.getElementById('inpBL').value;
+  const H = state.armH;
+  const entry = {
+    timestamp: new Date().toISOString(),
+    measurements: { B, W, BL, SL: n("inpSL"), Hem: n("inpHem") },
+    capFormula: document.getElementById("selCapFormula")?.value || "culture",
+    anchors: {
+      a1: { x: +H.a1.x.toFixed(3), y: +H.a1.y.toFixed(3) },
+      a2: { x: +H.a2.x.toFixed(3), y: +H.a2.y.toFixed(3) },
+      a3: { x: +H.a3.x.toFixed(3), y: +H.a3.y.toFixed(3) },
+    },
+    handles: {
+      h0:  { x: +H.h0.x.toFixed(3),  y: +H.h0.y.toFixed(3)  },
+      h1a: { x: +H.h1a.x.toFixed(3), y: +H.h1a.y.toFixed(3) },
+      h1b: { x: +H.h1b.x.toFixed(3), y: +H.h1b.y.toFixed(3) },
+      h2a: { x: +H.h2a.x.toFixed(3), y: +H.h2a.y.toFixed(3) },
+      h2b: { x: +H.h2b.x.toFixed(3), y: +H.h2b.y.toFixed(3) },
+      h3a: { x: +H.h3a.x.toFixed(3), y: +H.h3a.y.toFixed(3) },
+      h3b: { x: +H.h3b.x.toFixed(3), y: +H.h3b.y.toFixed(3) },
+      h4:  { x: +H.h4.x.toFixed(3),  y: +H.h4.y.toFixed(3)  },
+    },
+    fArmhole: state.fArmH ? {
+      hGa: { x: +state.fArmH.hGa.x.toFixed(3), y: +state.fArmH.hGa.y.toFixed(3) },
+      hGb: { x: +state.fArmH.hGb.x.toFixed(3), y: +state.fArmH.hGb.y.toFixed(3) },
+      hFa: { x: +state.fArmH.hFa.x.toFixed(3), y: +state.fArmH.hFa.y.toFixed(3) },
+      hFb: { x: +state.fArmH.hFb.x.toFixed(3), y: +state.fArmH.hFb.y.toFixed(3) },
+    } : null,
+    bNeckline: state.bNeckH ? {
+      h0: { x: +state.bNeckH.h0.x.toFixed(3), y: +state.bNeckH.h0.y.toFixed(3) },
+      h1: { x: +state.bNeckH.h1.x.toFixed(3), y: +state.bNeckH.h1.y.toFixed(3) },
+    } : null,
+    fNeckline: state.fNeckH ? {
+      h0: { x: +state.fNeckH.h0.x.toFixed(3), y: +state.fNeckH.h0.y.toFixed(3) },
+      h1: { x: +state.fNeckH.h1.x.toFixed(3), y: +state.fNeckH.h1.y.toFixed(3) },
+    } : null,
+    sleevePattern: state.sleeveH ? {
+      anchorCount: state.sleeveH.anchorCount,
+      segments: state.sleeveH.segments.map(seg => ({
+        c1: { x: +seg.c1.x.toFixed(3), y: +seg.c1.y.toFixed(3) },
+        c2: { x: +seg.c2.x.toFixed(3), y: +seg.c2.y.toFixed(3) },
+      }))
+    } : null,
+  };
+  const key = 'armhole_data';
+  const existing = JSON.parse(localStorage.getItem(key) || '[]');
+  existing.push(entry);
+  localStorage.setItem(key, JSON.stringify(existing));
+  updateSaveCount();
+  alert('저장 완료! (총 ' + existing.length + '건) B=' + B + ' W=' + W + ' BL=' + BL);
+}
+
+
+function autoSaveCurveData(){
+  if(!state.armH && !state.sleeveH) return false;
+  const B=n('inpB'), W=n('inpW'), BL=n('inpBL');
+  const H = state.armH || {};
+  const safePt = p => p ? {x:+p.x.toFixed(3), y:+p.y.toFixed(3)} : null;
+  const entry = {
+    timestamp: new Date().toISOString(), auto:true,
+    measurements: { B, W, BL, SL:n('inpSL'), Hem:n('inpHem') },
+    capFormula: document.getElementById('selCapFormula')?.value || 'culture',
+    anchors: state.armH ? { a1:safePt(H.a1), a2:safePt(H.a2), a3:safePt(H.a3) } : null,
+    handles: state.armH ? { h0:safePt(H.h0), h1a:safePt(H.h1a), h1b:safePt(H.h1b), h2a:safePt(H.h2a), h2b:safePt(H.h2b), h3a:safePt(H.h3a), h3b:safePt(H.h3b), h4:safePt(H.h4) } : null,
+    fArmhole: state.fArmH ? { hGa:safePt(state.fArmH.hGa), hGb:safePt(state.fArmH.hGb), hFa:safePt(state.fArmH.hFa), hFb:safePt(state.fArmH.hFb) } : null,
+    bNeckline: state.bNeckH ? { h0:safePt(state.bNeckH.h0), h1:safePt(state.bNeckH.h1) } : null,
+    fNeckline: state.fNeckH ? { h0:safePt(state.fNeckH.h0), h1:safePt(state.fNeckH.h1) } : null,
+    sleevePattern: state.sleeveH ? { anchorCount: state.sleeveH.anchorCount, segments: state.sleeveH.segments.map(seg=>({ c1:safePt(seg.c1), c2:safePt(seg.c2) })) } : null
+  };
+  const key='armhole_data';
+  const data = getSavedCurveEntries();
+  // 같은 치수/공식의 기존 자동저장은 마지막값으로 교체해서 데이터가 과도하게 쌓이지 않게 한다.
+  for(let i=data.length-1;i>=0;i--){
+    if(data[i].auto && measurementMatches(data[i]) && sleeveMeasurementMatches(data[i])){ data[i]=entry; localStorage.setItem(key, JSON.stringify(data)); updateSaveCount(); return true; }
+  }
+  data.push(entry);
+  localStorage.setItem(key, JSON.stringify(data));
+  updateSaveCount();
+  return true;
+}
+function exportData(){
+  const key = 'armhole_data';
+  const data = JSON.parse(localStorage.getItem(key) || '[]');
+  if(data.length === 0){ alert('저장된 데이터가 없습니다.'); return; }
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'armhole_data_' + new Date().toISOString().slice(0,10) + '.json';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+function updateSaveCount(){
+  const data = JSON.parse(localStorage.getItem('armhole_data') || '[]');
+  const el = document.getElementById('saveCount');
+  if(el) el.textContent = '저장 ' + data.length + '건';
+}
+
+// 저장 데이터 복원 헬퍼 ─────────────────────────
+function getSavedCurveEntries(){
+  try{ return JSON.parse(localStorage.getItem('armhole_data') || '[]'); }
+  catch(e){ return []; }
+}
+function measurementMatches(entry){
+  if(!entry || !entry.measurements) return false;
+  const m = entry.measurements;
+  const same = (a,b) => Math.abs((+a||0)-(+b||0)) < 0.001;
+  // 몸판 암홀 저장값은 소매단둘레와 분리해서 불러온다.
+  return same(m.B,n('inpB')) && same(m.W,n('inpW')) && same(m.BL,n('inpBL'));
+}
+function sleeveMeasurementMatches(entry){
+  if(!measurementMatches(entry) || !entry.measurements) return false;
+  const m = entry.measurements;
+  const same = (a,b) => Math.abs((+a||0)-(+b||0)) < 0.001;
+  const mode = document.getElementById("selCapFormula")?.value || "culture";
+  return same(m.SL,n('inpSL')) && (!entry.capFormula || entry.capFormula === mode);
+}
+function applySavedCurveEntry(entry, includeSleeve=true){
+  if(!entry) return false;
+  if(entry.capFormula){
+    const sel = document.getElementById("selCapFormula");
+    if(sel) sel.value = entry.capFormula;
+  }
+  if(entry.handles && entry.anchors){
+    state.armH = {
+      h0:  entry.handles.h0,
+      h1a: entry.handles.h1a, h1b: entry.handles.h1b,
+      h2a: entry.handles.h2a, h2b: entry.handles.h2b,
+      h3a: entry.handles.h3a, h3b: entry.handles.h3b,
+      h4:  entry.handles.h4,
+      a1:  entry.anchors.a1,
+      a2:  entry.anchors.a2,
+      a3:  entry.anchors.a3,
+    };
+  }
+  if(entry.fArmhole)  state.fArmH  = entry.fArmhole;
+  if(entry.bNeckline) state.bNeckH = entry.bNeckline;
+  if(entry.fNeckline) state.fNeckH = entry.fNeckline;
+  if(includeSleeve && entry.sleevePattern) {
+    state.sleeveH = {
+      anchorCount: entry.sleevePattern.anchorCount,
+      segments: entry.sleevePattern.segments.map(seg => ({
+        c1: {x:+seg.c1.x, y:+seg.c1.y},
+        c2: {x:+seg.c2.x, y:+seg.c2.y},
+      }))
+    };
+  }
+  return true;
+}
+function findLastSavedForCurrentMeasurements(){
+  const data = getSavedCurveEntries();
+  for(let i=data.length-1;i>=0;i--){
+    if(measurementMatches(data[i])) return data[i];
+  }
+  return null;
+}
+function restoreSavedSleevePatternForAnchorCount(anchorCount){
+  const data = getSavedCurveEntries();
+  let entry = null;
+  for(let i=data.length-1;i>=0;i--){
+    if(sleeveMeasurementMatches(data[i]) && data[i].sleevePattern){ entry = data[i]; break; }
+  }
+  if(!entry || !entry.sleevePattern) return false;
+  const sp = entry.sleevePattern;
+  if(sp.anchorCount !== anchorCount || !sp.segments || sp.segments.length !== anchorCount-1) return false;
+  state.sleeveH = {
+    anchorCount: sp.anchorCount,
+    segments: sp.segments.map(seg => ({
+      c1: {x:+seg.c1.x, y:+seg.c1.y},
+      c2: {x:+seg.c2.x, y:+seg.c2.y},
+    }))
+  };
+  return true;
+}
+function restoreSavedSleevePatternForCurrentSleeve(showAlert=false){
+  const data = getSavedCurveEntries();
+  for(let i=data.length-1;i>=0;i--){
+    const entry = data[i];
+    if(sleeveMeasurementMatches(entry) && entry.sleevePattern){
+      state.sleeveH = {
+        anchorCount: entry.sleevePattern.anchorCount,
+        segments: entry.sleevePattern.segments.map(seg => ({
+          c1: {x:+seg.c1.x, y:+seg.c1.y},
+          c2: {x:+seg.c2.x, y:+seg.c2.y},
+        }))
+      };
+      if(showAlert) alert('현재 소매 기준의 마지막 소매산선을 불러왔습니다.');
+      return true;
+    }
+  }
+  if(showAlert) alert('현재 소매 기준과 같은 저장 데이터가 없습니다.');
+  return false;
+}
+function loadSavedCurveForCurrentMeasurements(showAlert=false){
+  const entry = findLastSavedForCurrentMeasurements();
+  if(!entry){
+    if(showAlert) alert('현재 치수와 같은 저장 데이터가 없습니다.');
+    return false;
+  }
+  applySavedCurveEntry(entry, true);
+  if(showAlert) alert('현재 치수의 마지막 저장선을 불러왔습니다.');
+  render();
+  return true;
+}
+// 마지막 저장 데이터로 핸들 복원: 현재 치수와 같은 데이터만 자동 복원
+if(n("inpB") && n("inpW") && n("inpBL")) loadSavedCurveForCurrentMeasurements(false);
+updateSaveCount();
+
+// 편집 시작 전 상태를 Undo 스택에 저장하고, 마우스를 놓으면 자동 저장한다.
+svg.addEventListener("mousedown",()=>{
+  if(state.armEditMode || state.neckEditMode || state.sleeveEditMode) pushUndoSnapshot();
+}, true);
+window.addEventListener("mouseup",()=>{
+  if(state.armEditMode || state.neckEditMode || state.sleeveEditMode) markAutoSave();
+}, true);
+window.addEventListener("keydown",e=>{
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){
+    e.preventDefault();
+    if(e.shiftKey) redoEdit(); else undoEdit();
+  }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); redoEdit(); }
+});
+
+svg.addEventListener("wheel",e=>{
+  e.preventDefault();
+  const[mx,my]=svgPt(e),dz=e.deltaY<0?1.12:1/1.12;
+  const nz=Math.min(Math.max(viewZ*dz,0.2),10);
+  viewX=mx-MX-(mx-MX-viewX)*(nz/viewZ);
+  viewY=my-MY-(my-MY-viewY)*(nz/viewZ);
+  viewZ=nz;render();
+},{passive:false});
+
+let panStart=null,spaceDown=false;
+document.addEventListener("keydown",e=>{if(e.code==="Space"){e.preventDefault();spaceDown=true;svg.style.cursor="grab";}});
+document.addEventListener("keyup",e=>{if(e.code==="Space"){spaceDown=false;svg.style.cursor="";}});
+svg.addEventListener("pointerdown",e=>{
+  if(e.button===0&&spaceDown){panStart={x:e.clientX,y:e.clientY,vx:viewX,vy:viewY};svg.setPointerCapture(e.pointerId);}
+});
+svg.addEventListener("pointermove",e=>{
+  if(!panStart)return;
+  viewX=panStart.vx+(e.clientX-panStart.x);
+  viewY=panStart.vy+(e.clientY-panStart.y);render();
+});
+svg.addEventListener("pointerup",()=>{panStart=null;});
+
+let pD0=null,pZ0=null,pMX=null,pMY=null;
+svg.addEventListener("touchstart",e=>{
+  if(e.touches.length===2){e.preventDefault();
+    const t1=e.touches[0],t2=e.touches[1];
+    pD0=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);pZ0=viewZ;
+    const r=svg.getBoundingClientRect();
+    pMX=(t1.clientX+t2.clientX)/2-r.left;pMY=(t1.clientY+t2.clientY)/2-r.top;}
+},{passive:false});
+svg.addEventListener("touchmove",e=>{
+  if(e.touches.length===2&&pD0){e.preventDefault();
+    const t1=e.touches[0],t2=e.touches[1];
+    const d2=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
+    const nz=Math.min(Math.max(pZ0*d2/pD0,0.2),10);
+    viewX=pMX-MX-(pMX-MX-viewX)*(nz/viewZ);
+    viewY=pMY-MY-(pMY-MY-viewY)*(nz/viewZ);viewZ=nz;render();}
+},{passive:false});
+svg.addEventListener("touchend",e=>{if(e.touches.length<2)pD0=null;},{passive:true});
+
+function resetView(){SC=11;MX=80;MY=100;viewX=0;viewY=0;viewZ=1;render();}
+
+render();
+</script>
+</body>
+</html>
