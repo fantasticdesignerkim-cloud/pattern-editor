@@ -88,12 +88,12 @@ svg#cv{width:100%;height:100%;touch-action:none;background:#fff;display:block}
 
   <hr class="divider">
   <div class="sec">표시 옵션</div>
-  <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="render()"></div>
-  <div class="row"><label>다트</label><input type="checkbox" id="chkDart" checked onchange="render()"></div>
-  <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="render()"></div>
-  <div class="row"><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="render()"></div>
-  <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" onchange="render()"></div>
-  <div class="row"><label>종속선</label><input type="checkbox" id="chkDep" onchange="render()"></div>
+  <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="toggleLayer('layer-base',this.checked)"></div>
+  <div class="row"><label>다트</label><input type="checkbox" id="chkDart" checked onchange="toggleLayer('layer-dart',this.checked)"></div>
+  <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="toggleLayer('layer-dim',this.checked)"></div>
+  <div class="row"><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
+  <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" onchange="toggleLayer('layer-points',this.checked)"></div>
+  <div class="row"><label>종속선</label><input type="checkbox" id="chkDep" onchange="toggleLayer('layer-dep',this.checked)"></div>
 
   <hr class="divider">
   <div class="sec">작업 모드</div>
@@ -298,6 +298,11 @@ function classifyVisualElement(el){
   if(tag === "circle" || /pt|txt-dark/.test(cls)) return "point";
   if(tag === "text") return "point";
   return "misc";
+}
+
+function toggleLayer(id, visible){
+  const el = document.getElementById(id);
+  if(el) el.style.display = visible ? "" : "none";
 }
 
 function applyLayerVisibility(){
@@ -637,6 +642,7 @@ function render(){
 function drawBaseLines(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim){
   // ── 기초선 ①~⑭ ─────────────────────────────
   const g=E("g");
+  g.setAttribute("id","layer-base");
   g.appendChild(Ln(p.A,      p.BACK_WL,  "base")); // ① 뒤중심
   g.appendChild(Ln(p.BACK_WL,p.FRONT_WL, "base")); // ② WL
   g.appendChild(Ln(p.B,      p.FRONT_WL, "base")); // ④ 앞중심
@@ -1362,6 +1368,7 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
 function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim){
   // ── 다트 a~f ─────────────────────────────────
   const gDart=E("g");
+  gDart.setAttribute("id","layer-dart");
   drawDart(gDart, darts_.a, "dart");
   drawDart(gDart, darts_.b, "dart-b");
   drawDart(gDart, darts_.c, "dart-c");
@@ -1378,6 +1385,7 @@ function drawDimLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPat
   // ── 치수선 ───────────────────────────────────
   if(showDim){
     const gd=E("g");
+    gd.setAttribute("id","layer-dim");
     gd.appendChild(dimLine(p.A,          p.BACK_WL,            -22)); // ① 등길이
     gd.appendChild(dimLine(p.BACK_WL,    p.FRONT_WL,            16)); // ② 신폭
     gd.appendChild(dimLine(p.A,          {x:0,y:f.yBL()},      -38)); // ③ 진동깊이
@@ -1413,6 +1421,7 @@ function drawPoints(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatte
   // - 패턴선 OFF: F/BP 같은 패턴 기준점 숨김
   // - 다트 OFF: a~f 다트점 숨김
   const gp=E("g");
+  gp.setAttribute("id","layer-points");
 
   const addPoint = (pt, name, cls, enabled=true) => {
     if(!enabled) return;
