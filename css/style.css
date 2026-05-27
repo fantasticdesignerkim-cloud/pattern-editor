@@ -1,0 +1,59 @@
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,sans-serif;background:#fff;height:100vh;overflow:hidden;display:flex}
+.sidebar{width:220px;min-width:220px;height:100vh;background:#f7f7f4;border-right:1px solid #ddd;display:flex;flex-direction:column;overflow-y:auto;padding:12px 12px 60px;gap:8px;flex-shrink:0}
+.sidebar-title{font-weight:800;color:#185FA5;font-size:14px;padding-bottom:6px;border-bottom:1px solid #ddd}
+.sec{font-size:10px;font-weight:700;color:#888;margin-top:4px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.row label{font-size:12px;font-weight:700;color:#444}
+.row input[type=number]{width:72px;padding:5px 7px;border:1px solid #ccc;border-radius:7px;text-align:right;font-size:13px;background:#fff}
+.row input[type=number]:focus{outline:none;border-color:#185FA5}
+.row input[type=checkbox]{width:16px;height:16px;accent-color:#185FA5}
+.btn{border:0;border-radius:8px;background:#185FA5;color:#fff;font-weight:800;padding:8px;cursor:pointer;font-size:12px;width:100%}
+.btn:active{filter:brightness(.9)}
+hr{border:none;border-top:1px solid #eee;margin:2px 0}
+.canvas-wrap{flex:1;position:relative;overflow:hidden}
+svg#cv{width:100%;height:100%;touch-action:none;background:#fff;display:block}
+.sb{position:absolute;bottom:0;left:0;right:0;background:rgba(245,245,242,.95);border-top:1px solid #ddd;font-size:11px;color:#666;padding:4px 10px;white-space:nowrap;overflow:hidden}
+.grid-m{stroke:#f0f0ec;stroke-width:0.5}
+.grid-M{stroke:#e4e4de;stroke-width:0.9}
+.base{stroke:#888;stroke-width:0.9;fill:none}
+.pattern{stroke:#111;stroke-width:2.5;fill:none}
+.dep{stroke:#8a5cf6;stroke-width:0.9;stroke-dasharray:4,3;fill:none}
+.dim{stroke:#e07800;stroke-width:0.8;fill:none}
+.rBL{stroke:#a0c4e8;stroke-width:1;stroke-dasharray:6,3;fill:none}
+.rWL{stroke:#f0a888;stroke-width:1;stroke-dasharray:6,3;fill:none}
+.pt{fill:#185FA5;stroke:white;stroke-width:1.2}
+.pt-dep{fill:#8a5cf6;stroke:white;stroke-width:1.2}
+.pt-main{fill:#cc3333;stroke:white;stroke-width:1.2}
+.dart{stroke:#cc3333;stroke-width:1.4;fill:none}
+.dart-b{stroke:#0F6E56;stroke-width:1.4;fill:none}
+.dart-c{stroke:#185FA5;stroke-width:1.4;fill:none}
+.dart-d{stroke:#9933cc;stroke-width:1.4;fill:none}
+.dart-e{stroke:#ff8800;stroke-width:1.4;fill:none}
+.dart-f{stroke:#111;stroke-width:1.4;fill:none}
+.dart-guide{stroke:#aaa;stroke-width:.8;stroke-dasharray:4,3;fill:none}
+.row input[type=range]{width:80px;accent-color:#185FA5}
+.slv{font-size:11px;color:#185FA5;font-weight:700;min-width:28px;text-align:right}
+
+.sleeve-front-guide{stroke:#0F6E56;stroke-width:1.1;stroke-dasharray:6,4;fill:none;opacity:.68}
+.sleeve-back-guide{stroke:#185FA5;stroke-width:1.1;stroke-dasharray:6,4;fill:none;opacity:.68}
+.sleeve-guide-label{font-size:9px;fill:#666;font-weight:700}
+.sleeve-cap{stroke:#111;stroke-width:2.2;fill:none}
+.sleeve-sch-culture{stroke:#9933cc;stroke-width:1.1;stroke-dasharray:4,3;fill:none;opacity:.8}
+.sleeve-sch-reco{stroke:#e07800;stroke-width:1.1;stroke-dasharray:4,3;fill:none;opacity:.8}
+.sleeve-front-circ{stroke:#0F6E56;stroke-width:1.3;stroke-dasharray:5,3;fill:none;opacity:.85}
+.sleeve-front-circ-light{stroke:#0F6E56;stroke-width:.9;stroke-dasharray:2,3;fill:none;opacity:.45}
+.sleeve-back-circ{stroke:#185FA5;stroke-width:1.3;stroke-dasharray:5,3;fill:none;opacity:.85}
+.sleeve-back-circ-light{stroke:#185FA5;stroke-width:.9;stroke-dasharray:2,3;fill:none;opacity:.45}
+.sleeve-culture-aux{stroke:#9933cc;stroke-width:1.2;stroke-dasharray:4,3;fill:none;opacity:.9}
+.sleeve-culture-aux-point{fill:#9933cc;stroke:white;stroke-width:1.2}
+.sleeve-culture-aux-copy{stroke:#9933cc;stroke-width:1;stroke-dasharray:2,3;fill:none;opacity:.7}
+.sleeve-pattern-line{stroke:#111;stroke-width:2.4;fill:none}
+.sleeve-pattern-handle{stroke:#777;stroke-width:.8;stroke-dasharray:3,2;fill:none;opacity:.72}
+.sleeve-pattern-handle-pt{fill:#fff;stroke:#777;stroke-width:1}
+.sleeve-pattern-anchor{fill:#111;stroke:white;stroke-width:1.2}
+.mode-btn{border:0;border-radius:7px;background:#ddd;color:#333;font-weight:800;padding:6px;cursor:pointer;font-size:11px;flex:1}
+.mode-btn.active{background:#185FA5;color:#fff}
+
+.txt-dep{font-size:9px;fill:#8a5cf6;font-weight:700}
+.txt-dark{font-size:9px;fill:#333;font-weight:700}
