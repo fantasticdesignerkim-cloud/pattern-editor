@@ -731,7 +731,9 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
           const {c1,c2} = catCtrl(p0,p1,p2,p3);
           segs.push({c1:clonePt(c1), c2:clonePt(c2)});
         }
-        return { anchorCount: anchors.length, segments: segs };
+        // anchorOffsets: 각 앵커의 공식 위치에서 얼마나 이동했는지 저장
+        const anchorOffsets = anchors.map(() => ({dx:0, dy:0}));
+        return { anchorCount: anchors.length, segments: segs, anchorOffsets };
       };
 
       if(!state.sleeveH || state.sleeveH.anchorCount !== anchors.length || !state.sleeveH.segments || state.sleeveH.segments.length !== anchors.length-1){
@@ -741,15 +743,24 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
         state.sleeveH = makeDefaultSleeveH();
       }
       const SH = state.sleeveH;
+      // anchorOffsets 없으면 초기화 (구버전 호환)
+      if(!SH.anchorOffsets || SH.anchorOffsets.length !== anchors.length){
+        SH.anchorOffsets = anchors.map(() => ({dx:0, dy:0}));
+      }
+      // 실제 앵커 위치 = 공식 위치 + 오프셋
+      const actualAnchors = anchors.map((pt, i) => ({
+        x: pt.x + SH.anchorOffsets[i].dx,
+        y: pt.y + SH.anchorOffsets[i].dy
+      }));
 
       let d = '';
-      const [mx,my] = pxy(anchors[0]);
+      const [mx,my] = pxy(actualAnchors[0]);
       d = `M${mx},${my}`;
-      for(let i=0;i<anchors.length-1;i++){
+      for(let i=0;i<actualAnchors.length-1;i++){
         const seg = SH.segments[i];
         const [c1x,c1y] = pxy(seg.c1);
         const [c2x,c2y] = pxy(seg.c2);
-        const [x2,y2] = pxy(anchors[i+1]);
+        const [x2,y2] = pxy(actualAnchors[i+1]);
         d += ` C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`;
       }
       g.appendChild(E("path",{d,class:"sleeve-pattern-line"}));
@@ -758,18 +769,19 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
       const segLen = (i) => {
         const seg = SH.segments[i];
         return bezierLen([
-          [anchors[i].x, anchors[i].y],
+          [actualAnchors[i].x, actualAnchors[i].y],
           [seg.c1.x, seg.c1.y],
           [seg.c2.x, seg.c2.y],
-          [anchors[i+1].x, anchors[i+1].y]
+          [actualAnchors[i+1].x, actualAnchors[i+1].y]
         ], 80);
       };
+      // SP 인덱스: actualAnchors 기준으로 찾기 (오프셋 적용 전 원본 SP와 비교)
       const spIndex = anchors.findIndex(pt => Math.abs(pt.x - SP.x) < 0.001 && Math.abs(pt.y - SP.y) < 0.001);
-      if(spIndex > 0 && spIndex < anchors.length-1){
+      if(spIndex > 0 && spIndex < actualAnchors.length-1){
         let sleeveBackLen = 0;
         for(let i=0;i<spIndex;i++) sleeveBackLen += segLen(i);
         let sleeveFrontLen = 0;
-        for(let i=spIndex;i<anchors.length-1;i++) sleeveFrontLen += segLen(i);
+        for(let i=spIndex;i<actualAnchors.length-1;i++) sleeveFrontLen += segLen(i);
         const backEase = sleeveBackLen - bAH;
         const frontEase = sleeveFrontLen - fAH;
         const totalEase = backEase + frontEase;
@@ -804,10 +816,47 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
         window.addEventListener("mouseup", onUp);
       };
 
+      // 앵커 드래그: 편집모드에서 앵커도 직접 이동 가능
+      const moveSleeveAnchor = (anchorIdx, ev) => {
+        ev.stopPropagation();
+        const origPt = anchors[anchorIdx]; // 공식 기준점
+        const origOffset = SH.anchorOffsets[anchorIdx];
+        const startPt = eventToPatternPoint(ev);
+        const startX = startPt[0], startY = startPt[1];
+        const onMove = mv => {
+          const [nx,ny] = eventToPatternPoint(mv);
+          const dx = nx - startX, dy = ny - startY;
+          // 오프셋 누적
+          SH.anchorOffsets[anchorIdx] = {
+            dx: origOffset.dx + dx,
+            dy: origOffset.dy + dy
+          };
+          // 연결된 핸들도 같이 이동
+          const newAnchor = { x: origPt.x + SH.anchorOffsets[anchorIdx].dx, y: origPt.y + SH.anchorOffsets[anchorIdx].dy };
+          const prevAnchor = anchorIdx > 0 ? actualAnchors[anchorIdx-1] : null;
+          const nextAnchor = anchorIdx < anchors.length-1 ? actualAnchors[anchorIdx+1] : null;
+          if(anchorIdx > 0){
+            const seg = SH.segments[anchorIdx-1];
+            seg.c2.x += dx; seg.c2.y += dy;
+          }
+          if(anchorIdx < anchors.length-1){
+            const seg = SH.segments[anchorIdx];
+            seg.c1.x += dx; seg.c1.y += dy;
+          }
+          render();
+        };
+        const onUp = () => {
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      };
+
       // 핸들 표시: 시작/끝은 하나, 중간점은 양쪽 핸들.
       SH.segments.forEach((seg,i)=>{
-        const from = anchors[i];
-        const to   = anchors[i+1];
+        const from = actualAnchors[i];
+        const to   = actualAnchors[i+1];
         const [x1,y1] = pxy(from), [x2,y2] = pxy(to);
         const [c1x,c1y] = pxy(seg.c1), [c2x,c2y] = pxy(seg.c2);
         g.appendChild(E("line",{x1,y1,x2:c1x,y2:c1y,class:"sleeve-pattern-handle"}));
@@ -823,11 +872,19 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
         g.appendChild(h2);
       });
 
-      anchors.forEach((pt,idx)=>{
+      actualAnchors.forEach((pt,idx)=>{
         const [ax,ay]=pxy(pt);
-        g.appendChild(E("circle",{cx:ax,cy:ay,r:3.2,class:"sleeve-pattern-anchor"}));
+        const hasOffset = SH.anchorOffsets[idx] && (Math.abs(SH.anchorOffsets[idx].dx) > 0.001 || Math.abs(SH.anchorOffsets[idx].dy) > 0.001);
+        // 편집모드: 앵커 크게 + 드래그 가능 / 오프셋 있는 앵커는 색상 강조
+        const anchorR = state.sleeveEditMode ? 7 : 3.2;
+        const anchorFill = state.sleeveEditMode ? (hasOffset ? "#e07800" : "#185FA5") : "#111";
+        const a = E("circle",{cx:ax,cy:ay,r:anchorR,fill:anchorFill,stroke:"white","stroke-width":1.5,class:"sleeve-pattern-anchor",style:state.sleeveEditMode?"cursor:grab":""});
+        if(state.sleeveEditMode){
+          a.addEventListener("mousedown", ev => moveSleeveAnchor(idx, ev));
+        }
+        g.appendChild(a);
         if(idx===0) g.appendChild(lbl(pt,"뒤둘레 시작","txt-dark",-44,-8));
-        if(idx===anchors.length-1) g.appendChild(lbl(pt,"앞둘레 끝","txt-dark",5,-8));
+        if(idx===actualAnchors.length-1) g.appendChild(lbl(pt,"앞둘레 끝","txt-dark",5,-8));
       });
       g.appendChild(lbl(SP,state.sleeveEditMode?"소매산 편집중":"실제 소매산 패턴선","txt-dark",8,-18));
     }
@@ -885,15 +942,17 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
 
   g.appendChild(dimLine(SP, SG, 8));
 
-  // 사용성 정리: 재도용 보라/주황 보조선은 기본 화면에서 숨기고, G높이 수평선만 다시 표시한다.
-  Array.from(g.querySelectorAll('.sleeve-culture-aux,.sleeve-culture-aux-copy,.sleeve-culture-aux-point')).forEach(el=>el.remove());
+  // 사용성 정리: 종속선 OFF면 보조선 숨기고, ON이면 G높이선과 함께 보여준다.
+  if(!showDep){
+    Array.from(g.querySelectorAll('.sleeve-culture-aux,.sleeve-culture-aux-copy,.sleeve-culture-aux-point')).forEach(el=>el.remove());
+  }
   if(sleevePatPts.gY !== undefined && sleevePatPts.frontCircPt && sleevePatPts.backCircPt){
     g.appendChild(Ln({x:sleevePatPts.backCircPt.x,y:sleevePatPts.gY},{x:sleevePatPts.frontCircPt.x,y:sleevePatPts.gY},"dep"));
     g.appendChild(lbl({x:sleevePatPts.frontCircPt.x,y:sleevePatPts.gY},"G높이","sleeve-guide-label",5,3));
   }
 
-  // 표시옵션 통합: 몸판 체크박스가 소매에도 같이 적용된다.
-  // 패턴선 옵션은 실제 소매 외곽선만 남기고, 편집 핸들/앵커/라벨은 편집모드에서만 표시한다.
+  // ── 표시옵션 통합 ────────────────────────────────
+  // 패턴선 옵션
   if(!showPattern){
     g.querySelectorAll('.sleeve-pattern-line,.sleeve-pattern-handle,.sleeve-pattern-handle-pt,.sleeve-pattern-anchor').forEach(el=>el.remove());
   } else if(!state.sleeveEditMode){
@@ -902,12 +961,25 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
       const txt = el.textContent || '';
       if(/실제 소매산|소매산 편집중|뒤둘레 시작|앞둘레 끝|뒤소매단|앞소매단|소매단 중심/.test(txt)) el.remove();
     });
-    g.querySelectorAll('.pt-main,.pt-dep').forEach(el=>{
-      // 소매산/보조점/단점 등 패턴 검토용 점은 패턴선만 볼 때 숨김
-      el.remove();
-    });
+    g.querySelectorAll('.pt-main,.pt-dep').forEach(el=>el.remove());
   }
-  if(window.__showGuide !== true){
+
+  // 종속선 옵션: OFF면 모든 보조선 숨김, ON이면 최대한 많이 표시
+  if(!showDep){
+    g.querySelectorAll([
+      '.sleeve-front-guide','.sleeve-back-guide',
+      '.sleeve-sch-culture','.sleeve-sch-reco',
+      '.sleeve-front-circ','.sleeve-front-circ-light',
+      '.sleeve-back-circ','.sleeve-back-circ-light',
+      '.sleeve-culture-aux','.sleeve-culture-aux-copy','.sleeve-culture-aux-point',
+      '.dep','.rBL','.rWL',
+      '.pt-dep','.txt-dep','.sleeve-guide-label'
+    ].join(',')).forEach(el=>el.remove());
+  }
+  // 종속선 ON이면: 보조선 라벨/점 모두 표시 (안내점 체크박스와 무관하게)
+
+  // 안내점 옵션: OFF면 보조점/라벨 숨김 (단, 종속선 ON이면 유지)
+  if(window.__showGuide !== true && !showDep){
     g.querySelectorAll('.pt-main,.pt-dep,.sleeve-culture-aux-point,.sleeve-pattern-anchor').forEach(el=>el.remove());
     g.querySelectorAll('text').forEach(el=>{
       const fill = el.getAttribute('fill') || '';
@@ -917,12 +989,13 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
       if(!isDimOrEase || isGuideText) el.remove();
     });
   }
-  if(!showDep){
-    g.querySelectorAll('.sleeve-front-guide,.sleeve-back-guide,.sleeve-sch-culture,.sleeve-sch-reco,.sleeve-front-circ,.sleeve-front-circ-light,.sleeve-back-circ,.sleeve-back-circ-light,.sleeve-culture-aux,.sleeve-culture-aux-copy,.sleeve-culture-aux-point,.dep,.rBL,.rWL,.pt-dep,.txt-dep,.sleeve-guide-label').forEach(el=>el.remove());
-  }
+
+  // 기초선 옵션
   if(!showBase){
     g.querySelectorAll('.base').forEach(el=>el.remove());
   }
+
+  // 치수선 옵션
   if(!showDim){
     g.querySelectorAll('.dim,.sleeve-guide-label').forEach(el=>el.remove());
     g.querySelectorAll('text').forEach(el=>{
