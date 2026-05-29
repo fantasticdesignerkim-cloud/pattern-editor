@@ -159,7 +159,7 @@ function calcFrontClosedSleeveGuideLine(f,p,B){
   // 하부 앞진동: 옆가슴점 → F안내점 → G 구간은 state.armH의 a2→a3→G를 사용한다.
   const H = state.armH;
   const lowerFrontArmhole = H ? {
-    sideTop: H.a2,
+    sideTop: p.SIDE_TOP, // ★ 공식 기반 p.SIDE_TOP 사용 (H.a2 편집 시 위치 오류 방지)
     h2b: H.h2b,
     h3a: H.h3a,
     a3: H.a3,
@@ -221,7 +221,8 @@ function calcBackSleeveGuideLine(f,p,B){
   // BSP → C안내(a1) → 옆가슴점(a2) 구간을 그대로 복사한다.
   // 없으면 초기값 기준으로만 fallback한다.
   const H = state.armH;
-  const sideTop = H?.a2 ? H.a2 : p.SIDE_TOP;
+  // ★ 매핑 기준은 항상 공식 기반 p.SIDE_TOP 사용 (H.a2 편집 시 위치 오류 방지)
+  const sideTop = p.SIDE_TOP;
   const backArmhole = H ? {
     start: BSP,
     h0: H.h0,
@@ -455,7 +456,9 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
   // 앞진동은 "옆가슴점 → G" 하부 구간과 "닫힌 GG → FSP" 상부 구간을 연결해서 가져온다.
   {
     const guide = calcFrontClosedSleeveGuideLine(f,p,B);
-    const sideTop0 = guide.lowerFrontArmhole?.sideTop || p.SIDE_TOP;
+    // ★ 매핑 기준은 항상 공식 기반 p.SIDE_TOP 사용
+    // H.a2(사용자 편집 앵커)를 기준으로 쓰면 앵커 이동 시 앞진동 보조선이 뒤쪽으로 넘어가는 오류 발생
+    const sideTop0 = p.SIDE_TOP;
 
     // 앞진동은 소매의 앞쪽으로 펼쳐지도록 옆가슴점을 SG에 붙여 평행이동한다.
     // 여기서 붙는 기준점은 G/GG가 아니라 항상 옆가슴점이다.
@@ -913,10 +916,6 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
     g.appendChild(lbl(backHemPt,  `뒤소매단`, "txt-dark", -48, 12));
     g.appendChild(lbl(frontHemPt, `앞소매단`, "txt-dark", 5, 12));
     g.appendChild(lbl(hemCenter,  `소매단 중심 / 단둘레 ${hemCirc.toFixed(1)}`, "txt-dep", -52, 14));
-
-    // 소매단 반폭 치수 표시: 중심선 기준 좌/우 = 소매단둘레/2
-    g.appendChild(dimLine(backHemPt, hemCenter, -12));
-    g.appendChild(dimLine(hemCenter, frontHemPt, -12));
   }
 
   const SB = {x:sx_B, y:sy_base};

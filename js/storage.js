@@ -4,17 +4,18 @@ function saveCurveData(){
   const B  = +document.getElementById('inpB').value;
   const W  = +document.getElementById('inpW').value;
   const BL = +document.getElementById('inpBL').value;
-  const H = state.armH;
+  const H = state.armH; // null일 수 있음
   const entry = {
     timestamp: new Date().toISOString(),
     measurements: { B, W, BL, SL: n("inpSL"), Hem: n("inpHem") },
     capFormula: document.getElementById("selCapFormula")?.value || "culture",
-    anchors: {
+    // armH 없으면 null로 저장
+    anchors: H ? {
       a1: { x: +H.a1.x.toFixed(3), y: +H.a1.y.toFixed(3) },
       a2: { x: +H.a2.x.toFixed(3), y: +H.a2.y.toFixed(3) },
       a3: { x: +H.a3.x.toFixed(3), y: +H.a3.y.toFixed(3) },
-    },
-    handles: {
+    } : null,
+    handles: H ? {
       h0:  { x: +H.h0.x.toFixed(3),  y: +H.h0.y.toFixed(3)  },
       h1a: { x: +H.h1a.x.toFixed(3), y: +H.h1a.y.toFixed(3) },
       h1b: { x: +H.h1b.x.toFixed(3), y: +H.h1b.y.toFixed(3) },
@@ -23,7 +24,7 @@ function saveCurveData(){
       h3a: { x: +H.h3a.x.toFixed(3), y: +H.h3a.y.toFixed(3) },
       h3b: { x: +H.h3b.x.toFixed(3), y: +H.h3b.y.toFixed(3) },
       h4:  { x: +H.h4.x.toFixed(3),  y: +H.h4.y.toFixed(3)  },
-    },
+    } : null,
     fArmhole: state.fArmH ? {
       hGa: { x: +state.fArmH.hGa.x.toFixed(3), y: +state.fArmH.hGa.y.toFixed(3) },
       hGb: { x: +state.fArmH.hGb.x.toFixed(3), y: +state.fArmH.hGb.y.toFixed(3) },
@@ -43,6 +44,9 @@ function saveCurveData(){
       segments: state.sleeveH.segments.map(seg => ({
         c1: { x: +seg.c1.x.toFixed(3), y: +seg.c1.y.toFixed(3) },
         c2: { x: +seg.c2.x.toFixed(3), y: +seg.c2.y.toFixed(3) },
+      })),
+      anchorOffsets: (state.sleeveH.anchorOffsets || []).map(o => ({
+        dx: +o.dx.toFixed(4), dy: +o.dy.toFixed(4)
       }))
     } : null,
   };
@@ -71,7 +75,7 @@ function autoSaveCurveData(){
     fArmhole: state.fArmH ? { hGa:safePt(state.fArmH.hGa), hGb:safePt(state.fArmH.hGb), hFa:safePt(state.fArmH.hFa), hFb:safePt(state.fArmH.hFb) } : null,
     bNeckline: state.bNeckH ? { h0:safePt(state.bNeckH.h0), h1:safePt(state.bNeckH.h1) } : null,
     fNeckline: state.fNeckH ? { h0:safePt(state.fNeckH.h0), h1:safePt(state.fNeckH.h1) } : null,
-    sleevePattern: state.sleeveH ? { anchorCount: state.sleeveH.anchorCount, segments: state.sleeveH.segments.map(seg=>({ c1:safePt(seg.c1), c2:safePt(seg.c2) })) } : null
+    sleevePattern: state.sleeveH ? { anchorCount: state.sleeveH.anchorCount, segments: state.sleeveH.segments.map(seg=>({ c1:safePt(seg.c1), c2:safePt(seg.c2) })), anchorOffsets: (state.sleeveH.anchorOffsets || []).map(o=>({dx:+o.dx.toFixed(4),dy:+o.dy.toFixed(4)})) } : null
   };
   // 키-값 구조에 저장 (치수별 최신 1건만 유지)
   setSavedCurveEntry(entry);
@@ -181,7 +185,11 @@ function applySavedCurveEntry(entry, includeSleeve=true){
       segments: entry.sleevePattern.segments.map(seg => ({
         c1: {x:+seg.c1.x, y:+seg.c1.y},
         c2: {x:+seg.c2.x, y:+seg.c2.y},
-      }))
+      })),
+      // anchorOffsets 복원 (없으면 0으로 초기화)
+      anchorOffsets: entry.sleevePattern.anchorOffsets
+        ? entry.sleevePattern.anchorOffsets.map(o => ({dx:+o.dx, dy:+o.dy}))
+        : Array(entry.sleevePattern.anchorCount).fill(null).map(()=>({dx:0,dy:0}))
     };
   }
   return true;
@@ -207,7 +215,10 @@ function restoreSavedSleevePatternForAnchorCount(anchorCount){
     segments: sp.segments.map(seg => ({
       c1: {x:+seg.c1.x, y:+seg.c1.y},
       c2: {x:+seg.c2.x, y:+seg.c2.y},
-    }))
+    })),
+    anchorOffsets: sp.anchorOffsets
+      ? sp.anchorOffsets.map(o => ({dx:+o.dx, dy:+o.dy}))
+      : Array(sp.anchorCount).fill(null).map(()=>({dx:0,dy:0}))
   };
   return true;
 }
@@ -221,7 +232,10 @@ function restoreSavedSleevePatternForCurrentSleeve(showAlert=false){
         segments: entry.sleevePattern.segments.map(seg => ({
           c1: {x:+seg.c1.x, y:+seg.c1.y},
           c2: {x:+seg.c2.x, y:+seg.c2.y},
-        }))
+        })),
+        anchorOffsets: entry.sleevePattern.anchorOffsets
+          ? entry.sleevePattern.anchorOffsets.map(o => ({dx:+o.dx, dy:+o.dy}))
+          : Array(entry.sleevePattern.anchorCount).fill(null).map(()=>({dx:0,dy:0}))
       };
       if(showAlert) alert('현재 소매 기준의 마지막 소매산선을 불러왔습니다.');
       return true;
