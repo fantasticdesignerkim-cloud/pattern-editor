@@ -958,7 +958,9 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
     g.querySelectorAll('.sleeve-pattern-handle,.sleeve-pattern-handle-pt,.sleeve-pattern-anchor').forEach(el=>el.remove());
     g.querySelectorAll('text').forEach(el=>{
       const txt = el.textContent || '';
-      if(/실제 소매산|소매산 편집중|뒤둘레 시작|앞둘레 끝|뒤소매단|앞소매단|소매단 중심/.test(txt)) el.remove();
+      // 소매단 치수(단둘레 숫자 포함 라벨)는 편집모드 아닐 때도 패턴선 위에 항상 표시
+      if(/실제 소매산|소매산 편집중|뒤둘레 시작|앞둘레 끝|뒤소매단|앞소매단/.test(txt)) el.remove();
+      if(/소매단 중심/.test(txt) && !/단둘레/.test(txt)) el.remove();
     });
     g.querySelectorAll('.pt-main,.pt-dep').forEach(el=>el.remove());
   }
@@ -984,7 +986,9 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
       const fill = el.getAttribute('fill') || '';
       const txt = (el.textContent || '').trim();
       const isDimOrEase = fill === '#e07800' || /^(뒤암홀|앞암홀|총이세|뒤이세|앞이세)/.test(txt);
-      const isGuideText = /^(G높이|BL교점|앞진동|뒤진동|EL|SL|소매산|소매BL|뒤둘레 시작|앞둘레 끝|소매단 중심|실제 소매산 패턴선)/.test(txt);
+      // 소매단 중심 라벨 중 '단둘레' 숫자가 포함된 것은 치수 정보이므로 항상 유지
+      const isGuideText = /^(G높이|BL교점|앞진동|뒤진동|EL|SL|소매산|소매BL|뒤둘레 시작|앞둘레 끝|실제 소매산 패턴선)/.test(txt)
+        || (/소매단 중심/.test(txt) && !/단둘레/.test(txt));
       if(!isDimOrEase || isGuideText) el.remove();
     });
   }

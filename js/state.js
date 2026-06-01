@@ -63,7 +63,7 @@ function serializeEditState(){
   return JSON.stringify({
     armH: state.armH, fArmH: state.fArmH, bNeckH: state.bNeckH, fNeckH: state.fNeckH, sleeveH: state.sleeveH,
     capFormula: document.getElementById("selCapFormula")?.value || "culture",
-    inputs: { SL:n("inpSL"), Hem:n("inpHem"), CapAdj:n("inpCapAdj") }
+    inputs: { SL:n("inpSL"), CapAdj:n("inpCapAdj") }  // Hem 제거: 소매단둘레는 소매산 핸들과 무관
   });
 }
 function applyEditSnapshot(snap){
@@ -73,7 +73,6 @@ function applyEditSnapshot(snap){
   if(s.capFormula && document.getElementById("selCapFormula")) document.getElementById("selCapFormula").value=s.capFormula;
   if(s.inputs){
     if(document.getElementById("inpSL")) document.getElementById("inpSL").value=s.inputs.SL||n("inpSL");
-    if(document.getElementById("inpHem")) document.getElementById("inpHem").value=s.inputs.Hem||n("inpHem");
     if(document.getElementById("inpCapAdj")) document.getElementById("inpCapAdj").value=s.inputs.CapAdj||0;
   }
 }
