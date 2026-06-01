@@ -897,10 +897,11 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
   // ── 소매단 수정 기능: 앞둘레점-뒤둘레점의 중간을 중심으로 소매단둘레/2씩 이동 ──
   // 기준: 소매단 중심은 소매산 중심선이 아니라, 앞둘레점과 뒤둘레점의 중간점에서 수직 하강한 지점이다.
   if(sleevePatPts.backCircPt && sleevePatPts.frontCircPt){
-    const sleeveMidX = (sleevePatPts.backCircPt.x + sleevePatPts.frontCircPt.x) / 2;
-    const hemCenter  = { x: sleeveMidX, y: sy_HEM };
-    const backHemPt  = { x: sleeveMidX - hemHalf, y: sy_HEM };
-    const frontHemPt = { x: sleeveMidX + hemHalf, y: sy_HEM };
+    // 소매단 중심 기준: 소매산점(SP)에서 소매기장만큼 수직으로 내려간 소매중심선(sx_C) 기준
+    // 이전: 앞둘레점과 뒤둘레점의 중간 → 소매산 편집 시 중심이 틀어지는 문제 있었음
+    const hemCenter  = { x: sx_C,              y: sy_HEM };
+    const backHemPt  = { x: sx_C - hemHalf,    y: sy_HEM };
+    const frontHemPt = { x: sx_C + hemHalf,    y: sy_HEM };
 
     // 뒤/앞 옆선: 둘레점에서 조절된 소매단으로 연결
     g.appendChild(Ln(sleevePatPts.backCircPt,  backHemPt,  "sleeve-pattern-line"));
