@@ -21,6 +21,7 @@ function classifyVisualElement(el){
   const hasGrab = (el.getAttribute("style") || "").includes("cursor:grab") || (el.getAttribute("style") || "").includes("cursor: grab");
 
   if(/grid-m|grid-M/.test(cls)) return "grid";
+  if(/ease-info/.test(cls)) return "misc";  // 이세량 패널: 항상 표시
   if(hasGrab || /sleeve-pattern-handle|sleeve-pattern-handle-pt/.test(cls) || dash === "3,2") return "handle";
   if(/dim/.test(cls) || /^(-?\d+(\.\d+)?|뒤암홀|앞암홀|총이세|뒤이세|앞이세|뒤AH|앞AH|EL|SL)/.test(txt)) return "dimension";
   if(/dart|dart-guide/.test(cls)) return "dart";

@@ -705,17 +705,22 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
   // ── 실제 소매 패턴선: 뒤둘레점 → 보조점들 → 소매산 → 보조점들 → 앞둘레점 ──
   // 소매산 편집모드에서는 암홀처럼 베지어 핸들을 직접 드래그할 수 있고, 저장 데이터에도 포함된다.
   {
-    const anchors = [
+    const rawAnchors = [
       sleevePatPts.backCircPt,     // 1. 뒤둘레점
       sleevePatPts.backCopyTop,    // 2. 가까운 수직 복사점
       sleevePatPts.backOneDown,    // 3. 뒤소매산선 위 1cm점
       sleevePatPts.backQOut,       // 4. 소매산에서 직각 2cm점
-      SP,                          // 5. 소매산
+      SP,                          // 5. 소매산 (고정 index=4)
       sleevePatPts.frontQOut,      // 6. 직각 1.9cm점
       sleevePatPts.frontGUp,       // 7. G점에서 소매산방향 1cm점
       sleevePatPts.frontCopyTop,   // 8. aaa 복사 직각끝점
       sleevePatPts.frontCircPt     // 9. 앞둘레점
-    ].filter(Boolean);
+    ];
+    const anchorNames = ['backCircPt','backCopyTop','backOneDown','backQOut','SP','frontQOut','frontGUp','frontCopyTop','frontCircPt'];
+    rawAnchors.forEach((pt, i) => {
+      if(!pt) console.warn(`[sleeve] 앵커 누락: ${anchorNames[i]} (index ${i})`);
+    });
+    const anchors = rawAnchors.filter(Boolean);
 
     if(anchors.length >= 2){
       const pxy = pt => c2p(pt.x, pt.y);
@@ -778,9 +783,12 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
           [actualAnchors[i+1].x, actualAnchors[i+1].y]
         ], 80);
       };
-      // SP 인덱스: actualAnchors 기준으로 찾기 (오프셋 적용 전 원본 SP와 비교)
-      const spIndex = anchors.findIndex(pt => Math.abs(pt.x - SP.x) < 0.001 && Math.abs(pt.y - SP.y) < 0.001);
-      if(spIndex > 0 && spIndex < actualAnchors.length-1){
+      // SP 인덱스: rawAnchors 고정 인덱스 기준 (index 4 = SP)
+      // anchors는 filter(Boolean) 결과이므로 null 제거 수만큼 인덱스가 달라질 수 있음
+      // SP 앵커에 오프셋이 생겨도 이세량 분할 기준이 흔들리지 않도록 rawAnchors 기준으로 고정
+      const spRawIndex = 4;
+      const spIndex = rawAnchors.slice(0, spRawIndex + 1).filter(Boolean).length - 1;
+      if(spIndex >= 0 && spIndex < actualAnchors.length-1){
         let sleeveBackLen = 0;
         for(let i=0;i<spIndex;i++) sleeveBackLen += segLen(i);
         let sleeveFrontLen = 0;
@@ -790,15 +798,20 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
         const totalEase = backEase + frontEase;
         const panelX = sx_F + 7;
         const panelY = sy_SP + 4;
+        // 이세량 패널: ease-info 클래스로 항상 표시 (편집모드 여부 무관)
+        // font-size는 viewZ에 비례해서 줌 시 글씨도 같이 커짐
+        const easeSign = v => v >= 0 ? "+" : "";
+        const baseFontSize = 11 * viewZ;  // 줌 비례 폰트 크기
+        const lineGap = 1.8;             // 줄 간격 (cm 단위)
         const rows = [
-          `뒤암홀 ${bAH.toFixed(2)} / 뒤소매 ${sleeveBackLen.toFixed(2)} / 뒤이세 ${backEase>=0?"+":""}${backEase.toFixed(2)}`,
-          `앞암홀 ${fAH.toFixed(2)} / 앞소매 ${sleeveFrontLen.toFixed(2)} / 앞이세 ${frontEase>=0?"+":""}${frontEase.toFixed(2)}`,
-          `총이세 ${totalEase>=0?"+":""}${totalEase.toFixed(2)}cm`
+          { txt: `뒤암홀 ${bAH.toFixed(1)}   뒤소매 ${sleeveBackLen.toFixed(1)}   뒤이세 ${easeSign(backEase)}${backEase.toFixed(2)}`, color: backEase < 0 ? "#cc3333" : "#111" },
+          { txt: `앞암홀 ${fAH.toFixed(1)}   앞소매 ${sleeveFrontLen.toFixed(1)}   앞이세 ${easeSign(frontEase)}${frontEase.toFixed(2)}`, color: frontEase < 0 ? "#cc3333" : "#111" },
+          { txt: `총이세  ${easeSign(totalEase)}${totalEase.toFixed(2)} cm`, color: totalEase < 0 ? "#cc3333" : "#111" },
         ];
-        rows.forEach((msg, idx)=>{
-          const [tx,ty] = c2p(panelX, panelY + idx*1.25);
-          const t = E("text",{x:tx,y:ty,fill:idx===2?"#cc3333":"#333","font-size":9,"font-weight":"700"});
-          t.textContent = msg;
+        rows.forEach(({txt, color}, idx)=>{
+          const [tx,ty] = c2p(panelX, panelY + idx * lineGap);
+          const t = E("text",{x:tx, y:ty, fill:color, "font-size":baseFontSize, "font-weight":"700", "font-family":"monospace", class:"ease-info"});
+          t.textContent = txt;
           g.appendChild(t);
         });
       }
@@ -973,7 +986,8 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
     g.querySelectorAll('.sleeve-pattern-handle,.sleeve-pattern-handle-pt,.sleeve-pattern-anchor').forEach(el=>el.remove());
     g.querySelectorAll('text').forEach(el=>{
       const txt = el.textContent || '';
-      // 소매단 치수(단둘레 숫자 포함 라벨)는 편집모드 아닐 때도 패턴선 위에 항상 표시
+      // ease-info(이세량 패널)와 소매단 치수 라벨은 항상 표시
+      if(el.classList.contains('ease-info')) return;
       if(/실제 소매산|소매산 편집중|뒤둘레 시작|앞둘레 끝|뒤소매단|앞소매단/.test(txt)) el.remove();
       if(/소매단 중심/.test(txt) && !/단둘레/.test(txt)) el.remove();
     });
