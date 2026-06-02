@@ -897,11 +897,16 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
   // ── 소매단 수정 기능: 앞둘레점-뒤둘레점의 중간을 중심으로 소매단둘레/2씩 이동 ──
   // 기준: 소매단 중심은 소매산 중심선이 아니라, 앞둘레점과 뒤둘레점의 중간점에서 수직 하강한 지점이다.
   if(sleevePatPts.backCircPt && sleevePatPts.frontCircPt){
-    // 소매단 중심 기준: 소매산점(SP)에서 소매기장만큼 수직으로 내려간 소매중심선(sx_C) 기준
-    // 이전: 앞둘레점과 뒤둘레점의 중간 → 소매산 편집 시 중심이 틀어지는 문제 있었음
-    const hemCenter  = { x: sx_C,              y: sy_HEM };
-    const backHemPt  = { x: sx_C - hemHalf,    y: sy_HEM };
-    const frontHemPt = { x: sx_C + hemHalf,    y: sy_HEM };
+    // 소매단 기준: sx_C 중심으로 뒤/앞 둘레점 비율에 따라 hemCirc 배분
+    // backDx/frontDx 비율로 좌우를 나누어 소매단둘레 입력값을 유지하면서 비대칭 보정
+    const _backDx  = sx_C - sleevePatPts.backCircPt.x;
+    const _frontDx = sleevePatPts.frontCircPt.x - sx_C;
+    const _totalDx = _backDx + _frontDx;
+    const backHemHalf  = _totalDx > 0 ? hemHalf * (_backDx  / _totalDx) * 2 : hemHalf;
+    const frontHemHalf = _totalDx > 0 ? hemHalf * (_frontDx / _totalDx) * 2 : hemHalf;
+    const hemCenter  = { x: sx_C,                  y: sy_HEM };
+    const backHemPt  = { x: sx_C - backHemHalf,    y: sy_HEM };
+    const frontHemPt = { x: sx_C + frontHemHalf,   y: sy_HEM };
 
     // 뒤/앞 옆선: 둘레점에서 조절된 소매단으로 연결
     g.appendChild(Ln(sleevePatPts.backCircPt,  backHemPt,  "sleeve-pattern-line"));
@@ -909,6 +914,15 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
 
     // 조절된 소매단선
     g.appendChild(Ln(backHemPt, frontHemPt, "sleeve-pattern-line"));
+
+    // 소매단 중심선 보조선: 소매산점(SP)에서 소매단까지 수직으로 내려오는 중심선
+    const hemCenterTop = { x: sx_C, y: sy_SP };
+    const hemCenterLine = E("line", {
+      x1: c2p(hemCenterTop.x, hemCenterTop.y)[0], y1: c2p(hemCenterTop.x, hemCenterTop.y)[1],
+      x2: c2p(hemCenter.x,    hemCenter.y   )[0], y2: c2p(hemCenter.x,    hemCenter.y   )[1],
+      class: "sleeve-culture", "stroke-dasharray": "4,3"
+    });
+    g.appendChild(hemCenterLine);
 
     // 소매단 중심 및 기준 표시
     g.appendChild(dot(backHemPt,  "pt-main", 3.2));
