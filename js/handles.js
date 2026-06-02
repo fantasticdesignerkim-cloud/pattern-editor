@@ -1,5 +1,5 @@
 let isMeasureDirty = false;
-function markDirty(){
+function markDirty(ev){
   isMeasureDirty = true;
   const el = document.getElementById("dirtyState");
   if(el){
@@ -9,7 +9,7 @@ function markDirty(){
   }
   // 몸판 치수(B/W/BL)가 바뀔 때만 몸판 핸들 리셋
   // 소매단둘레(inpHem)는 소매 하단 폭만 바꾸므로 몸판/소매산 핸들을 리셋하지 않는다
-  const changedId = event?.target?.id;
+  const changedId = ev?.target?.id;
   if(changedId !== "inpHem"){
     resetBodyCurveHandles();
   }
