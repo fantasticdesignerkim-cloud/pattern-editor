@@ -145,3 +145,11 @@ function toggleArmEdit(){
   render();
 }
 
+
+// ── 소매산 앵커 개별 리셋 ──────────────────────
+function resetSleeveAnchors(){
+  resetSleeveCurveHandles();
+  render();
+  const btn = document.getElementById("btnSleeveReset");
+  if(btn){ btn.textContent = "리셋됨 ✓"; setTimeout(()=>{ btn.textContent = "소매산 리셋"; }, 1200); }
+}
