@@ -222,9 +222,52 @@ function drawPatternLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,sho
     });
   }
   svg.appendChild(gPat);
+
+  // ── 다트이동 적용 결과: 앞판 패턴선 대체 ──────
+  const hasDartMoveApplied = typeof dartMoveState !== 'undefined' && dartMoveState.applied;
+  if(hasDartMoveApplied){
+    drawDartMoveApplied(svg, p, f, B);
+  }
+}
+
+function drawDartMoveApplied(svg, p, f, B){
+  const app = typeof dartMoveState !== 'undefined' && dartMoveState.applied;
+  if(!app) return;
+  const g = E("g");
+
+  // 마지막 두 점(BP, cutPoint 닫힘선) 제외 → G / rotatedGG 추출
+  const fixedOuter   = (app.fixedPts   || []).slice(0, -2);
+  const rotatedOuter = (app.rotatedPts || []).slice(0, -2);
+
+  // G와 rotatedGG는 외곽선 끝점이 아니라 다트 끝점
+  const G_end    = fixedOuter[fixedOuter.length - 1];
+  const rotatedGG = rotatedOuter[rotatedOuter.length - 1];
+
+  // 외곽선: G / rotatedGG 직전까지만 그린다
+  const fixedOuterVisible   = fixedOuter.slice(0, -1);
+  const rotatedOuterVisible = rotatedOuter.slice(0, -1);
+
+  for(let i = 0; i < fixedOuterVisible.length - 1; i++){
+    g.appendChild(Ln(fixedOuterVisible[i], fixedOuterVisible[i+1], "pattern"));
+  }
+  for(let i = 0; i < rotatedOuterVisible.length - 1; i++){
+    g.appendChild(Ln(rotatedOuterVisible[i], rotatedOuterVisible[i+1], "pattern"));
+  }
+
+  // 다트선 4개: BP → G, BP → rotatedGG, BP → cutPoint, BP → cutPoint2
+  const [bpx, bpy] = c2p(p.BP.x, p.BP.y);
+  if(G_end)         { const [x,y]=c2p(G_end.x,          G_end.y);          g.appendChild(E("line",{x1:bpx,y1:bpy,x2:x,y2:y,class:"pattern"})); }
+  if(rotatedGG)     { const [x,y]=c2p(rotatedGG.x,       rotatedGG.y);      g.appendChild(E("line",{x1:bpx,y1:bpy,x2:x,y2:y,class:"pattern"})); }
+  if(app.cutPoint)  { const [x,y]=c2p(app.cutPoint.x,  app.cutPoint.y);     g.appendChild(E("line",{x1:bpx,y1:bpy,x2:x,y2:y,class:"pattern"})); }
+  if(app.cutPoint2) { const [x,y]=c2p(app.cutPoint2.x, app.cutPoint2.y);    g.appendChild(E("line",{x1:bpx,y1:bpy,x2:x,y2:y,class:"pattern"})); }
+
+  svg.appendChild(g);
 }
 
 function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
+  // 다트이동 적용 시 앞판 원본선 전부 skip (앞목/앞어깨/가슴다트 포함)
+  const hasDartMoveApplied_FN = typeof dartMoveState !== 'undefined' && dartMoveState.applied;
+  if(hasDartMoveApplied_FN) return;
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
 
 
@@ -321,7 +364,7 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
     gPat.appendChild(dot(FSP, "pt-main", 3));
     gPat.appendChild(lbl(FSP, "FSP", "txt-dark", 6, 10));
 
-    // ─ G점 → BP 직선 + 다트선 ───────────────────
+    // ─ G점 → BP 직선 + 다트선 ──────────────────
     gPat.appendChild(Ln(p.G, p.BP, "pattern"));
     gPat.appendChild(Ln(p.BP, GG,  "pattern"));
     gPat.appendChild(dot(GG, "pt-main", 3));
@@ -329,6 +372,9 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
 }
 
 function drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
+  // 다트이동 적용 시 앞진동선 원본은 그리지 않는다 (rotatedPts로 대체됨)
+  const hasDartMoveApplied_FA = typeof dartMoveState !== 'undefined' && dartMoveState.applied;
+  if(hasDartMoveApplied_FA) return;
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
     // ── 앞진동선: G → GG → FSP (뒤진동선과 연결) ──
     {
@@ -561,19 +607,26 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
 
     // ── 옆선 (앞판 + 뒤판) ───────────────────────
     const _dartC = darts_.c;
-    gPat.appendChild(Ln(p.SIDE_TOP, _dartC.right, "pattern")); // 앞판 옆선 상단
-    gPat.appendChild(Ln(_dartC.right, p.SIDE_BTM, "pattern")); // 앞판 옆선 하단
+    const _applied = typeof dartMoveState !== 'undefined' && !!dartMoveState.applied;
+    if(!_applied){
+      gPat.appendChild(Ln(p.SIDE_TOP, _dartC.right, "pattern")); // 앞판 옆선 상단
+      gPat.appendChild(Ln(_dartC.right, p.SIDE_BTM, "pattern")); // 앞판 옆선 하단
+    }
     gPat.appendChild(Ln(p.SIDE_TOP, _dartC.left,  "pattern")); // 뒤판 옆선 상단
     gPat.appendChild(Ln(_dartC.left,  p.SIDE_BTM, "pattern")); // 뒤판 옆선 하단
 
 
     const FND = { x: f.sw(), y: f.yB() + f.fnd() };
-    gPat.appendChild(Ln(FND,         p.FRONT_WL,   "pattern")); // FND → 앞중심 허리
-    gPat.appendChild(Ln(p.FRONT_WL,  p.BACK_WL,    "pattern")); // 앞중심허리 → 뒤중심허리
+    if(!_applied){
+      gPat.appendChild(Ln(FND,        p.FRONT_WL,   "pattern")); // FND → 앞중심 허리
+      gPat.appendChild(Ln(p.FRONT_WL, p.BACK_WL,    "pattern")); // 앞중심허리 → 뒤중심허리
+    }
     gPat.appendChild(Ln(p.BACK_WL,   p.A,          "pattern")); // 뒤중심허리 → A점
 
-    // ── FRONT_ARM → BP (절개선) ────────────────────
-    gPat.appendChild(Ln(p.FRONT_ARM, p.BP, "dep"));
+    // ── FRONT_ARM → BP (절개선) ─ applied 시 skip ──
+    if(!_applied){
+      gPat.appendChild(Ln(p.FRONT_ARM, p.BP, "dep"));
+    }
 
     // ── 진동선 편집 모드: 앞판 회전 ─────────────────
     if(state.armEditMode){

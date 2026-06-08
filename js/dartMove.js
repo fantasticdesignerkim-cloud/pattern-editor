@@ -332,31 +332,8 @@ function ptsToSvgPoints(pts) {
 
 // ── 오버레이 ──────────────────────────────────
 function drawDartMoveOverlay(svgEl, p) {
-  // ── 적용된 다트이동 결과 표시 ─────────────────
-  if (dartMoveState.applied) {
-    const gApplied = E("g", { "pointer-events": "none" });
-    const applied  = dartMoveState.applied;
-
-    if (applied.rotatedPts && applied.rotatedPts.length >= 2) {
-      gApplied.appendChild(E("polyline", {
-        points: ptsToSvgPoints(applied.rotatedPts),
-        fill: "none", stroke: "#0066ff",
-        "stroke-width": 2.4, opacity: 0.95,
-      }));
-    }
-
-    const [bx, by]   = c2p(p.BP.x, p.BP.y);
-    const [c1x, c1y] = c2p(applied.cutPoint.x,  applied.cutPoint.y);
-    const [c2x, c2y] = c2p(applied.cutPoint2.x, applied.cutPoint2.y);
-
-    gApplied.appendChild(E("line", { x1: bx, y1: by, x2: c1x, y2: c1y, stroke: "#e07800", "stroke-width": 1.8 }));
-    gApplied.appendChild(E("line", { x1: bx, y1: by, x2: c2x, y2: c2y, stroke: "#0066ff", "stroke-width": 1.8 }));
-    gApplied.appendChild(E("circle", { cx: c1x, cy: c1y, r: 6, fill: "#e07800", stroke: "#fff", "stroke-width": 2 }));
-    gApplied.appendChild(E("circle", { cx: c2x, cy: c2y, r: 6, fill: "#0066ff", stroke: "#fff", "stroke-width": 2 }));
-
-    svgEl.appendChild(gApplied);
-  }
-
+  // applied 상태에서는 render.js의 drawDartMoveApplied()가 패턴선을 그린다.
+  // overlay에서는 추가 표시 없음.
   if (!dartMoveState.active) return;
   if (!dartMoveState.cutPoint) return;
 
