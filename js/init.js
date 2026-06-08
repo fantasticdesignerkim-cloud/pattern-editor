@@ -66,4 +66,5 @@ function resetView(){
   render();
 }
 
-render();
+generatePattern();
+initDartMoveClickHandler();

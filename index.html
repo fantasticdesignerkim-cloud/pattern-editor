@@ -12,19 +12,29 @@
   <div class="sidebar-title">문화식 원형 에디터</div>
 
   <div class="sec">실측 치수 (cm)</div>
-  <div class="row"><label>B 가슴둘레</label><input type="number" id="inpB" value="0" step="0.5" oninput="markDirty(event)"></div>
-  <div class="row"><label>W 허리둘레</label><input type="number" id="inpW" value="0" step="0.5" oninput="markDirty(event)"></div>
-  <div class="row"><label>BL 등길이</label><input type="number" id="inpBL" value="0" step="0.5" oninput="markDirty(event)"></div>
-  <div class="row"><label>소매길이</label><input type="number" id="inpSL" value="0" step="0.5" oninput="markDirty(event)"></div>
-  <div class="row"><label>소매단둘레</label><input type="number" id="inpHem" value="0" step="0.5" oninput="markDirty(event)"></div>
+  <div class="row"><label>B 가슴둘레</label><input type="number" id="inpB" value="83" step="0.5" oninput="markDirty(event)"></div>
+  <div class="row"><label>W 허리둘레</label><input type="number" id="inpW" value="64" step="0.5" oninput="markDirty(event)"></div>
+  <div class="row"><label>BL 등길이</label><input type="number" id="inpBL" value="38" step="0.5" oninput="markDirty(event)"></div>
+  <div class="row"><label>소매길이</label><input type="number" id="inpSL" value="52" step="0.5" oninput="markDirty(event)"></div>
+  <div class="row"><label>소매단둘레</label><input type="number" id="inpHem" value="30" step="0.5" oninput="markDirty(event)"></div>
+  <div class="row" id="dirtyState" style="font-size:11px;color:#888">패턴 생성 버튼을 누르세요</div>
+  <div class="row"><label>소매산 공식</label><select id="selCapFormula" onchange="if(!isMeasureDirty) render()" style="width:96px;padding:5px;border:1px solid #ccc;border-radius:7px;font-size:12px;background:#fff"><option value="culture" selected>문화식</option><option value="recommended">추천식</option></select></div>
+  <div class="row"><label>소매산 보정</label><input type="range" id="inpCapAdj" min="-3" max="3" step="0.1" value="3" oninput="if(!isMeasureDirty) render()"><span class="slv" id="capAdjVal">0.0</span></div>
   <div class="row"><button class="btn" id="btnGenerate" style="background:#0F6E56" onclick="generatePattern()">패턴 생성 / 다시 계산</button></div>
-  <div class="row" id="dirtyState" style="font-size:11px;color:#888">치수를 입력한 뒤 생성하세요</div>
-  <div class="row"><label>소매산 공식</label><select id="selCapFormula" onchange="render()" style="width:96px;padding:5px;border:1px solid #ccc;border-radius:7px;font-size:12px;background:#fff"><option value="culture" selected>문화식</option><option value="recommended">추천식</option></select></div>
-  <div class="row"><label>소매산 보정</label><input type="range" id="inpCapAdj" min="-3" max="3" step="0.1" value="0" oninput="render()"><span class="slv" id="capAdjVal">0.0</span></div>
 
   <hr class="divider">
   <div class="sec">다트</div>
   <div class="row"><label>총량 (cm)</label><input type="number" id="inpDart" value="12.5" step="0.5" oninput="render()"></div>
+  <div class="row"><label>다트이동</label><button class="btn" id="btnDartMove" style="background:#e07800" onclick="toggleDartMove()">다트이동 시작</button></div>
+  <div class="row" id="dartThetaRow" style="display:none">
+    <label>닫는 양</label>
+    <input type="range" id="inpDartTheta" min="0" max="1" step="0.01" value="1" oninput="setDartTheta(+this.value)">
+  </div>
+  <div class="row" style="gap:4px">
+    <button class="btn" style="background:#0F6E56" id="btnDartApply" onclick="applyDartMove()" disabled>적용</button>
+    <button class="btn" style="background:#666" onclick="resetDartMove()">리셋</button>
+  </div>
+  <div class="row" id="dartMoveHint" style="font-size:11px;color:#e07800"></div>
 
   <hr class="divider">
   <div class="sec">표시 옵션</div>
@@ -32,8 +42,8 @@
   <div class="row"><label>다트</label><input type="checkbox" id="chkDart" checked onchange="toggleLayer('layer-dart',this.checked)"></div>
   <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="toggleLayer('layer-dim',this.checked)"></div>
   <div class="row"><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
-  <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" onchange="toggleLayer('layer-points',this.checked)"></div>
-  <div class="row"><label>종속선</label><input type="checkbox" id="chkDep" onchange="toggleLayer('layer-dep',this.checked)"></div>
+  <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" checked onchange="toggleLayer('layer-points',this.checked)"></div>
+  <div class="row"><label>종속선</label><input type="checkbox" id="chkDep" checked onchange="toggleLayer('layer-dep',this.checked)"></div>
 
   <hr class="divider">
   <div class="sec">작업 모드</div>
@@ -55,6 +65,7 @@
   <div class="row"><label>곡선 저장</label><button class="btn" style="background:#0F6E56" onclick="saveCurveData()">저장</button></div>
   <div class="row"><label>마지막 저장선</label><button class="btn" style="background:#666" onclick="loadSavedCurveForCurrentMeasurements(true)">불러오기</button></div>
   <div class="row"><label>데이터 내보내기</label><button class="btn" style="background:#9933cc" onclick="exportData()">JSON 다운로드</button></div>
+  <div class="row"><label>패턴 내보내기</label><button class="btn" style="background:#185FA5" onclick="exportDXF()">DXF 다운로드</button></div>
   <div class="row" id="saveCount" style="font-size:11px;color:#888">저장 0건</div>
   <hr class="divider">
   <button class="btn" onclick="resetView()">화면 초기화</button>
@@ -66,14 +77,15 @@
 </div>
 
 <!-- JS 파일 순서 중요: 의존성 순서대로 로드 -->
-<script src="js/state.js"></script>
-<script src="js/layer.js"></script>
-<script src="js/draft.js"></script>
-<script src="js/handles.js"></script>
-<script src="js/render.js"></script>
-<script src="js/sleeve.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/init.js"></script>
+<script src="js/state.js?v=1780561963"></script>
+<script src="js/layer.js?v=1780561963"></script>
+<script src="js/draft.js?v=1780561963"></script>
+<script src="js/handles.js?v=1780561963"></script>
+<script src="js/render.js?v=1780561963"></script>
+<script src="js/sleeve.js?v=1780561963"></script>
+<script src="js/storage.js?v=1780561963"></script>
+<script src="js/dartMove.js?v=1780561963"></script>
+<script src="js/init.js?v=1780561963"></script>
 
 </body>
 </html>
