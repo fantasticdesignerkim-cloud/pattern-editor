@@ -4,9 +4,17 @@
 // ══════════════════════════════════════════════
 
 const dartMoveState = {
-  active: false,
-  cutPoint: null,
+  active:      false,
+  cutPoint:    null,
   cutSegIndex: -1,
+  // ── 회전 상태 ──────────────────────────────
+  baseAngle:   0,       // closeAngle (기준 각도)
+  userAngle:   0,       // 사용자가 드래그로 조절한 각도
+  rotatePts:   null,    // 회전 대상 조각 (원본, 회전 전)
+  fixedPts:    null,    // 고정 조각
+  dragging:    false,   // 드래그 중 여부
+  // ── 적용 결과 ──────────────────────────────
+  applied:     null,
 };
 
 // ── 유틸 ──────────────────────────────────────
@@ -68,13 +76,9 @@ function calcCloseAngle(p, B) {
   return { closeAngle, GG };
 }
 
-// ── 앞판 외곽선을 두 조각으로 분할 ───────────
-// 반환: { fixedPts, rotatePts }
-// fixedPts  = front-center를 포함하는 조각 (CF쪽, 고정)
-// rotatePts = 반대 조각 (회전 대상, cutPoint에서 시작)
-// ── 앞판 외곽선을 G/GG 기준으로 두 조각 분할 ───────────
-// fixedPts  = G를 포함하는 조각
-// rotatePts = GG를 포함하는 조각
+// ── 앞판 외곽선을 G/GG 기준으로 두 조각 분할 ─
+// fixedPts  = G를 포함하는 조각 (고정)
+// rotatePts = GG를 포함하는 조각 (회전 대상)
 function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   const { GG } = calcCloseAngle(p, B);
 
@@ -85,7 +89,6 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
 
   const isG  = pt => isNear(pt, p.G);
   const isGG = pt => isNear(pt, GG);
-
   const nn = segments.length;
 
   function walkForward() {
@@ -130,7 +133,6 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
     fixedPts  = backward.pts;
     rotatePts = forward.pts;
   } else {
-    // fallback: GG와 가까운 끝점 쪽을 회전 조각으로
     const fEnd = forward.pts[forward.pts.length - 1];
     const bEnd = backward.pts[backward.pts.length - 1];
     const fDistGG = Math.hypot(fEnd.x - GG.x, fEnd.y - GG.y);
@@ -139,7 +141,7 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
     else                   { rotatePts = backward.pts; fixedPts = forward.pts;  }
   }
 
-  // 미리보기용: BP와 cutPoint로 닫아서 조각처럼 보이게 한다
+  // BP·cutPoint로 닫아서 조각처럼 표시
   const rotateClosed = [...rotatePts, { ...p.BP }, { ...cutPoint }];
   const fixedClosed  = [...fixedPts,  { ...p.BP }, { ...cutPoint }];
 
@@ -194,7 +196,6 @@ function buildFrontOutline(p, f, B) {
   const FH = state.fArmH || { hFa: { x: GG.x, y: GG.y }, hFb: { x: FSP.x, y: FSP.y } };
   const frontArm = sampleCubic(GG, FH.hFa, FH.hFb, FSP, 16);
 
-  // ── segment 순서 (루프): nBR → WL → SideBtm → SideTop → G → [BP → GG disabled] → armhole → FSP → nTL → neckline → (nBR로 돌아옴)
   addLineSegment(segments, nBR,        p.FRONT_WL,  { type: "front-center"   });
   addLineSegment(segments, p.FRONT_WL, p.SIDE_BTM,  { type: "front-waist"    });
   addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP,  { type: "side-seam"      });
@@ -236,26 +237,93 @@ function findCutPoint(clickPt, segments, pts) {
 function toggleDartMove() {
   if (dartMoveState.active) cancelDartMove(); else startDartMove();
 }
+
 function startDartMove() {
-  dartMoveState.active = true;
-  dartMoveState.cutPoint = null;
+  dartMoveState.active      = true;
+  dartMoveState.cutPoint    = null;
   dartMoveState.cutSegIndex = -1;
+  dartMoveState.userAngle   = 0;
+  dartMoveState.baseAngle   = 0;
+  dartMoveState.rotatePts   = null;
+  dartMoveState.fixedPts    = null;
   setBtn("취소", "#cc3333");
+  setApplyEnabled(false);
   setHint("앞판 외곽선을 클릭하세요");
   render();
 }
+
 function cancelDartMove() {
-  dartMoveState.active = false;
-  dartMoveState.cutPoint = null;
+  dartMoveState.active      = false;
+  dartMoveState.cutPoint    = null;
   dartMoveState.cutSegIndex = -1;
+  dartMoveState.userAngle   = 0;
+  dartMoveState.baseAngle   = 0;
+  dartMoveState.rotatePts   = null;
+  dartMoveState.fixedPts    = null;
   setBtn("다트이동 시작", "#e07800");
+  setApplyEnabled(false);
   setHint("");
   render();
 }
-function resetDartMove()  { cancelDartMove(); }
-function applyDartMove()  {}
-function setDartTheta()   {}
+
+function resetDartMove() {
+  dartMoveState.active      = false;
+  dartMoveState.cutPoint    = null;
+  dartMoveState.cutSegIndex = -1;
+  dartMoveState.userAngle   = 0;
+  dartMoveState.baseAngle   = 0;
+  dartMoveState.rotatePts   = null;
+  dartMoveState.fixedPts    = null;
+  dartMoveState.applied     = null;
+  setBtn("다트이동 시작", "#e07800");
+  setApplyEnabled(false);
+  setHint("다트이동 결과를 초기화했습니다");
+  render();
+}
+
+function applyDartMove() {
+  if (!dartMoveState.cutPoint || dartMoveState.cutSegIndex < 0) {
+    setHint("먼저 외곽선 위에서 다트 이동 위치를 선택하세요");
+    return;
+  }
+  if (!dartMoveState.rotatePts) {
+    setHint("회전 조각이 준비되지 않았습니다");
+    return;
+  }
+
+  const angle = dartMoveState.userAngle;
+  const p = _getDraftPts();
+  if (!p) return;
+
+  const rotatedPts = dartMoveState.rotatePts.map(pt => rotatePt(pt, p.BP, angle));
+  const cut2 = rotatePt(dartMoveState.cutPoint, p.BP, angle);
+
+  dartMoveState.applied = {
+    cutPoint:    { ...dartMoveState.cutPoint },
+    cutPoint2:   { ...cut2 },
+    cutSegIndex: dartMoveState.cutSegIndex,
+    fixedPts:    dartMoveState.fixedPts,
+    rotatePts:   dartMoveState.rotatePts,
+    rotatedPts,
+    userAngle:   angle,
+  };
+
+  dartMoveState.active = false;
+  setBtn("다트이동 시작", "#e07800");
+  setApplyEnabled(false);
+  setHint(`다트이동 적용 완료 (${(angle * 180 / Math.PI).toFixed(1)}°)`);
+  render();
+}
+
+function setDartTheta()  {}
 function applyDartMoveToPoint(key, orig) { return orig; }
+
+// ── 드래프트 pts 헬퍼 (중복 방지) ─────────────
+function _getDraftPts() {
+  const B = n("inpB"), W = n("inpW"), BL = n("inpBL");
+  if (!B || !W || !BL) return null;
+  return createDraft(B, W, BL).pts;
+}
 
 // ── 점 배열 → SVG polyline points 문자열 ──────
 function ptsToSvgPoints(pts) {
@@ -263,19 +331,44 @@ function ptsToSvgPoints(pts) {
 }
 
 // ── 오버레이 ──────────────────────────────────
-function drawDartMoveOverlay(svg, p) {
+function drawDartMoveOverlay(svgEl, p) {
+  // ── 적용된 다트이동 결과 표시 ─────────────────
+  if (dartMoveState.applied) {
+    const gApplied = E("g", { "pointer-events": "none" });
+    const applied  = dartMoveState.applied;
+
+    if (applied.rotatedPts && applied.rotatedPts.length >= 2) {
+      gApplied.appendChild(E("polyline", {
+        points: ptsToSvgPoints(applied.rotatedPts),
+        fill: "none", stroke: "#0066ff",
+        "stroke-width": 2.4, opacity: 0.95,
+      }));
+    }
+
+    const [bx, by]   = c2p(p.BP.x, p.BP.y);
+    const [c1x, c1y] = c2p(applied.cutPoint.x,  applied.cutPoint.y);
+    const [c2x, c2y] = c2p(applied.cutPoint2.x, applied.cutPoint2.y);
+
+    gApplied.appendChild(E("line", { x1: bx, y1: by, x2: c1x, y2: c1y, stroke: "#e07800", "stroke-width": 1.8 }));
+    gApplied.appendChild(E("line", { x1: bx, y1: by, x2: c2x, y2: c2y, stroke: "#0066ff", "stroke-width": 1.8 }));
+    gApplied.appendChild(E("circle", { cx: c1x, cy: c1y, r: 6, fill: "#e07800", stroke: "#fff", "stroke-width": 2 }));
+    gApplied.appendChild(E("circle", { cx: c2x, cy: c2y, r: 6, fill: "#0066ff", stroke: "#fff", "stroke-width": 2 }));
+
+    svgEl.appendChild(gApplied);
+  }
+
   if (!dartMoveState.active) return;
   if (!dartMoveState.cutPoint) return;
 
   const B = n("inpB"), W = n("inpW"), BL = n("inpBL");
   if (!B || !W || !BL) return;
 
-  const g = E("g");
+  const g   = E("g", { "pointer-events": "none" });
   const cut = dartMoveState.cutPoint;
   const [cx, cy] = c2p(cut.x, cut.y);
   const [bx, by] = c2p(p.BP.x, p.BP.y);
 
-  const d = createDraft(B, W, BL);
+  const d    = createDraft(B, W, BL);
   const segs = buildFrontOutline(d.pts, d.formula, B);
 
   // ── 선택 세그먼트 강조 ────────────────────────
@@ -283,105 +376,165 @@ function drawDartMoveOverlay(svg, p) {
   if (seg) {
     const [sx1, sy1] = c2p(seg.from.x, seg.from.y);
     const [sx2, sy2] = c2p(seg.to.x, seg.to.y);
-    g.appendChild(E("line", {
-      x1: sx1, y1: sy1, x2: sx2, y2: sy2,
-      stroke: "#ffcc00", "stroke-width": 3, opacity: 0.85,
-    }));
+    g.appendChild(E("line", { x1: sx1, y1: sy1, x2: sx2, y2: sy2, stroke: "#ffcc00", "stroke-width": 3, opacity: 0.85 }));
   }
 
-  // ── closeAngle + 분할 ─────────────────────────
-  const { closeAngle } = calcCloseAngle(p, B);
-  const { rotatePts } = splitFrontOutline(
-    segs,
-    cut,
-    dartMoveState.cutSegIndex,
-    p,
-    B
-  );
+  // rotatePts가 아직 없으면 (초기 클릭 직후) 표시만
+  const rotatePts = dartMoveState.rotatePts;
+  if (!rotatePts) { svgEl.appendChild(g); return; }
 
-  // non-CF 조각 → BP 중심으로 -closeAngle 회전
-  const rotated = rotatePts.map(pt => rotatePt(pt, p.BP, closeAngle));
+  const angle = dartMoveState.userAngle;
 
-  // 파랑 점선 polyline (회전 미리보기)
+  // ── 회전 미리보기 polyline ─────────────────────
+  const rotated = rotatePts.map(pt => rotatePt(pt, p.BP, angle));
   if (rotated.length >= 2) {
     g.appendChild(E("polyline", {
       points: ptsToSvgPoints(rotated),
-      fill: "none",
-      stroke: "#44aaff",
-      "stroke-width": 2,
-      opacity: 0.8,
+      fill: "none", stroke: "#44aaff",
+      "stroke-width": 2, opacity: 0.8,
       "stroke-dasharray": "5,3",
     }));
   }
 
-  // ── BP→cutPoint 기존 절개선 (주황) ───────────
-  g.appendChild(E("line", {
-    x1: bx, y1: by, x2: cx, y2: cy,
-    stroke: "#e07800", "stroke-width": 1.8, "stroke-dasharray": "6,3",
-  }));
+  // ── BP→cutPoint 절개선 (주황) ─────────────────
+  g.appendChild(E("line", { x1: bx, y1: by, x2: cx, y2: cy, stroke: "#e07800", "stroke-width": 1.8, "stroke-dasharray": "6,3" }));
 
-  // ── BP→cutPoint2 새 다트 다리 (파랑) ─────────
-  const cut2 = rotatePt(cut, p.BP, closeAngle);
+  // ── BP→cutPoint2 새 다트 다리 (파랑) ──────────
+  const cut2 = rotatePt(cut, p.BP, angle);
   const [cx2, cy2] = c2p(cut2.x, cut2.y);
-  g.appendChild(E("line", {
-    x1: bx, y1: by, x2: cx2, y2: cy2,
-    stroke: "#44aaff", "stroke-width": 1.8, "stroke-dasharray": "6,3",
-  }));
+  g.appendChild(E("line", { x1: bx, y1: by, x2: cx2, y2: cy2, stroke: "#44aaff", "stroke-width": 1.8, "stroke-dasharray": "6,3" }));
 
-  // ── cutPoint 원 (주황) ────────────────────────
+  // ── cutPoint 원 (주황, 고정) ───────────────────
   g.appendChild(E("circle", { cx, cy, r: 7, fill: "#e07800", stroke: "#fff", "stroke-width": 2 }));
 
-  // ── cutPoint2 원 (파랑) ───────────────────────
-  g.appendChild(E("circle", { cx: cx2, cy: cy2, r: 7, fill: "#44aaff", stroke: "#fff", "stroke-width": 2 }));
-
-  // ── 닫는 각도 표시 ────────────────────────────
-  const deg = Math.abs(closeAngle * 180 / Math.PI).toFixed(1);
+  // ── 각도 표시 ─────────────────────────────────
+  const degVal = (angle * 180 / Math.PI).toFixed(1);
   const [lx, ly] = c2p(p.BP.x + 1.5, p.BP.y - 1.5);
-  g.appendChild(E("text", {
-    x: lx, y: ly, "font-size": 11, fill: "#44aaff",
-    "font-weight": "700", "text-anchor": "start",
-  }, `${deg}°`));
+  g.appendChild(E("text", { x: lx, y: ly, "font-size": 11, fill: "#44aaff", "font-weight": "700", "text-anchor": "start" }, `${degVal}°`));
 
-  svg.appendChild(g);
+  svgEl.appendChild(g);
+
+  // ── 드래그 핸들 (cutPoint2 위치, pointer-events 활성) ──
+  const hg = E("g", {
+    class: "dart-rotate-handle",
+    "pointer-events": "auto",
+    style: "cursor:grab",
+  });
+  hg.appendChild(E("circle", {
+    cx: cx2, cy: cy2, r: 10,
+    fill: "#44aaff", stroke: "#fff", "stroke-width": 2, opacity: 0.9,
+  }));
+  hg.appendChild(E("circle", { cx: cx2, cy: cy2, r: 3, fill: "#fff" }));
+  svgEl.appendChild(hg);
 }
 
-// ── 클릭 핸들러 ───────────────────────────────
+// ── 드래그 핸들 이벤트 ────────────────────────
 function initDartMoveClickHandler() {
   if (window.__dartMoveClickHandlerReady) return;
   window.__dartMoveClickHandlerReady = true;
 
+  // ── 외곽선 클릭 → cutPoint 선택 ──────────────
   svg.addEventListener("click", e => {
     if (!dartMoveState.active) return;
+    // 드래그 핸들 위 클릭은 cutPoint 선택 무시
+    if (e.target.closest(".dart-rotate-handle")) return;
+
     const [cx, cy] = eventToPatternPoint(e);
     const B = n("inpB"), W = n("inpW"), BL = n("inpBL");
     if (!B || !W || !BL) return;
     const d = createDraft(B, W, BL);
     const segments = buildFrontOutline(d.pts, d.formula, B);
     const result = findCutPoint({ x: cx, y: cy }, segments, d.pts);
+
     if (result?.blocked && result.reason === "dart-end") {
+      setApplyEnabled(false);
       setHint("기존 다트 끝점 G/GG 근처는 선택할 수 없습니다");
       render();
       return;
     }
+
     if (result) {
-      dartMoveState.cutPoint = result.point;
+      dartMoveState.cutPoint    = result.point;
       dartMoveState.cutSegIndex = result.segIndex;
-      const seg = segments[result.segIndex];
+
+      // 조각 분할 + 기준 각도 계산
       const { closeAngle } = calcCloseAngle(d.pts, B);
+      const { rotatePts, fixedPts } = splitFrontOutline(
+        segments, result.point, result.segIndex, d.pts, B
+      );
+      dartMoveState.baseAngle = closeAngle;
+      dartMoveState.userAngle = closeAngle;  // 초기값 = 기존 다트 닫힘각
+      dartMoveState.rotatePts = rotatePts;
+      dartMoveState.fixedPts  = fixedPts;
+
+      const seg = segments[result.segIndex];
       const deg = Math.abs(closeAngle * 180 / Math.PI).toFixed(1);
-      setHint(`${seg?.type || "outline"} · 닫힘각 ${deg}°`);
+      setApplyEnabled(true);
+      setHint(`${seg?.type || "outline"} · 기준각 ${deg}° · 핸들 드래그로 조절`);
     } else {
+      setApplyEnabled(false);
       setHint(`앞판 외곽선 근처를 클릭하세요 x=${cx.toFixed(1)} y=${cy.toFixed(1)}`);
     }
     render();
   });
+
+  // ── 드래그 핸들: mousedown ────────────────────
+  svg.addEventListener("mousedown", e => {
+    if (!dartMoveState.active) return;
+    const handle = e.target.closest(".dart-rotate-handle");
+    if (!handle) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dartMoveState.dragging = true;
+    svg.style.cursor = "grabbing";
+  });
+
+  // ── 드래그 핸들: mousemove ────────────────────
+  window.addEventListener("mousemove", e => {
+    if (!dartMoveState.active || !dartMoveState.dragging) return;
+    if (!dartMoveState.cutPoint) return;
+
+    const [mx, my] = eventToPatternPoint(e);
+    const p = _getDraftPts();
+    if (!p) return;
+
+    // 마우스 방향각 - cutPoint 방향각 = userAngle
+    const angleMouse = Math.atan2(my - p.BP.y, mx - p.BP.x);
+    const angleCut   = Math.atan2(dartMoveState.cutPoint.y - p.BP.y, dartMoveState.cutPoint.x - p.BP.x);
+    let userAngle = angleMouse - angleCut;
+
+    // -π ~ π 정규화
+    while (userAngle >  Math.PI) userAngle -= 2 * Math.PI;
+    while (userAngle < -Math.PI) userAngle += 2 * Math.PI;
+
+    dartMoveState.userAngle = userAngle;
+
+    const deg = (userAngle * 180 / Math.PI).toFixed(1);
+    setHint(`회전 중: ${deg}° (기준 ${(dartMoveState.baseAngle * 180 / Math.PI).toFixed(1)}°)`);
+    render();
+  });
+
+  // ── 드래그 핸들: mouseup ──────────────────────
+  window.addEventListener("mouseup", e => {
+    if (!dartMoveState.dragging) return;
+    dartMoveState.dragging = false;
+    svg.style.cursor = "";
+    const deg = (dartMoveState.userAngle * 180 / Math.PI).toFixed(1);
+    setHint(`확정: ${deg}° — 적용 버튼을 눌러 완료`);
+  });
 }
 
 // ── UI 헬퍼 ───────────────────────────────────
+function setApplyEnabled(enabled) {
+  const b = document.getElementById("btnDartApply");
+  if (b) b.disabled = !enabled;
+}
+
 function setBtn(txt, bg) {
   const b = document.getElementById("btnDartMove");
   if (b) { b.textContent = txt; b.style.background = bg; }
 }
+
 function setHint(txt) {
   const h = document.getElementById("dartMoveHint");
   if (h) h.textContent = txt;
