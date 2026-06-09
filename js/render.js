@@ -235,31 +235,27 @@ function drawDartMoveApplied(svg, p, f, B){
   if(!app) return;
   const g = E("g");
 
-  // 마지막 두 점(BP, cutPoint 닫힘선) 제외 → G / rotatedGG 추출
   const fixedOuter   = (app.fixedPts   || []).slice(0, -2);
   const rotatedOuter = (app.rotatedPts || []).slice(0, -2);
 
-  // G와 rotatedGG는 외곽선 끝점이 아니라 다트 끝점
-  const G_end    = fixedOuter[fixedOuter.length - 1];
+  // G는 외곽선 연결점이 아니라 잔여 다트선 끝점 → 외곽선에서 제외
+  const G         = fixedOuter[fixedOuter.length - 1];
   const rotatedGG = rotatedOuter[rotatedOuter.length - 1];
+  const fixedOuterVisible = fixedOuter.slice(0, -1); // SIDE_TOP→G 구간 제거
 
-  // 외곽선: G / rotatedGG 직전까지만 그린다
-  const fixedOuterVisible   = fixedOuter.slice(0, -1);
-  const rotatedOuterVisible = rotatedOuter.slice(0, -1);
-
+  // 외곽선
   for(let i = 0; i < fixedOuterVisible.length - 1; i++){
     g.appendChild(Ln(fixedOuterVisible[i], fixedOuterVisible[i+1], "pattern"));
   }
-  for(let i = 0; i < rotatedOuterVisible.length - 1; i++){
-    g.appendChild(Ln(rotatedOuterVisible[i], rotatedOuterVisible[i+1], "pattern"));
+  for(let i = 0; i < rotatedOuter.length - 1; i++){
+    g.appendChild(Ln(rotatedOuter[i], rotatedOuter[i+1], "pattern"));
   }
 
-  // 다트선 4개: BP → G, BP → rotatedGG, BP → cutPoint, BP → cutPoint2
-  const [bpx, bpy] = c2p(p.BP.x, p.BP.y);
-  if(G_end)         { const [x,y]=c2p(G_end.x,          G_end.y);          g.appendChild(E("line",{x1:bpx,y1:bpy,x2:x,y2:y,class:"pattern"})); }
-  if(rotatedGG)     { const [x,y]=c2p(rotatedGG.x,       rotatedGG.y);      g.appendChild(E("line",{x1:bpx,y1:bpy,x2:x,y2:y,class:"pattern"})); }
-  if(app.cutPoint)  { const [x,y]=c2p(app.cutPoint.x,  app.cutPoint.y);     g.appendChild(E("line",{x1:bpx,y1:bpy,x2:x,y2:y,class:"pattern"})); }
-  if(app.cutPoint2) { const [x,y]=c2p(app.cutPoint2.x, app.cutPoint2.y);    g.appendChild(E("line",{x1:bpx,y1:bpy,x2:x,y2:y,class:"pattern"})); }
+  // 다트선 4개
+  if(G)             g.appendChild(Ln(p.BP, G,             "pattern"));
+  if(rotatedGG)     g.appendChild(Ln(p.BP, rotatedGG,     "pattern"));
+  if(app.cutPoint)  g.appendChild(Ln(p.BP, app.cutPoint,  "pattern"));
+  if(app.cutPoint2) g.appendChild(Ln(p.BP, app.cutPoint2, "pattern"));
 
   svg.appendChild(g);
 }
