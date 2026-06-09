@@ -87,6 +87,20 @@ function render(){
   updateStatusBar(f,p,dr,B,W,BL);
 }
 
+// ══ DEBUG: 앞판/뒤판 색상 구분 (확인 후 제거) ══════════════
+// DEBUG_COLORS = true  → 앞판 빨강 / 뒤판 파랑
+// DEBUG_COLORS = false → 모두 기존 "pattern" 클래스 (검정)
+const DEBUG_COLORS = true; // DEBUG
+const DBG_FRONT = "#cc2222"; // DEBUG front
+const DBG_BACK  = "#0066cc"; // DEBUG back
+// LnC: 디버그 색상을 직접 주입하는 헬퍼
+function LnC(a, b, cls, color){
+  const el = Ln(a, b, cls);
+  if(DEBUG_COLORS && color) el.setAttribute("style", `stroke:${color};`);
+  return el;
+}
+// ════════════════════════════════════════════════════════════
+
 function drawBaseLines(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim){
   // ── 기초선 ①~⑭ ─────────────────────────────
   const g=E("g");
@@ -231,36 +245,50 @@ function drawPatternLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,sho
 }
 
 function drawDartMoveApplied(svg, p, f, B){
+  const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG
   const app = typeof dartMoveState !== 'undefined' && dartMoveState.applied;
+  console.log('[render] drawDartMoveApplied', app ? { fixedSegs: app.fixedSegs?.length, rotatedSegs: app.rotatedSegs?.length } : 'no applied');
   if(!app) return;
   const g = E("g");
 
-  const fixedOuter   = (app.fixedPts   || []).slice(0, -2);
-  const rotatedOuter = (app.rotatedPts || []).slice(0, -2);
+  // ── whitelist: 외곽선으로 허용할 type만 그린다 ──
+  const OUTLINE_TYPES = new Set([
+    "front-center", "front-waist",
+    "front-neckline", "front-shoulder",
+    "front-armhole-lower", "front-armhole-upper",
+    // side-seam, side-to-dart, old-dart 제외
+  ]);
 
-  // G는 외곽선 연결점이 아니라 잔여 다트선 끝점 → 외곽선에서 제외
-  const G         = fixedOuter[fixedOuter.length - 1];
-  const rotatedGG = rotatedOuter[rotatedOuter.length - 1];
-  const fixedOuterVisible = fixedOuter.slice(0, -1); // SIDE_TOP→G 구간 제거
+  // BP 좌표와 근접 여부 체크 (BP를 from/to로 가진 segment 차단)
+  const isBP = pt => pt && Math.hypot(pt.x - p.BP.x, pt.y - p.BP.y) < 0.1;
 
-  // 외곽선
-  for(let i = 0; i < fixedOuterVisible.length - 1; i++){
-    g.appendChild(Ln(fixedOuterVisible[i], fixedOuterVisible[i+1], "pattern"));
+  function drawOutlineSegs(segs, label) {
+    let count = 0;
+    (segs || []).forEach(seg => {
+      if(seg.disabled) return;
+      if(!OUTLINE_TYPES.has(seg.type)) return;
+      if(isBP(seg.from) || isBP(seg.to)) return;
+      g.appendChild(LnC(seg.from, seg.to, "pattern", _DC_F));
+      count++;
+    });
+    if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) console.log('[draw]', label, 'drew:', count, '/', (segs||[]).length,
+      'types:', (segs||[]).filter(s=>OUTLINE_TYPES.has(s.type)).map(s=>s.type).join(','));
   }
-  for(let i = 0; i < rotatedOuter.length - 1; i++){
-    g.appendChild(Ln(rotatedOuter[i], rotatedOuter[i+1], "pattern"));
-  }
 
-  // 다트선 4개
-  if(G)             g.appendChild(Ln(p.BP, G,             "pattern"));
-  if(rotatedGG)     g.appendChild(Ln(p.BP, rotatedGG,     "pattern"));
-  if(app.cutPoint)  g.appendChild(Ln(p.BP, app.cutPoint,  "pattern"));
-  if(app.cutPoint2) g.appendChild(Ln(p.BP, app.cutPoint2, "pattern"));
+  drawOutlineSegs(app.fixedSegs, 'fixedSegs');
+  drawOutlineSegs(app.rotatedSegs, 'rotatedSegs');
+
+  // ── 다트선 4개: dart-struct 클래스 (구조다트 레이어) ──
+  if(app.GPoint)         g.appendChild(Ln(p.BP, app.GPoint,         "dart-struct"));
+  if(app.rotatedGGPoint) g.appendChild(Ln(p.BP, app.rotatedGGPoint, "dart-struct"));
+  if(app.cutPoint)       g.appendChild(Ln(p.BP, app.cutPoint,       "dart-struct"));
+  if(app.cutPoint2)      g.appendChild(Ln(p.BP, app.cutPoint2,      "dart-struct"));
 
   svg.appendChild(g);
 }
 
 function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
+  const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG
   // 다트이동 적용 시 앞판 원본선 전부 skip (앞목/앞어깨/가슴다트 포함)
   const hasDartMoveApplied_FN = typeof dartMoveState !== 'undefined' && dartMoveState.applied;
   if(hasDartMoveApplied_FN) return;
@@ -328,11 +356,15 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
       const c2x=xg-tx*d1, c2y=yg-ty*d1;
       const c3x=xg+tx*d2, c3y=yg+ty*d2;
 
-      gPat.appendChild(E("path",{
-        d:`M${x1},${y1} C${fhx0},${fhy0} ${c2x},${c2y} ${xg},${yg}`+
-          ` C${c3x},${c3y} ${fhx1},${fhy1} ${x2},${y2}`,
-        class:"pattern"
-      }));
+      { // DEBUG front neckline path
+        const _fnp = E("path",{
+          d:`M${x1},${y1} C${fhx0},${fhy0} ${c2x},${c2y} ${xg},${yg}`+
+            ` C${c3x},${c3y} ${fhx1},${fhy1} ${x2},${y2}`,
+          class:"pattern"
+        });
+        if(DEBUG_COLORS) _fnp.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
+        gPat.appendChild(_fnp);
+      }
 
       // 핸들 드래그
       const mkFN=(hx,hy,ax,ay,col,key)=>{
@@ -355,19 +387,20 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
     }
 
     // ─ 앞어깨선 ──────────────────────────────────
-    gPat.appendChild(Ln(nTL, FSP, "pattern"));
+    gPat.appendChild(LnC(nTL, FSP, "pattern", _DC_F));
     if(showDim) gPat.appendChild(dimLine(nTL, FSP, 12));
     gPat.appendChild(dot(FSP, "pt-main", 3));
     gPat.appendChild(lbl(FSP, "FSP", "txt-dark", 6, 10));
 
     // ─ G점 → BP 직선 + 다트선 ──────────────────
-    gPat.appendChild(Ln(p.G, p.BP, "pattern"));
-    gPat.appendChild(Ln(p.BP, GG,  "pattern"));
+    gPat.appendChild(Ln(p.G,  p.BP, "dart-struct")); // 가슴다트 하부
+    gPat.appendChild(Ln(p.BP, GG,  "dart-struct")); // 가슴다트 상부
     gPat.appendChild(dot(GG, "pt-main", 3));
     gPat.appendChild(lbl(GG, "GG", "txt-dark", 6, -6));
 }
 
 function drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
+  const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG
   // 다트이동 적용 시 앞진동선 원본은 그리지 않는다 (rotatedPts로 대체됨)
   const hasDartMoveApplied_FA = typeof dartMoveState !== 'undefined' && dartMoveState.applied;
   if(hasDartMoveApplied_FA) return;
@@ -385,10 +418,14 @@ function drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
       const[hfax,hfay]=c2p(FH.hFa.x, FH.hFa.y);
       const[hfbx,hfby]=c2p(FH.hFb.x, FH.hFb.y);
 
-      gPat.appendChild(E("path",{
-        d:`M${ggx},${ggy} C${hfax},${hfay} ${hfbx},${hfby} ${fx},${fy}`,
-        class:"pattern"
-      }));
+      { // DEBUG front armhole path
+        const _p = E("path",{
+          d:`M${ggx},${ggy} C${hfax},${hfay} ${hfbx},${hfby} ${fx},${fy}`,
+          class:"pattern"
+        });
+        if(DEBUG_COLORS) _p.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
+        gPat.appendChild(_p);
+      }
 
       // 핸들 드래그
       const mkFH=(hx,hy,ax,ay,col,key)=>{
@@ -420,6 +457,7 @@ function drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
 }
 
 function drawBackNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
+  const _DC_B = DEBUG_COLORS ? DBG_BACK : null; // DEBUG
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
     gPat.appendChild(Ln(p.A,  bSNP, "dep"));
     gPat.appendChild(Ln(bSNP, bND,  "dep"));
@@ -438,10 +476,14 @@ function drawBackNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
       const[hx0,hy0]=c2p(NH.h0.x, NH.h0.y);
       const[hx1,hy1]=c2p(NH.h1.x, NH.h1.y);
 
-      gPat.appendChild(E("path",{
-        d:`M${x1},${y1} C${hx0},${hy0} ${hx1},${hy1} ${x2},${y2}`,
-        class:"pattern"
-      }));
+      { // DEBUG back neck path
+        const _bnp = E("path",{
+          d:`M${x1},${y1} C${hx0},${hy0} ${hx1},${hy1} ${x2},${y2}`,
+          class:"pattern"
+        });
+        if(DEBUG_COLORS) _bnp.setAttribute("style", `stroke:${DBG_BACK};`); // DEBUG
+        gPat.appendChild(_bnp);
+      }
 
       // 핸들 드래그
       const mkNH=(hx,hy,ax,ay,col,key)=>{
@@ -467,6 +509,7 @@ function drawBackNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
 }
 
 function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
+  const _DC_B = DEBUG_COLORS ? DBG_BACK : null; // DEBUG
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
 
 
@@ -476,8 +519,8 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
 
 
 
-    gPat.appendChild(Ln(bND,      dartCenter, "pattern"));
-    gPat.appendChild(Ln(dartEnd_, bSP,        "pattern"));
+    gPat.appendChild(LnC(bND, dartCenter, "pattern", _DC_B));
+    gPat.appendChild(LnC(dartEnd_, bSP, "pattern", _DC_B));
     gPat.appendChild(dot(bSP, "pt-main", 3));
     gPat.appendChild(lbl(bSP, "BSP", "txt-dark", 4, 10));
     gPat.appendChild(Ln(p.E, eOnSh, "dep"));
@@ -486,8 +529,8 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
     gPat.appendChild(lbl(dartCenter, "다트시작", "txt-dark", 4, -6));
     gPat.appendChild(dot(dartEnd_, "pt-main", 4));
     gPat.appendChild(lbl(dartEnd_, "다트끝", "txt-dark", 4, -6));
-    gPat.appendChild(Ln(dartCenter, p.E, "pattern"));
-    gPat.appendChild(Ln(p.E, dartEnd_,   "pattern"));
+    gPat.appendChild(Ln(dartCenter, p.E,    "dart-struct")); // 뒤어깨다트
+    gPat.appendChild(Ln(p.E,        dartEnd_, "dart-struct")); // 뒤어깨다트
     if(showDim) gPat.appendChild(dimLine(bND, bSP, 12));
 
     gPat.appendChild(Ln(p.F, fAux, "dep"));
@@ -499,6 +542,8 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
 }
 
 function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
+  const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG front
+  const _DC_B = DEBUG_COLORS ? DBG_BACK  : null; // DEBUG back
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
     {
       const perpX = Math.sin(deg18), perpY = -Math.cos(deg18);
@@ -531,13 +576,26 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
       const[hx3b,hy3b]=c2p(H.h3b.x,H.h3b.y);
       const[hx4,hy4]=c2p(H.h4.x,  H.h4.y);
 
-      gPat.appendChild(E("path",{
-        d:`M${bx0},${by0} C${hx0},${hy0} ${hx1a},${hy1a} ${bx1},${by1}`+
-          ` C${hx1b},${hy1b} ${hx2a},${hy2a} ${bx2},${by2}`+
-          ` C${hx2b},${hy2b} ${hx3a},${hy3a} ${bx3},${by3}`+
-          ` C${hx3b},${hy3b} ${hx4},${hy4} ${bx4},${by4}`,
-        class:"pattern"
-      }));
+      // ── 뒤암홀: BSP → SIDE_TOP ────────────────────────
+      { // DEBUG back armhole path
+        const _bpd = `M${bx0},${by0} C${hx0},${hy0} ${hx1a},${hy1a} ${bx1},${by1}`+
+                     ` C${hx1b},${hy1b} ${hx2a},${hy2a} ${bx2},${by2}`;
+        const _bp = E("path",{ d:_bpd, class:"pattern" });
+        if(DEBUG_COLORS) _bp.setAttribute("style", `stroke:${DBG_BACK};`); // DEBUG
+        gPat.appendChild(_bp);
+      }
+
+      // ── 앞암홀 하부: SIDE_TOP → G (applied 시 skip) ────────────
+      { // DEBUG front armhole lower path
+        const _hasDMA = typeof dartMoveState !== "undefined" && dartMoveState.applied;
+        if(!_hasDMA){
+          const _fpd = `M${bx2},${by2} C${hx2b},${hy2b} ${hx3a},${hy3a} ${bx3},${by3}`+
+                       ` C${hx3b},${hy3b} ${hx4},${hy4} ${bx4},${by4}`;
+          const _fp = E("path",{ d:_fpd, class:"pattern" });
+          if(DEBUG_COLORS) _fp.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
+          gPat.appendChild(_fp);
+        }
+      }
 
       // 핸들선 + 핸들점 그리기 헬퍼
       const mkHandle=(hx,hy,ax,ay,col,key)=>{
@@ -604,20 +662,28 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
     // ── 옆선 (앞판 + 뒤판) ───────────────────────
     const _dartC = darts_.c;
     const _applied = typeof dartMoveState !== 'undefined' && !!dartMoveState.applied;
+    // 옆선: 허리다트 무관하게 항상 SIDE_TOP → SIDE_BTM 수직
+    // 앞판 옆선 = applied 시 drawDartMoveApplied 담당, 비applied 시 없음 (앞판은 다트이동 후 대체)
+    // 공통 옆선은 파랑 1개만 표시
     if(!_applied){
-      gPat.appendChild(Ln(p.SIDE_TOP, _dartC.right, "pattern")); // 앞판 옆선 상단
-      gPat.appendChild(Ln(_dartC.right, p.SIDE_BTM, "pattern")); // 앞판 옆선 하단
+      // 비applied: 앞판 옆선도 수직으로 표시 (빨강)
+      gPat.appendChild(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_F)); // DEBUG 앞판 옆선 수직
     }
-    gPat.appendChild(Ln(p.SIDE_TOP, _dartC.left,  "pattern")); // 뒤판 옆선 상단
-    gPat.appendChild(Ln(_dartC.left,  p.SIDE_BTM, "pattern")); // 뒤판 옆선 하단
-
+    // 뒤판 옆선: 항상 수직 (파랑)
+    gPat.appendChild(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_B)); // DEBUG 뒤판 옆선 수직
 
     const FND = { x: f.sw(), y: f.yB() + f.fnd() };
     if(!_applied){
-      gPat.appendChild(Ln(FND,        p.FRONT_WL,   "pattern")); // FND → 앞중심 허리
-      gPat.appendChild(Ln(p.FRONT_WL, p.BACK_WL,    "pattern")); // 앞중심허리 → 뒤중심허리
+      // 앞판 허리선: FND → FRONT_WL → SIDE_BTM (앞판 = 빨강)
+      gPat.appendChild(LnC(FND,          p.FRONT_WL, "pattern", _DC_F)); // DEBUG FND → 앞중심 허리
+      gPat.appendChild(LnC(p.FRONT_WL,   p.SIDE_BTM, "pattern", _DC_F)); // DEBUG 앞판 허리 → SIDE_BTM
+      // 뒤판 허리선: SIDE_BTM → BACK_WL (뒤판 = 파랑)
+      gPat.appendChild(LnC(p.SIDE_BTM,   p.BACK_WL,  "pattern", _DC_B)); // DEBUG SIDE_BTM → 뒤중심 허리
+    } else {
+      // applied 시: 뒤판 허리선만 별도로 유지
+      gPat.appendChild(LnC(p.BACK_WL, p.SIDE_BTM, "pattern", _DC_B)); // DEBUG 뒤판 허리선
     }
-    gPat.appendChild(Ln(p.BACK_WL,   p.A,          "pattern")); // 뒤중심허리 → A점
+    gPat.appendChild(LnC(p.BACK_WL,   p.A,          "pattern", _DC_B)); // DEBUG 뒤중심허리 → A점
 
     // ── FRONT_ARM → BP (절개선) ─ applied 시 skip ──
     if(!_applied){
@@ -829,13 +895,13 @@ function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatter
   // ── 다트 a~f ─────────────────────────────────
   const gDart=E("g");
   gDart.setAttribute("id","layer-dart");
-  drawDart(gDart, darts_.a, "dart");
-  drawDart(gDart, darts_.b, "dart-b");
-  drawDart(gDart, darts_.c, "dart-c");
-  drawDart(gDart, darts_.d, "dart-d");
-  drawDart(gDart, darts_.e, "dart-e");
+  drawDart(gDart, darts_.a, "dart-waist");
+  drawDart(gDart, darts_.b, "dart-waist");
+  drawDart(gDart, darts_.c, "dart-waist");
+  drawDart(gDart, darts_.d, "dart-waist");
+  drawDart(gDart, darts_.e, "dart-waist");
   // f 다트: 뒤중심선이라 오른쪽만
-  gDart.appendChild(Ln(darts_.f.right, darts_.f.apex, "dart-f"));
+  gDart.appendChild(Ln(darts_.f.right, darts_.f.apex, "dart-waist"));
   gDart.appendChild(dot(darts_.f.apex, "pt-main", 4));
   if(showDart)svg.appendChild(gDart);
 }

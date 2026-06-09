@@ -39,7 +39,8 @@
   <hr class="divider">
   <div class="sec">표시 옵션</div>
   <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="toggleLayer('layer-base',this.checked)"></div>
-  <div class="row"><label>다트</label><input type="checkbox" id="chkDart" checked onchange="toggleLayer('layer-dart',this.checked)"></div>
+  <div class="row"><label>구조다트</label><input type="checkbox" id="chkDartStruct" checked onchange="applyLayerVisibility()"></div>
+  <div class="row"><label>허리다트</label><input type="checkbox" id="chkDartWaist" checked onchange="applyLayerVisibility()"></div>
   <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="toggleLayer('layer-dim',this.checked)"></div>
   <div class="row"><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
   <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" checked onchange="toggleLayer('layer-points',this.checked)"></div>
