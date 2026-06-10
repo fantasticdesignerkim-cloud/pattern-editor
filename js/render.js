@@ -244,45 +244,44 @@ function drawPatternLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,sho
   }
 }
 
+function drawPolylineFromPts(g, pts, cls = "pattern", color = null) {
+  if (!pts || pts.length < 2) return;
+  for (let i = 0; i < pts.length - 1; i++) {
+    g.appendChild(LnC(pts[i], pts[i + 1], cls, color));
+  }
+}
+
+function drawAppliedSegments(g, segs, cls, color) {
+  if (!Array.isArray(segs)) return;
+  const OUTLINE_TYPES = new Set([
+    "front-center", "front-waist", "side-seam",
+    "front-armhole-lower", "front-armhole-upper",
+    "front-shoulder", "front-neckline",
+  ]);
+  for (const seg of segs) {
+    if (!seg || !seg.from || !seg.to) continue;
+    if (seg.disabled) continue;
+    if (!OUTLINE_TYPES.has(seg.type)) continue;
+    g.appendChild(LnC(seg.from, seg.to, cls, color));
+  }
+}
+
 function drawDartMoveApplied(svg, p, f, B){
-  const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG
   const app = typeof dartMoveState !== 'undefined' && dartMoveState.applied;
-  console.log('[render] drawDartMoveApplied', app ? { fixedSegs: app.fixedSegs?.length, rotatedSegs: app.rotatedSegs?.length } : 'no applied');
   if(!app) return;
   const g = E("g");
+  const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG front color
 
-  // ── whitelist: 외곽선으로 허용할 type만 그린다 ──
-  const OUTLINE_TYPES = new Set([
-    "front-center", "front-waist",
-    "front-neckline", "front-shoulder",
-    "front-armhole-lower", "front-armhole-upper",
-    // side-seam, side-to-dart, old-dart 제외
-  ]);
+  // ── 앞판 외곽선: segment 기반 (점 배열 직결 대신 seg.from→seg.to 개별 연결) ──
+  // fixedSegs / rotatedSegs 사용 → 불연속 구간 자동 차단
+  drawAppliedSegments(g, app.fixedSegs,   "pattern", _DC_F);
+  drawAppliedSegments(g, app.rotatedSegs, "pattern", _DC_F);
 
-  // BP 좌표와 근접 여부 체크 (BP를 from/to로 가진 segment 차단)
-  const isBP = pt => pt && Math.hypot(pt.x - p.BP.x, pt.y - p.BP.y) < 0.1;
-
-  function drawOutlineSegs(segs, label) {
-    let count = 0;
-    (segs || []).forEach(seg => {
-      if(seg.disabled) return;
-      if(!OUTLINE_TYPES.has(seg.type)) return;
-      if(isBP(seg.from) || isBP(seg.to)) return;
-      g.appendChild(LnC(seg.from, seg.to, "pattern", _DC_F));
-      count++;
-    });
-    if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) console.log('[draw]', label, 'drew:', count, '/', (segs||[]).length,
-      'types:', (segs||[]).filter(s=>OUTLINE_TYPES.has(s.type)).map(s=>s.type).join(','));
-  }
-
-  drawOutlineSegs(app.fixedSegs, 'fixedSegs');
-  drawOutlineSegs(app.rotatedSegs, 'rotatedSegs');
-
-  // ── 다트선 4개: dart-struct 클래스 (구조다트 레이어) ──
-  if(app.GPoint)         g.appendChild(Ln(p.BP, app.GPoint,         "dart-struct"));
-  if(app.rotatedGGPoint) g.appendChild(Ln(p.BP, app.rotatedGGPoint, "dart-struct"));
-  if(app.cutPoint)       g.appendChild(Ln(p.BP, app.cutPoint,       "dart-struct"));
-  if(app.cutPoint2)      g.appendChild(Ln(p.BP, app.cutPoint2,      "dart-struct"));
+  // ── 구조다트 절개선 + 참조선: dart dart-struct (외곽선과 분리) ──
+  if(app.cutPoint)       g.appendChild(Ln(p.BP, app.cutPoint,       "dart dart-struct"));
+  if(app.cutPoint2)      g.appendChild(Ln(p.BP, app.cutPoint2,      "dart dart-struct"));
+  if(app.GPoint)         g.appendChild(Ln(p.BP, app.GPoint,         "dart dart-struct"));
+  if(app.rotatedGGPoint) g.appendChild(Ln(p.BP, app.rotatedGGPoint, "dart dart-struct"));
 
   svg.appendChild(g);
 }
@@ -393,8 +392,8 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
     gPat.appendChild(lbl(FSP, "FSP", "txt-dark", 6, 10));
 
     // ─ G점 → BP 직선 + 다트선 ──────────────────
-    gPat.appendChild(Ln(p.G,  p.BP, "dart-struct")); // 가슴다트 하부
-    gPat.appendChild(Ln(p.BP, GG,  "dart-struct")); // 가슴다트 상부
+    gPat.appendChild(Ln(p.G,  p.BP, "dart dart-struct")); // 가슴다트 하부
+    gPat.appendChild(Ln(p.BP, GG,  "dart dart-struct")); // 가슴다트 상부
     gPat.appendChild(dot(GG, "pt-main", 3));
     gPat.appendChild(lbl(GG, "GG", "txt-dark", 6, -6));
 }
@@ -529,8 +528,8 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
     gPat.appendChild(lbl(dartCenter, "다트시작", "txt-dark", 4, -6));
     gPat.appendChild(dot(dartEnd_, "pt-main", 4));
     gPat.appendChild(lbl(dartEnd_, "다트끝", "txt-dark", 4, -6));
-    gPat.appendChild(Ln(dartCenter, p.E,    "dart-struct")); // 뒤어깨다트
-    gPat.appendChild(Ln(p.E,        dartEnd_, "dart-struct")); // 뒤어깨다트
+    gPat.appendChild(LnC(dartCenter, p.E,    "dart dart-struct", _DC_B)); // 뒤어깨다트
+    gPat.appendChild(LnC(p.E,        dartEnd_, "dart dart-struct", _DC_B)); // 뒤어깨다트
     if(showDim) gPat.appendChild(dimLine(bND, bSP, 12));
 
     gPat.appendChild(Ln(p.F, fAux, "dep"));

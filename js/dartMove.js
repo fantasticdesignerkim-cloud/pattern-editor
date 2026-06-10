@@ -105,9 +105,8 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       const seg = segments[idx];
       const next = { ...seg.to };
       if (seg.disabled && !isG(next) && !isGG(next)) continue;
-      // cutPoint → seg.to の最初のセグのfromはcutPoint
-      const from = pts[pts.length - 1];
-      segs.push({ from: { ...from }, to: { ...next }, type: seg.type, disabled: !!seg.disabled });
+      // 원본 segment의 from/to를 그대로 보존 (sampled 곡선 좌표 유지)
+      segs.push({ from: { ...seg.from }, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
       pts.push(next);
       if (isG(next))  { hit = "G";  break; }
       if (isGG(next)) { hit = "GG"; break; }
@@ -126,9 +125,8 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       const seg = segments[idx];
       const prev = { ...seg.from };
       if (seg.disabled && !isG(prev) && !isGG(prev)) continue;
-      const from = pts[pts.length - 1];
-      // 수집 시점에는 진행 방향(from=현재점, to=prev)으로 저장
-      segs.push({ from: { ...from }, to: { ...prev }, type: seg.type, disabled: !!seg.disabled });
+      // 원본 segment의 from/to를 그대로 보존 (sampled 곡선 좌표 유지)
+      segs.push({ from: { ...seg.from }, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
       pts.push(prev);
       if (isG(prev))  { hit = "G";  break; }
       if (isGG(prev)) { hit = "GG"; break; }
