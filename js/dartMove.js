@@ -97,6 +97,8 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   const nn = segments.length;
 
   function walkForward() {
+    // cutSegIndex segment: cutPoint → seg.to (cutPoint 이후 부분만)
+    // 이후 segments: 원본 그대로
     const pts  = [{ ...cutPoint }];
     const segs = [];
     let hit = null;
@@ -105,8 +107,9 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       const seg = segments[idx];
       const next = { ...seg.to };
       if (seg.disabled && !isG(next) && !isGG(next)) continue;
-      // 원본 segment의 from/to를 그대로 보존 (sampled 곡선 좌표 유지)
-      segs.push({ from: { ...seg.from }, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+      // cutSegIndex segment는 from을 cutPoint로 교체 (cutPoint 이전 구간 제거)
+      const fromPt = (step === 0) ? { ...cutPoint } : { ...seg.from };
+      segs.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
       pts.push(next);
       if (isG(next))  { hit = "G";  break; }
       if (isGG(next)) { hit = "GG"; break; }
@@ -115,9 +118,8 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   }
 
   function walkBackward() {
-    // backward는 cutPoint에서 역방향으로 진행한다.
-    // seg.from/to를 뒤집어 저장 → cutPoint→hit 방향으로 from/to 정렬
-    // trimFirstSeg와 drawAppliedSegments가 양쪽 동일 규칙으로 동작할 수 있게 됨
+    // cutSegIndex segment: seg.from → cutPoint (cutPoint 이전 부분만)
+    // 이후 segments: from/to 뒤집어서 cutPoint→hit 방향으로 정렬
     const pts  = [{ ...cutPoint }];
     const segs = [];
     let hit = null;
@@ -126,8 +128,11 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       const seg = segments[idx];
       const prev = { ...seg.from };
       if (seg.disabled && !isG(prev) && !isGG(prev)) continue;
+      // cutSegIndex segment는 to를 cutPoint로 교체 (cutPoint 이후 구간 제거)
       // from/to 뒤집기: 역방향 이동이므로 실제 방향은 to→from
-      segs.push({ from: { ...seg.to }, to: { ...seg.from }, type: seg.type, disabled: !!seg.disabled });
+      const toPt   = (step === 0) ? { ...cutPoint } : { ...seg.from };
+      const fromPt = (step === 0) ? { ...seg.from } : { ...seg.to  };
+      segs.push({ from: fromPt, to: toPt, type: seg.type, disabled: !!seg.disabled });
       pts.push(prev);
       if (isG(prev))  { hit = "G";  break; }
       if (isGG(prev)) { hit = "GG"; break; }
@@ -440,9 +445,30 @@ function drawDartMoveOverlay(svgEl, p) {
       }
     }
     if (dartMoveState.hoverPoint) {
-      const [hpx, hpy] = c2p(dartMoveState.hoverPoint.x, dartMoveState.hoverPoint.y);
+      const hp = dartMoveState.hoverPoint;
+      const [hpx, hpy] = c2p(hp.x, hp.y);
       g.appendChild(E("circle", { cx: hpx, cy: hpy, r: 5,
         fill: "#ffcc00", stroke: "#fff", "stroke-width": 1.5, opacity: 0.9 }));
+
+      // ── a→c, c→b 거리 표시 ──────────────────────
+      const dHov2 = createDraft(B, W, BL);
+      const segsHov2 = buildFrontOutline(dHov2.pts, dHov2.formula, B);
+      const hSeg2 = segsHov2[dartMoveState.hoverSegIndex];
+      if (hSeg2) {
+        const dA = Math.hypot(hp.x - hSeg2.from.x, hp.y - hSeg2.from.y);
+        const dB = Math.hypot(hp.x - hSeg2.to.x,   hp.y - hSeg2.to.y);
+        const [tx, ty] = c2p(hp.x, hp.y);
+        g.appendChild(E("text", {
+          x: tx + 10, y: ty - 8,
+          "font-size": 11, fill: "#ffcc00", "font-weight": "700",
+          "text-anchor": "start", stroke: "#333", "stroke-width": 0.3,
+        }, `↑${dA.toFixed(1)}cm`));
+        g.appendChild(E("text", {
+          x: tx + 10, y: ty + 6,
+          "font-size": 11, fill: "#ffcc00", "font-weight": "700",
+          "text-anchor": "start", stroke: "#333", "stroke-width": 0.3,
+        }, `↓${dB.toFixed(1)}cm`));
+      }
     }
     svgEl.appendChild(g);
     return;
@@ -620,6 +646,11 @@ function initDartMoveClickHandler() {
     // -π ~ π 정규화
     while (userAngle >  Math.PI) userAngle -= 2 * Math.PI;
     while (userAngle < -Math.PI) userAngle += 2 * Math.PI;
+
+    // 범위 제한: 0 ~ baseAngle (패턴 겹침 방지)
+    const base = dartMoveState.baseAngle;
+    // baseAngle은 음수 방향 — 범위: baseAngle ~ 0
+    userAngle = Math.max(base, Math.min(0, userAngle));
 
     dartMoveState.userAngle = userAngle;
 
