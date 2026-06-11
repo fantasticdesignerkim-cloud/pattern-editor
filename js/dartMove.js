@@ -115,8 +115,9 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   }
 
   function walkBackward() {
-    // backward는 cutPoint에서 역방향으로 진행 → 수집 후 reverse해서
-    // cutPoint → hit 순서로 통일한다.
+    // backward는 cutPoint에서 역방향으로 진행한다.
+    // seg.from/to를 뒤집어 저장 → cutPoint→hit 방향으로 from/to 정렬
+    // trimFirstSeg와 drawAppliedSegments가 양쪽 동일 규칙으로 동작할 수 있게 됨
     const pts  = [{ ...cutPoint }];
     const segs = [];
     let hit = null;
@@ -125,14 +126,12 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       const seg = segments[idx];
       const prev = { ...seg.from };
       if (seg.disabled && !isG(prev) && !isGG(prev)) continue;
-      // 원본 segment의 from/to를 그대로 보존 (sampled 곡선 좌표 유지)
-      segs.push({ from: { ...seg.from }, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+      // from/to 뒤집기: 역방향 이동이므로 실제 방향은 to→from
+      segs.push({ from: { ...seg.to }, to: { ...seg.from }, type: seg.type, disabled: !!seg.disabled });
       pts.push(prev);
       if (isG(prev))  { hit = "G";  break; }
       if (isGG(prev)) { hit = "GG"; break; }
     }
-    // pts는 이미 cutPoint→hit 순서
-    // segs는 cutPoint→hit 순서이므로 그대로 반환
     return { pts, segs, hit };
   }
 

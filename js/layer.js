@@ -3,7 +3,6 @@ function getUiOptions(){
   return {
     base:        document.getElementById("chkBase")?.checked        !== false,
     dart:        document.getElementById("chkDart")?.checked        !== false,
-    dartStruct:  document.getElementById("chkDartStruct")?.checked  !== false,
     dartWaist:   document.getElementById("chkDartWaist")?.checked   !== false,
     dim:         document.getElementById("chkDim")?.checked         === true,
     pattern:     document.getElementById("chkPattern")?.checked     !== false,
@@ -26,7 +25,7 @@ function classifyVisualElement(el){
   if(/ease-info/.test(cls)) return "misc";  // 이세량 패널: 항상 표시
   if(hasGrab || /sleeve-pattern-handle|sleeve-pattern-handle-pt/.test(cls) || dash === "3,2") return "handle";
   if(/dim/.test(cls) || /^(-?\d+(\.\d+)?|뒤암홀|앞암홀|총이세|뒤이세|앞이세|뒤AH|앞AH|EL|SL)/.test(txt)) return "dimension";
-  if(/dart-struct/.test(cls)) return "dart-struct";
+  if(/dart-struct/.test(cls)) return "pattern";
   if(/dart-waist/.test(cls)) return "dart-waist";
   if(/dart|dart-guide/.test(cls)) return "dart";
   if(/base/.test(cls)) return "base";
@@ -48,7 +47,6 @@ function applyLayerVisibility(){
     grid: true,
     base: opt.base,
     dart: opt.dart,
-    "dart-struct": opt.dartStruct !== false ? opt.dartStruct : opt.dart,
     "dart-waist":  opt.dartWaist  !== false ? opt.dartWaist  : opt.dart,
     pattern: opt.pattern,
     guide: opt.dep,

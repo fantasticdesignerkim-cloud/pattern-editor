@@ -52,7 +52,7 @@ function render(){
 
   // ── 체크박스 상태 (한 번만 읽기) ─────────────
   const showBase    = document.getElementById("chkBase")?.checked    !== false;
-  const showDart    = document.getElementById("chkDart")?.checked    !== false;
+  const showDart    = document.getElementById("chkDartWaist")?.checked !== false;
   const showDep     = document.getElementById("chkDep")?.checked     === true;
   const showPattern = document.getElementById("chkPattern")?.checked !== false;
   const showGuide   = document.getElementById("chkGuide")?.checked   === true;
@@ -275,17 +275,17 @@ function drawDartMoveApplied(svg, p, f, B){
   // ── 앞판 외곽선: segment 기반 ──────────────────────────────────
   // cutPoint가 속한 segment의 첫 점을 cutPoint로 trim
   // → 어깨선 등 cutPoint 이전/이후 연장선 방지
-  function trimFirstSeg(segs, cutPt) {
-    if (!segs || !segs.length || !cutPt) return segs;
-    const trimmed = segs.map((s, i) => i === 0
-      ? { ...s, from: { ...cutPt } }
-      : s
-    );
-    return trimmed;
+  // 시작점: segs[0].from → cutPoint, 끝점: segs[last].to → G or GG
+  function trimSegs(segs, startPt, endPt) {
+    if (!segs || !segs.length) return segs;
+    const result = segs.map(s => ({ ...s }));
+    if (startPt) result[0].from = { ...startPt };
+    if (endPt)   result[result.length - 1].to = { ...endPt };
+    return result;
   }
 
-  const fixedTrimmed   = trimFirstSeg(app.fixedSegs,   app.cutPoint);
-  const rotatedTrimmed = trimFirstSeg(app.rotatedSegs, app.cutPoint);
+  const fixedTrimmed   = trimSegs(app.fixedSegs,   app.cutPoint,  app.GPoint);
+  const rotatedTrimmed = trimSegs(app.rotatedSegs, app.cutPoint2, app.rotatedGGPoint);
 
   drawAppliedSegments(g, fixedTrimmed,   "pattern", _DC_F);
   drawAppliedSegments(g, rotatedTrimmed, "pattern", _DC_F);
