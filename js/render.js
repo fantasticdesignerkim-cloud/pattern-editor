@@ -272,10 +272,23 @@ function drawDartMoveApplied(svg, p, f, B){
   const g = E("g");
   const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG front color
 
-  // ── 앞판 외곽선: segment 기반 (점 배열 직결 대신 seg.from→seg.to 개별 연결) ──
-  // fixedSegs / rotatedSegs 사용 → 불연속 구간 자동 차단
-  drawAppliedSegments(g, app.fixedSegs,   "pattern", _DC_F);
-  drawAppliedSegments(g, app.rotatedSegs, "pattern", _DC_F);
+  // ── 앞판 외곽선: segment 기반 ──────────────────────────────────
+  // cutPoint가 속한 segment의 첫 점을 cutPoint로 trim
+  // → 어깨선 등 cutPoint 이전/이후 연장선 방지
+  function trimFirstSeg(segs, cutPt) {
+    if (!segs || !segs.length || !cutPt) return segs;
+    const trimmed = segs.map((s, i) => i === 0
+      ? { ...s, from: { ...cutPt } }
+      : s
+    );
+    return trimmed;
+  }
+
+  const fixedTrimmed   = trimFirstSeg(app.fixedSegs,   app.cutPoint);
+  const rotatedTrimmed = trimFirstSeg(app.rotatedSegs, app.cutPoint);
+
+  drawAppliedSegments(g, fixedTrimmed,   "pattern", _DC_F);
+  drawAppliedSegments(g, rotatedTrimmed, "pattern", _DC_F);
 
   // ── 구조다트 절개선 + 참조선: dart dart-struct (외곽선과 분리) ──
   if(app.cutPoint)       g.appendChild(Ln(p.BP, app.cutPoint,       "dart dart-struct"));

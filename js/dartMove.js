@@ -237,7 +237,25 @@ function buildFrontOutline(p, f, B) {
   addLineSegment(segments, nBR,        p.FRONT_WL,  { type: "front-center"   });
   addLineSegment(segments, p.FRONT_WL, p.SIDE_BTM,  { type: "front-waist"    });
   addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP,  { type: "side-seam"      });
-  addLineSegment(segments, p.SIDE_TOP, p.G,         { type: "front-armhole-lower" });
+  // 앞암홀 하부: SIDE_TOP → G 곡선 (state.armH 핸들 사용, 직선 금지)
+  {
+    const H = state.armH;
+    if (H && H.h2b && H.h3a && H.a3 && H.h3b && H.h4) {
+      // render.js drawArmhole과 동일한 두 구간 cubic
+      const lower1 = sampleCubic(p.SIDE_TOP, H.h2b, H.h3a, H.a3, 8);
+      const lower2 = sampleCubic(H.a3,       H.h3b, H.h4,  p.G,   8);
+      const lowerFrontArm = [...lower1, ...lower2.slice(1)];
+      addSampledSegments(segments, lowerFrontArm, { type: "front-armhole-lower" });
+    } else {
+      // fallback: SIDE_TOP → G 단순 cubic 근사 (직선 회피)
+      const midX = (p.SIDE_TOP.x + p.G.x) / 2;
+      const midY = Math.min(p.SIDE_TOP.y, p.G.y) - 2; // 약간 위로 들어올린 제어점
+      const c1 = { x: p.SIDE_TOP.x, y: midY };
+      const c2 = { x: midX,         y: midY };
+      const fallbackArm = sampleCubic(p.SIDE_TOP, c1, c2, p.G, 16);
+      addSampledSegments(segments, fallbackArm, { type: "front-armhole-lower" });
+    }
+  }
   addLineSegment(segments, p.G,        p.BP,        { type: "old-dart", disabled: true });
   addLineSegment(segments, p.BP,       GG,          { type: "old-dart", disabled: true });
   addSampledSegments(segments, frontArm,             { type: "front-armhole-upper" });
