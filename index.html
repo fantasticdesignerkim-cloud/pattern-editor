@@ -26,6 +26,10 @@
   <div class="sec">다트</div>
   <div class="row"><label>총량 (cm)</label><input type="number" id="inpDart" value="12.5" step="0.5" oninput="render()"></div>
   <div class="row"><label>다트이동</label><button class="btn" id="btnDartMove" style="background:#e07800" onclick="toggleDartMove()">다트이동 시작</button></div>
+  <div class="row" id="dartSideRow" style="display:none;gap:4px">
+    <button class="btn" id="btnDartSideFront" style="background:#e07800" onclick="selectDartSide('front')">앞판</button>
+    <button class="btn" id="btnDartSideBack"  style="background:#e07800" onclick="selectDartSide('back')">뒤판</button>
+  </div>
   <div class="row" id="dartThetaRow" style="display:none">
     <label>닫는 양</label>
     <input type="range" id="inpDartTheta" min="0" max="1" step="0.01" value="1" oninput="setDartTheta(+this.value)">
@@ -84,6 +88,7 @@
 <script src="js/render.js?v=1781165025"></script>
 <script src="js/sleeve.js?v=1781165025"></script>
 <script src="js/storage.js?v=1781165025"></script>
+<script>const DEBUG_DART_MOVE = true;</script>
 <script src="js/dartMove.js?v=1781165025"></script>
 <script src="js/init.js?v=1781165025"></script>
 

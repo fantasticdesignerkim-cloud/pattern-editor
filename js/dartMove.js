@@ -5,6 +5,7 @@
 
 const dartMoveState = {
   active:        false,
+  side:          null,   // "front" | "back" | null
   cutPoint:      null,
   cutSegIndex:   -1,
   // ── hover ──────────────────────────────────
@@ -118,8 +119,6 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   }
 
   function walkBackward() {
-    // cutSegIndex segment: seg.from → cutPoint (cutPoint 이전 부분만)
-    // 이후 segments: from/to 뒤집어서 cutPoint→hit 방향으로 정렬
     const pts  = [{ ...cutPoint }];
     const segs = [];
     let hit = null;
@@ -127,16 +126,23 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       const idx = (cutSegIndex - step + nn) % nn;
       const seg = segments[idx];
       const prev = { ...seg.from };
-      if (seg.disabled && !isG(prev) && !isGG(prev)) continue;
-      // cutSegIndex segment는 to를 cutPoint로 교체 (cutPoint 이후 구간 제거)
-      // from/to 뒤집기: 역방향 이동이므로 실제 방향은 to→from
+      const next = { ...seg.to };
+      if (seg.disabled && !isG(prev) && !isGG(prev) && !isG(next) && !isGG(next)) continue;
       const toPt   = (step === 0) ? { ...cutPoint } : { ...seg.from };
       const fromPt = (step === 0) ? { ...seg.from } : { ...seg.to  };
       segs.push({ from: fromPt, to: toPt, type: seg.type, disabled: !!seg.disabled });
       pts.push(prev);
-      if (isG(prev))  { hit = "G";  break; }
-      if (isGG(prev)) { hit = "GG"; break; }
+      if (isG(prev)  || isG(next))  { hit = "G";  break; }
+      if (isGG(prev) || isGG(next)) { hit = "GG"; break; }
     }
+    // reverse 후 from/to swap, segs[0].from = cutPoint 고정
+    segs.reverse();
+    for (let i = 0; i < segs.length; i++) {
+      const tmp = segs[i].from;
+      segs[i].from = segs[i].to;
+      segs[i].to   = tmp;
+    }
+    if (segs.length > 0) segs[0].from = { ...cutPoint };
     return { pts, segs, hit };
   }
 
@@ -300,6 +306,7 @@ function toggleDartMove() {
 
 function startDartMove() {
   dartMoveState.active        = true;
+  dartMoveState.side          = null;   // 아직 앞/뒤 미선택
   dartMoveState.cutPoint      = null;
   dartMoveState.cutSegIndex   = -1;
   dartMoveState.hoverPoint    = null;
@@ -310,12 +317,33 @@ function startDartMove() {
   dartMoveState.fixedPts      = null;
   setBtn("취소", "#cc3333");
   setApplyEnabled(false);
-  setHint("앞판 외곽선을 클릭하세요");
+  setHint("앞판 / 뒤판을 선택하세요");
+  setSideRowVisible(true);
+  setSideActive(null);
+  render();
+}
+
+// 앞판 / 뒤판 선택
+function selectDartSide(side) {
+  dartMoveState.side          = side;
+  dartMoveState.cutPoint      = null;
+  dartMoveState.cutSegIndex   = -1;
+  dartMoveState.hoverPoint    = null;
+  dartMoveState.hoverSegIndex = -1;
+  dartMoveState.userAngle     = 0;
+  dartMoveState.baseAngle     = 0;
+  dartMoveState.rotatePts     = null;
+  dartMoveState.fixedPts      = null;
+  setApplyEnabled(false);
+  setSideActive(side);
+  const label = side === "front" ? "앞판" : "뒤판";
+  setHint(`${label} 외곽선을 클릭하세요`);
   render();
 }
 
 function cancelDartMove() {
   dartMoveState.active        = false;
+  dartMoveState.side          = null;
   dartMoveState.cutPoint      = null;
   dartMoveState.cutSegIndex   = -1;
   dartMoveState.hoverPoint    = null;
@@ -327,11 +355,14 @@ function cancelDartMove() {
   setBtn("다트이동 시작", "#e07800");
   setApplyEnabled(false);
   setHint("");
+  setSideRowVisible(false);
+  setSideActive(null);
   render();
 }
 
 function resetDartMove() {
   dartMoveState.active        = false;
+  dartMoveState.side          = null;
   dartMoveState.cutPoint      = null;
   dartMoveState.cutSegIndex   = -1;
   dartMoveState.hoverPoint    = null;
@@ -346,6 +377,8 @@ function resetDartMove() {
   setBtn("다트이동 시작", "#e07800");
   setApplyEnabled(false);
   setHint("다트이동 결과를 초기화했습니다");
+  setSideRowVisible(false);
+  setSideActive(null);
   render();
 }
 
@@ -364,25 +397,46 @@ function applyDartMove() {
   const p = _getDraftPts();
   if (!p) return;
 
-  const rotatedPts = dartMoveState.rotatePts.map(pt => rotatePt(pt, p.BP, angle));
-  const cut2 = rotatePt(dartMoveState.cutPoint, p.BP, angle);
+  // 회전 중심: 앞판=BP, 뒤판=E
+  const pivot = (dartMoveState.side === "back") ? p.E : p.BP;
 
-  // rotateSegs의 from/to를 BP 기준으로 회전
+  const rotatedPts = dartMoveState.rotatePts.map(pt => rotatePt(pt, pivot, angle));
+  const cut2 = rotatePt(dartMoveState.cutPoint, pivot, angle);
+
+  // rotateSegs의 from/to를 pivot 기준으로 회전
   const rotatedSegs = (dartMoveState.rotateSegs || []).map(seg => ({
-    from:     rotatePt(seg.from, p.BP, angle),
-    to:       rotatePt(seg.to,   p.BP, angle),
+    from:     rotatePt(seg.from, pivot, angle),
+    to:       rotatePt(seg.to,   pivot, angle),
     type:     seg.type,
     disabled: seg.disabled,
   }));
 
-  // G / rotatedGG 명시 추출 (render.js가 추측하지 않아도 되도록)
-  const fixedSegsAll   = dartMoveState.fixedSegs  || [];
-  const rotateSegsAll  = dartMoveState.rotateSegs || [];
-  const GPoint         = fixedSegsAll.length  ? fixedSegsAll[fixedSegsAll.length - 1].to   : null;
-  const GGPoint        = rotateSegsAll.length ? rotateSegsAll[rotateSegsAll.length - 1].to : null;
-  const rotatedGGPoint = GGPoint ? rotatePt(GGPoint, p.BP, angle) : null;
+  // dartCenter / dartEnd_ 명시 추출
+  const fixedSegsAll  = dartMoveState.fixedSegs  || [];
+  const rotateSegsAll = dartMoveState.rotateSegs || [];
+
+  let GPoint, GGPoint;
+  if (dartMoveState.side === "back") {
+    // 뒤판: GPoint = dartCenter (buildBackShoulderDartInfo에서 직접 취득)
+    const _B = n("inpB"), _W = n("inpW"), _BL = n("inpBL");
+    if (_B && _W && _BL) {
+      const _d = createDraft(_B, _W, _BL);
+      const _bi = buildBackShoulderDartInfo(_d.formula, _d.pts, _B);
+      GPoint = _bi?.dartCenter ? { ..._bi.dartCenter } : null;
+    } else {
+      GPoint = null;
+    }
+    GGPoint = rotateSegsAll.length ? { ...rotateSegsAll[rotateSegsAll.length - 1].to } : null;
+  } else {
+    // 앞판: 기존 로직
+    GPoint  = fixedSegsAll.length  ? { ...fixedSegsAll[fixedSegsAll.length - 1].to }   : null;
+    GGPoint = rotateSegsAll.length ? { ...rotateSegsAll[rotateSegsAll.length - 1].to } : null;
+  }
+  const rotatedGGPoint = GGPoint ? rotatePt(GGPoint, pivot, angle) : null;
 
   dartMoveState.applied = {
+    side:            dartMoveState.side,
+    pivot:           { ...pivot },
     cutPoint:        { ...dartMoveState.cutPoint },
     cutPoint2:       { ...cut2 },
     cutSegIndex:     dartMoveState.cutSegIndex,
@@ -435,7 +489,9 @@ function drawDartMoveOverlay(svgEl, p) {
   if (!dartMoveState.cutPoint) {
     if (dartMoveState.hoverSegIndex >= 0) {
       const dHov = createDraft(B, W, BL);
-      const segsHov = buildFrontOutline(dHov.pts, dHov.formula, B);
+      const segsHov = dartMoveState.side === "back"
+        ? buildBackOutline(dHov.pts, dHov.formula, B)
+        : buildFrontOutline(dHov.pts, dHov.formula, B);
       const hSeg = segsHov[dartMoveState.hoverSegIndex];
       if (hSeg) {
         const [hx1, hy1] = c2p(hSeg.from.x, hSeg.from.y);
@@ -477,10 +533,15 @@ function drawDartMoveOverlay(svgEl, p) {
   // ── 2. cutPoint 확정 후: 선택 세그먼트 강조 + 회전 미리보기 ────
   const cut = dartMoveState.cutPoint;
   const [cx, cy] = c2p(cut.x, cut.y);
-  const [bx, by] = c2p(p.BP.x, p.BP.y);
+
+  // 회전 중심: 앞판=BP, 뒤판=E
+  const pivot = (dartMoveState.side === "back") ? p.E : p.BP;
+  const [bx, by] = c2p(pivot.x, pivot.y);
 
   const dDraft = createDraft(B, W, BL);
-  const segs   = buildFrontOutline(dDraft.pts, dDraft.formula, B);
+  const segs = dartMoveState.side === "back"
+    ? buildBackOutline(dDraft.pts, dDraft.formula, B)
+    : buildFrontOutline(dDraft.pts, dDraft.formula, B);
 
   // 선택된 세그먼트 강조
   const seg = segs[dartMoveState.cutSegIndex];
@@ -498,7 +559,7 @@ function drawDartMoveOverlay(svgEl, p) {
   const angle = dartMoveState.userAngle;
 
   // ── 회전 미리보기 polyline ─────────────────────
-  const rotated = rotatePts.map(pt => rotatePt(pt, p.BP, angle));
+  const rotated = rotatePts.map(pt => rotatePt(pt, pivot, angle));
   if (rotated.length >= 2) {
     g.appendChild(E("polyline", {
       points: ptsToSvgPoints(rotated),
@@ -508,11 +569,11 @@ function drawDartMoveOverlay(svgEl, p) {
     }));
   }
 
-  // ── BP→cutPoint 절개선 (주황) ─────────────────
+  // ── pivot→cutPoint 절개선 (주황) ──────────────
   g.appendChild(E("line", { x1: bx, y1: by, x2: cx, y2: cy, stroke: "#e07800", "stroke-width": 1.8, "stroke-dasharray": "6,3" }));
 
-  // ── BP→cutPoint2 새 다트 다리 (파랑) ──────────
-  const cut2 = rotatePt(cut, p.BP, angle);
+  // ── pivot→cutPoint2 새 다트 다리 (파랑) ────────
+  const cut2 = rotatePt(cut, pivot, angle);
   const [cx2, cy2] = c2p(cut2.x, cut2.y);
   g.appendChild(E("line", { x1: bx, y1: by, x2: cx2, y2: cy2, stroke: "#44aaff", "stroke-width": 1.8, "stroke-dasharray": "6,3" }));
 
@@ -521,7 +582,7 @@ function drawDartMoveOverlay(svgEl, p) {
 
   // ── 각도 표시 ─────────────────────────────────
   const degVal = (angle * 180 / Math.PI).toFixed(1);
-  const [lx, ly] = c2p(p.BP.x + 1.5, p.BP.y - 1.5);
+  const [lx, ly] = c2p(pivot.x + 1.5, pivot.y - 1.5);
   g.appendChild(E("text", { x: lx, y: ly, "font-size": 11, fill: "#44aaff", "font-weight": "700", "text-anchor": "start" }, `${degVal}°`));
 
   svgEl.appendChild(g);
@@ -548,6 +609,7 @@ function initDartMoveClickHandler() {
   // ── 외곽선 클릭 → cutPoint 선택 ──────────────
   svg.addEventListener("click", e => {
     if (!dartMoveState.active) return;
+    if (!dartMoveState.side) return;          // 앞/뒤 선택 전엔 무시
     // 드래그 핸들 위 클릭은 cutPoint 선택 무시
     if (e.target.closest(".dart-rotate-handle")) return;
 
@@ -555,6 +617,47 @@ function initDartMoveClickHandler() {
     const B = n("inpB"), W = n("inpW"), BL = n("inpBL");
     if (!B || !W || !BL) return;
     const d = createDraft(B, W, BL);
+
+    // ── 뒤판 ────────────────────────────────────
+    if (dartMoveState.side === "back") {
+      const segsBack = buildBackOutline(d.pts, d.formula, B);
+      const resultB  = findCutPointBack({ x: cx, y: cy }, segsBack, d.pts, d.formula, B);
+
+      if (resultB?.blocked) {
+        setHint("다트 끝점 근처는 선택할 수 없습니다");
+        render();
+        return;
+      }
+      if (resultB) {
+        dartMoveState.cutPoint    = resultB.point;
+        dartMoveState.cutSegIndex = resultB.segIndex;
+
+        const info = buildBackShoulderDartInfo(d.formula, d.pts, B);
+        const { closeAngle } = calcBackCloseAngle(info);
+        const { rotatePts, fixedPts, fixedSegs, rotateSegs } =
+          splitBackOutline(segsBack, resultB.point, resultB.segIndex, d.pts, d.formula, B);
+
+        dartMoveState.baseAngle  = closeAngle;
+        dartMoveState.userAngle  = closeAngle;
+        dartMoveState.rotatePts  = rotatePts;
+        dartMoveState.fixedPts   = fixedPts;
+        dartMoveState.fixedSegs  = fixedSegs;
+        dartMoveState.rotateSegs = rotateSegs;
+        dartMoveState.hoverPoint    = null;
+        dartMoveState.hoverSegIndex = -1;
+
+        const seg = segsBack[resultB.segIndex];
+        const deg = Math.abs(closeAngle * 180 / Math.PI).toFixed(1);
+        setApplyEnabled(true);
+        setHint(`${seg?.type || "outline"} · 기준각 ${deg}° · 핸들 드래그로 조절`);
+      } else {
+        setHint(`뒤판 외곽선 근처를 클릭하세요 x=${cx.toFixed(1)} y=${cy.toFixed(1)}`);
+      }
+      render();
+      return;
+    }
+
+    // ── 앞판 ────────────────────────────────────
     const segments = buildFrontOutline(d.pts, d.formula, B);
     const result = findCutPoint({ x: cx, y: cy }, segments, d.pts);
 
@@ -608,6 +711,7 @@ function initDartMoveClickHandler() {
   // ── hover: SVG 위 마우스 이동 시 선택 가능 외곽선 표시 ──────────
   svg.addEventListener("mousemove", e => {
     if (!dartMoveState.active) return;
+    if (!dartMoveState.side) return;
     if (dartMoveState.dragging) return;
     if (dartMoveState.cutPoint) return;
     if (e.target.closest(".dart-rotate-handle")) return;
@@ -616,6 +720,21 @@ function initDartMoveClickHandler() {
     const B = n("inpB"), W = n("inpW"), BL = n("inpBL");
     if (!B || !W || !BL) return;
     const dh = createDraft(B, W, BL);
+
+    if (dartMoveState.side === "back") {
+      const segsH = buildBackOutline(dh.pts, dh.formula, B);
+      const hr = findCutPointBack({ x: mx, y: my }, segsH, dh.pts, dh.formula, B);
+      if (hr && !hr.blocked) {
+        dartMoveState.hoverPoint    = hr.point;
+        dartMoveState.hoverSegIndex = hr.segIndex;
+      } else {
+        dartMoveState.hoverPoint    = null;
+        dartMoveState.hoverSegIndex = -1;
+      }
+      render();
+      return;
+    }
+
     const segsH = buildFrontOutline(dh.pts, dh.formula, B);
     const hr = findCutPoint({ x: mx, y: my }, segsH, dh.pts);
 
@@ -638,9 +757,12 @@ function initDartMoveClickHandler() {
     const p = _getDraftPts();
     if (!p) return;
 
+    // 회전 중심: 앞판=BP, 뒤판=E
+    const pivot = (dartMoveState.side === "back") ? p.E : p.BP;
+
     // 마우스 방향각 - cutPoint 방향각 = userAngle
-    const angleMouse = Math.atan2(my - p.BP.y, mx - p.BP.x);
-    const angleCut   = Math.atan2(dartMoveState.cutPoint.y - p.BP.y, dartMoveState.cutPoint.x - p.BP.x);
+    const angleMouse = Math.atan2(my - pivot.y, mx - pivot.x);
+    const angleCut   = Math.atan2(dartMoveState.cutPoint.y - pivot.y, dartMoveState.cutPoint.x - pivot.x);
     let userAngle = angleMouse - angleCut;
 
     // -π ~ π 정규화
@@ -649,8 +771,12 @@ function initDartMoveClickHandler() {
 
     // 범위 제한: 0 ~ baseAngle (패턴 겹침 방지)
     const base = dartMoveState.baseAngle;
-    // baseAngle은 음수 방향 — 범위: baseAngle ~ 0
-    userAngle = Math.max(base, Math.min(0, userAngle));
+    // baseAngle은 양수 방향 (뒤판) 또는 음수 방향 (앞판)
+    if (base >= 0) {
+      userAngle = Math.max(0, Math.min(base, userAngle));
+    } else {
+      userAngle = Math.max(base, Math.min(0, userAngle));
+    }
 
     dartMoveState.userAngle = userAngle;
 
@@ -683,4 +809,278 @@ function setBtn(txt, bg) {
 function setHint(txt) {
   const h = document.getElementById("dartMoveHint");
   if (h) h.textContent = txt;
+}
+
+// 앞판/뒤판 선택 버튼 행 표시/숨김
+function setSideRowVisible(visible) {
+  const row = document.getElementById("dartSideRow");
+  if (row) row.style.display = visible ? "" : "none";
+}
+
+// 앞판/뒤판 선택 버튼 활성 표시
+function setSideActive(side) {
+  const btnF = document.getElementById("btnDartSideFront");
+  const btnB = document.getElementById("btnDartSideBack");
+  if (btnF) btnF.style.background = side === "front" ? "#c05000" : "#e07800";
+  if (btnB) btnB.style.background = side === "back"  ? "#c05000" : "#e07800";
+}
+
+// ══════════════════════════════════════════════
+// 뒤판 어깨 다트이동 — Stage 2: 클릭/분할
+// ══════════════════════════════════════════════
+
+// ── 뒤판 cutPoint 탐색 (다트 끝점 근처 차단) ──
+function findCutPointBack(clickPt, segments, p, f, B) {
+  let best = null, bestD = Infinity, bestIndex = -1;
+  segments.forEach((seg, idx) => {
+    if (seg.disabled) return;
+    const r = closestOnSeg(clickPt, seg.from, seg.to);
+    if (r.d < bestD) { bestD = r.d; best = r.pt; bestIndex = idx; }
+  });
+  if (bestD > 2.0) return null;
+
+  // dartCenter / dartEnd_ 근처 차단
+  const info = buildBackShoulderDartInfo(f, p, B);
+  const minD = 1.2;
+  const nearCenter = Math.hypot(best.x - info.dartCenter.x, best.y - info.dartCenter.y) < minD;
+  const nearEnd    = Math.hypot(best.x - info.dartEnd_.x,   best.y - info.dartEnd_.y)   < minD;
+  if (nearCenter || nearEnd) {
+    return { blocked: true, reason: "dart-end", point: best, segIndex: bestIndex };
+  }
+
+  return { point: best, segIndex: bestIndex, distance: bestD };
+}
+
+// ── 뒤판 다트 닫힘 각도 계산 ──────────────────
+// E점 기준: dartEnd_ → dartCenter 방향으로 닫힘 (음수)
+function calcBackCloseAngle(info) {
+  const angleCenter = Math.atan2(info.dartCenter.y - info.apex.y, info.dartCenter.x - info.apex.x);
+  const angleEnd    = Math.atan2(info.dartEnd_.y   - info.apex.y, info.dartEnd_.x   - info.apex.x);
+  let closeAngle = angleCenter - angleEnd;  // 음수: dartEnd_ → dartCenter 방향
+  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
+  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
+  return { closeAngle };
+}
+
+// ── 뒤판 외곽선을 dartCenter/dartEnd_ 기준으로 두 조각 분할 ──
+// fixedSegs  = dartCenter 포함 (고정)
+// rotateSegs = dartEnd_   포함 (회전 대상)
+function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
+  const info = buildBackShoulderDartInfo(f, p, B);
+
+  const isNear = (a, b, eps = 0.05) => {
+    if (!a || !b) return false;
+    return Math.hypot(a.x - b.x, a.y - b.y) < eps;
+  };
+
+  const isDartCenter = pt => isNear(pt, info.dartCenter);
+  const isDartEnd    = pt => isNear(pt, info.dartEnd_);
+  const nn = segments.length;
+
+  function walkForward() {
+    const pts  = [{ ...cutPoint }];
+    const segs = [];
+    let hit = null;
+    for (let step = 0; step < nn; step++) {
+      const idx = (cutSegIndex + step) % nn;
+      const seg = segments[idx];
+      const next = { ...seg.to };
+      if (seg.disabled && !isDartCenter(next) && !isDartEnd(next)) continue;
+      const fromPt = (step === 0) ? { ...cutPoint } : { ...seg.from };
+      segs.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+      pts.push(next);
+      if (isDartCenter(next)) { hit = "dartCenter"; break; }
+      if (isDartEnd(next))    { hit = "dartEnd";    break; }
+    }
+    return { pts, segs, hit };
+  }
+
+  function walkBackward() {
+    const pts  = [{ ...cutPoint }];
+    const segs = [];
+    let hit = null;
+    for (let step = 0; step < nn; step++) {
+      const idx = (cutSegIndex - step + nn) % nn;
+      const seg = segments[idx];
+      const prev = { ...seg.from };
+      if (seg.disabled && !isDartCenter(prev) && !isDartEnd(prev)) continue;
+      const toPt   = (step === 0) ? { ...cutPoint } : { ...seg.from };
+      const fromPt = (step === 0) ? { ...seg.from } : { ...seg.to  };
+      segs.push({ from: fromPt, to: toPt, type: seg.type, disabled: !!seg.disabled });
+      pts.push(prev);
+      if (isDartCenter(prev)) { hit = "dartCenter"; break; }
+      if (isDartEnd(prev))    { hit = "dartEnd";    break; }
+    }
+    // 역방향으로 수집된 segs를 순방향(cutPoint→hit)으로 뒤집기
+    segs.reverse();
+    return { pts, segs, hit };
+  }
+
+  const forward  = walkForward();
+  const backward = walkBackward();
+
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    console.log('[splitBack] forward.hit:', forward.hit, 'pts:', forward.pts.length);
+    console.log('[splitBack] backward.hit:', backward.hit, 'pts:', backward.pts.length);
+  }
+
+  let fixedPts = [], rotatePts = [], fixedSegs = [], rotateSegs = [];
+
+  // dartCenter 포함 조각 = 고정 (큰 조각, 목쪽)
+  // dartEnd_   포함 조각 = 회전 (작은 조각, BSP 어깨쪽)
+  if (forward.hit === "dartCenter" && backward.hit === "dartEnd") {
+    fixedPts  = forward.pts;  fixedSegs  = forward.segs;
+    rotatePts = backward.pts; rotateSegs = backward.segs;
+  } else if (forward.hit === "dartEnd" && backward.hit === "dartCenter") {
+    fixedPts  = backward.pts; fixedSegs  = backward.segs;
+    rotatePts = forward.pts;  rotateSegs = forward.segs;
+  } else {
+    // 판별 실패시 dartEnd_ 거리 기준 (회전 조각 = dartEnd_에 가까운 쪽)
+    const fEnd = forward.pts[forward.pts.length - 1];
+    const bEnd = backward.pts[backward.pts.length - 1];
+    const fDistEnd = Math.hypot(fEnd.x - info.dartEnd_.x, fEnd.y - info.dartEnd_.y);
+    const bDistEnd = Math.hypot(bEnd.x - info.dartEnd_.x, bEnd.y - info.dartEnd_.y);
+    if (fDistEnd < bDistEnd) {
+      rotatePts = forward.pts;  rotateSegs = forward.segs;
+      fixedPts  = backward.pts; fixedSegs  = backward.segs;
+    } else {
+      rotatePts = backward.pts; rotateSegs = backward.segs;
+      fixedPts  = forward.pts;  fixedSegs  = forward.segs;
+    }
+  }
+
+  // E점(apex)으로 닫아서 조각처럼 표시
+  const rotateClosed = [...rotatePts, { ...info.apex }, { ...cutPoint }];
+  const fixedClosed  = [...fixedPts,  { ...info.apex }, { ...cutPoint }];
+
+  return { fixedPts: fixedClosed, rotatePts: rotateClosed, fixedSegs, rotateSegs };
+}
+
+// ── 뒤판 어깨 다트 기하 정보 ──────────────────
+// render.js drawBackShoulder()와 완전히 동일한 공식 사용
+function buildBackShoulderDartInfo(f, p, B) {
+  const deg18  = 18 * Math.PI / 180;
+  const deg22  = 22 * Math.PI / 180;
+
+  const bND = { x: f.bnw(), y: -f.bnd() };
+
+  const fSNP_x2 = f.sw() - f.fnw();
+  const armX2   = f.sw() - f.fw();
+  const fShLen2 = (fSNP_x2 - armX2) / Math.cos(deg22) + 1.8;
+  const bShLen2 = fShLen2 + B / 32 - 0.8;
+
+  // bSP: render.js drawBackShoulder와 동일
+  // (bND 기준이 아닌 bND에서 시작 — render.js는 bND에서 계산)
+  const bSP = {
+    x: bND.x + bShLen2 * Math.cos(deg18),
+    y: bND.y + bShLen2 * Math.sin(deg18),
+  };
+
+  const shDx = Math.cos(deg18);
+  const shDy = Math.sin(deg18);
+
+  // E점이 어깨선 위 어느 t 위치에 있는지
+  const t = (p.E.x - bND.x) / shDx;
+  const dartCenterT = t + 1.5;
+
+  const dartCenter = {
+    x: bND.x + dartCenterT * shDx,
+    y: bND.y + dartCenterT * shDy,
+  };
+
+  const dartLen = B / 32 - 0.8;
+
+  const dartEnd_ = {
+    x: dartCenter.x + dartLen * shDx,
+    y: dartCenter.y + dartLen * shDy,
+  };
+
+  return { apex: p.E, dartCenter, dartEnd_, dartLen };
+}
+
+// ── 뒤판 외곽선 세그먼트 배열 ─────────────────
+// 순서: A → BACK_WL → SIDE_BTM → SIDE_TOP
+//       → [진동곡선: SIDE_TOP→bSP]
+//       → dartEnd_ → E(꼭지점) → dartCenter
+//       → bND → [목곡선: bND→A]
+function buildBackOutline(p, f, B) {
+  const segments = [];
+
+  const deg18 = 18 * Math.PI / 180;
+  const deg22 = 22 * Math.PI / 180;
+
+  // ── 뒤판 기하 재계산 (render.js와 동일) ────
+  const bND = { x: f.bnw(), y: -f.bnd() };
+
+  const fSNP_x2 = f.sw() - f.fnw();
+  const armX2   = f.sw() - f.fw();
+  const fShLen2 = (fSNP_x2 - armX2) / Math.cos(deg22) + 1.8;
+  const bShLen2 = fShLen2 + B / 32 - 0.8;
+
+  const bSP = {
+    x: bND.x + bShLen2 * Math.cos(deg18),
+    y: bND.y + bShLen2 * Math.sin(deg18),
+  };
+
+  const { dartCenter, dartEnd_ } = buildBackShoulderDartInfo(f, p, B);
+
+  // ── 고정 조각: dartCenter → bND → [목선] → A → BACK_WL → SIDE_BTM → SIDE_TOP → [진동] → bSP → dartEnd_ ──
+  // 순서 설명:
+  //   고정(dartCenter 포함): dartCenter → bND → 목선 → A → 뒤중심 → 허리 → 옆선 → 진동 → bSP → dartEnd_
+  //   회전(dartEnd_ 포함):   dartEnd_ → [dart disabled] → dartCenter
+
+  // ── 어깨선: dartCenter → bND ────────────────
+  addLineSegment(segments, dartCenter, bND,      { type: "back-shoulder" });
+
+  // ── 뒤목선 곡선: bND → A ────────────────────
+  {
+    const NH = state.bNeckH;
+    if (NH && NH.h0 && NH.h1) {
+      const neckPts = sampleCubic(bND, NH.h1, NH.h0, p.A, 10);
+      addSampledSegments(segments, neckPts, { type: "back-neckline" });
+    } else {
+      addLineSegment(segments, bND, p.A, { type: "back-neckline" });
+    }
+  }
+
+  // ── 뒤중심/허리/옆선 직선 ────────────────────
+  addLineSegment(segments, p.A,        p.BACK_WL,  { type: "back-center" });
+  addLineSegment(segments, p.BACK_WL,  p.SIDE_BTM, { type: "back-waist"  });
+  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP, { type: "side-seam"   });
+
+  // ── 뒤진동 곡선: SIDE_TOP → bSP ─────────────
+  {
+    const H = state.armH;
+    if (H && H.h2a && H.h1b && H.a1 && H.h1a && H.h0) {
+      const back1 = sampleCubic(p.SIDE_TOP, H.h2a, H.h1b, H.a1, 8);
+      const back2 = sampleCubic(H.a1,       H.h1a, H.h0,  bSP,  8);
+      const backArmPts = [...back1, ...back2.slice(1)];
+      addSampledSegments(segments, backArmPts, { type: "back-armhole" });
+    } else {
+      addLineSegment(segments, p.SIDE_TOP, bSP, { type: "back-armhole" });
+    }
+  }
+
+  // ── 어깨선: bSP → dartEnd_ ──────────────────
+  addLineSegment(segments, bSP,      dartEnd_,  { type: "back-shoulder" });
+
+  // ── 어깨 다트 (disabled): dartEnd_ → E → dartCenter ──
+  addLineSegment(segments, dartEnd_,  p.E,        { type: "back-shoulder-dart", disabled: true });
+  addLineSegment(segments, p.E,       dartCenter, { type: "back-shoulder-dart", disabled: true });
+
+  // ── DEBUG 검증 ──────────────────────────────
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    console.log('[buildBackOutline] 세그먼트 수:', segments.length);
+    console.log('[buildBackOutline] 타입 순서:', segments.map(s => s.type).join(' → '));
+    console.log('[buildBackOutline] disabled 세그먼트:', segments.filter(s => s.disabled).map(s => s.type));
+    const info = buildBackShoulderDartInfo(f, p, B);
+    console.log('[buildBackOutline] 다트info:', {
+      apex:        JSON.stringify(info.apex),
+      dartCenter:  JSON.stringify(info.dartCenter),
+      dartEnd_:    JSON.stringify(info.dartEnd_),
+      dartLen:     info.dartLen.toFixed(3),
+    });
+  }
+
+  return segments;
 }
