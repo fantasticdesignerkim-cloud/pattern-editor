@@ -82,9 +82,68 @@ function calcCloseAngle(p, B) {
   return { closeAngle, GG };
 }
 
+// ── 항상 작은 조각이 rotate가 되도록 보장 ────
+function polygonArea(pts) {
+  if (!Array.isArray(pts) || pts.length < 3) return 0;
+  let sum = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+function ensureSmallPieceRotates(result) {
+  // 열린 pts(closePt 추가 전)로 면적 비교 → apex/BP 왜곡 방지
+  const fixedArea  = polygonArea(result.openFixedPts  || result.fixedPts);
+  const rotateArea = polygonArea(result.openRotatePts || result.rotatePts);
+
+  if (fixedArea < rotateArea) {
+    return {
+      ...result,
+      fixedPts:      result.rotatePts,
+      rotatePts:     result.fixedPts,
+      fixedSegs:     result.rotateSegs,
+      rotateSegs:    result.fixedSegs,
+      fixedHit:      result.rotateHit,
+      rotateHit:     result.fixedHit,
+      fixedArea:     rotateArea,
+      rotateArea:    fixedArea,
+      swappedByArea: true,
+    };
+  }
+
+  return {
+    ...result,
+    fixedArea,
+    rotateArea,
+    swappedByArea: false,
+  };
+}
+
 // ── 앞판 외곽선을 G/GG 기준으로 두 조각 분할 ─
 // fixedPts  = G를 포함하는 조각 (고정)
 // rotatePts = GG를 포함하는 조각 (회전 대상)
+function calcFrontCloseAngleByRotateHit(p, B, rotateHit) {
+  const { GG } = calcCloseAngle(p, B);
+  const pivot = p.BP;
+  const angleG  = Math.atan2(p.G.y  - pivot.y, p.G.x  - pivot.x);
+  const angleGG = Math.atan2(GG.y   - pivot.y, GG.x   - pivot.x);
+
+  let closeAngle;
+  if (rotateHit === "G") {
+    // G 조각이 움직이면 G를 GG 방향으로 닫는다
+    closeAngle = angleGG - angleG;
+  } else {
+    // GG 조각이 움직이면 GG를 G 방향으로 닫는다 (기존 방향)
+    closeAngle = angleG - angleGG;
+  }
+  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
+  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
+  return { closeAngle, GG };
+}
+
 function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   const { GG } = calcCloseAngle(p, B);
 
@@ -119,33 +178,28 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   }
 
   function walkBackward() {
-    const pts  = [{ ...cutPoint }];
-    const segs = [];
+    const rawSegs = [];
     let hit = null;
     for (let step = 0; step < nn; step++) {
       const idx = (cutSegIndex - step + nn) % nn;
       const seg = segments[idx];
-      const prev = { ...seg.from };
-      const next = { ...seg.to };
-      if (seg.disabled && !isG(prev) && !isGG(prev) && !isG(next) && !isGG(next)) continue;
-      const toPt   = (step === 0) ? { ...cutPoint } : { ...seg.from };
-      const fromPt = (step === 0) ? { ...seg.from } : { ...seg.to  };
-      segs.push({ from: fromPt, to: toPt, type: seg.type, disabled: !!seg.disabled });
-      pts.push(prev);
-      if (isG(prev)  || isG(next))  { hit = "G";  break; }
-      if (isGG(prev) || isGG(next)) { hit = "GG"; break; }
+      const prev = seg.from;
+      if (seg.disabled && !isG(prev) && !isGG(prev)) continue;
+      rawSegs.push(seg);
+      if (isG(prev))  { hit = "G";  break; }
+      if (isGG(prev)) { hit = "GG"; break; }
     }
-    // reverse 후 from/to swap, segs[0].from = cutPoint 고정
-    segs.reverse();
-    for (let i = 0; i < segs.length; i++) {
-      const tmp = segs[i].from;
-      segs[i].from = segs[i].to;
-      segs[i].to   = tmp;
-    }
+    const segs = rawSegs.map(seg => ({
+      from: { ...seg.to },
+      to:   { ...seg.from },
+      type: seg.type,
+      disabled: !!seg.disabled,
+    }));
     if (segs.length > 0) segs[0].from = { ...cutPoint };
+    const pts = [{ ...cutPoint }];
+    for (const seg of segs) pts.push({ ...seg.to });
     return { pts, segs, hit };
   }
-
   const forward  = walkForward();
   const backward = walkBackward();
 
@@ -166,32 +220,33 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   }
 
   let fixedPts = [], rotatePts = [], fixedSegs = [], rotateSegs = [];
+  let fixedHit = "", rotateHit = "";
 
-  if (forward.hit === "G" && backward.hit === "GG") {
-    fixedPts  = forward.pts;  fixedSegs  = forward.segs;
-    rotatePts = backward.pts; rotateSegs = backward.segs;
-  } else if (forward.hit === "GG" && backward.hit === "G") {
-    fixedPts  = backward.pts; fixedSegs  = backward.segs;
+  // hit 성공/실패 무관하게 항상 열린 pts 면적으로 결정
+  // forward/backward 중 더 작은 쪽이 rotatePts
+  const fArea = polygonArea([...forward.pts,  { ...p.BP }, { ...cutPoint }]);
+  const bArea = polygonArea([...backward.pts, { ...p.BP }, { ...cutPoint }]);
+  if (fArea < bArea) {
     rotatePts = forward.pts;  rotateSegs = forward.segs;
+    fixedPts  = backward.pts; fixedSegs  = backward.segs;
+    rotateHit = forward.hit  || "G";
+    fixedHit  = backward.hit || "GG";
   } else {
-    const fEnd = forward.pts[forward.pts.length - 1];
-    const bEnd = backward.pts[backward.pts.length - 1];
-    const fDistGG = Math.hypot(fEnd.x - GG.x, fEnd.y - GG.y);
-    const bDistGG = Math.hypot(bEnd.x - GG.x, bEnd.y - GG.y);
-    if (fDistGG < bDistGG) {
-      rotatePts = forward.pts;  rotateSegs = forward.segs;
-      fixedPts  = backward.pts; fixedSegs  = backward.segs;
-    } else {
-      rotatePts = backward.pts; rotateSegs = backward.segs;
-      fixedPts  = forward.pts;  fixedSegs  = forward.segs;
-    }
+    rotatePts = backward.pts; rotateSegs = backward.segs;
+    fixedPts  = forward.pts;  fixedSegs  = forward.segs;
+    rotateHit = backward.hit || "G";
+    fixedHit  = forward.hit  || "GG";
   }
 
-  // BP·cutPoint로 닫아서 조각처럼 표시 (pts는 호환성 유지)
+  // BP·cutPoint로 닫아서 조각처럼 표시
   const rotateClosed = [...rotatePts, { ...p.BP }, { ...cutPoint }];
   const fixedClosed  = [...fixedPts,  { ...p.BP }, { ...cutPoint }];
 
-  return { fixedPts: fixedClosed, rotatePts: rotateClosed, fixedSegs, rotateSegs };
+  return ensureSmallPieceRotates({
+    fixedPts: fixedClosed, rotatePts: rotateClosed,
+    fixedSegs, rotateSegs, fixedHit, rotateHit,
+    openFixedPts: fixedPts, openRotatePts: rotatePts,
+  });
 }
 
 // ── 앞판 실제 패턴선 기준 외곽선 ───────────────
@@ -400,6 +455,14 @@ function applyDartMove() {
   // 회전 중심: 앞판=BP, 뒤판=E
   const pivot = (dartMoveState.side === "back") ? p.E : p.BP;
 
+  console.log('[apply] rotatePts.len:', dartMoveState.rotatePts.length,
+    '/ fixedPts.len:', dartMoveState.fixedPts?.length,
+    '/ rotateArea:', polygonArea(dartMoveState.rotatePts).toFixed(2),
+    '/ fixedArea:', polygonArea(dartMoveState.fixedPts).toFixed(2));
+  console.log('[apply] rotateSegs.len:', dartMoveState.rotateSegs?.length,
+    '/ fixedSegs.len:', dartMoveState.fixedSegs?.length,
+    '/ rotateSegs types:', dartMoveState.rotateSegs?.map(s=>s.type).join(','));
+
   const rotatedPts = dartMoveState.rotatePts.map(pt => rotatePt(pt, pivot, angle));
   const cut2 = rotatePt(dartMoveState.cutPoint, pivot, angle);
 
@@ -415,20 +478,20 @@ function applyDartMove() {
   const fixedSegsAll  = dartMoveState.fixedSegs  || [];
   const rotateSegsAll = dartMoveState.rotateSegs || [];
 
+  // GPoint/GGPoint: 뒤판은 hit 기준, 앞판은 segs 끝점
   let GPoint, GGPoint;
   if (dartMoveState.side === "back") {
-    // 뒤판: GPoint = dartCenter (buildBackShoulderDartInfo에서 직접 취득)
-    const _B = n("inpB"), _W = n("inpW"), _BL = n("inpBL");
-    if (_B && _W && _BL) {
-      const _d = createDraft(_B, _W, _BL);
-      const _bi = buildBackShoulderDartInfo(_d.formula, _d.pts, _B);
-      GPoint = _bi?.dartCenter ? { ..._bi.dartCenter } : null;
+    const _Bb = n("inpB"), _Wb = n("inpW"), _BLb = n("inpBL");
+    if (_Bb && _Wb && _BLb) {
+      const _db   = createDraft(_Bb, _Wb, _BLb);
+      const _info = buildBackShoulderDartInfo(_db.formula, _db.pts, _Bb);
+      GPoint  = dartMoveState.fixedHit  === "dartCenter" ? { ..._info.dartCenter } : { ..._info.dartEnd_ };
+      GGPoint = dartMoveState.rotateHit === "dartCenter" ? { ..._info.dartCenter } : { ..._info.dartEnd_ };
     } else {
-      GPoint = null;
+      GPoint  = fixedSegsAll.length  ? { ...fixedSegsAll[fixedSegsAll.length - 1].to }   : null;
+      GGPoint = rotateSegsAll.length ? { ...rotateSegsAll[rotateSegsAll.length - 1].to } : null;
     }
-    GGPoint = rotateSegsAll.length ? { ...rotateSegsAll[rotateSegsAll.length - 1].to } : null;
   } else {
-    // 앞판: 기존 로직
     GPoint  = fixedSegsAll.length  ? { ...fixedSegsAll[fixedSegsAll.length - 1].to }   : null;
     GGPoint = rotateSegsAll.length ? { ...rotateSegsAll[rotateSegsAll.length - 1].to } : null;
   }
@@ -633,23 +696,24 @@ function initDartMoveClickHandler() {
         dartMoveState.cutSegIndex = resultB.segIndex;
 
         const info = buildBackShoulderDartInfo(d.formula, d.pts, B);
-        const { closeAngle } = calcBackCloseAngle(info);
-        const { rotatePts, fixedPts, fixedSegs, rotateSegs } =
-          splitBackOutline(segsBack, resultB.point, resultB.segIndex, d.pts, d.formula, B);
+        const splitB = splitBackOutline(segsBack, resultB.point, resultB.segIndex, d.pts, d.formula, B);
+        const { closeAngle } = calcBackCloseAngleByRotateHit(info, splitB.rotateHit);
 
         dartMoveState.baseAngle  = closeAngle;
         dartMoveState.userAngle  = closeAngle;
-        dartMoveState.rotatePts  = rotatePts;
-        dartMoveState.fixedPts   = fixedPts;
-        dartMoveState.fixedSegs  = fixedSegs;
-        dartMoveState.rotateSegs = rotateSegs;
+        dartMoveState.rotatePts  = splitB.rotatePts;
+        dartMoveState.fixedPts   = splitB.fixedPts;
+        dartMoveState.fixedSegs  = splitB.fixedSegs;
+        dartMoveState.rotateSegs = splitB.rotateSegs;
+        dartMoveState.fixedHit   = splitB.fixedHit;
+        dartMoveState.rotateHit  = splitB.rotateHit;
         dartMoveState.hoverPoint    = null;
         dartMoveState.hoverSegIndex = -1;
 
         const seg = segsBack[resultB.segIndex];
         const deg = Math.abs(closeAngle * 180 / Math.PI).toFixed(1);
         setApplyEnabled(true);
-        setHint(`${seg?.type || "outline"} · 기준각 ${deg}° · 핸들 드래그로 조절`);
+        setHint(`${seg?.type || "outline"} · rotateHit=${splitB.rotateHit} · 기준각 ${deg}° · 핸들 드래그로 조절`);
       } else {
         setHint(`뒤판 외곽선 근처를 클릭하세요 x=${cx.toFixed(1)} y=${cy.toFixed(1)}`);
       }
@@ -672,17 +736,19 @@ function initDartMoveClickHandler() {
       dartMoveState.cutPoint    = result.point;
       dartMoveState.cutSegIndex = result.segIndex;
 
-      // 조각 분할 + 기준 각도 계산
-      const { closeAngle } = calcCloseAngle(d.pts, B);
-      const { rotatePts, fixedPts, fixedSegs, rotateSegs } = splitFrontOutline(
+      // 조각 분할 + rotateHit 기준 각도 계산
+      const split = splitFrontOutline(
         segments, result.point, result.segIndex, d.pts, B
       );
+      const { closeAngle } = calcFrontCloseAngleByRotateHit(d.pts, B, split.rotateHit);
       dartMoveState.baseAngle  = closeAngle;
       dartMoveState.userAngle  = closeAngle;
-      dartMoveState.rotatePts  = rotatePts;
-      dartMoveState.fixedPts   = fixedPts;
-      dartMoveState.fixedSegs  = fixedSegs;
-      dartMoveState.rotateSegs = rotateSegs;
+      dartMoveState.rotatePts  = split.rotatePts;
+      dartMoveState.fixedPts   = split.fixedPts;
+      dartMoveState.fixedSegs  = split.fixedSegs;
+      dartMoveState.rotateSegs = split.rotateSegs;
+      dartMoveState.fixedHit   = split.fixedHit;
+      dartMoveState.rotateHit  = split.rotateHit;
       dartMoveState.hoverPoint    = null;
       dartMoveState.hoverSegIndex = -1;
 
@@ -862,6 +928,31 @@ function calcBackCloseAngle(info) {
   return { closeAngle };
 }
 
+function calcBackCloseAngleByRotateHit(info, rotateHit) {
+  const angleCenter = Math.atan2(
+    info.dartCenter.y - info.apex.y,
+    info.dartCenter.x - info.apex.x
+  );
+  const angleEnd = Math.atan2(
+    info.dartEnd_.y - info.apex.y,
+    info.dartEnd_.x - info.apex.x
+  );
+
+  let closeAngle;
+  if (rotateHit === "dartEnd") {
+    // dartEnd_ 쪽이 움직이면 dartEnd_를 dartCenter 방향으로 닫는다
+    closeAngle = angleCenter - angleEnd;
+  } else if (rotateHit === "dartCenter") {
+    // dartCenter 쪽이 움직이면 dartCenter를 dartEnd_ 방향으로 닫는다
+    closeAngle = angleEnd - angleCenter;
+  } else {
+    closeAngle = angleCenter - angleEnd;
+  }
+  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
+  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
+  return { closeAngle };
+}
+
 // ── 뒤판 외곽선을 dartCenter/dartEnd_ 기준으로 두 조각 분할 ──
 // fixedSegs  = dartCenter 포함 (고정)
 // rotateSegs = dartEnd_   포함 (회전 대상)
@@ -877,6 +968,8 @@ function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
   const isDartEnd    = pt => isNear(pt, info.dartEnd_);
   const nn = segments.length;
 
+  const isDartRelated = seg => seg.type === "back-shoulder-dart";
+
   function walkForward() {
     const pts  = [{ ...cutPoint }];
     const segs = [];
@@ -885,7 +978,7 @@ function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
       const idx = (cutSegIndex + step) % nn;
       const seg = segments[idx];
       const next = { ...seg.to };
-      if (seg.disabled && !isDartCenter(next) && !isDartEnd(next)) continue;
+      if (seg.disabled && !isDartRelated(seg)) continue;
       const fromPt = (step === 0) ? { ...cutPoint } : { ...seg.from };
       segs.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
       pts.push(next);
@@ -896,64 +989,64 @@ function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
   }
 
   function walkBackward() {
-    const pts  = [{ ...cutPoint }];
-    const segs = [];
+    const rawSegs = [];
     let hit = null;
     for (let step = 0; step < nn; step++) {
       const idx = (cutSegIndex - step + nn) % nn;
       const seg = segments[idx];
-      const prev = { ...seg.from };
-      if (seg.disabled && !isDartCenter(prev) && !isDartEnd(prev)) continue;
-      const toPt   = (step === 0) ? { ...cutPoint } : { ...seg.from };
-      const fromPt = (step === 0) ? { ...seg.from } : { ...seg.to  };
-      segs.push({ from: fromPt, to: toPt, type: seg.type, disabled: !!seg.disabled });
-      pts.push(prev);
+      const prev = seg.from;
+      if (seg.disabled && !isDartRelated(seg)) continue;
+      rawSegs.push(seg);
       if (isDartCenter(prev)) { hit = "dartCenter"; break; }
       if (isDartEnd(prev))    { hit = "dartEnd";    break; }
     }
-    // 역방향으로 수집된 segs를 순방향(cutPoint→hit)으로 뒤집기
-    segs.reverse();
+    const segs = rawSegs.map(seg => ({
+      from: { ...seg.to },
+      to:   { ...seg.from },
+      type: seg.type,
+      disabled: !!seg.disabled,
+    }));
+    if (segs.length > 0) segs[0].from = { ...cutPoint };
+    const pts = [{ ...cutPoint }];
+    for (const seg of segs) pts.push({ ...seg.to });
     return { pts, segs, hit };
   }
-
   const forward  = walkForward();
   const backward = walkBackward();
 
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[splitBack] forward.hit:', forward.hit, 'pts:', forward.pts.length);
-    console.log('[splitBack] backward.hit:', backward.hit, 'pts:', backward.pts.length);
-  }
+  console.log('[splitBack] forward.hit:', forward.hit, 'pts:', forward.pts.length,
+    'types:', forward.segs.map(s=>s.type).join(','));
+  console.log('[splitBack] backward.hit:', backward.hit, 'pts:', backward.pts.length,
+    'types:', backward.segs.map(s=>s.type).join(','));
 
   let fixedPts = [], rotatePts = [], fixedSegs = [], rotateSegs = [];
 
-  // dartCenter 포함 조각 = 고정 (큰 조각, 목쪽)
-  // dartEnd_   포함 조각 = 회전 (작은 조각, BSP 어깨쪽)
-  if (forward.hit === "dartCenter" && backward.hit === "dartEnd") {
-    fixedPts  = forward.pts;  fixedSegs  = forward.segs;
-    rotatePts = backward.pts; rotateSegs = backward.segs;
-  } else if (forward.hit === "dartEnd" && backward.hit === "dartCenter") {
-    fixedPts  = backward.pts; fixedSegs  = backward.segs;
+  // hit 성공/실패 무관하게 항상 열린 pts 면적으로 결정
+  // forward/backward 중 더 작은 쪽이 rotatePts
+  const fArea = polygonArea([...forward.pts,  { ...info.apex }, { ...cutPoint }]);
+  const bArea = polygonArea([...backward.pts, { ...info.apex }, { ...cutPoint }]);
+  let fixedHit, rotateHit;
+  if (fArea < bArea) {
     rotatePts = forward.pts;  rotateSegs = forward.segs;
+    fixedPts  = backward.pts; fixedSegs  = backward.segs;
+    rotateHit = forward.hit  === "dartCenter" ? "dartCenter" : "dartEnd";
+    fixedHit  = backward.hit === "dartCenter" ? "dartCenter" : "dartEnd";
   } else {
-    // 판별 실패시 dartEnd_ 거리 기준 (회전 조각 = dartEnd_에 가까운 쪽)
-    const fEnd = forward.pts[forward.pts.length - 1];
-    const bEnd = backward.pts[backward.pts.length - 1];
-    const fDistEnd = Math.hypot(fEnd.x - info.dartEnd_.x, fEnd.y - info.dartEnd_.y);
-    const bDistEnd = Math.hypot(bEnd.x - info.dartEnd_.x, bEnd.y - info.dartEnd_.y);
-    if (fDistEnd < bDistEnd) {
-      rotatePts = forward.pts;  rotateSegs = forward.segs;
-      fixedPts  = backward.pts; fixedSegs  = backward.segs;
-    } else {
-      rotatePts = backward.pts; rotateSegs = backward.segs;
-      fixedPts  = forward.pts;  fixedSegs  = forward.segs;
-    }
+    rotatePts = backward.pts; rotateSegs = backward.segs;
+    fixedPts  = forward.pts;  fixedSegs  = forward.segs;
+    rotateHit = backward.hit === "dartCenter" ? "dartCenter" : "dartEnd";
+    fixedHit  = forward.hit  === "dartCenter" ? "dartCenter" : "dartEnd";
   }
 
   // E점(apex)으로 닫아서 조각처럼 표시
   const rotateClosed = [...rotatePts, { ...info.apex }, { ...cutPoint }];
   const fixedClosed  = [...fixedPts,  { ...info.apex }, { ...cutPoint }];
 
-  return { fixedPts: fixedClosed, rotatePts: rotateClosed, fixedSegs, rotateSegs };
+  return ensureSmallPieceRotates({
+    fixedPts: fixedClosed, rotatePts: rotateClosed,
+    fixedSegs, rotateSegs, fixedHit, rotateHit,
+    openFixedPts: fixedPts, openRotatePts: rotatePts,
+  });
 }
 
 // ── 뒤판 어깨 다트 기하 정보 ──────────────────
