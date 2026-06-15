@@ -20,7 +20,8 @@ const dartMoveState = {
   rotateSegs:  null,
   dragging:    false,
   // ── 적용 결과 ──────────────────────────────
-  applied:     null,
+  appliedFront: null,
+  appliedBack:  null,
 };
 
 // ── 유틸 ──────────────────────────────────────
@@ -428,7 +429,8 @@ function resetDartMove() {
   dartMoveState.fixedPts      = null;
   dartMoveState.fixedSegs     = null;
   dartMoveState.rotateSegs    = null;
-  dartMoveState.applied       = null;
+  dartMoveState.appliedFront  = null;
+  dartMoveState.appliedBack   = null;
   setBtn("다트이동 시작", "#e07800");
   setApplyEnabled(false);
   setHint("다트이동 결과를 초기화했습니다");
@@ -497,7 +499,7 @@ function applyDartMove() {
   }
   const rotatedGGPoint = GGPoint ? rotatePt(GGPoint, pivot, angle) : null;
 
-  dartMoveState.applied = {
+  const appliedData = {
     side:            dartMoveState.side,
     pivot:           { ...pivot },
     cutPoint:        { ...dartMoveState.cutPoint },
@@ -512,13 +514,39 @@ function applyDartMove() {
     rotatedGGPoint,
     userAngle:       angle,
   };
+  if (dartMoveState.side === "back") {
+    dartMoveState.appliedBack  = appliedData;
+  } else {
+    dartMoveState.appliedFront = appliedData;
+  }
 
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) console.log('[dartMove] applied 저장 완료', dartMoveState.applied);
-  dartMoveState.active   = false;
-  dartMoveState.dragging = false;
-  setBtn("다트이동 시작", "#e07800");
+  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    const _saved = dartMoveState.side === "back" ? dartMoveState.appliedBack : dartMoveState.appliedFront;
+    console.log('[dartMove] applied 저장 완료', _saved);
+  }
+  // 적용 후: active 유지, 앞/뒤 재선택 대기 상태로 복귀
+  const appliedSide = dartMoveState.side;
+  dartMoveState.active        = true;
+  dartMoveState.dragging      = false;
+  dartMoveState.side          = null;
+  dartMoveState.cutPoint      = null;
+  dartMoveState.cutSegIndex   = -1;
+  dartMoveState.hoverPoint    = null;
+  dartMoveState.hoverSegIndex = -1;
+  dartMoveState.userAngle     = 0;
+  dartMoveState.baseAngle     = 0;
+  dartMoveState.rotatePts     = null;
+  dartMoveState.fixedPts      = null;
+  dartMoveState.rotateSegs    = null;
+  dartMoveState.fixedSegs     = null;
+  dartMoveState.fixedHit      = null;
+  dartMoveState.rotateHit     = null;
+  const sideLabel = appliedSide === "back" ? "뒤판" : "앞판";
+  setBtn("취소", "#cc3333");
   setApplyEnabled(false);
-  setHint(`다트이동 적용 완료 (${(angle * 180 / Math.PI).toFixed(1)}°)`);
+  setSideRowVisible(true);
+  setSideActive(null);
+  setHint(`${sideLabel} 적용 완료 (${(angle * 180 / Math.PI).toFixed(1)}°) · 앞판 / 뒤판을 선택하세요`);
   render();
 }
 
@@ -571,7 +599,9 @@ function drawDartMoveOverlay(svgEl, p) {
 
       // ── a→c, c→b 거리 표시 ──────────────────────
       const dHov2 = createDraft(B, W, BL);
-      const segsHov2 = buildFrontOutline(dHov2.pts, dHov2.formula, B);
+      const segsHov2 = dartMoveState.side === "back"
+        ? buildBackOutline(dHov2.pts, dHov2.formula, B)
+        : buildFrontOutline(dHov2.pts, dHov2.formula, B);
       const hSeg2 = segsHov2[dartMoveState.hoverSegIndex];
       if (hSeg2) {
         const dA = Math.hypot(hp.x - hSeg2.from.x, hp.y - hSeg2.from.y);
