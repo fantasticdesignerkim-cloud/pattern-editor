@@ -254,16 +254,11 @@ function drawPolylineFromPts(g, pts, cls = "pattern", color = null) {
 
 function drawAppliedSegments(g, segs, cls, color, side) {
   if (!Array.isArray(segs)) return;
-  const FRONT_TYPES = new Set([
-    "front-center", "front-waist", "side-seam",
-    "front-armhole-lower", "front-armhole-upper",
-    "front-shoulder", "front-neckline",
-  ]);
-  const BACK_TYPES = new Set([
-    "back-center", "back-waist", "side-seam",
-    "back-armhole", "back-shoulder", "back-neckline",
-  ]);
-  const OUTLINE_TYPES = (side === "back") ? BACK_TYPES : FRONT_TYPES;
+  // 블랙리스트: 다트 다리선·브릿지·참고선은 외곽선 렌더에서 제외 (다트/보조 스타일로 따로 그림)
+  // old-dart/back-shoulder-dart가 빠지면 baked 결과에 섞여 들어왔을 때 굵은 외곽선으로
+  // 그려져서 "외곽선이 이상하게 연결됐다"는 오해를 만든다.
+  const DART_SKIP = new Set(["dart-leg-new", "dart-leg-old", "dart-bridge",
+                             "old-dart", "back-shoulder-dart"]);
 
   // 샘플링된 점들을 Catmull-Rom smooth path로 그릴 곡선 타입
   const CURVE_TYPES = new Set([
@@ -304,11 +299,16 @@ function drawAppliedSegments(g, segs, cls, color, side) {
 
   for (const seg of segs) {
     if (!seg || !seg.from || !seg.to) continue;
-    if (seg.disabled) continue;
-    if (!OUTLINE_TYPES.has(seg.type)) continue;
+    if (DART_SKIP.has(seg.type)) continue;
 
     if (CURVE_TYPES.has(seg.type)) {
-      if (seg.type !== curveType) {
+      // 타입이 같아도 좌표상 실제로 붙어 있지 않으면(다른 세대/다른 위치의 조각이
+      // 우연히 같은 타입으로 이어진 경우) 같은 곡선으로 잇지 않는다 — 안 그러면
+      // bakedSegments 순서가 살짝만 어긋나도 화면에서는 매끄럽게 이어진 것처럼
+      // 잘못 그려진다.
+      const lastPt = curvePts[curvePts.length - 1];
+      const isContinuous = lastPt && Math.hypot(lastPt.x - seg.from.x, lastPt.y - seg.from.y) < 0.05;
+      if (seg.type !== curveType || !isContinuous) {
         flushSmoothPath(curvePts);
         curvePts = [{ ...seg.from }];
         curveType = seg.type;
@@ -329,45 +329,39 @@ function drawDartMoveApplied(svg, p, f, B){
   const _DC_F = DEBUG_COLORS ? DBG_FRONT : null;
   const _DC_B = DEBUG_COLORS ? DBG_BACK  : null;
 
-  function trimSegs(segs, endPt) {
-    if (!segs || !segs.length) return segs;
-    const result = segs.map(s => ({ ...s }));
-    if (endPt) result[result.length - 1].to = { ...endPt };
-    return result;
-  }
-
-  function renderApp(app) {
-    if (!app) return;
+  function renderApp(app, color) {
+    if (!app?.bakedSegments?.length) return;
     const g = E("g");
-    const side   = app.side || "front";
-    const _color = (side === "back") ? _DC_B : _DC_F;
-
-    const fixedTrimmed   = trimSegs(app.fixedSegs,   app.GPoint);
-    const rotatedTrimmed = trimSegs(app.rotatedSegs, app.rotatedGGPoint);
-
-    drawAppliedSegments(g, fixedTrimmed,   "pattern", _color, side);
-    drawAppliedSegments(g, rotatedTrimmed, "pattern", _color, side);
-
-    // ── 절개선 + 다트 다리: pivot 기준 ──────────────
-    const pivotPt = (side === "back") ? app.pivot : p.BP;
-    const _mkDart = (a, b) => { const l = Ln(a, b, "dart dart-struct"); if(_color) l.setAttribute("style",`stroke:${_color};`); return l; };
-    if(app.cutPoint)  g.appendChild(_mkDart(pivotPt, app.cutPoint));
-    if(app.cutPoint2) g.appendChild(_mkDart(pivotPt, app.cutPoint2));
-    // 앞판: G/rotatedGG 참조선
-    if(side !== "back"){
-      if(app.GPoint)         g.appendChild(_mkDart(pivotPt, app.GPoint));
-      if(app.rotatedGGPoint) g.appendChild(_mkDart(pivotPt, app.rotatedGGPoint));
-    }
-    // 뒤판: E점 기준 다트선 (E→dartCenter 고정, E→rotatedDartEnd_ 회전)
-    if(side === "back"){
-      if(app.GPoint)         g.appendChild(_mkDart(app.pivot, app.GPoint));
-      if(app.rotatedGGPoint) g.appendChild(_mkDart(app.pivot, app.rotatedGGPoint));
+    // bakedSegments 전체를 drawAppliedSegments에 전달
+    // (dart-leg-new, dart-bridge는 내부에서 블랙리스트로 제외됨)
+    const segs = app.bakedSegments;
+    // 참고선(dart-leg-old/old-dart/back-shoulder-dart)은 기본 숨김 — 패턴사가
+    // 이미 판단해서 다트를 옮긴 뒤에는 "여기 예전에 다트가 있었다"는 흔적이
+    // 보통은 필요 없다(사용자 확인). "참고선(옛 다트 흔적)" 체크박스를 켜면
+    // 얇은 점선으로 볼 수 있게 옵션으로만 남겨둔다. bakeFromSplitPieces가
+    // 폐곡선을 만들려고 쓰는 참고선은 켜든 끄든 bakedSegments 데이터에는
+    // 그대로 남아있음 — 화면 표시 여부만 바뀜.
+    const REF_TYPES = new Set(["dart-leg-old", "old-dart", "back-shoulder-dart"]);
+    const showRef = document.getElementById("chkRefDart")?.checked === true;
+    const legs = app.bakedSegments.filter(s =>
+      s.type === "dart-leg-new" || (showRef && REF_TYPES.has(s.type)));
+    drawAppliedSegments(g, segs, "pattern", color, app.side);
+    const _dartColor = color || (app.side === "back" ? "#c0392b" : "#2980b9");
+    const _mkDart = (a, b, isRef) => {
+      const l = Ln(a, b, "dart dart-struct");
+      l.setAttribute("style", isRef
+        ? `stroke:${_dartColor};stroke-width:0.6;stroke-dasharray:4 3;opacity:0.55;`
+        : `stroke:${_dartColor};stroke-width:1.2;`);
+      return l;
+    };
+    for (const leg of legs) {
+      if (leg.from && leg.to) g.appendChild(_mkDart(leg.from, leg.to, REF_TYPES.has(leg.type)));
     }
     svg.appendChild(g);
   }
 
-  renderApp(dartMoveState.appliedFront);
-  renderApp(dartMoveState.appliedBack);
+  renderApp(dartMoveState.appliedFront, _DC_F);
+  renderApp(dartMoveState.appliedBack,  _DC_B);
 }
 
 function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){

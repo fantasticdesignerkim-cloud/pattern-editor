@@ -100,6 +100,14 @@ function pointInPolygon(pt, polygon) {
   return inside;
 }
 
+// ── 두 세그먼트가 내부에서 실제로 교차하는지 (엄격 교차만, 끝점 공유/collinear는 제외) ──
+function segmentsCross(segA, segB) {
+  const o = (a, b, c) => Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+  const p1 = segA.from, p2 = segA.to, p3 = segB.from, p4 = segB.to;
+  const o1 = o(p1, p2, p3), o2 = o(p1, p2, p4), o3 = o(p3, p4, p1), o4 = o(p3, p4, p2);
+  return o1 !== o2 && o1 !== 0 && o2 !== 0 && o3 !== o4 && o3 !== 0 && o4 !== 0;
+}
+
 // ── 위상 순서 보존 bake ───────────────────────────────
 // ── split 결과로 bakedSegments 생성 ─────────────
 // 다트 입구 = cutPoint / rotatedCutPoint, 꼭지점 = pivot
@@ -127,6 +135,76 @@ function debugCheckSegmentContinuity(segs, label = "segments") {
   console.log("[continuity]", label, { count: segs.length, breaks });
 }
 
+// ── 참고선 판별: 재단 외곽선이 아니라 "다트가 어디 있었는지" 보여주는 흔적/기준선 ──
+// old-dart(원본 G-BP-GG) / back-shoulder-dart(원본 dartEnd_-E-dartCenter)는 원본
+// 도안부터 존재하는 다트 기준선이고, dart-leg-old는 이미 닫힌 다트의 잔여 흔적이다.
+// 이 선들은 종이를 자르는 선이 아니므로 외곽 곡선과 겹쳐도 물리 오류가 아니다
+// (실제로 원본 도안 gen-0부터 GG-BP 기준선이 진동상부 곡선과 교차함 — 정상 상태).
+function isReferenceSeg(seg) {
+  return seg?.type === "old-dart" ||
+         seg?.type === "back-shoulder-dart" ||
+         seg?.type === "dart-leg-old" ||
+         seg?.type === "dart-bridge";
+}
+
+// ── 자기교차 탐지 (물리 검사 대상만: 실제 외곽선 + 현재 열린 다트 다리) ──
+// DEBUG 플래그와 무관하게 항상 동작 — applyDartMove에서 적용 차단 판단에도 쓰인다.
+// dart-leg-new는 지금 열려 있는 다트 입구(종이가 실제로 벌어지는 경계)이므로 검사에
+// 포함한다 — 빼면 다리가 외곽선을 관통하는 진짜 겹침을 못 잡는다. 반면 참고선
+// (isReferenceSeg)은 검사에서 제외한다 — 참고선은 재단선이 아니라서 곡선과 겹치는
+// 게 정상일 수 있고, 포함하면 멀쩡한 다트이동까지 전부 차단된다(실측: 원본 기준선
+// 하나 때문에 244/244 전부 차단됐던 회귀). "배열 인접"이 아니라 "좌표상 끝점을
+// 실제로 공유하는지"로 정상 연결(같은 pivot에서 만나는 여러 다리)을 걸러낸다.
+function findSelfIntersections(segs) {
+  if (!Array.isArray(segs)) return [];
+  const real = segs.filter(s => s?.from && s?.to && !isReferenceSeg(s));
+  const sharesEndpoint = (a, b) => {
+    const near = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 1e-3;
+    return near(a.from, b.from) || near(a.from, b.to) || near(a.to, b.from) || near(a.to, b.to);
+  };
+  // 교차점이 어느 한 세그먼트의 끝점에서 이 거리 안이면 "스침"으로 보고 무시한다.
+  // 곡선은 ~1cm 간격 폴리라인 샘플이라 cutPoint(조각 중점)가 실제 곡선보다 살짝
+  // 안쪽에 놓이고, 오목 구간에서는 그 이산화 오차만으로 다트 입구에 0.1cm급
+  // 가짜 교차가 생긴다(실측). 0.2cm는 그 노이즈보다 크고 실제 조각 겹침보다는
+  // 훨씬 작은 스케일.
+  const GRAZE_EPS = 0.2;
+  const intersectionPoint = (a, b) => {
+    const r = { x: a.to.x - a.from.x, y: a.to.y - a.from.y };
+    const s = { x: b.to.x - b.from.x, y: b.to.y - b.from.y };
+    const denom = r.x * s.y - r.y * s.x;
+    if (Math.abs(denom) < 1e-12) return null;
+    const t = ((b.from.x - a.from.x) * s.y - (b.from.y - a.from.y) * s.x) / denom;
+    return { x: a.from.x + t * r.x, y: a.from.y + t * r.y };
+  };
+  const isGraze = (a, b) => {
+    const pt = intersectionPoint(a, b);
+    if (!pt) return false;
+    const d = (q) => Math.hypot(pt.x - q.x, pt.y - q.y);
+    return d(a.from) < GRAZE_EPS || d(a.to) < GRAZE_EPS ||
+           d(b.from) < GRAZE_EPS || d(b.to) < GRAZE_EPS;
+  };
+  const crossings = [];
+  for (let i = 0; i < real.length; i++) {
+    for (let j = i + 1; j < real.length; j++) {
+      if (sharesEndpoint(real[i], real[j])) continue;
+      if (segmentsCross(real[i], real[j]) && !isGraze(real[i], real[j])) {
+        crossings.push({ i, j, typeA: real[i].type, typeB: real[j].type });
+      }
+    }
+  }
+  return crossings;
+}
+
+// ── 2단 검증 구조 ──────────────────────────────
+// 1층: 전체 세그먼트 연결성 (아래 1~4번) — 참고선(old-dart/back-shoulder-dart/
+//   dart-leg-old/dart-bridge) 포함 전체를 본다. 이 참고선들은 평면 패턴 상태의
+//   진짜 절개선(닫히기 전 다트는 실제로 그 지점까지 잘려 들어가 있음)이라
+//   폐곡선 조립(bakeFromSplitPieces)에서 빠지면 안 되고, 여기서도 빠지면 안 된다
+//   — 데이터가 실제로 하나의 닫힌 체인인지 확인하는 층.
+// 2층: 물리 외곽선 검증 (findSelfIntersections, 5번) — 참고선을 뺀 진짜 절개
+//   외곽선(+ 지금 열린 다트 dart-leg-new)만 자기교차를 본다. 노치가 근처
+//   곡선을 스치는 건 정상 기하이지 겹침이 아니므로, "이어져 있는가"(1층)와
+//   "물리적으로 겹치는가"(2층)를 다른 세그먼트 집합으로 따로 판단해야 한다.
 function validateBakedSegments(segs, label) {
   if (typeof DEBUG_DART_MOVE === 'undefined' || !DEBUG_DART_MOVE) return;
   if (!Array.isArray(segs)) {
@@ -135,7 +213,7 @@ function validateBakedSegments(segs, label) {
   }
   console.log(`\n[validate] ${label} 적용 검증`);
 
-  // 1. 연속성
+  // 1. 연속성 (1층 — 참고선 포함 전체)
   let breaks = 0;
   for (let i = 0; i < segs.length - 1; i++) {
     if (!segs[i]?.to || !segs[i+1]?.from) { breaks++; continue; }
@@ -168,6 +246,11 @@ function validateBakedSegments(segs, label) {
     const allPairs = idEntries.every(([, c]) => c === 2);
     console.log(`  ${allPairs ? '✅' : '❌'} dartId별 다리쌍 (${idEntries.map(([id,c]) => c).join(',')})`);
   }
+
+  // 5. 자기교차
+  const crossings = findSelfIntersections(segs);
+  console.log(`  ${crossings.length === 0 ? '✅' : '❌'} 자기교차 없음 (${crossings.length}건)`,
+    crossings.length ? crossings.slice(0, 5) : '');
 }
 
 function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle }) {
@@ -210,6 +293,23 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle }) {
   let outlineEndIdxB = -1;
   for (let i = segsBFull.length - 1; i >= 0; i--) { if (_isOutlineSeg(segsBFull[i])) { outlineEndIdxB = i; break; } }
 
+  // trailing은 "꼬리의 다트선 뭉치가 실제로 pivot에 닿아서 끝나는" 경우에만 유효하다
+  // (이미 열린 다트 입구로 자연스럽게 이어지는 경우). splitBakedOutline의 dartId 보정으로
+  // rest에 편입된, 이 bake와 무관한 과거 다트 쌍이 배열 꼬리에 붙어 있을 수 있는데 그건
+  // pivot에 닿지 않고 끝난다 — 그런 경우 trailing으로 착각해 떼어내면 그 뒤에 이 bake
+  // 자신의 새 legOld를 이어붙이면서 서로 무관한 두 다트가 연결점 없이 맞닿아 끊김/자기교차가
+  // 생긴다. pivot에 안 닿으면 trailing이 아니라 그냥 이 조각의 일반 외곽선 내용으로 본다.
+  const _tailReachesPivot = (fullArr) => {
+    const last = fullArr[fullArr.length - 1]?.to;
+    return last && Math.hypot(last.x - pivot.x, last.y - pivot.y) < 1e-3;
+  };
+  if (outlineEndIdxA >= 0 && outlineEndIdxA < segsAFull.length - 1 && !_tailReachesPivot(segsAFull)) {
+    outlineEndIdxA = segsAFull.length - 1;
+  }
+  if (outlineEndIdxB >= 0 && outlineEndIdxB < segsBFull.length - 1 && !_tailReachesPivot(segsBFull)) {
+    outlineEndIdxB = segsBFull.length - 1;
+  }
+
   if (outlineEndIdxA < 0 || outlineEndIdxB < 0) {
     console.warn("[bakeFromSplitPieces] no outline segment found", { outlineEndIdxA, outlineEndIdxB });
     return [...segsAFull, ...segsBFull];
@@ -223,6 +323,22 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle }) {
   const segsA_trailing = segsAFull.slice(outlineEndIdxA + 1);
   const segsB_outline = segsBFull.slice(0, outlineEndIdxB + 1);
   const segsB_trailing = segsBFull.slice(outlineEndIdxB + 1);
+
+  // ── TEMP DEBUG: old-leg fallback 진단 (원인 확정되면 제거) ──
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    console.log("[bake old-leg check]", {
+      outlineEndIdxA,
+      outlineEndIdxB,
+      endA: { x: +endA.x.toFixed(3), y: +endA.y.toFixed(3) },
+      endB: { x: +endB.x.toFixed(3), y: +endB.y.toFixed(3) },
+      endAType: segsAFull[outlineEndIdxA]?.type,
+      endBType: segsBFull[outlineEndIdxB]?.type,
+      trailingA: segsA_trailing.map(s => s.type),
+      trailingB: segsB_trailing.map(s => s.type),
+      willCreateLegOldA: segsA_trailing.length === 0 && Math.hypot(endA.x - pivot.x, endA.y - pivot.y) > 1e-3,
+      willCreateLegOldB: segsB_trailing.length === 0 && Math.hypot(endB.x - pivot.x, endB.y - pivot.y) > 1e-3,
+    });
+  }
 
   const dartId = `dart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -309,6 +425,10 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   const isNear = (a, b, eps = 1e-3) => a && b && Math.hypot(a.x-b.x, a.y-b.y) < eps;
   const isPivot = (pt) => isNear(pt, pivot);
   const segTouchesPivot = (seg) => isPivot(seg?.from) || isPivot(seg?.to);
+  // 다중다트 상태에서는 dart-leg가 pivot→mouth, mouth→pivot 양방향으로 모두 존재한다.
+  // segTouchesPivot 하나로는 방향을 구분 못 해 "pivot에서 출발하는" 세그먼트까지
+  // 포함하고 지나쳐버릴 수 있으므로, forward/backward 각각 진행 방향 기준
+  // "도착"(포함하고 정지)과 "출발"(포함하지 않고 정지)을 구분한다.
 
   // 1. forward: cutSegIndex 자신부터 시작해 첫 pivot 도달까지 (뒷부분, cutSegIndex 세그먼트 포함)
   // ── TEMP DEBUG: cutSegIndex 세그먼트 확인 (ChatGPT 지시서, 확인 후 제거) ──
@@ -334,25 +454,14 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
 
   let forwardSteps = 0;
   for (let step = 0; step < nn; step++) {
-    forwardSteps++;
-    const idx = (cutSegIndex + step) % nn;
-    if (segTouchesPivot(segments[idx])) break;
-  }
-
-  // 2. pieceA: forward 구간
-  // segs: 외곽선 + boundary(다트선) 모두 순서대로 포함 (bakeFromSplitPieces가 trailing dart로 인식)
-  const segsA = [], ptsA = [{ ...cutPoint }];
-  for (let step = 0; step < forwardSteps; step++) {
     const idx = (cutSegIndex + step) % nn;
     const seg = segments[idx];
-    if (isBakedBoundarySeg(seg)) {
-      segsA.push({ from: { ...seg.from }, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
-      ptsA.push({ ...seg.to });
-      continue;
-    }
-    const fromPt = segsA.length === 0 ? { ...cutPoint } : { ...seg.from };
-    segsA.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
-    ptsA.push({ ...seg.to });
+    // seg.from이 pivot이면 이전 세그먼트 끝에서 이미 pivot에 도착한 것 —
+    // 이 세그먼트(pivot→mouth, 출발)는 포함하지 않고 여기서 멈춘다.
+    if (isPivot(seg?.from)) break;
+    forwardSteps++;
+    // seg.to가 pivot이면 이 세그먼트(mouth→pivot, 도착)에서 정지 — 포함하고 멈춘다.
+    if (isPivot(seg?.to)) break;
   }
 
   // 3. backward: 독립 탐색 — cutSegIndex 세그먼트의 from쪽 절반(cutPoint→seg.from)부터
@@ -367,13 +476,98 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   const maxBackward = cutSegIsBoundary ? (nn - forwardSteps) : (nn - forwardSteps + 1);
   let backwardSteps = 0;
   for (let step = 0; step < maxBackward; step++) {
-    backwardSteps++;
     const idx = (backStart - step + nn) % nn;
+    const seg = segments[idx];
     // cutSegIndex 세그먼트(backward 첫 스텝, non-boundary)는 pivot 정지 판정에서 제외
     // (cutPoint→seg.from 반쪽이라 pivot에 안 닿음)
-    if (!(step === 0 && !cutSegIsBoundary) && segTouchesPivot(segments[idx])) break;
+    const skipPivotCheck = (step === 0 && !cutSegIsBoundary);
+    // backward는 원본 세그먼트를 reverse해서 쓰므로 방향이 뒤집힌다:
+    // 원본 seg.to가 pivot이면 reverse 시 pivot에서 출발하는 세그먼트 — 포함하지 않고 멈춘다.
+    if (!skipPivotCheck && isPivot(seg?.to)) break;
+    backwardSteps++;
+    // 원본 seg.from이 pivot이면 reverse 시 pivot에 도착하는 세그먼트 — 포함하고 멈춘다.
+    if (!skipPivotCheck && isPivot(seg?.from)) break;
   }
-  const restSteps = maxBackward - backwardSteps; // 양쪽 국소 조각 사이의 "항상 고정" 영역
+
+  // ── dartId 짝 보정: forward/backward가 같은 dartId의 다리를 서로 다른 영역으로
+  // 쪼개면(한쪽만 로컬 조각 segsA/segsB에, 나머지는 rest에) 그 다트의 노치가
+  // 물리적으로 찢어진다 (한쪽만 회전하고 반대쪽은 고정된 채 남음).
+  // → 쪼개진 dartId 그룹은 통째로 rest(항상-고정 영역)로 넘긴다. 절대 반대 방향
+  //   (rest → segsA/segsB로 끌어올림)으로는 확장하지 않는다 — 예전에 그 방식으로
+  //   시도했다가 restSteps 회계가 깨져 외곽선이 중복 생성된 적이 있음.
+  //
+  // 단, "가장 최근에 생긴 dartId"는 이 보정에서 제외한다. dart-leg-new(pair A/B)는
+  // "이미 닫힌 노치"가 아니라 지금 열려 있는 다트 입구이고, 다음 세대가 한쪽은
+  // 회전·한쪽은 고정시켜 서로 붙게 만드는 것 자체가 "다트를 닫는" 동작이다.
+  // 최신 dartId까지 강제로 rest에 묶으면 그 다트를 영영 닫을 방법이 없어지고,
+  // bakeFromSplitPieces가 억지로 만들어내는 가짜 봉합선(불필요한 선/갈 수 없는
+  // 위치로의 이동)의 원인이 된다. dartId에 타임스탬프가 박혀 있으므로 최댓값을
+  // "현재 진행 중인 다트"로 보고 보정 대상에서 뺀다.
+  let forwardStepsBeforeFix = forwardSteps;
+  {
+    const regionOf = new Array(nn).fill('rest');
+    for (let step = 0; step < forwardSteps; step++) regionOf[(cutSegIndex + step) % nn] = 'A';
+    for (let step = 0; step < backwardSteps; step++) regionOf[(backStart - step + nn) % nn] = 'B';
+
+    const dartGroups = {};
+    segments.forEach((seg, idx) => {
+      if (!seg?.dartId || !isBakedBoundarySeg(seg)) return;
+      (dartGroups[seg.dartId] ||= []).push(idx);
+    });
+
+    let latestDartId = null, latestTs = -Infinity;
+    for (const id of Object.keys(dartGroups)) {
+      const ts = parseInt(id.split('-')[1], 10);
+      if (!isNaN(ts) && ts > latestTs) { latestTs = ts; latestDartId = id; }
+    }
+
+    const forceRest = new Set();
+    for (const [dartId, idxs] of Object.entries(dartGroups)) {
+      if (dartId === latestDartId) continue; // 방금 만든 다트는 쪼개져서 닫히는 게 정상 동작
+      const regionSet = new Set(idxs.map(i => regionOf[i]));
+      if (regionSet.size > 1) idxs.forEach(i => forceRest.add(i));
+    }
+
+    if (forceRest.size > 0) {
+      let trimmedForward = 0;
+      for (let step = 0; step < forwardSteps; step++) {
+        if (forceRest.has((cutSegIndex + step) % nn)) break;
+        trimmedForward++;
+      }
+      let trimmedBackward = 0;
+      for (let step = 0; step < backwardSteps; step++) {
+        if (forceRest.has((backStart - step + nn) % nn)) break;
+        trimmedBackward++;
+      }
+      if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+        console.log('[dartGroupFix] 갈라진 dartId 발견 → rest로 편입', {
+          forceRest: [...forceRest],
+          forwardSteps: `${forwardSteps} → ${trimmedForward}`,
+          backwardSteps: `${backwardSteps} → ${trimmedBackward}`,
+        });
+      }
+      forwardSteps  = trimmedForward;
+      backwardSteps = trimmedBackward;
+    }
+  }
+  const forwardTrimDelta = forwardStepsBeforeFix - forwardSteps; // restSteps 회계 보정용
+  const restSteps = (maxBackward - backwardSteps) + forwardTrimDelta; // 양쪽 국소 조각 사이의 "항상 고정" 영역
+
+  // 2. pieceA: forward 구간 (dartId 보정이 끝난 forwardSteps 기준으로 구성)
+  // segs: 외곽선 + boundary(다트선) 모두 순서대로 포함 (bakeFromSplitPieces가 trailing dart로 인식)
+  const segsA = [], ptsA = [{ ...cutPoint }];
+  for (let step = 0; step < forwardSteps; step++) {
+    const idx = (cutSegIndex + step) % nn;
+    const seg = segments[idx];
+    if (isBakedBoundarySeg(seg)) {
+      segsA.push({ ...seg, from: { ...seg.from }, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+      ptsA.push({ ...seg.to });
+      continue;
+    }
+    const fromPt = segsA.length === 0 ? { ...cutPoint } : { ...seg.from };
+    segsA.push({ ...seg, from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+    ptsA.push({ ...seg.to });
+  }
 
   const segsB = [], ptsB = [{ ...cutPoint }];
   for (let step = 0; step < backwardSteps; step++) {
@@ -383,24 +577,27 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
     // 첫 스텝: from을 cutPoint로 교체. non-boundary cutSegIndex면 to=seg.from(반쪽),
     //          boundary거나 이후 스텝이면 revSeg 그대로.
     const fromPt = segsB.length === 0 ? { ...cutPoint } : { ...revSeg.from };
-    segsB.push({ from: fromPt, to: { ...revSeg.to }, type: seg.type, disabled: !!seg.disabled });
+    segsB.push({ ...seg, from: fromPt, to: { ...revSeg.to }, type: seg.type, disabled: !!seg.disabled });
     ptsB.push({ ...revSeg.to });
   }
 
   // 4. segsFull: bake용 전체 체인 (국소 조각 + rest 영역)
   // 회전 조각은 국소(segs)만 돌고, 고정 조각은 rest까지 포함한 전체(segsFull)를 사용해야
   // 루프 완결성이 유지된다. rest는 어느 조각을 돌리든 절대 움직이지 않는 영역.
-  const segsAFull = segsA.map(s => ({ from: { ...s.from }, to: { ...s.to }, type: s.type, disabled: !!s.disabled }));
+  const segsAFull = segsA.map(s => ({ ...s, from: { ...s.from }, to: { ...s.to }, type: s.type, disabled: !!s.disabled }));
   for (let step = forwardSteps; step < forwardSteps + restSteps; step++) {
     const idx = (cutSegIndex + step) % nn;
     const seg = segments[idx];
-    segsAFull.push({ from: { ...seg.from }, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+    segsAFull.push({ ...seg, from: { ...seg.from }, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
   }
-  const segsBFull = segsB.map(s => ({ from: { ...s.from }, to: { ...s.to }, type: s.type, disabled: !!s.disabled }));
-  for (let step = backwardSteps; step < maxBackward; step++) {
+  const segsBFull = segsB.map(s => ({ ...s, from: { ...s.from }, to: { ...s.to }, type: s.type, disabled: !!s.disabled }));
+  // maxBackward가 아니라 restSteps 기준으로 순회해야 한다: dartId 보정으로
+  // forward 쪽에서 rest로 밀려난 분량(forwardTrimDelta)까지 segsBFull이 놓치지 않고
+  // 포함해야 fixedSegs로 쓰였을 때 루프가 끊기지 않는다.
+  for (let step = backwardSteps; step < backwardSteps + restSteps; step++) {
     const idx = (backStart - step + nn) % nn;
     const seg = segments[idx];
-    segsBFull.push({ from: { ...seg.to }, to: { ...seg.from }, type: seg.type, disabled: !!seg.disabled });
+    segsBFull.push({ ...seg, from: { ...seg.to }, to: { ...seg.from }, type: seg.type, disabled: !!seg.disabled });
   }
 
   if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
@@ -469,6 +666,40 @@ function choosePhysicalCloseAngle({ pivot, cutPoint, rotatePts, absAngle }) {
   return dPlus < dMinus ? a : -a;
 }
 
+// ── 회전 가능한 최대 각도: 기본 다트량 각도와 "자기교차 없이 가능한 최대각" 중 작은 쪽 ──
+// 사용자는 손으로 정확한 지점을 맞출 필요가 없어야 한다 — 끝까지 밀면 시스템이
+// 물리적으로 가능한 위치에서 알아서 멈춰야 한다. targetAngle(부호 검증된 기본
+// 다트량 각도)까지 겹치지 않으면 그대로 반환하고, 겹치면 0(항상 안전, 회전 없음)과
+// targetAngle 사이를 이분 탐색해서 겹치기 직전 각도를 찾는다.
+function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle) {
+  if (Math.abs(targetAngle) < 1e-9) return targetAngle;
+  const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
+    s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
+  const fixedClean  = cleanForBake(fixedSegsRaw);
+  const rotateClean = cleanForBake(rotateSegsRaw);
+  if (fixedClean.length === 0 || rotateClean.length === 0) return targetAngle;
+
+  const crossesAt = (angle) => {
+    const baked = bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle });
+    return findSelfIntersections(baked).length > 0;
+  };
+
+  if (!crossesAt(targetAngle)) return targetAngle; // 기본 다트량까지 안전
+
+  // 0(항상 안전)과 targetAngle(겹침) 사이 이분 탐색 — 22회면 라디안 기준
+  // 오차가 무시할 수준(π/2^22)까지 좁혀짐.
+  let lo = 0, hi = targetAngle;
+  for (let i = 0; i < 22; i++) {
+    const mid = (lo + hi) / 2;
+    if (crossesAt(mid)) hi = mid; else lo = mid;
+  }
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    console.log('[findMaxSafeAngle] 겹침으로 축소:', (targetAngle*180/Math.PI).toFixed(2), '° →',
+      (lo*180/Math.PI).toFixed(2), '°');
+  }
+  return lo;
+}
+
 // ── 조각의 mouth 끝점 추출 ──
 function pieceMouthPoint(piece, pivot) {
   if (piece?.openPts?.length) {
@@ -480,15 +711,6 @@ function pieceMouthPoint(piece, pivot) {
     return last?.to ? { ...last.to } : null;
   }
   return null;
-}
-
-function calcCloseAngleByMouthPair(pivot, mouthA, mouthB, rotateHit) {
-  const angleA = Math.atan2(mouthA.y - pivot.y, mouthA.x - pivot.x);
-  const angleB = Math.atan2(mouthB.y - pivot.y, mouthB.x - pivot.x);
-  let closeAngle = (rotateHit === "mouthB") ? angleA - angleB : angleB - angleA;
-  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
-  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
-  return { closeAngle };
 }
 
 function calcFrontCloseAngleByRotateHit(p, B, rotateHit) {
@@ -508,6 +730,19 @@ function calcFrontCloseAngleByRotateHit(p, B, rotateHit) {
   while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
   while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
   return { closeAngle, GG };
+}
+
+// ── 이 옷 전체의 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
+// 부호는 신경 쓰지 않는다 — choosePhysicalCloseAngle이 최종 결정한다.
+function calcFrontBaseDartAngle(p, B) {
+  const { GG } = calcCloseAngle(p, B);
+  const pivot = p.BP;
+  const angleG  = Math.atan2(p.G.y  - pivot.y, p.G.x  - pivot.x);
+  const angleGG = Math.atan2(GG.y   - pivot.y, GG.x   - pivot.x);
+  let a = angleGG - angleG;
+  while (a >  Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return Math.abs(a);
 }
 
 function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
@@ -889,6 +1124,18 @@ function applyDartMove() {
   debugCheckSegmentContinuity(bakedSegments, `${side} bakedSegments`);
   validateBakedSegments(bakedSegments, side);
 
+  // ── 자기교차는 판단이 아니라 차단 대상이다: 겹치는 결과는 애초에 적용되지 않는다.
+  // 드래그 상태(mode/rotateSegs/cutPoint 등)는 그대로 유지해 사용자가 각도나 조각을
+  // 바꿔서 다시 시도할 수 있게 한다.
+  const _crossings = findSelfIntersections(bakedSegments);
+  if (_crossings.length > 0) {
+    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+      console.warn('[apply] 자기교차로 적용 차단', _crossings);
+    }
+    setHint(`이 위치/각도는 패턴이 겹칩니다 (${_crossings.length}건) — 각도를 줄이거나 다른 조각/위치를 선택하세요`);
+    return;
+  }
+
   if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
     const DART_TYPES = ["dart-leg-new","dart-leg-old","dart-bridge"];
     const outerTypes = bakedSegments.filter(s=>!DART_TYPES.includes(s.type)).map(s=>s.type);
@@ -1160,32 +1407,20 @@ function initDartMoveClickHandler() {
       const _d = createDraft(_B, _W, _BL);
       const pivot2 = dartMoveState.side === "back" ? _d.pts.E : _d.pts.BP;
 
-      // closeAngle: 크기는 기존 계산, 부호는 물리적 닫힘 검증으로 결정
-      // userAngle은 항상 0에서 시작 (가위로 자른 직후 붙어있는 상태)
-      let closeAngle = 0;
-      const _applied2 = dartMoveState.side === "front"
-        ? dartMoveState.appliedFront : dartMoveState.appliedBack;
-      if (_applied2?.bakedSegments) {
-        // 2차 이후: 새 다트 입구(dart-leg-new)만 mouth로 사용
-        // dart-leg-old(기존 잔여)는 다음 다트의 닫힘 기준이 아니므로 제외
-        const _legs = _applied2.bakedSegments.filter(s => s.type === "dart-leg-new");
-        if (_legs.length >= 2) {
-          const getNPE = (leg, piv) =>
-            Math.hypot(leg.from.x-piv.x, leg.from.y-piv.y) >
-            Math.hypot(leg.to.x-piv.x,   leg.to.y-piv.y)
-              ? leg.from : leg.to;
-          const _od = {
-            pivot:  _applied2.pivot,
-            mouthA: getNPE(_legs[_legs.length-2], _applied2.pivot),
-            mouthB: getNPE(_legs[_legs.length-1], _applied2.pivot),
-          };
-          ({ closeAngle } = calcCloseAngleByMouthPair(_od.pivot, _od.mouthA, _od.mouthB, rotatePiece.hit));
-        }
-      } else if (dartMoveState.side === "back") {
+      // closeAngle 크기: 몇 차 다트이동이든 항상 이 옷 전체의 기본 다트량(B 공식 기준
+      // G/GG, 혹은 뒤판 dartCenter/dartEnd_) 크기를 그대로 쓴다. 새로 자르는 위치는
+      // 직전 다트와 무관해도 되고, 직전 다트는 그대로 열린 채 남아있는 게 정상 동작이다
+      // (여유분을 여러 군데에 나눠 배치하는 것 — 패턴사가 결정할 몫).
+      // 예전에는 baked(2차 이상) 상태에서 "직전 다트의 현재 벌어진 폭"을 역산해서 각도로
+      // 썼는데, 그 폭이 이미 커져 있으면 새 절개 위치가 pivot에서 멀수록 다트가 폭발적으로
+      // 커지는 버그가 있었다(예: 30cm 다트). 부호는 지금처럼 choosePhysicalCloseAngle이
+      // 최종 검증한다.
+      let closeAngle;
+      if (dartMoveState.side === "back") {
         const _info = buildBackShoulderDartInfo(_d.formula, _d.pts, _B);
-        ({ closeAngle } = calcBackCloseAngleByRotateHit(_info, rotatePiece.hit));
+        closeAngle = calcBackBaseDartAngle(_info);
       } else {
-        ({ closeAngle } = calcFrontCloseAngleByRotateHit(_d.pts, _B, rotatePiece.hit));
+        closeAngle = calcFrontBaseDartAngle(_d.pts, _B);
       }
 
       // ── 부호 물리 검증: cutPoint를 미세 회전해서 회전 조각 안으로 들어가는 방향 선택 ──
@@ -1203,15 +1438,23 @@ function initDartMoveClickHandler() {
         console.log('[closeAngle] 부호검증 후 baseAngle:', closeAngle.toFixed(4),
           'pivot:', JSON.stringify(_pivotSign), 'cutPoint:', JSON.stringify(dartMoveState.cutPoint));
 
+      // 고정 조각은 rest(항상-고정 영역)까지 포함한 전체 체인 사용 (baked 다중다트).
+      // 1차(splitFront/BackOutline)는 segsFull이 없으므로 기존 segs 그대로 사용.
+      const _rotateSegs = rotatePiece.segs;
+      const _fixedSegs  = fixedPiece.segsFull || fixedPiece.segs;
+
+      // ── 최대 회전각 = min(기본 다트량 각도, 자기교차 없이 가능한 최대각) ──
+      // 사용자가 손으로 딱 맞는 지점을 찾을 필요가 없어야 한다: 끝까지 드래그하면
+      // 시스템이 물리적으로 가능한 한계에서 알아서 멈춰야 한다.
+      closeAngle = findMaxSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, closeAngle);
+
       dartMoveState.mode          = "drag";
-      dartMoveState.baseAngle     = closeAngle;   // 드래그 최대 한계 (부호 검증됨)
+      dartMoveState.baseAngle     = closeAngle;   // 드래그 최대 한계 (부호 검증 + 겹침 없는 한계)
       dartMoveState.userAngle     = 0;             // 항상 0에서 시작
       dartMoveState.rotatePts     = rotatePiece.pts;
       dartMoveState.fixedPts      = fixedPiece.pts;
-      dartMoveState.rotateSegs    = rotatePiece.segs;
-      // 고정 조각은 rest(항상-고정 영역)까지 포함한 전체 체인 사용 (baked 다중다트).
-      // 1차(splitFront/BackOutline)는 segsFull이 없으므로 기존 segs 그대로 사용.
-      dartMoveState.fixedSegs     = fixedPiece.segsFull || fixedPiece.segs;
+      dartMoveState.rotateSegs    = _rotateSegs;
+      dartMoveState.fixedSegs     = _fixedSegs;
       dartMoveState.rotateHit     = rotatePiece.hit;
       dartMoveState.fixedHit      = fixedPiece.hit;
       dartMoveState._splitIsBaked = null;
@@ -1312,6 +1555,23 @@ function initDartMoveClickHandler() {
     e.stopPropagation();
     dartMoveState.dragging = true;
     svg.style.cursor = "grabbing";
+  });
+
+  // ── 드래그 핸들: 더블클릭 = 끝까지 이동 (userAngle = baseAngle, 이미 겹침 없는 한계로 clamp됨) ──
+  svg.addEventListener("dblclick", e => {
+    if (!dartMoveState.active) return;
+    const handle = e.target.closest(".dart-rotate-handle");
+    if (!handle) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dartMoveState.dragging = false;
+    dartMoveState.userAngle = dartMoveState.baseAngle;
+    const pivot = (dartMoveState.side === "back") ? _getDraftPts()?.E : _getDraftPts()?.BP;
+    if (pivot && dartMoveState.cutPoint) {
+      const openW = dartOpenWidth(dartMoveState.cutPoint, pivot, dartMoveState.userAngle);
+      setHint(`끝까지 이동: ${openW.toFixed(1)}cm`);
+    }
+    render();
   });
 
   // ── hover: SVG 위 마우스 이동 시 선택 가능 외곽선 표시 ──────────
@@ -1517,6 +1777,16 @@ function calcBackCloseAngleByRotateHit(info, rotateHit) {
   while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
   while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
   return { closeAngle };
+}
+
+// ── 뒤판 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
+function calcBackBaseDartAngle(info) {
+  const angleCenter = Math.atan2(info.dartCenter.y - info.apex.y, info.dartCenter.x - info.apex.x);
+  const angleEnd    = Math.atan2(info.dartEnd_.y   - info.apex.y, info.dartEnd_.x   - info.apex.x);
+  let a = angleCenter - angleEnd;
+  while (a >  Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return Math.abs(a);
 }
 
 // ── 뒤판 외곽선을 dartCenter/dartEnd_ 기준으로 두 조각 분할 ──
