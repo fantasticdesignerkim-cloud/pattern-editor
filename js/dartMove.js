@@ -135,39 +135,82 @@ function debugCheckSegmentContinuity(segs, label = "segments") {
   console.log("[continuity]", label, { count: segs.length, breaks });
 }
 
-// ── 참고선 판별: 재단 외곽선이 아니라 "다트가 어디 있었는지" 보여주는 흔적/기준선 ──
-// old-dart(원본 G-BP-GG) / back-shoulder-dart(원본 dartEnd_-E-dartCenter)는 원본
-// 도안부터 존재하는 다트 기준선이고, dart-leg-old는 이미 닫힌 다트의 잔여 흔적이다.
-// 이 선들은 종이를 자르는 선이 아니므로 외곽 곡선과 겹쳐도 물리 오류가 아니다
-// (실제로 원본 도안 gen-0부터 GG-BP 기준선이 진동상부 곡선과 교차함 — 정상 상태).
+// ── 참고선 판별: 물리 검사에서 제외할 순수 내부 연결선 ──
+// dart-bridge만 조립용 내부 연결선(실제 재단 경계가 아님)이라 제외한다.
+// old-dart/back-shoulder-dart/dart-leg-old는 "옛 흔적"이 아니라 현재 baked
+// 결과에 남아있는 실제 패턴 경계일 수 있다(다트를 끝까지 안 닫으면 그 자리에
+// 진짜로 벌어진 틈이 남는다) — 물리 검사에서 제외하면 그 틈과 겹치는 다음
+// 회전을 놓친다. 그래서 더 이상 통째로 빼지 않는다.
 function isReferenceSeg(seg) {
-  return seg?.type === "old-dart" ||
-         seg?.type === "back-shoulder-dart" ||
-         seg?.type === "dart-leg-old" ||
-         seg?.type === "dart-bridge";
+  return seg?.type === "dart-bridge";
 }
 
-// ── 자기교차 탐지 (물리 검사 대상만: 실제 외곽선 + 현재 열린 다트 다리) ──
+// 이보다 작은 각도의 다트는 만들지 않는다 (0.5° ≈ pivot에서 20cm 거리 기준 폭
+// 0.17cm). 안전각이 이 밑으로 깎였다는 건 그 위치에 회전 공간이 없다는 뜻이고,
+// 그대로 적용하면 입구가 안 벌어진 퇴화 다트(같은 자리에 겹친 다리 두 개 =
+// 화면에 남는 방사형 잔선)만 생긴다.
+const MIN_DART_ANGLE_RAD = 0.5 * Math.PI / 180;
+
+// 곡선 스침 허용오차(GRAZE_EPS)를 적용할 대상: ~1cm 간격 폴리라인으로 샘플링된
+// 곡선 타입만. 직선(다트 다리, 허리/어깨 등)은 샘플링 오차가 없으므로 교차하면
+// 그대로 진짜 겹침이다 — 여기 포함시키면 진짜 과회전을 "스침"으로 놓친다.
+const CURVE_SAMPLED_TYPES = new Set([
+  "back-armhole", "front-armhole-lower", "front-armhole-upper",
+  "back-neckline", "front-neckline",
+]);
+
+// ── 자기교차 탐지 (물리 검사 대상만: 실제 외곽선 + 현재 열린/미완전히 닫힌 다트 다리) ──
 // DEBUG 플래그와 무관하게 항상 동작 — applyDartMove에서 적용 차단 판단에도 쓰인다.
-// dart-leg-new는 지금 열려 있는 다트 입구(종이가 실제로 벌어지는 경계)이므로 검사에
-// 포함한다 — 빼면 다리가 외곽선을 관통하는 진짜 겹침을 못 잡는다. 반면 참고선
-// (isReferenceSeg)은 검사에서 제외한다 — 참고선은 재단선이 아니라서 곡선과 겹치는
-// 게 정상일 수 있고, 포함하면 멀쩡한 다트이동까지 전부 차단된다(실측: 원본 기준선
-// 하나 때문에 244/244 전부 차단됐던 회귀). "배열 인접"이 아니라 "좌표상 끝점을
-// 실제로 공유하는지"로 정상 연결(같은 pivot에서 만나는 여러 다리)을 걸러낸다.
-function findSelfIntersections(segs) {
+// dart-leg-new/dart-leg-old는 종이가 실제로 벌어질 수 있는 경계이므로 검사에
+// 포함한다 — 빼면 다리가 외곽선(또는 다른 다트의 다리)을 관통하는 진짜 겹침을
+// 못 잡는다. dart-bridge(isReferenceSeg)만 순수 조립용 내부선이라 제외한다.
+// "배열 인접"이 아니라 "좌표상 끝점을 실제로 공유하는지"로 정상 연결(같은
+// pivot에서 만나는 여러 다리)을 걸러낸다.
+// pivot을 주면(front=BP, back=E) "기준점 앵커" 방식으로 스침을 판정한다: 다트
+// 다리(dart-leg-new/dart-leg-old)의 pivot 반대쪽 끝점은 정의상 G/GG/cutPoint
+// 같은 "원래 곡선과 만나도록 설계된 기준점"이다. 그 좌표들을 junctionPoints로
+// 모아두면, 교차점이 "두 세그먼트 중 아무 끝점"이 아니라 "실제로 설계된 접점"
+// 근처인지를 정확히 볼 수 있다 — G/GG처럼 서로 다른 곡선이 한 점에서 만나도록
+// 만들어진 경우(폴리라인 샘플링으로 그 접점 자체가 흔들리는 경우)와, 전혀
+// 무관한 두 곡선이 엉뚱한 곳에서 진짜로 겹친 경우(2026-07-07 실측: 부채꼴
+// 다중다트 3차 이후 "필요없는 선"/"가슴다트 방향 과회전"의 원인이었음)를
+// 구분해준다. pivot이 없으면(옛 호출부 호환) 예전처럼 "아무 끝점이나 가까우면
+// 스침"으로 판정한다.
+function findSelfIntersections(segs, pivot) {
   if (!Array.isArray(segs)) return [];
   const real = segs.filter(s => s?.from && s?.to && !isReferenceSeg(s));
   const sharesEndpoint = (a, b) => {
     const near = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 1e-3;
     return near(a.from, b.from) || near(a.from, b.to) || near(a.to, b.from) || near(a.to, b.to);
   };
-  // 교차점이 어느 한 세그먼트의 끝점에서 이 거리 안이면 "스침"으로 보고 무시한다.
-  // 곡선은 ~1cm 간격 폴리라인 샘플이라 cutPoint(조각 중점)가 실제 곡선보다 살짝
-  // 안쪽에 놓이고, 오목 구간에서는 그 이산화 오차만으로 다트 입구에 0.1cm급
-  // 가짜 교차가 생긴다(실측). 0.2cm는 그 노이즈보다 크고 실제 조각 겹침보다는
-  // 훨씬 작은 스케일.
+  // 교차점이 실제 기준점(junctionPoints) 근처면 "스침"으로 보고 무시한다.
+  // 곡선은 ~1cm 간격 폴리라인 샘플이라 cutPoint/G/GG가 실제 곡선 샘플보다 살짝
+  // 어긋나 있고, 그 이산화 오차만으로 가짜 교차가 생긴다(실측). 이 허용오차는
+  // CURVE_SAMPLED_TYPES(폴리라인 샘플 곡선)가 관련된 교차에만 적용한다 — 직선
+  // 끼리의 교차는 샘플링 노이즈가 있을 수 없으므로 항상 진짜 겹침으로 취급한다.
+  //
+  // 두 임계값을 구분해서 쓴다: junctionPoints(기준점) 기반 판정은 pivot이 있어야
+  // 가능한 더 정확한 방식이라 허용폭을 넓게(GRAZE_EPS_JUNCTION) 잡아도 안전하고,
+  // pivot이 없는 옛 호출부 호환 경로("아무 끝점이나 가까우면 스침")는 오탐 폭을
+  // 좁게 유지해야 하므로 그대로 GRAZE_EPS를 쓴다.
+  // GRAZE_EPS_JUNCTION=0.7 근거(2026-07-07 무작위 4연속 다트 스윕 실측, 총 214건
+  // 교차 샘플): 정상적으로 스쳐야 하는 경우(다트다리-곡선이 원래 만나도록 설계된
+  // G/GG/cutPoint 부근)는 전부 기준점에서 0.19~0.59cm 안에 몰려 있었고, 실제
+  // 겹침(예: front-armhole-lower×side-seam, 서로 다른 곡선이 엉뚱한 곳에서 교차)은
+  // 전부 1.5cm 이상이었다 — 그 사이에 값이 하나도 없어 0.7cm면 안전하게 갈린다.
   const GRAZE_EPS = 0.2;
+  const GRAZE_EPS_JUNCTION = 0.7;
+  const DART_LEG_TYPES = new Set(["dart-leg-new", "dart-leg-old"]);
+  let junctionPoints = null;
+  if (pivot) {
+    junctionPoints = real
+      .filter(s => DART_LEG_TYPES.has(s.type))
+      .map(s => {
+        const dFrom = Math.hypot(s.from.x - pivot.x, s.from.y - pivot.y);
+        const dTo   = Math.hypot(s.to.x   - pivot.x, s.to.y   - pivot.y);
+        return dFrom > dTo ? s.from : s.to; // pivot 반대쪽(먼) 끝 = G/GG/cutPoint
+      });
+  }
   const intersectionPoint = (a, b) => {
     const r = { x: a.to.x - a.from.x, y: a.to.y - a.from.y };
     const s = { x: b.to.x - b.from.x, y: b.to.y - b.from.y };
@@ -177,9 +220,11 @@ function findSelfIntersections(segs) {
     return { x: a.from.x + t * r.x, y: a.from.y + t * r.y };
   };
   const isGraze = (a, b) => {
+    if (!CURVE_SAMPLED_TYPES.has(a.type) && !CURVE_SAMPLED_TYPES.has(b.type)) return false;
     const pt = intersectionPoint(a, b);
     if (!pt) return false;
     const d = (q) => Math.hypot(pt.x - q.x, pt.y - q.y);
+    if (junctionPoints) return junctionPoints.some(jp => d(jp) < GRAZE_EPS_JUNCTION);
     return d(a.from) < GRAZE_EPS || d(a.to) < GRAZE_EPS ||
            d(b.from) < GRAZE_EPS || d(b.to) < GRAZE_EPS;
   };
@@ -195,17 +240,85 @@ function findSelfIntersections(segs) {
   return crossings;
 }
 
+// ── 회전 충돌 검사: "회전으로 새로 생기는" 겹침만 본다 ──────────────
+// 강체 회전은 같은 조각 내부의 상대 기하를 보존하므로, 조각 내부끼리의 교차
+// 상태는 회전으로 절대 바뀌지 않는다 — 내부 교차는 전부 원본부터 있던 것이거나
+// 접선 상태의 부동소수점 노이즈다(실측: 저장된 진동하부 곡선이 옆선과 거의
+// 접해 있어, 같은 조각인 두 선의 "교차 여부"가 회전 각도에 따라 FP 노이즈로
+// 나타났다 사라졌다 하며 안전각을 0으로 오판 → 멀쩡한 1차 다트까지 차단됐던
+// 회귀). 그래서 회전 한계/적용 차단 판단은 [고정 조각 ∪ 고정쪽 다트다리] ×
+// [회전 조각 ∪ 회전쪽 다트다리] 쌍만 검사한다. 스침(graze) 판정은
+// findSelfIntersections와 동일한 기준점(junction) 방식.
+function findRotationCollisions(fixedSegsIn, rotateSegsIn, pivot, angle) {
+  const clean = (arr) => (arr || []).filter(s => s?.from && s?.to && !isReferenceSeg(s));
+  const fixedC  = clean(fixedSegsIn);
+  const rotateC = clean(rotateSegsIn);
+  if (fixedC.length === 0 || rotateC.length === 0) return [];
+
+  const rotP = (pt) => rotatePt(pt, pivot, angle);
+  const fix = fixedC.map(s => ({ ...s }));
+  const rot = rotateC.map(s => ({ ...s, from: rotP(s.from), to: rotP(s.to) }));
+
+  // 다트 입구의 두 변(고정쪽: pivot→cutPoint, 회전쪽: pivot→회전된 cutPoint)도
+  // 실제 종이 경계이므로 상대편 조각과의 충돌 검사에 포함한다.
+  const cutFixed = fixedC[0].from;
+  const cutRot   = rotP(rotateC[0].from);
+  fix.push({ type: "dart-leg-new", from: { ...pivot }, to: { ...cutFixed } });
+  rot.push({ type: "dart-leg-new", from: { ...pivot }, to: { ...cutRot } });
+
+  // 기준점(junction): 양쪽의 다트다리 mouth + 입구 양끝 — 여기 근처의 곡선 스침은
+  // 설계상 만나는 점의 샘플링 오차이므로 무시(findSelfIntersections와 동일 기준).
+  const DL = new Set(["dart-leg-new", "dart-leg-old"]);
+  const junctions = [];
+  for (const s of [...fix, ...rot]) {
+    if (!DL.has(s.type)) continue;
+    const dFrom = Math.hypot(s.from.x - pivot.x, s.from.y - pivot.y);
+    const dTo   = Math.hypot(s.to.x   - pivot.x, s.to.y   - pivot.y);
+    junctions.push(dFrom > dTo ? s.from : s.to);
+  }
+
+  const GRAZE_EPS_J = 0.7;
+  const sharesEndpoint = (a, b) => {
+    const near = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 1e-3;
+    return near(a.from, b.from) || near(a.from, b.to) || near(a.to, b.from) || near(a.to, b.to);
+  };
+  const intersectionPoint = (a, b) => {
+    const r = { x: a.to.x - a.from.x, y: a.to.y - a.from.y };
+    const s = { x: b.to.x - b.from.x, y: b.to.y - b.from.y };
+    const denom = r.x * s.y - r.y * s.x;
+    if (Math.abs(denom) < 1e-12) return null;
+    const t = ((b.from.x - a.from.x) * s.y - (b.from.y - a.from.y) * s.x) / denom;
+    return { x: a.from.x + t * r.x, y: a.from.y + t * r.y };
+  };
+  const isGraze = (a, b) => {
+    if (!CURVE_SAMPLED_TYPES.has(a.type) && !CURVE_SAMPLED_TYPES.has(b.type)) return false;
+    const pt = intersectionPoint(a, b);
+    if (!pt) return false;
+    return junctions.some(jp => Math.hypot(pt.x - jp.x, pt.y - jp.y) < GRAZE_EPS_J);
+  };
+
+  const collisions = [];
+  for (const a of fix) {
+    for (const b of rot) {
+      if (sharesEndpoint(a, b)) continue;
+      if (segmentsCross(a, b) && !isGraze(a, b)) {
+        collisions.push({ typeA: a.type, typeB: b.type });
+      }
+    }
+  }
+  return collisions;
+}
+
 // ── 2단 검증 구조 ──────────────────────────────
-// 1층: 전체 세그먼트 연결성 (아래 1~4번) — 참고선(old-dart/back-shoulder-dart/
-//   dart-leg-old/dart-bridge) 포함 전체를 본다. 이 참고선들은 평면 패턴 상태의
-//   진짜 절개선(닫히기 전 다트는 실제로 그 지점까지 잘려 들어가 있음)이라
-//   폐곡선 조립(bakeFromSplitPieces)에서 빠지면 안 되고, 여기서도 빠지면 안 된다
-//   — 데이터가 실제로 하나의 닫힌 체인인지 확인하는 층.
-// 2층: 물리 외곽선 검증 (findSelfIntersections, 5번) — 참고선을 뺀 진짜 절개
-//   외곽선(+ 지금 열린 다트 dart-leg-new)만 자기교차를 본다. 노치가 근처
-//   곡선을 스치는 건 정상 기하이지 겹침이 아니므로, "이어져 있는가"(1층)와
-//   "물리적으로 겹치는가"(2층)를 다른 세그먼트 집합으로 따로 판단해야 한다.
-function validateBakedSegments(segs, label) {
+// 1층: 전체 세그먼트 연결성 (아래 1~4번) — dart-bridge를 포함한 전체를 본다.
+//   이 선들은 평면 패턴 상태의 진짜 절개선(닫히기 전 다트는 실제로 그 지점까지
+//   잘려 들어가 있음)이라 폐곡선 조립(bakeFromSplitPieces)에서 빠지면 안 되고,
+//   여기서도 빠지면 안 된다 — 데이터가 실제로 하나의 닫힌 체인인지 확인하는 층.
+// 2층: 물리 외곽선 검증 (findSelfIntersections, 5번) — dart-bridge만 뺀 진짜
+//   절개 외곽선(+ 다트 다리 전부)의 자기교차를 본다. 노치가 근처 곡선을 스치는
+//   건 정상 기하이지 겹침이 아니므로, "이어져 있는가"(1층)와 "물리적으로
+//   겹치는가"(2층)를 다른 세그먼트 집합으로 따로 판단해야 한다.
+function validateBakedSegments(segs, label, pivot) {
   if (typeof DEBUG_DART_MOVE === 'undefined' || !DEBUG_DART_MOVE) return;
   if (!Array.isArray(segs)) {
     console.warn(`[validate] ${label} 검증 실패: segs가 배열이 아님`, segs);
@@ -248,7 +361,7 @@ function validateBakedSegments(segs, label) {
   }
 
   // 5. 자기교차
-  const crossings = findSelfIntersections(segs);
+  const crossings = findSelfIntersections(segs, pivot);
   console.log(`  ${crossings.length === 0 ? '✅' : '❌'} 자기교차 없음 (${crossings.length}건)`,
     crossings.length ? crossings.slice(0, 5) : '');
 }
@@ -648,10 +761,32 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
 }
 
 // ── 물리적 닫힘 부호 결정 ───────────────────────
-// cutPoint를 미세 회전했을 때 회전 조각 polygon 안으로 들어가는 방향 선택
+// 결정적 기하 판정: rotatePts는 cutPoint에서 시작해 회전 조각의 외곽선을 따라
+// 걷는 점들이므로, cutPoint 직후의 점이 pivot 기준 어느 각도 방향에 있는지
+// (외적 부호)가 곧 "조각 본체가 있는 쪽"이다. 잘린 변이 자기 본체 쪽으로 쓸려
+// 들어가는 방향으로 회전해야 고정 조각과의 사이가 벌어진다(다트 열림).
+//
+// 예전 방식(cutPoint를 ±0.01rad 돌린 샘플 점의 pointInPolygon 검사)은 얇은
+// 부채꼴 조각에서 두 방향 모두 폴리곤 밖으로 나가 무게중심 거리 추측으로
+// 떨어졌고(실측: 다중다트 3차 이후 무작위 108건 중 상당수가 이 CENTROID 분기),
+// 그 추측이 틀리면 회전이 몸판 쪽으로 파고들었다 — "어쩔 때는 맞고 어쩔 때는
+// 틀리다"로 관측된 간헐 오류의 직접 원인.
 function choosePhysicalCloseAngle({ pivot, cutPoint, rotatePts, absAngle }) {
   const a = Math.abs(absAngle);
   if (a < 1e-9 || !rotatePts || rotatePts.length < 3 || !cutPoint) return a;
+  const vx = cutPoint.x - pivot.x, vy = cutPoint.y - pivot.y;
+  // cutPoint(=rotatePts[0]) 이후의 점들 중, cut 방사선과 유의미하게 벌어진 첫
+  // 점을 찾는다 (초반 점들이 방사선과 거의 평행하면 부호 판정이 불안정하므로 skip).
+  for (let k = 1; k < rotatePts.length; k++) {
+    const wx = rotatePts[k].x - pivot.x, wy = rotatePts[k].y - pivot.y;
+    const cross = vx * wy - vy * wx;
+    const scale = Math.hypot(vx, vy) * Math.hypot(wx, wy);
+    if (scale > 1e-12 && Math.abs(cross) > 1e-4 * scale) {
+      // rotatePt의 양(+)의 각도는 cross>0 쪽으로 움직인다 (좌표계 무관, 정의상 일치)
+      return cross > 0 ? a : -a;
+    }
+  }
+  // 퇴화(외곽선 전체가 cut 방사선상에 놓임): 기존 샘플 방식으로 폴백
   const testPlus  = rotatePt(cutPoint, pivot,  0.01);
   const testMinus = rotatePt(cutPoint, pivot, -0.01);
   const inPlus  = pointInPolygon(testPlus,  rotatePts);
@@ -670,8 +805,49 @@ function choosePhysicalCloseAngle({ pivot, cutPoint, rotatePts, absAngle }) {
 // 사용자는 손으로 정확한 지점을 맞출 필요가 없어야 한다 — 끝까지 밀면 시스템이
 // 물리적으로 가능한 위치에서 알아서 멈춰야 한다. targetAngle(부호 검증된 기본
 // 다트량 각도)까지 겹치지 않으면 그대로 반환하고, 겹치면 0(항상 안전, 회전 없음)과
-// targetAngle 사이를 이분 탐색해서 겹치기 직전 각도를 찾는다.
-function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle) {
+// targetAngle 사이에서 겹치기 직전 각도를 찾는다.
+//
+// 끝점(0°/targetAngle)만 보고 이분탐색하면 안 된다 — 실측(2026-07-07, 부채꼴
+// 다중다트 3~4차)으로 회전 경로 중간에서만 자기교차가 생겼다 사라지는(비단조)
+// 경우를 확인했다: 0%/40%/... 지점은 안전한데 10%, 65~75% 지점에서만 진짜로
+// 겹쳤다. 끝점만 확인하는 이분탐색은 이런 "중간에서만 겹침"을 완전히 놓치고
+// targetAngle 전체를 안전하다고 잘못 반환한다 — 이게 "가슴다트 방향으로 회전할
+// 때만 오버해서 회전한다"는 증상의 실제 원인이었다. 그래서 경로 전체를 촘촘히
+// 스캔해서 "처음 겹치는 각도"를 찾은 뒤, 그 직전 구간에서만 이분탐색으로
+// 정밀도를 높인다.
+// ── 회전 다리의 각도 배리어 ────────────────────────────────
+// 회전하는 조각의 mouth 다리(pivot→cutPoint)가 회전 방향으로 스윕하다가 "가장
+// 가까운 고정쪽 다트 다리(pivot→mouth)"를 만나면 그 앞에서 멈춰야 한다. 이
+// 배리어는 segmentsCross로는 절대 못 잡는다 — 두 다리가 pivot을 공유하므로
+// 교차검사에서 sharesEndpoint로 제외되고, 그래서 회전 다리가 기존 다트가 열어놓은
+// "빈 웨지"를 그대로 통과해버린다(실측 2026-07-07: "가슴다트 방향으로만 오버해서
+// 회전한다"는 증상의 진짜 원인. pivot 근처 point-in-polygon 겹침판정은 gen-0
+// 정상 다트에서도 오탐이 나 못 쓴다 — 순수 각도 계산만이 강건함).
+// 배리어 대상은 dart-leg-new/old만이다. 원본 가슴다트(old-dart)는 배리어에 넣지
+// 않는다 — 1차 다트는 그 가슴다트를 "닫는" 동작이고 targetAngle 자체가 이미 G→GG
+// 각도라, min(target, ...)이 알아서 그 값에서 멈춘다(1차 풀클로징 보존, 실측 확인).
+function rotationLegBarrier(fixedClean, pivot, cutPoint, signedTarget) {
+  if (!cutPoint) return signedTarget;
+  const dir = Math.sign(signedTarget) || 1;
+  const margin = 0.3 * Math.PI / 180;   // 기존 다리와 정확히 겹쳐 합쳐지지 않도록 살짝 앞에서 멈춤
+  const angleOf = (pt) => Math.atan2(pt.y - pivot.y, pt.x - pivot.x);
+  const norm = (a) => { while (a > Math.PI) a -= 2*Math.PI; while (a <= -Math.PI) a += 2*Math.PI; return a; };
+  const cutAng = angleOf(cutPoint);
+  let best = Math.abs(signedTarget);
+  for (const s of fixedClean) {
+    if (s.type !== "dart-leg-new" && s.type !== "dart-leg-old") continue;
+    const dF = Math.hypot(s.from.x - pivot.x, s.from.y - pivot.y);
+    const dT = Math.hypot(s.to.x   - pivot.x, s.to.y   - pivot.y);
+    if (Math.max(dF, dT) < 1e-3) continue;            // 퇴화(길이 0) 다리는 무시
+    const mouth = dF > dT ? s.from : s.to;            // pivot에서 먼 끝 = mouth
+    const rel = norm(angleOf(mouth) - cutAng);
+    const gapInDir = dir > 0 ? rel : -rel;            // 회전 방향으로 얼마나 앞에 있나
+    if (gapInDir > 1e-3) best = Math.min(best, Math.max(0, gapInDir - margin));
+  }
+  return dir * best;
+}
+
+function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPoint) {
   if (Math.abs(targetAngle) < 1e-9) return targetAngle;
   const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
     s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
@@ -679,23 +855,43 @@ function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle) {
   const rotateClean = cleanForBake(rotateSegsRaw);
   if (fixedClean.length === 0 || rotateClean.length === 0) return targetAngle;
 
+  // 1) 각도 배리어: 회전 다리가 기존 다트 다리를 지나치지 못하게 상한을 먼저 좁힌다.
+  const cut = cutPoint || rotateClean[0]?.from || fixedClean[0]?.from;
+  const barrierAngle = rotationLegBarrier(fixedClean, pivot, cut, targetAngle);
+  const effTarget = (Math.abs(barrierAngle) < Math.abs(targetAngle)) ? barrierAngle : targetAngle;
+  if (Math.abs(effTarget) < 1e-9) {
+    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
+      console.log('[findMaxSafeAngle] 각도 배리어로 0까지 축소 (기존 다트 다리 인접)');
+    return effTarget;
+  }
+
+  // 2) 회전으로 새로 생기는 겹침(고정×회전 조각 간)만 회전 한계를 결정한다 —
+  // bake 결과 전체의 자기교차를 보면 같은 조각 내부의 접선 노이즈(원본부터
+  // 있던 것)까지 걸려서 멀쩡한 회전을 0으로 오판한다.
   const crossesAt = (angle) => {
-    const baked = bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle });
-    return findSelfIntersections(baked).length > 0;
+    return findRotationCollisions(fixedClean, rotateClean, pivot, angle).length > 0;
   };
 
-  if (!crossesAt(targetAngle)) return targetAngle; // 기본 다트량까지 안전
+  // 0°부터 effTarget까지 촘촘히 스캔해서 "처음으로 겹치는 지점"을 찾는다.
+  const SCAN_STEPS = 60;
+  let firstUnsafeStep = -1;
+  for (let i = 1; i <= SCAN_STEPS; i++) {
+    if (crossesAt(effTarget * (i / SCAN_STEPS))) { firstUnsafeStep = i; break; }
+  }
+  if (firstUnsafeStep === -1) return effTarget; // 경로 전체가 안전 (배리어 한계까지)
 
-  // 0(항상 안전)과 targetAngle(겹침) 사이 이분 탐색 — 22회면 라디안 기준
-  // 오차가 무시할 수준(π/2^22)까지 좁혀짐.
-  let lo = 0, hi = targetAngle;
-  for (let i = 0; i < 22; i++) {
+  // 마지막으로 안전이 확인된 스텝과 처음 겹친 스텝 사이만 이분 탐색 — 18회면
+  // 스캔 간격(effTarget/SCAN_STEPS) 기준 오차가 무시할 수준까지 좁혀진다.
+  let lo = effTarget * ((firstUnsafeStep - 1) / SCAN_STEPS);
+  let hi = effTarget * (firstUnsafeStep / SCAN_STEPS);
+  for (let i = 0; i < 18; i++) {
     const mid = (lo + hi) / 2;
     if (crossesAt(mid)) hi = mid; else lo = mid;
   }
   if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[findMaxSafeAngle] 겹침으로 축소:', (targetAngle*180/Math.PI).toFixed(2), '° →',
-      (lo*180/Math.PI).toFixed(2), '°');
+    console.log('[findMaxSafeAngle] 축소:', (targetAngle*180/Math.PI).toFixed(2), '° →',
+      (lo*180/Math.PI).toFixed(2), '° (배리어:', (effTarget*180/Math.PI).toFixed(2),
+      '°, 첫 겹침 스텝:', firstUnsafeStep, '/', SCAN_STEPS, ')');
   }
   return lo;
 }
@@ -1068,6 +1264,13 @@ function applyDartMove() {
   const p = _getDraftPts();
   if (!p) return;
 
+  // 퇴화 다트 차단: 회전량이 사실상 0이면 적용해도 입구가 안 벌어진 다리 두 개가
+  // 같은 자리에 겹쳐 방사형 잔선만 남는다 — 적용 자체를 막는다.
+  if (Math.abs(angle) < MIN_DART_ANGLE_RAD) {
+    setHint("회전량이 너무 작습니다 — 핸들을 드래그해서 다트를 벌린 뒤 적용하세요");
+    return;
+  }
+
   // 회전 중심: 앞판=BP, 뒤판=E
   const pivot = (dartMoveState.side === "back") ? p.E : p.BP;
 
@@ -1122,17 +1325,38 @@ function applyDartMove() {
   });
 
   debugCheckSegmentContinuity(bakedSegments, `${side} bakedSegments`);
-  validateBakedSegments(bakedSegments, side);
+  validateBakedSegments(bakedSegments, side, pivot);
 
-  // ── 자기교차는 판단이 아니라 차단 대상이다: 겹치는 결과는 애초에 적용되지 않는다.
-  // 드래그 상태(mode/rotateSegs/cutPoint 등)는 그대로 유지해 사용자가 각도나 조각을
-  // 바꿔서 다시 시도할 수 있게 한다.
-  const _crossings = findSelfIntersections(bakedSegments);
+  // ── 겹침은 판단이 아니라 차단 대상이다: 겹치는 결과는 애초에 적용되지 않는다.
+  // 검사 기준은 findMaxSafeAngle과 동일하게 "회전으로 새로 생기는 겹침"(고정×회전
+  // 조각 간)만 본다 — bake 전체의 자기교차를 보면 같은 조각 내부의 접선 노이즈
+  // (원본부터 있던 것)까지 걸려 멀쩡한 적용을 차단한다. 드래그 상태(mode/
+  // rotateSegs/cutPoint 등)는 그대로 유지해 사용자가 각도나 조각을 바꿔서 다시
+  // 시도할 수 있게 한다.
+  const _crossings = findRotationCollisions(_cleanFixed, _cleanRotate, pivot, dartMoveState.userAngle);
   if (_crossings.length > 0) {
     if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-      console.warn('[apply] 자기교차로 적용 차단', _crossings);
+      console.warn('[apply] 조각 간 겹침으로 적용 차단', _crossings);
     }
     setHint(`이 위치/각도는 패턴이 겹칩니다 (${_crossings.length}건) — 각도를 줄이거나 다른 조각/위치를 선택하세요`);
+    return;
+  }
+
+  // ── 델타 안전망: 이 이동이 회전 전(각도 0) 대비 자기교차를 "새로" 늘리면 거부.
+  // findRotationCollisions는 조각 본체 간 겹침은 잡지만, bake가 새로 만들어내는
+  // 잔여벽(legOld) 등이 본체를 관통하는 경우는 검사 대상에 없어 놓친다. 각도 0의
+  // 재조립(baked0)을 기준선으로 삼아 교차 수를 비교하면, 원본부터 있던 접선
+  // 노이즈는 양쪽에 똑같이 있어 상쇄되고 이 회전이 "새로" 만든 겹침만 남는다
+  // (실측 2026-07-07: 실제 순차 다트이동은 새 겹침 0건이라 오차단 없음, 비현실적
+  // 조각 선택에서만 걸림). 제1법칙 — 물리적으로 겹치는 결과는 종이가 될 수 없다.
+  const _baked0 = bakeFromSplitPieces({ fixedSegs: _cleanFixed, rotateSegs: _cleanRotate, pivot, angle: 0 });
+  const _cross0 = findSelfIntersections(_baked0, pivot).length;
+  const _crossNow = findSelfIntersections(bakedSegments, pivot).length;
+  if (_crossNow > _cross0) {
+    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+      console.warn('[apply] 회전이 새 겹침을 만들어 적용 차단 (baseline:', _cross0, '→', _crossNow, ')');
+    }
+    setHint(`이 위치/각도는 패턴이 겹칩니다 — 각도를 줄이거나 다른 조각/위치를 선택하세요`);
     return;
   }
 
@@ -1446,7 +1670,17 @@ function initDartMoveClickHandler() {
       // ── 최대 회전각 = min(기본 다트량 각도, 자기교차 없이 가능한 최대각) ──
       // 사용자가 손으로 딱 맞는 지점을 찾을 필요가 없어야 한다: 끝까지 드래그하면
       // 시스템이 물리적으로 가능한 한계에서 알아서 멈춰야 한다.
-      closeAngle = findMaxSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, closeAngle);
+      closeAngle = findMaxSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, closeAngle, dartMoveState.cutPoint);
+
+      // 회전 공간이 사실상 없으면(안전각 0.5° 미만) 여기서 차단하고 조각 선택
+      // 상태를 유지한다 — 이대로 적용하면 겹침은 없지만 입구가 안 벌어진 퇴화
+      // 다트(다리 두 개가 같은 자리에 겹친 방사선)가 남는다(실측: 무작위 재현에서
+      // "필요없는 선" 잔선의 직접 원인이 이 케이스였음).
+      if (Math.abs(closeAngle) < MIN_DART_ANGLE_RAD) {
+        setHint("이 위치/조각은 회전할 공간이 없습니다 — 다른 조각이나 위치를 선택하세요");
+        render();
+        return;
+      }
 
       dartMoveState.mode          = "drag";
       dartMoveState.baseAngle     = closeAngle;   // 드래그 최대 한계 (부호 검증 + 겹침 없는 한계)

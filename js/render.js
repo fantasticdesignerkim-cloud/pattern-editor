@@ -254,11 +254,10 @@ function drawPolylineFromPts(g, pts, cls = "pattern", color = null) {
 
 function drawAppliedSegments(g, segs, cls, color, side) {
   if (!Array.isArray(segs)) return;
-  // 블랙리스트: 다트 다리선·브릿지·참고선은 외곽선 렌더에서 제외 (다트/보조 스타일로 따로 그림)
-  // old-dart/back-shoulder-dart가 빠지면 baked 결과에 섞여 들어왔을 때 굵은 외곽선으로
-  // 그려져서 "외곽선이 이상하게 연결됐다"는 오해를 만든다.
-  const DART_SKIP = new Set(["dart-leg-new", "dart-leg-old", "dart-bridge",
-                             "old-dart", "back-shoulder-dart"]);
+  // 블랙리스트: dart-bridge(조립용 내부 연결선)만 제외한다. dart-leg-new/dart-leg-old/
+  // old-dart/back-shoulder-dart는 현재 baked 결과에 남아있는 실제 패턴선이므로
+  // 일반 외곽선과 동일하게 그린다 — "지금 붙어있는 조각이 곧 현재 패턴"이다.
+  const DART_SKIP = new Set(["dart-bridge"]);
 
   // 샘플링된 점들을 Catmull-Rom smooth path로 그릴 곡선 타입
   const CURVE_TYPES = new Set([
@@ -332,31 +331,11 @@ function drawDartMoveApplied(svg, p, f, B){
   function renderApp(app, color) {
     if (!app?.bakedSegments?.length) return;
     const g = E("g");
-    // bakedSegments 전체를 drawAppliedSegments에 전달
-    // (dart-leg-new, dart-bridge는 내부에서 블랙리스트로 제외됨)
-    const segs = app.bakedSegments;
-    // 참고선(dart-leg-old/old-dart/back-shoulder-dart)은 기본 숨김 — 패턴사가
-    // 이미 판단해서 다트를 옮긴 뒤에는 "여기 예전에 다트가 있었다"는 흔적이
-    // 보통은 필요 없다(사용자 확인). "참고선(옛 다트 흔적)" 체크박스를 켜면
-    // 얇은 점선으로 볼 수 있게 옵션으로만 남겨둔다. bakeFromSplitPieces가
-    // 폐곡선을 만들려고 쓰는 참고선은 켜든 끄든 bakedSegments 데이터에는
-    // 그대로 남아있음 — 화면 표시 여부만 바뀜.
-    const REF_TYPES = new Set(["dart-leg-old", "old-dart", "back-shoulder-dart"]);
-    const showRef = document.getElementById("chkRefDart")?.checked === true;
-    const legs = app.bakedSegments.filter(s =>
-      s.type === "dart-leg-new" || (showRef && REF_TYPES.has(s.type)));
-    drawAppliedSegments(g, segs, "pattern", color, app.side);
-    const _dartColor = color || (app.side === "back" ? "#c0392b" : "#2980b9");
-    const _mkDart = (a, b, isRef) => {
-      const l = Ln(a, b, "dart dart-struct");
-      l.setAttribute("style", isRef
-        ? `stroke:${_dartColor};stroke-width:0.6;stroke-dasharray:4 3;opacity:0.55;`
-        : `stroke:${_dartColor};stroke-width:1.2;`);
-      return l;
-    };
-    for (const leg of legs) {
-      if (leg.from && leg.to) g.appendChild(_mkDart(leg.from, leg.to, REF_TYPES.has(leg.type)));
-    }
+    // 현재 baked 결과(bakedSegments)는 "지금 붙어있는 하나의 평면 패턴"이다 —
+    // 옛 다트 위치의 "참고선"이라는 별도 카테고리를 두지 않는다. dart-leg-new/
+    // dart-leg-old(가슴다트 등 잔여 다리 포함)는 전부 drawAppliedSegments를 통해
+    // 일반 패턴선과 동일하게 그린다.
+    drawAppliedSegments(g, app.bakedSegments, "pattern", color, app.side);
     svg.appendChild(g);
   }
 
