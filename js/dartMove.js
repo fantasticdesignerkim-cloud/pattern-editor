@@ -544,6 +544,30 @@ function normalizeBakedSegments(segs, pivot) {
   return arr;
 }
 
+// ── sumOpenDartAngle: 현재 열린 다트들의 pivot(BP) 기준 각도 합 (라디안) ──
+// 다트 예산 게이트의 "used" 측정값. 반드시 각도로 계산한다 — 폭(mouthWidth)은 pivot
+// 거리에 비례해 보존되지 않으므로 예산 회계에 쓰면 안 된다(2026-07-03 #5의 교훈).
+// 열린 다트 = normalize를 통과한, 입(두 바깥 끝점)이 EPS_CLOSED_DART 이상 벌어진
+// 인접 다리쌍. 각 쌍의 두 바깥 끝점이 pivot에서 이루는 사잇각을 더한다.
+function sumOpenDartAngle(segs, pivot) {
+  if (!Array.isArray(segs) || segs.length === 0 || !pivot) return 0;
+  const isLeg = (s) => s && (s.type === "dart-leg-new" || s.type === "dart-leg-old");
+  const near  = (a, b, e) => a && b && Math.hypot(a.x - b.x, a.y - b.y) < e;
+  let total = 0;
+  for (let i = 0; i < segs.length; i++) {
+    const a = segs[i], b = segs[(i + 1) % segs.length];
+    if (isLeg(a) && isLeg(b) &&
+        near(a.to, pivot, EPS_CLOSED_DART) &&
+        near(b.from, pivot, EPS_CLOSED_DART) &&
+        Math.hypot(a.from.x - b.to.x, a.from.y - b.to.y) >= EPS_CLOSED_DART) {
+      const v1x = a.from.x - pivot.x, v1y = a.from.y - pivot.y;
+      const v2x = b.to.x   - pivot.x, v2y = b.to.y   - pivot.y;
+      total += Math.abs(Math.atan2(v1x * v2y - v1y * v2x, v1x * v2x + v1y * v2y));
+    }
+  }
+  return total;
+}
+
 // ── 다트 다리 타입 판별 / 클릭 가능 판별 ─────────
 // ── G점을 BP 중심으로 회전시켜 GG(가슴다트 닫힌 위치) 계산 ──
 // buildFrontOutline의 GG 산출 공식과 동일 (B/4 - 2.5도 회전)
@@ -1428,6 +1452,38 @@ function applyDartMove() {
       console.warn('[apply] 회전이 새 겹침을 만들어 적용 차단 (baseline:', _cross0, '→', _crossNow, ')');
     }
     setHint(`이 위치/각도는 패턴이 겹칩니다 — 각도를 줄이거나 다른 조각/위치를 선택하세요`);
+    return;
+  }
+
+  // ── 다트 예산 게이트 (사후, 각도 기준) ──
+  // 지배 결정(2026-07-08): 다중다트는 매 다트에 기본각을 복제하는 게 아니라, 적용 후
+  // 열린 다트들의 BP 기준 각도 합이 이 옷 전체의 기본 다트각 "예산"을 넘지 않아야 한다.
+  // 정상적인 "다른 위치" 다트이동은 재분배(새 다트 열림 ↔ 기존 다트 닫힘)라 예산을
+  // 보존하지만(실측 90%가 ≤1.05×budget), 병리적 이동(기존 다트 다리를 팽창 방향으로
+  // 끌고 감)은 총합을 2~8배로 폭발시킨다(실측 최대 149.8°=8.2×, 7다트 부채꼴).
+  // ★ 사전 clamp(remaining=budget-used로 새 다트 축소)가 아니라 사후 게이트다 —
+  //   잔여 다트가 예산을 먹고 있어도 "닫으며 여는" 정상 재분배를 막지 않기 위함.
+  //   폭(mouthWidth)이 아니라 반드시 pivot 기준 각도로만 계산한다(폭은 pivot 거리에
+  //   비례해 보존되지 않음 — 2026-07-03 #5 calcCloseAngleByMouthPair 폭주 버그의 교훈).
+  // 임계값 1.15×: 실측 분포가 이봉형(정상 ≤1.05× / 병리 ≥2×)이라 그 사이 빈 구간의
+  //   보수적 값. (1.25×까지 올려도 안전하지만 우선 안전하게 1.15×.)
+  const DART_BUDGET_TOL = 1.15;
+  let _budgetRad;
+  const _bB = n("inpB");
+  if (side === "back") {
+    const _bd = createDraft(_bB, n("inpW"), n("inpBL"));
+    _budgetRad = Math.abs(calcBackBaseDartAngle(buildBackShoulderDartInfo(_bd.formula, _bd.pts, _bB)));
+  } else {
+    _budgetRad = Math.abs(calcFrontBaseDartAngle(p, _bB));
+  }
+  const _usedRad = sumOpenDartAngle(bakedSegments, pivot);
+  if (_budgetRad > 1e-6 && _usedRad > _budgetRad * DART_BUDGET_TOL) {
+    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+      console.warn('[apply] 다트 예산 초과로 차단',
+        { usedDeg: +(_usedRad*180/Math.PI).toFixed(1), budgetDeg: +(_budgetRad*180/Math.PI).toFixed(1),
+          ratio: +(_usedRad/_budgetRad).toFixed(2) });
+    }
+    setHint(`이 위치/조각은 가슴다트를 복제합니다 (열린 다트 합 ${(_usedRad*180/Math.PI).toFixed(0)}° > 예산 ${(_budgetRad*180/Math.PI).toFixed(0)}°) — 다른 조각/위치를 선택하세요`);
     return;
   }
 
