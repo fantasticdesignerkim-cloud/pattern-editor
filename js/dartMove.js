@@ -1342,15 +1342,24 @@ function applyDartMove() {
     return;
   }
 
-  // ── 델타 안전망: 이 이동이 회전 전(각도 0) 대비 자기교차를 "새로" 늘리면 거부.
+  // ── 델타 안전망: 이 이동이 "이동 전 형상" 대비 자기교차를 새로 늘리면 거부.
   // findRotationCollisions는 조각 본체 간 겹침은 잡지만, bake가 새로 만들어내는
-  // 잔여벽(legOld) 등이 본체를 관통하는 경우는 검사 대상에 없어 놓친다. 각도 0의
-  // 재조립(baked0)을 기준선으로 삼아 교차 수를 비교하면, 원본부터 있던 접선
-  // 노이즈는 양쪽에 똑같이 있어 상쇄되고 이 회전이 "새로" 만든 겹침만 남는다
-  // (실측 2026-07-07: 실제 순차 다트이동은 새 겹침 0건이라 오차단 없음, 비현실적
-  // 조각 선택에서만 걸림). 제1법칙 — 물리적으로 겹치는 결과는 종이가 될 수 없다.
-  const _baked0 = bakeFromSplitPieces({ fixedSegs: _cleanFixed, rotateSegs: _cleanRotate, pivot, angle: 0 });
-  const _cross0 = findSelfIntersections(_baked0, pivot).length;
+  // 잔여벽(legOld) 등이 본체를 관통하는 경우는 검사 대상에 없어 놓친다.
+  //
+  // 기준선은 반드시 "이동 전 저장된 검증필 형상"(appliedFront/Back.bakedSegments)을
+  // 쓴다. 예전엔 각도 0 재조립(baked0)을 기준선으로 삼았는데, bakeFromSplitPieces의
+  // 각도 0 재조립이 항등이 아니라서 깨끗한 저장 형상(교차 0)을 split→rebake하면
+  // 없던 교차가 생겼다(실측: 저장본 0 → baked0 2). 그 오염된 기준선이 진짜로 몸판을
+  // 관통하는 결과(교차 1)를 "기준선보다 적다"며 통과시켜 영구 누적됐다(스트레스
+  // 60런×8세대에서 겹침 적용 59건, 13/60 run이 교차로 종료). 저장 형상은 이미 이
+  // 게이트를 통과한 깨끗한 형상이므로 정직한 기준선이다 — 불변식: 정상 다트 이동은
+  // 이동 전보다 자기교차를 늘리지 않는다. (기준선 교체 후 스트레스: 겹침 적용
+  // 59→0건, 교차 종료 13→0건, 정상 적용 480건 그대로 — 오차단 0.)
+  // 제1법칙 — 물리적으로 겹치는 결과는 종이가 될 수 없다.
+  const _prevBaked = (side === "back")
+    ? dartMoveState.appliedBack?.bakedSegments
+    : dartMoveState.appliedFront?.bakedSegments;
+  const _cross0 = _prevBaked ? findSelfIntersections(_prevBaked, pivot).length : 0;
   const _crossNow = findSelfIntersections(bakedSegments, pivot).length;
   if (_crossNow > _cross0) {
     if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
