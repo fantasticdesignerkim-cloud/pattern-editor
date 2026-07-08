@@ -506,6 +506,9 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle }) {
 //   남기는 쪽으로 안전하게 치우침). 검증: normalize를 3열림 부채꼴에 적용해도 3열림 유지,
 //   세대 간 refeed에서도 2열림 다중다트 도달 가능(열린 다트 파괴 0).
 const EPS_CLOSED_DART = 0.05;
+// 다트 예산 게이트 허용폭 (budgetMaxAngle·applyDartMove 공용). 실측 분포 이봉형
+// (정상 ≤1.05× / 병리 ≥2×)의 빈 구간이라 1.15×는 임시 허용폭 — 1.25×까지 안전.
+const DART_BUDGET_TOL = 1.15;
 function normalizeBakedSegments(segs, pivot) {
   if (!Array.isArray(segs) || segs.length === 0 || !pivot) return segs;
   const isLeg = (s) => s && (s.type === "dart-leg-new" || s.type === "dart-leg-old");
@@ -974,6 +977,55 @@ function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPo
       '°, 첫 겹침 스텝:', firstUnsafeStep, '/', SCAN_STEPS, ')');
   }
   return lo;
+}
+
+// ── budget-aware 최대 각도: 이 회전의 결과 총합(열린 다트 BP 각도 합)이 예산을 넘지
+// 않는 최대 각도. findMaxSafeAngle과 min으로 결합해 baseAngle(드래그 한계)에 반영하면,
+// 사용자가 손으로 드래그할 때 이미 예산 한계에서 멈춘다(적용 버튼을 눌러야 막히는 게
+// 아니라). 적용 시점 budget 게이트는 최종 안전망으로 그대로 유지된다.
+//
+// 판정은 findMaxSafeAngle과 같은 스캔+이분탐색이되, 기준이 "자기교차"가 아니라
+// "sumOpenDartAngle > budget×DART_BUDGET_TOL"이다. 정상 재분배는 총합이 예산에서
+// 보존되므로 targetAngle 전체가 통과(축소 없음, 실측 186/190), 병리적 팽창 이동만
+// 총합이 예산을 넘는 각도에서 잘린다(실측 4/190이 18.2°→1.4°로 축소). 비단조
+// (다트가 0폭을 지나며 총합이 출렁이는) 경우를 놓치지 않도록 끝점만 보지 않고
+// 경로를 스캔한다.
+function budgetMaxAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, budgetRad) {
+  if (Math.abs(targetAngle) < 1e-9 || !(budgetRad > 1e-6)) return targetAngle;
+  const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
+    s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
+  const fixedClean  = cleanForBake(fixedSegsRaw);
+  const rotateClean = cleanForBake(rotateSegsRaw);
+  if (fixedClean.length === 0 || rotateClean.length === 0) return targetAngle;
+
+  const limit  = budgetRad * DART_BUDGET_TOL;
+  const dir    = Math.sign(targetAngle) || 1;
+  const target = Math.abs(targetAngle);
+  const overAt = (mag) => {
+    const baked = normalizeBakedSegments(
+      bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle: dir * mag }),
+      pivot);
+    return sumOpenDartAngle(baked, pivot) > limit;
+  };
+
+  const SCAN_STEPS = 24;
+  let firstOverStep = -1;
+  for (let i = 1; i <= SCAN_STEPS; i++) {
+    if (overAt(target * (i / SCAN_STEPS))) { firstOverStep = i; break; }
+  }
+  if (firstOverStep === -1) return targetAngle;   // 경로 전체가 예산 이내 (정상 재분배)
+
+  let lo = target * ((firstOverStep - 1) / SCAN_STEPS);
+  let hi = target * (firstOverStep / SCAN_STEPS);
+  for (let i = 0; i < 16; i++) {
+    const mid = (lo + hi) / 2;
+    if (overAt(mid)) hi = mid; else lo = mid;
+  }
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    console.log('[budgetMaxAngle] 예산 축소:', (target*180/Math.PI).toFixed(2), '° →',
+      (lo*180/Math.PI).toFixed(2), '° (예산:', (budgetRad*180/Math.PI).toFixed(2), '°)');
+  }
+  return dir * lo;
 }
 
 // ── 조각의 mouth 끝점 추출 ──
@@ -1465,9 +1517,8 @@ function applyDartMove() {
   //   잔여 다트가 예산을 먹고 있어도 "닫으며 여는" 정상 재분배를 막지 않기 위함.
   //   폭(mouthWidth)이 아니라 반드시 pivot 기준 각도로만 계산한다(폭은 pivot 거리에
   //   비례해 보존되지 않음 — 2026-07-03 #5 calcCloseAngleByMouthPair 폭주 버그의 교훈).
-  // 임계값 1.15×: 실측 분포가 이봉형(정상 ≤1.05× / 병리 ≥2×)이라 그 사이 빈 구간의
-  //   보수적 값. (1.25×까지 올려도 안전하지만 우선 안전하게 1.15×.)
-  const DART_BUDGET_TOL = 1.15;
+  // 임계값 DART_BUDGET_TOL(=1.15×, 모듈 상단 상수): 실측 분포가 이봉형(정상 ≤1.05× /
+  //   병리 ≥2×)이라 그 사이 빈 구간의 보수적 값. (1.25×까지 올려도 안전.)
   let _budgetRad;
   const _bB = n("inpB");
   if (side === "back") {
@@ -1798,6 +1849,16 @@ function initDartMoveClickHandler() {
       // 사용자가 손으로 딱 맞는 지점을 찾을 필요가 없어야 한다: 끝까지 드래그하면
       // 시스템이 물리적으로 가능한 한계에서 알아서 멈춰야 한다.
       closeAngle = findMaxSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, closeAngle, dartMoveState.cutPoint);
+
+      // ── budget 반영: 드래그 한계가 예산(기본 가슴다트 각도)을 넘지 못하게 미리 줄인다.
+      // 이러면 사용자가 손으로 드래그할 때 이미 예산 한계에서 멈춘다(적용 시점 게이트가
+      // 막을 때까지 가지 않음). 정상 재분배는 예산이 보존되므로 축소 없음, 병리적
+      // 팽창 이동만 총합이 예산을 넘는 각도에서 잘린다. 적용 시점 budget 게이트는
+      // 최종 안전망으로 유지된다.
+      const _budgetRad = (dartMoveState.side === "back")
+        ? Math.abs(calcBackBaseDartAngle(buildBackShoulderDartInfo(_d.formula, _d.pts, _B)))
+        : Math.abs(calcFrontBaseDartAngle(_d.pts, _B));
+      closeAngle = budgetMaxAngle(_fixedSegs, _rotateSegs, _pivotSign, closeAngle, _budgetRad);
 
       // 회전 공간이 사실상 없으면(안전각 0.5° 미만) 여기서 차단하고 조각 선택
       // 상태를 유지한다 — 이대로 적용하면 겹침은 없지만 입구가 안 벌어진 퇴화
