@@ -1028,6 +1028,41 @@ function budgetMaxAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, budgetR
   return dir * lo;
 }
 
+// ── 부호 보존 교정: 회전 방향(부호)을 "다트량 보존" 기준으로 최종 결정 ──
+// (2026-07-08 분석) 회전 크기(θ)는 정확하다 — 새 다트 각도 = θ로 선형 대응. 틀린 건
+// 회전 방향(부호)이다: 다중다트(baked) 케이스에서 choosePhysicalCloseAngle의 기하
+// 판정(다각형 side)이 기존 다트를 "닫는 쪽"이 아니라 "여는 쪽"을 골라 총합이 2~8배로
+// 폭발했다(실측: 같은 cut을 부호만 뒤집으면 3×→1× 보존). 물리적으로 올바른 다트이동은
+// BP 각도 총합을 보존하므로(제1법칙), +θ/−θ 중 normalize 후 sumOpenDartAngle이 작은
+// (=예산에 가까운) 쪽이 재분배 방향이다. 기하 판정은 1차 후보로만 쓰고 여기서 교정.
+// θ 크기는 건드리지 않는다(부호만). 폭 미사용, BP 각도 총합만 사용.
+function chooseConservingSign(fixedSegsRaw, rotateSegsRaw, pivot, signedAngle) {
+  if (Math.abs(signedAngle) < 1e-9) return signedAngle;
+  const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
+    s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
+  const fixedClean  = cleanForBake(fixedSegsRaw);
+  const rotateClean = cleanForBake(rotateSegsRaw);
+  if (fixedClean.length === 0 || rotateClean.length === 0) return signedAngle;
+
+  const mag = Math.abs(signedAngle);
+  const geomSign = Math.sign(signedAngle) || 1;
+  const totalFor = (s) => sumOpenDartAngle(
+    normalizeBakedSegments(
+      bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle: s * mag }),
+      pivot),
+    pivot);
+  const totalPlus  = totalFor(+1);
+  const totalMinus = totalFor(-1);
+  // 동률(두 방향 총합 차이 무시할 수준)이면 1차 기하 판정을 유지한다.
+  if (Math.abs(totalPlus - totalMinus) < 1e-4) return geomSign * mag;
+  const consSign = (totalPlus < totalMinus) ? +1 : -1;
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE && consSign !== geomSign) {
+    console.log('[chooseConservingSign] 부호 교정:', geomSign, '→', consSign,
+      '(+θ 총합:', (totalPlus*180/Math.PI).toFixed(1), '° / −θ 총합:', (totalMinus*180/Math.PI).toFixed(1), '°)');
+  }
+  return consSign * mag;
+}
+
 // ── 조각의 mouth 끝점 추출 ──
 function pieceMouthPoint(piece, pivot) {
   if (piece?.openPts?.length) {
@@ -1844,6 +1879,12 @@ function initDartMoveClickHandler() {
       // 1차(splitFront/BackOutline)는 segsFull이 없으므로 기존 segs 그대로 사용.
       const _rotateSegs = rotatePiece.segs;
       const _fixedSegs  = fixedPiece.segsFull || fixedPiece.segs;
+
+      // ── 부호 보존 교정: 기하 판정(choosePhysicalCloseAngle)은 1차 후보로만 쓰고,
+      // 최종 부호는 "다트량 보존"(BP 각도 총합이 예산에 가까운 쪽)으로 결정한다.
+      // 크기(θ)는 그대로 두고 부호만 바꾼다. 이게 기존 다트를 팽창시키는 잘못된 방향을
+      // 재분배(닫으며 여는) 방향으로 교정한다 (2026-07-08 분석).
+      closeAngle = chooseConservingSign(_fixedSegs, _rotateSegs, _pivotSign, closeAngle);
 
       // ── 최대 회전각 = min(기본 다트량 각도, 자기교차 없이 가능한 최대각) ──
       // 사용자가 손으로 딱 맞는 지점을 찾을 필요가 없어야 한다: 끝까지 드래그하면
