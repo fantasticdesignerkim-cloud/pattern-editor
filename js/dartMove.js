@@ -488,6 +488,62 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle }) {
   return finalSegments;
 }
 
+// ── normalizeBakedSegments: bake 결과를 "현재 형상 하나"로 정리 (젤리/물 모델 1단계) ──
+// 지배 원칙(CLAUDE.md 최상단): 자르고→돌리고→붙이면 결과는 현재 형상 하나다.
+// 한마디로: "닫힌 흔적은 녹이고, 열린 다트는 현재 외곽선으로 남긴다."
+//
+// 유일 불변식 (케이스별 삭제가 아니라 이 하나로 통합):
+//   제거 = pivot을 떠나 pivot으로 되돌아오되 "입"(두 바깥 끝점 거리)이 0인 다트 다리쌍.
+//          = 면적 0 서브패스 = 닫힌 다트 / 폭0 다트 / pivot 왕복 스파이크 /
+//            역방향 중복 다리 / 0폭으로 닫힌 과거 legOld. (전부 이 조건 하나)
+//   유지 = 입이 벌어진(면적>0) 다리쌍 = 지금 열린 다트 = 현재 외곽선. 부채꼴 다중다트 포함.
+// bake 출력은 이미 pivot→…→pivot 순서 루프라 이 판정이 로컬하게 성립한다.
+//
+// EPS_CLOSED_DART=0.05cm 근거 (2026-07-08 실측, 무작위 50런×6세대 = 다리쌍 488개):
+//   닫힌 다트는 정확히 0.00cm에 응집(두 다리 완전 중첩, float drift<1e-4).
+//   적용 가능한 가장 작은 정상 다트 입 ≈ 0.087cm(0.5°×짧은 다리, MIN_DART_ANGLE_RAD 하한).
+//   0.05는 그 사이 빈 구간 — 닫힘만 녹이고 실제 다트는 전부 보존한다(지우는 쪽이 아니라
+//   남기는 쪽으로 안전하게 치우침). 검증: normalize를 3열림 부채꼴에 적용해도 3열림 유지,
+//   세대 간 refeed에서도 2열림 다중다트 도달 가능(열린 다트 파괴 0).
+const EPS_CLOSED_DART = 0.05;
+function normalizeBakedSegments(segs, pivot) {
+  if (!Array.isArray(segs) || segs.length === 0 || !pivot) return segs;
+  const isLeg = (s) => s && (s.type === "dart-leg-new" || s.type === "dart-leg-old");
+  const near  = (a, b, e) => a && b && Math.hypot(a.x - b.x, a.y - b.y) < e;
+
+  // 1) 폭 0(퇴화) 세그먼트 먼저 제거
+  let arr = segs.filter(s => s && s.from && s.to &&
+    Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y) > 1e-6);
+
+  // 2) 닫힌 다리쌍(면적 0 서브패스) 반복 제거 — 삼중 이상 겹침도 fixpoint까지 벗겨냄.
+  //    루프 시작(legOut)·끝(legIn)은 현재 열린 다트라 a.to가 pivot이 아니거나 입이
+  //    벌어져 있어 이 조건에 안 걸린다(제거 대상은 항상 배열 내부의 닫힌 잔재).
+  let changed = true, guard = 0;
+  while (changed && guard++ < 1000) {
+    changed = false;
+    for (let i = 0; i < arr.length; i++) {
+      const iN = (i + 1) % arr.length;
+      const a = arr[i], b = arr[iN];
+      if (isLeg(a) && isLeg(b) &&
+          near(a.to,   pivot, EPS_CLOSED_DART) &&
+          near(b.from, pivot, EPS_CLOSED_DART) &&
+          near(a.from, b.to,  EPS_CLOSED_DART)) {
+        // 제거 전 이음새 스냅: 앞 세그먼트 끝점을 뒤 세그먼트 시작점에 정확히 맞춰
+        // 연속성 보존(닫힌 다트는 실측상 정확히 0폭이라 대개 no-op, drift 방어용).
+        const prev = arr[(i - 1 + arr.length) % arr.length];
+        const next = arr[(iN + 1) % arr.length];
+        if (prev && next && prev !== next && prev !== a && next !== b) {
+          next.from = { ...prev.to };
+        }
+        arr = arr.filter((_, k) => k !== i && k !== iN);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return arr;
+}
+
 // ── 다트 다리 타입 판별 / 클릭 가능 판별 ─────────
 // ── G점을 BP 중심으로 회전시켜 GG(가슴다트 닫힌 위치) 계산 ──
 // buildFrontOutline의 GG 산출 공식과 동일 (B/4 - 2.5도 회전)
@@ -1317,12 +1373,18 @@ function applyDartMove() {
   }
 
   // split 결과로 직접 bake (fixedSegs 그대로, rotateSegs만 회전)
-  const bakedSegments = bakeFromSplitPieces({
+  // 파이프라인: cut → rotate → bake → normalize → validate → render
+  let bakedSegments = bakeFromSplitPieces({
     fixedSegs:  _cleanFixed,
     rotateSegs: _cleanRotate,
     pivot,
     angle:      dartMoveState.userAngle,
   });
+
+  // normalize: 닫힌 다트 흔적(면적 0 서브패스)을 녹여 "현재 형상 하나"로 정리.
+  // 열린 다트(부채꼴 다중다트 포함)는 그대로 보존. 이 결과가 저장·렌더·다음 세대
+  // split의 입력이 되므로 과거 찌꺼기가 누적되지 않는다(젤리/물 지배 모델).
+  bakedSegments = normalizeBakedSegments(bakedSegments, pivot);
 
   debugCheckSegmentContinuity(bakedSegments, `${side} bakedSegments`);
   validateBakedSegments(bakedSegments, side, pivot);
