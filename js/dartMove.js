@@ -1028,39 +1028,39 @@ function budgetMaxAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, budgetR
   return dir * lo;
 }
 
-// ── 부호 보존 교정: 회전 방향(부호)을 "다트량 보존" 기준으로 최종 결정 ──
-// (2026-07-08 분석) 회전 크기(θ)는 정확하다 — 새 다트 각도 = θ로 선형 대응. 틀린 건
-// 회전 방향(부호)이다: 다중다트(baked) 케이스에서 choosePhysicalCloseAngle의 기하
-// 판정(다각형 side)이 기존 다트를 "닫는 쪽"이 아니라 "여는 쪽"을 골라 총합이 2~8배로
-// 폭발했다(실측: 같은 cut을 부호만 뒤집으면 3×→1× 보존). 물리적으로 올바른 다트이동은
-// BP 각도 총합을 보존하므로(제1법칙), +θ/−θ 중 normalize 후 sumOpenDartAngle이 작은
-// (=예산에 가까운) 쪽이 재분배 방향이다. 기하 판정은 1차 후보로만 쓰고 여기서 교정.
-// θ 크기는 건드리지 않는다(부호만). 폭 미사용, BP 각도 총합만 사용.
-function chooseConservingSign(fixedSegsRaw, rotateSegsRaw, pivot, signedAngle) {
-  if (Math.abs(signedAngle) < 1e-9) return signedAngle;
-  const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
-    s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
-  const fixedClean  = cleanForBake(fixedSegsRaw);
-  const rotateClean = cleanForBake(rotateSegsRaw);
-  if (fixedClean.length === 0 || rotateClean.length === 0) return signedAngle;
-
-  const mag = Math.abs(signedAngle);
-  const geomSign = Math.sign(signedAngle) || 1;
-  const totalFor = (s) => sumOpenDartAngle(
-    normalizeBakedSegments(
-      bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle: s * mag }),
-      pivot),
-    pivot);
-  const totalPlus  = totalFor(+1);
-  const totalMinus = totalFor(-1);
-  // 동률(두 방향 총합 차이 무시할 수준)이면 1차 기하 판정을 유지한다.
-  if (Math.abs(totalPlus - totalMinus) < 1e-4) return geomSign * mag;
-  const consSign = (totalPlus < totalMinus) ? +1 : -1;
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE && consSign !== geomSign) {
-    console.log('[chooseConservingSign] 부호 교정:', geomSign, '→', consSign,
-      '(+θ 총합:', (totalPlus*180/Math.PI).toFixed(1), '° / −θ 총합:', (totalMinus*180/Math.PI).toFixed(1), '°)');
+// ── 부호 + 회전 한계 통합 선택 (2026-07-08 재설계) ──
+// 회전 크기(θ)는 정확하다 — 새 다트 각도 = θ로 선형 대응. 틀린 건 회전 방향(부호).
+// 두 부호(+/−)를 각각 실제 파이프라인(findMaxSafeAngle → budgetMaxAngle)까지 통과시켜
+// "실제 사용 가능한 각도"를 구하고, 그 값이 큰 부호를 최종 선택한다.
+//   - 팽창 부호: budgetMaxAngle이 예산 넘는 지점에서 잘라 작아짐 → 짐(다트량 보존).
+//   - 회전 공간 없는 부호: findMaxSafeAngle이 0으로 잘라 짐 → 반대 부호에 공간이 있으면
+//     그쪽을 자동 선택(no-room 오차단 회복).
+//   - 둘 다 0: 진짜 no-room(호출부에서 MIN 미만이면 차단).
+// 동률(차이 무시)이면 1차 기하 부호(geomSign) 유지.
+//
+// ★ 이전 chooseConservingSign(폐기)은 full 각도에서 sumOpenDartAngle을 재서 부호를
+//   골랐는데, full 각도에선 두 부호 다 자기교차하는 "쓰레기 형상"이라 총합이 무의미했다.
+//   그 결과 회전 공간이 실제로 있는 반대 부호를 놓쳐 "회전 공간 없음"으로 오차단했다
+//   (실측: 다중다트 상태의 no-room 65건 중 51건=78%가 이 버그). 여기서는 total이 아니라
+//   "파이프라인 통과 후 사용 가능 각도"로 판정하므로 팽창/공간 문제를 동시에 올바로 처리.
+// θ 크기(baseMag)는 안 건드리고 부호만 재선택. 폭 미사용, BP 각도만 사용.
+function chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot, baseMag, cutPoint, budgetRad, geomSign) {
+  if (baseMag < 1e-9) return 0;
+  const usable = (s) => {
+    let a = findMaxSafeAngle(fixedSegs, rotateSegs, pivot, s * baseMag, cutPoint);
+    a = budgetMaxAngle(fixedSegs, rotateSegs, pivot, a, budgetRad);
+    return a;
+  };
+  const sign0 = Math.sign(geomSign) || 1;
+  const aGeom = usable(sign0);
+  const aOpp  = usable(-sign0);
+  const mGeom = Math.abs(aGeom), mOpp = Math.abs(aOpp);
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE && mOpp > mGeom + 1e-4) {
+    console.log('[chooseSignedBaseAngle] 반대 부호 선택 (사용가능:',
+      (mGeom*180/Math.PI).toFixed(1), '° → ', (mOpp*180/Math.PI).toFixed(1), '°)');
   }
-  return consSign * mag;
+  if (Math.abs(mGeom - mOpp) < 1e-4) return aGeom;   // 동률 → 기하 부호 유지
+  return (mGeom >= mOpp) ? aGeom : aOpp;
 }
 
 // ── 조각의 mouth 끝점 추출 ──
@@ -1880,26 +1880,20 @@ function initDartMoveClickHandler() {
       const _rotateSegs = rotatePiece.segs;
       const _fixedSegs  = fixedPiece.segsFull || fixedPiece.segs;
 
-      // ── 부호 보존 교정: 기하 판정(choosePhysicalCloseAngle)은 1차 후보로만 쓰고,
-      // 최종 부호는 "다트량 보존"(BP 각도 총합이 예산에 가까운 쪽)으로 결정한다.
-      // 크기(θ)는 그대로 두고 부호만 바꾼다. 이게 기존 다트를 팽창시키는 잘못된 방향을
-      // 재분배(닫으며 여는) 방향으로 교정한다 (2026-07-08 분석).
-      closeAngle = chooseConservingSign(_fixedSegs, _rotateSegs, _pivotSign, closeAngle);
-
-      // ── 최대 회전각 = min(기본 다트량 각도, 자기교차 없이 가능한 최대각) ──
-      // 사용자가 손으로 딱 맞는 지점을 찾을 필요가 없어야 한다: 끝까지 드래그하면
-      // 시스템이 물리적으로 가능한 한계에서 알아서 멈춰야 한다.
-      closeAngle = findMaxSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, closeAngle, dartMoveState.cutPoint);
-
-      // ── budget 반영: 드래그 한계가 예산(기본 가슴다트 각도)을 넘지 못하게 미리 줄인다.
-      // 이러면 사용자가 손으로 드래그할 때 이미 예산 한계에서 멈춘다(적용 시점 게이트가
-      // 막을 때까지 가지 않음). 정상 재분배는 예산이 보존되므로 축소 없음, 병리적
-      // 팽창 이동만 총합이 예산을 넘는 각도에서 잘린다. 적용 시점 budget 게이트는
-      // 최종 안전망으로 유지된다.
+      // ── 부호 + 회전 한계 통합 결정 (2026-07-08 재설계) ──
+      // 기하 판정(choosePhysicalCloseAngle)은 1차 부호 후보로만 쓴다. 최종은 두 부호를
+      // 각각 findMaxSafeAngle+budgetMaxAngle까지 통과시켜 "실제 사용 가능한 각도가 큰 쪽"을
+      // 고른다: 팽창 부호는 budgetMaxAngle이 작게 깎아 지고(다트량 보존), 회전 공간 없는
+      // 부호는 findMaxSafeAngle이 0으로 깎아 지므로 반대 부호에 공간이 있으면 자동 선택된다
+      // (예전 chooseConservingSign이 full 각도의 자기교차 총합으로 부호를 골라 회전 공간
+      // 있는 반대 부호를 놓치던 no-room 오차단 — 78% — 을 근본 해소). θ 크기는 불변.
+      // 드래그는 [0, baseAngle]로 clamp되므로 손이 이미 물리/예산 한계에서 멈춘다.
+      // 적용 시점 budget 게이트/자기교차 검사는 최종 안전망으로 유지.
       const _budgetRad = (dartMoveState.side === "back")
         ? Math.abs(calcBackBaseDartAngle(buildBackShoulderDartInfo(_d.formula, _d.pts, _B)))
         : Math.abs(calcFrontBaseDartAngle(_d.pts, _B));
-      closeAngle = budgetMaxAngle(_fixedSegs, _rotateSegs, _pivotSign, closeAngle, _budgetRad);
+      closeAngle = chooseSignedBaseAngle(_fixedSegs, _rotateSegs, _pivotSign,
+        Math.abs(closeAngle), dartMoveState.cutPoint, _budgetRad, Math.sign(closeAngle) || 1);
 
       // 회전 공간이 사실상 없으면(안전각 0.5° 미만) 여기서 차단하고 조각 선택
       // 상태를 유지한다 — 이대로 적용하면 겹침은 없지만 입구가 안 벌어진 퇴화
