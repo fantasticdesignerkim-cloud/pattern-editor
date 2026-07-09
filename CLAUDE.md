@@ -483,6 +483,38 @@ selfX/breaks/closed 0. 콘솔 오류 0. 캐시 버전 `?v=2026070725`.
 **남은 것**: 남은 no-room 22건은 양쪽 부호 다 즉시 자기교차하는 진짜 불가 위치(정상
 차단). 뒤판 중심 검증은 여전히 미완.
 
+### findMaxSafeAngle 델타 전환 시도 → 폐기 (2026-07-08) — 다음에 재시도 금지
+
+**시도**: `findMaxSafeAngle`의 회전 한계 판정을 `findRotationCollisions`(고정×회전 조각
+쌍)에서 **적용 게이트와 같은 bake-delta 자기교차 기준**(`bake(θ)→normalize→
+findSelfIntersections`가 각도0 기준선보다 늘면 unsafe)으로 단순 교체. 동기: 실측에서
+`findRotationCollisions`가 실재하지 않는 겹침을 신고하는 거짓 양성(rotColl>0인데 실제
+bake 자기교차=0)이 있어 일부 다중다트에서 과소회전("여유 있는데 회전 못함")이 났음.
+
+**결과: 실패 → 되돌림.** 첫 다트 기본 케이스(front-waist/side-seam/front-center 등)가
+**18.2° → 1.3°로 과소회전**(findRotationCollisions 기준 18.2° vs 델타 기준 1.3°, 실측
+확인). 원인: 델타-bake **경로 스캔**이 **회전 중 일시적으로 나타나는 접선 노이즈**
+(각도0엔 없다가 θ>0에서 진동하부 곡선이 옆선에 스침)를 "새 자기교차"로 오판해 첫
+다트를 캡함. **이건 2026-07-07에 `findSelfIntersections(bake)`를 버리고
+`findRotationCollisions`로 간 바로 그 이유** — 델타 게이트는 끝점만 봐서 접선 노이즈를
+피하지만, findMaxSafeAngle은 경로 전체를 스캔해야 해서(중간에서만 생기는 겹침 때문)
+접선 노이즈에 취약하다.
+
+**결론: `findRotationCollisions`를 델타-bake로 단순 대체하면 안 된다.** 두 기준은 정반대
+실패 모드다 — findRotationCollisions=일부 다중다트 거짓 양성(과소회전)이지만 첫 다트
+정확, 델타-bake=다중다트 정확이지만 첫 다트 회귀.
+
+**다음 설계 후보(둘 다 단순 swap이 아니라 별도 설계)**:
+1. **하이브리드**: `findRotationCollisions` 결과를 1차로 쓰되, 그게 캡한 각도를 bake-delta로
+   사후 검증해 **거짓 양성만 제거**(실제 bake 자기교차가 안 늘면 캡 연장). 중간 경로의
+   진짜 겹침은 findRotationCollisions가 계속 잡음.
+2. **graze-허용 델타**: bake-delta에 `findSelfIntersections`의 graze/junction 허용
+   (GRAZE_EPS_JUNCTION 등)을 회전 스윕 중 접선에도 적용해 접선 노이즈를 걸러냄.
+
+**현재 방침**: 실사용 테스트 우선. chooseSignedBaseAngle(beefede)로 no-room 대부분
+해소됐으므로, findRotationCollisions 거짓 양성의 잔여 과소회전이 **실사용에서 실제로
+거슬리는 수준으로 확인될 때** 위 하이브리드/graze-델타를 별도 설계로 진행.
+
 ## 최근 해결된 핵심 버그 (2026-07-02 세션)
 
 `splitBakedOutline`이 이전 세대 `dart-leg-new`/`dart-leg-old`를 잘라 넘길 때
