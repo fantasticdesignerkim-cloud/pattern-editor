@@ -1028,13 +1028,99 @@ function budgetMaxAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, budgetR
   return dir * lo;
 }
 
-// ── 부호 + 회전 한계 통합 선택 (2026-07-08 재설계) ──
+// ── 적용 시점 델타 게이트를 후보각 탐색에 반영 ("발견 5" 수정, 2026-07 2차 재설계) ──
+// findMaxSafeAngle(=findRotationCollisions 세그먼트쌍 교차 스캔)과 applyDartMove의
+// 최종 델타 게이트(findSelfIntersections 폴리곤 전체 자기교차, 이동 전 저장 형상
+// 기준)가 같은 bake·같은 각도에서 서로 다른 판정을 낼 수 있다(실측 2026-07:
+// findRotationCollisions=충돌 0건→안전 판정, 그런데 실제 bake는 자기교차가
+// 1건 새로 생겨 적용 게이트가 거부 — "드래그는 OK, 적용은 거부" 증상의 원인).
+//
+// findMaxSafeAngle 자체를 델타 기준으로 전면 교체하면 첫 다트가 18.25°→1.3°로
+// 과소회전하는 회귀가 재현된다(2026-07-08 시도 후 폐기 — 회전 경로 스캔이 회전
+// 중 일시적으로만 나타나는 접선 노이즈를 "새 자기교차"로 오판했다). 그래서
+// findRotationCollisions 스캔(findMaxSafeAngle 내부)은 그대로 두고, 여기서는
+// 이미 collision-safe로 확인된 [0, candidateAngle] 범위 안에서 델타 게이트
+// 기준으로 "실제 적용 가능한 최대각"을 찾는다.
+//
+// ★ 2026-07 1차 구현(단순 0~candidate 이분 탐색)은 "0이 안전하면 그 위는 단조롭게
+//   안전/불안전이 갈린다"고 가정했는데, 이 가정이 findMaxSafeAngle 자신의 주석이
+//   경고하는 것과 똑같은 비단조 자기교차(회전 경로 중간에서만 생겼다 사라짐) 문제에
+//   취약했다. 그래서 [0, candidate] 전체를 촘촘히 스캔해 "가장 큰(=candidate에 가장
+//   가까운) 안전 구간"을 먼저 찾고, 그 구간의 상단 경계만 이분 탐색으로 정밀화한다
+//   (findMaxSafeAngle의 SCAN_STEPS+이분탐색 관례와 동일한 패턴). candidateAngle
+//   자체가 이미 collision-safe 범위의 끝점이므로 0쪽에서 노이즈가 있어도 candidate에
+//   가까운 쪽에 더 넓은 안전 구간이 있을 수 있다 — 그걸 놓치지 않기 위해 0에서
+//   실패해도 즉시 포기하지 않고 끝까지 스캔한다. 전체 스캔에서 단 하나도 안전한
+//   지점이 없을 때만 0(차단)을 반환한다.
+function applyTimeSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, candidateAngle, prevBakedSegments) {
+  if (Math.abs(candidateAngle) < 1e-9) return candidateAngle;
+  const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
+    s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
+  const fixedClean  = cleanForBake(fixedSegsRaw);
+  const rotateClean = cleanForBake(rotateSegsRaw);
+  if (fixedClean.length === 0 || rotateClean.length === 0) return candidateAngle;
+
+  // 기준선은 적용 게이트와 동일하게 "이동 전 저장된 형상"이다(각도0 재조립이 아님 —
+  // 그게 항등이 아니라서 예전 델타 게이트가 오염됐던 전례가 있다, 2026-07-07/08 기록).
+  const cross0 = prevBakedSegments ? findSelfIntersections(prevBakedSegments, pivot).length : 0;
+  const crossesAt = (angle) => {
+    const baked = normalizeBakedSegments(
+      bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle }), pivot);
+    return findSelfIntersections(baked, pivot).length > cross0;
+  };
+
+  const dir = Math.sign(candidateAngle) || 1;
+  const mag = Math.abs(candidateAngle);
+
+  if (!crossesAt(dir * mag)) return candidateAngle; // 끝점 자체가 안전 — 스캔 불필요
+
+  // [0, mag] 전체를 촘촘히 스캔해 "가장 큰 안전 지점"을 찾는다. 0이 실패해도 계속
+  // 진행 — candidate 쪽에 더 넓은 안전 구간이 있을 수 있다(비단조 대비).
+  const SCAN_STEPS = 40;
+  let bestSafeStep = -1;
+  for (let i = 0; i <= SCAN_STEPS; i++) {
+    const m = mag * (i / SCAN_STEPS);
+    if (!crossesAt(dir * m)) bestSafeStep = i; // 안전한 지점을 찾을 때마다 갱신 → 마지막(최대) 값이 남는다
+  }
+
+  if (bestSafeStep === -1) {
+    // 스캔한 어떤 지점도 안전하지 않았다 — 이 조각선택 자체를 정직하게 차단한다
+    // (호출부 MIN_DART_ANGLE_RAD 체크가 "회전할 공간이 없습니다"로 안내).
+    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+      console.log('[applyTimeSafeAngle] 전체 구간 실패 → 0 (차단)');
+    }
+    return 0;
+  }
+
+  // bestSafeStep은 스캔에서 찾은 가장 큰 안전 지점 — 정의상 그 다음 스텝(bestSafeStep+1,
+  // 끝점 mag 자체는 이미 위에서 실패 확인했으므로 bestSafeStep < SCAN_STEPS 항상 성립)은
+  // 안전하지 않다(더 큰 인덱스는 전부 실패했으니 bestSafeStep이 갱신되지 않고 남았을 것).
+  // 그 마지막 경계만 이분 탐색으로 정밀화한다.
+  let lo = mag * (bestSafeStep / SCAN_STEPS);
+  let hi = mag * ((bestSafeStep + 1) / SCAN_STEPS);
+  for (let i = 0; i < 18; i++) {
+    const mid = (lo + hi) / 2;
+    if (crossesAt(dir * mid)) hi = mid; else lo = mid;
+  }
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    console.log('[applyTimeSafeAngle] 델타 게이트 스캔 결과:', (mag*180/Math.PI).toFixed(2),
+      '° → 안전 구간 상단', (lo*180/Math.PI).toFixed(2), '° (스텝', bestSafeStep, '/', SCAN_STEPS, ')');
+  }
+  return dir * lo;
+}
+
+// ── 부호 + 회전 한계 통합 선택 (2026-07-08 재설계, 2026-07 2차 확장) ──
 // 회전 크기(θ)는 정확하다 — 새 다트 각도 = θ로 선형 대응. 틀린 건 회전 방향(부호).
-// 두 부호(+/−)를 각각 실제 파이프라인(findMaxSafeAngle → budgetMaxAngle)까지 통과시켜
-// "실제 사용 가능한 각도"를 구하고, 그 값이 큰 부호를 최종 선택한다.
+// 두 부호(+/−)를 각각 실제 파이프라인 **findMaxSafeAngle → budgetMaxAngle →
+// applyTimeSafeAngle** 전체까지 통과시켜 "최종적으로 적용 가능한 각도"를 구하고,
+// 그 값이 큰 부호를 최종 선택한다.
 //   - 팽창 부호: budgetMaxAngle이 예산 넘는 지점에서 잘라 작아짐 → 짐(다트량 보존).
 //   - 회전 공간 없는 부호: findMaxSafeAngle이 0으로 잘라 짐 → 반대 부호에 공간이 있으면
 //     그쪽을 자동 선택(no-room 오차단 회복).
+//   - findRotationCollisions는 안전하다 했지만 실제 적용(findSelfIntersections)은
+//     거부하는 부호: applyTimeSafeAngle이 그 부호의 사용가능 각도를 줄이므로,
+//     반대 부호가 (delta까지 통과한) 더 큰 값을 갖고 있으면 자동으로 그쪽이 선택된다
+//     ("발견 5" 수정 — 부호 선택 단계에서부터 적용 시점 델타를 반영).
 //   - 둘 다 0: 진짜 no-room(호출부에서 MIN 미만이면 차단).
 // 동률(차이 무시)이면 1차 기하 부호(geomSign) 유지.
 //
@@ -1044,11 +1130,12 @@ function budgetMaxAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, budgetR
 //   (실측: 다중다트 상태의 no-room 65건 중 51건=78%가 이 버그). 여기서는 total이 아니라
 //   "파이프라인 통과 후 사용 가능 각도"로 판정하므로 팽창/공간 문제를 동시에 올바로 처리.
 // θ 크기(baseMag)는 안 건드리고 부호만 재선택. 폭 미사용, BP 각도만 사용.
-function chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot, baseMag, cutPoint, budgetRad, geomSign) {
+function chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot, baseMag, cutPoint, budgetRad, geomSign, prevBakedSegments) {
   if (baseMag < 1e-9) return 0;
   const usable = (s) => {
     let a = findMaxSafeAngle(fixedSegs, rotateSegs, pivot, s * baseMag, cutPoint);
     a = budgetMaxAngle(fixedSegs, rotateSegs, pivot, a, budgetRad);
+    a = applyTimeSafeAngle(fixedSegs, rotateSegs, pivot, a, prevBakedSegments);
     return a;
   };
   const sign0 = Math.sign(geomSign) || 1;
@@ -1892,8 +1979,12 @@ function initDartMoveClickHandler() {
       const _budgetRad = (dartMoveState.side === "back")
         ? Math.abs(calcBackBaseDartAngle(buildBackShoulderDartInfo(_d.formula, _d.pts, _B)))
         : Math.abs(calcFrontBaseDartAngle(_d.pts, _B));
+      const _prevBakedForSide = (dartMoveState.side === "back")
+        ? dartMoveState.appliedBack?.bakedSegments
+        : dartMoveState.appliedFront?.bakedSegments;
       closeAngle = chooseSignedBaseAngle(_fixedSegs, _rotateSegs, _pivotSign,
-        Math.abs(closeAngle), dartMoveState.cutPoint, _budgetRad, Math.sign(closeAngle) || 1);
+        Math.abs(closeAngle), dartMoveState.cutPoint, _budgetRad, Math.sign(closeAngle) || 1,
+        _prevBakedForSide);
 
       // 회전 공간이 사실상 없으면(안전각 0.5° 미만) 여기서 차단하고 조각 선택
       // 상태를 유지한다 — 이대로 적용하면 겹침은 없지만 입구가 안 벌어진 퇴화
