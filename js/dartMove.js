@@ -685,69 +685,91 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
     if (!skipPivotCheck && isPivot(seg?.from)) break;
   }
 
-  // ── dartId 짝 보정: forward/backward가 같은 dartId의 다리를 서로 다른 영역으로
-  // 쪼개면(한쪽만 로컬 조각 segsA/segsB에, 나머지는 rest에) 그 다트의 노치가
-  // 물리적으로 찢어진다 (한쪽만 회전하고 반대쪽은 고정된 채 남음).
-  // → 쪼개진 dartId 그룹은 통째로 rest(항상-고정 영역)로 넘긴다. 절대 반대 방향
-  //   (rest → segsA/segsB로 끌어올림)으로는 확장하지 않는다 — 예전에 그 방식으로
-  //   시도했다가 restSteps 회계가 깨져 외곽선이 중복 생성된 적이 있음.
+  // ── notch-instance 태깅 (2026-07 3차 재설계: 차단 대신 각 조각에 source notch 부착) ──
+  // 예전(2차)엔 forward·backward가 서로 다른 notch instance에 닿으면(Case B) 둘 다
+  // rest로 강제 편입해 차단했는데, 이건 과도했다. forward가 도달한 notch는 pieceA의
+  // 회전에만, backward가 도달한 notch는 pieceB의 회전에만 관련이 있다 — 사용자가
+  // 둘 중 하나만 회전 조각으로 선택하므로, 선택 안 된 쪽 notch는 애초에 회전과 무관
+  // (선택 안 된 조각은 고정되고, 그 notch의 다리도 그 안에서 안 움직인 채 남는다).
+  // 그러니 "서로 다르면 차단"할 이유가 없다 — 각 조각에 **자기 자신의** source notch만
+  // 정확히 붙여주면 충분하다. Case A(forward·backward가 같은 notch)든 Case B(다름)든
+  // 이 태깅 로직 자체는 동일하다: pieceA.sourceNotch = forwardNotch,
+  // pieceB.sourceNotch = backwardNotch. forwardSteps/backwardSteps는 원래 위상 계산
+  // (raw walk) 그대로 쓴다 — 더 이상 강제로 줄이지 않는다.
   //
-  // 단, "가장 최근에 생긴 dartId"는 이 보정에서 제외한다. dart-leg-new(pair A/B)는
-  // "이미 닫힌 노치"가 아니라 지금 열려 있는 다트 입구이고, 다음 세대가 한쪽은
-  // 회전·한쪽은 고정시켜 서로 붙게 만드는 것 자체가 "다트를 닫는" 동작이다.
-  // 최신 dartId까지 강제로 rest에 묶으면 그 다트를 영영 닫을 방법이 없어지고,
-  // bakeFromSplitPieces가 억지로 만들어내는 가짜 봉합선(불필요한 선/갈 수 없는
-  // 위치로의 이동)의 원인이 된다. dartId에 타임스탬프가 박혀 있으므로 최댓값을
-  // "현재 진행 중인 다트"로 보고 보정 대상에서 뺀다.
-  let forwardStepsBeforeFix = forwardSteps;
-  {
-    const regionOf = new Array(nn).fill('rest');
-    for (let step = 0; step < forwardSteps; step++) regionOf[(cutSegIndex + step) % nn] = 'A';
-    for (let step = 0; step < backwardSteps; step++) regionOf[(backStart - step + nn) % nn] = 'B';
-
-    const dartGroups = {};
-    segments.forEach((seg, idx) => {
-      if (!seg?.dartId || !isBakedBoundarySeg(seg)) return;
-      (dartGroups[seg.dartId] ||= []).push(idx);
-    });
-
-    let latestDartId = null, latestTs = -Infinity;
-    for (const id of Object.keys(dartGroups)) {
-      const ts = parseInt(id.split('-')[1], 10);
-      if (!isNaN(ts) && ts > latestTs) { latestTs = ts; latestDartId = id; }
-    }
-
-    const forceRest = new Set();
-    for (const [dartId, idxs] of Object.entries(dartGroups)) {
-      if (dartId === latestDartId) continue; // 방금 만든 다트는 쪼개져서 닫히는 게 정상 동작
-      const regionSet = new Set(idxs.map(i => regionOf[i]));
-      if (regionSet.size > 1) idxs.forEach(i => forceRest.add(i));
-    }
-
-    if (forceRest.size > 0) {
-      let trimmedForward = 0;
-      for (let step = 0; step < forwardSteps; step++) {
-        if (forceRest.has((cutSegIndex + step) % nn)) break;
-        trimmedForward++;
-      }
-      let trimmedBackward = 0;
-      for (let step = 0; step < backwardSteps; step++) {
-        if (forceRest.has((backStart - step + nn) % nn)) break;
-        trimmedBackward++;
-      }
-      if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-        console.log('[dartGroupFix] 갈라진 dartId 발견 → rest로 편입', {
-          forceRest: [...forceRest],
-          forwardSteps: `${forwardSteps} → ${trimmedForward}`,
-          backwardSteps: `${backwardSteps} → ${trimmedBackward}`,
-        });
-      }
-      forwardSteps  = trimmedForward;
-      backwardSteps = trimmedBackward;
+  // 다른 모든 notch는 forward/backward가 애초에 도달할 수 없으므로(각 방향에서
+  // 가장 가까운 다리에서 무조건 멈춤) rest에 그대로 남고, 회전과 무관해 안전하다.
+  //
+  // 현재 outline의 모든 notch instance 나열 (인접한 두 boundary 세그먼트가 각각
+  // mouth→pivot / pivot→mouth로 만나는 지점 — sumOpenDartAngle과 동일 정의).
+  // 타입은 "지금 열린 다트 입구"를 의미하는 dart-leg-new/dart-leg-old로만 제한한다
+  // (isBakedBoundarySeg는 walk의 정지 판정용으로 dart-bridge/plain dart-leg도
+  // 포함하는데, 이 두 타입은 현재 bake 파이프라인에서 실제로 생성되지 않는
+  // 레거시/내부 연결 타입이라 "열린 aperture"로 취급하면 안 된다 — notch 판정만
+  // 방어적으로 좁힌다).
+  const isOpenLegType = (seg) => seg?.type === "dart-leg-new" || seg?.type === "dart-leg-old";
+  const notchInstances = [];
+  for (let idx = 0; idx < nn; idx++) {
+    const a = segments[idx], b = segments[(idx + 1) % nn];
+    if (isOpenLegType(a) && isOpenLegType(b) && isPivot(a?.to) && isPivot(b?.from)) {
+      notchInstances.push({ legIdxA: idx, legIdxB: (idx + 1) % nn });
     }
   }
-  const forwardTrimDelta = forwardStepsBeforeFix - forwardSteps; // restSteps 회계 보정용
-  const restSteps = (maxBackward - backwardSteps) + forwardTrimDelta; // 양쪽 국소 조각 사이의 "항상 고정" 영역
+  const notchInstanceOf = (idx) =>
+    notchInstances.find(ni => ni.legIdxA === idx || ni.legIdxB === idx) || null;
+
+  // forward walk가 실제로 도달해 정지한 boundary 다리(있다면)
+  let forwardBoundaryIdx = -1;
+  if (forwardSteps > 0) {
+    const idx = (cutSegIndex + forwardSteps - 1 + nn) % nn;
+    if (isPivot(segments[idx]?.to)) forwardBoundaryIdx = idx;
+  }
+  // backward walk가 실제로 도달해 정지한 boundary 다리(있다면, 원본 인덱스 기준)
+  let backwardBoundaryIdx = -1;
+  if (backwardSteps > 0) {
+    const idx = (backStart - backwardSteps + 1 + nn) % nn;
+    if (isPivot(segments[idx]?.from)) backwardBoundaryIdx = idx;
+  }
+
+  const forwardNotch  = forwardBoundaryIdx  >= 0 ? notchInstanceOf(forwardBoundaryIdx)  : null;
+  const backwardNotch = backwardBoundaryIdx >= 0 ? notchInstanceOf(backwardBoundaryIdx) : null;
+
+  // notch instance → {apertureRad, movingMouth, targetMouth} 로 변환. pieceA(forward)는
+  // legIdxA 다리(mouth→pivot, .from이 mouth)를 회전시켜 legIdxB의 mouth(.to)로 보내야
+  // 닫힌다. pieceB(backward)는 legIdxB 다리(pivot→mouth, .to가 mouth)를 회전시켜
+  // legIdxA의 mouth(.from)로 보내야 닫힌다. 회전은 항상 같은 pivot 중심이라 두 mouth는
+  // 항상 같은 반지름이다(각도만 맞으면 정확히 겹침).
+  const angleOf = (pt) => Math.atan2(pt.y - pivot.y, pt.x - pivot.x);
+  const norm = (a) => { while (a > Math.PI) a -= 2*Math.PI; while (a <= -Math.PI) a += 2*Math.PI; return a; };
+  function buildSourceNotch(ni, role) {
+    if (!ni) return null;
+    const legA = segments[ni.legIdxA], legB = segments[ni.legIdxB];
+    const movingMouth = role === 'A' ? legA.from : legB.to;
+    const targetMouth  = role === 'A' ? legB.to   : legA.from;
+    // signedAngleRad: movingMouth를 pivot 중심으로 이 각도만큼 회전하면 정확히
+    // targetMouth 방향에 도달한다(둘 다 pivot에서 항상 같은 반지름 — 이 엔진의 모든
+    // 회전이 같은 pivot 중심이라 반지름이 보존됨). 부호 있는 값 그대로 저장해
+    // 호출부가 회전 방향을 바로 알 수 있게 한다. apertureRad는 그 절댓값(크기)만.
+    const signedAngleRad = norm(angleOf(targetMouth) - angleOf(movingMouth));
+    return { movingMouth: { ...movingMouth }, targetMouth: { ...targetMouth },
+      signedAngleRad, apertureRad: Math.abs(signedAngleRad) };
+  }
+  const forwardSourceNotch  = buildSourceNotch(forwardNotch,  'A');
+  const backwardSourceNotch = buildSourceNotch(backwardNotch, 'B');
+
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    console.log('[notchInstanceTag]', {
+      notchInstanceCount: notchInstances.length,
+      forwardBoundaryIdx, backwardBoundaryIdx,
+      forwardApertureDeg: forwardSourceNotch ? +(forwardSourceNotch.apertureRad*180/Math.PI).toFixed(2) : null,
+      backwardApertureDeg: backwardSourceNotch ? +(backwardSourceNotch.apertureRad*180/Math.PI).toFixed(2) : null,
+      caseKind: (forwardNotch && backwardNotch)
+        ? (forwardNotch.legIdxA === backwardNotch.legIdxA ? 'sameNotch' : 'differentNotch')
+        : 'oneSidedOrNone',
+    });
+  }
+
+  const restSteps = maxBackward - backwardSteps; // 양쪽 국소 조각 사이의 "항상 고정" 영역 (더 이상 트림 없음)
 
   // 2. pieceA: forward 구간 (dartId 보정이 끝난 forwardSteps 기준으로 구성)
   // segs: 외곽선 + boundary(다트선) 모두 순서대로 포함 (bakeFromSplitPieces가 trailing dart로 인식)
@@ -813,8 +835,11 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
       : [...openPts, { ...pivot }, { ...cutPoint }];
   };
 
-  const pieceA = { pts: closePolygonPts(ptsA), segs: segsA, segsFull: segsAFull, hit: "mouthA", openPts: ptsA };
-  const pieceB = { pts: closePolygonPts(ptsB), segs: segsB, segsFull: segsBFull, hit: "mouthB", openPts: ptsB };
+  // sourceNotch: 이 조각이 "회전 조각"으로 선택됐을 때 닫아야 할 기존 열린 notch
+  // (있다면). null이면 이 방향엔 닿은 기존 다트가 없다는 뜻 — gen-0처럼 완전히
+  // 새 notch를 여는 경우이므로 호출부가 rawBase(기본 다트량)를 그대로 쓴다.
+  const pieceA = { pts: closePolygonPts(ptsA), segs: segsA, segsFull: segsAFull, hit: "mouthA", openPts: ptsA, sourceNotch: forwardSourceNotch };
+  const pieceB = { pts: closePolygonPts(ptsB), segs: segsB, segsFull: segsBFull, hit: "mouthB", openPts: ptsB, sourceNotch: backwardSourceNotch };
 
   // ── TEMP DEBUG: piece polygon 진단 (ChatGPT 지시서, 원인 확정되면 제거) ──
   if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
@@ -1931,60 +1956,58 @@ function initDartMoveClickHandler() {
       const _d = createDraft(_B, _W, _BL);
       const pivot2 = dartMoveState.side === "back" ? _d.pts.E : _d.pts.BP;
 
-      // closeAngle 크기: 몇 차 다트이동이든 항상 이 옷 전체의 기본 다트량(B 공식 기준
-      // G/GG, 혹은 뒤판 dartCenter/dartEnd_) 크기를 그대로 쓴다. 새로 자르는 위치는
-      // 직전 다트와 무관해도 되고, 직전 다트는 그대로 열린 채 남아있는 게 정상 동작이다
-      // (여유분을 여러 군데에 나눠 배치하는 것 — 패턴사가 결정할 몫).
-      // 예전에는 baked(2차 이상) 상태에서 "직전 다트의 현재 벌어진 폭"을 역산해서 각도로
-      // 썼는데, 그 폭이 이미 커져 있으면 새 절개 위치가 pivot에서 멀수록 다트가 폭발적으로
-      // 커지는 버그가 있었다(예: 30cm 다트). 부호는 지금처럼 choosePhysicalCloseAngle이
-      // 최종 검증한다.
-      let closeAngle;
-      if (dartMoveState.side === "back") {
-        const _info = buildBackShoulderDartInfo(_d.formula, _d.pts, _B);
-        closeAngle = calcBackBaseDartAngle(_info);
-      } else {
-        closeAngle = calcFrontBaseDartAngle(_d.pts, _B);
-      }
-
-      // ── 부호 물리 검증: cutPoint를 미세 회전해서 회전 조각 안으로 들어가는 방향 선택 ──
+      // ── closeAngle 결정 (2026-07 3차 재설계: source notch 우선) ──
       const _pivotSign = dartMoveState.side === "back" ? _d.pts.E : _d.pts.BP;
-      if (rotatePiece.pts && rotatePiece.pts.length >= 3) {
-        closeAngle = choosePhysicalCloseAngle({
-          pivot:      _pivotSign,
-          cutPoint:   dartMoveState.cutPoint,
-          rotatePts:  rotatePiece.pts,
-          absAngle:   closeAngle,
-        });
-      }
-
-      if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
-        console.log('[closeAngle] 부호검증 후 baseAngle:', closeAngle.toFixed(4),
-          'pivot:', JSON.stringify(_pivotSign), 'cutPoint:', JSON.stringify(dartMoveState.cutPoint));
-
       // 고정 조각은 rest(항상-고정 영역)까지 포함한 전체 체인 사용 (baked 다중다트).
       // 1차(splitFront/BackOutline)는 segsFull이 없으므로 기존 segs 그대로 사용.
       const _rotateSegs = rotatePiece.segs;
       const _fixedSegs  = fixedPiece.segsFull || fixedPiece.segs;
-
-      // ── 부호 + 회전 한계 통합 결정 (2026-07-08 재설계) ──
-      // 기하 판정(choosePhysicalCloseAngle)은 1차 부호 후보로만 쓴다. 최종은 두 부호를
-      // 각각 findMaxSafeAngle+budgetMaxAngle까지 통과시켜 "실제 사용 가능한 각도가 큰 쪽"을
-      // 고른다: 팽창 부호는 budgetMaxAngle이 작게 깎아 지고(다트량 보존), 회전 공간 없는
-      // 부호는 findMaxSafeAngle이 0으로 깎아 지므로 반대 부호에 공간이 있으면 자동 선택된다
-      // (예전 chooseConservingSign이 full 각도의 자기교차 총합으로 부호를 골라 회전 공간
-      // 있는 반대 부호를 놓치던 no-room 오차단 — 78% — 을 근본 해소). θ 크기는 불변.
-      // 드래그는 [0, baseAngle]로 clamp되므로 손이 이미 물리/예산 한계에서 멈춘다.
-      // 적용 시점 budget 게이트/자기교차 검사는 최종 안전망으로 유지.
       const _budgetRad = (dartMoveState.side === "back")
         ? Math.abs(calcBackBaseDartAngle(buildBackShoulderDartInfo(_d.formula, _d.pts, _B)))
         : Math.abs(calcFrontBaseDartAngle(_d.pts, _B));
       const _prevBakedForSide = (dartMoveState.side === "back")
         ? dartMoveState.appliedBack?.bakedSegments
         : dartMoveState.appliedFront?.bakedSegments;
-      closeAngle = chooseSignedBaseAngle(_fixedSegs, _rotateSegs, _pivotSign,
-        Math.abs(closeAngle), dartMoveState.cutPoint, _budgetRad, Math.sign(closeAngle) || 1,
-        _prevBakedForSide);
+
+      let closeAngle;
+      if (rotatePiece.sourceNotch) {
+        // 회전 조각이 기존 열린 notch(source)의 다리 하나를 물고 있다. 목표는 그
+        // notch를 "정확히" 닫는 것 — 부호와 크기 모두 그 notch의 signedAngleRad에서
+        // 직접 유도한다. rawBase(기본 다트량 전체)는 시작점으로 쓰지 않는다 —
+        // sourceAngle이 새 시작점이다(사용자 지시 3/5). 반대 부호는 source를 닫는 게
+        // 아니라 더 벌리므로 애초에 시도하지 않는다(사용자 지시 4 — "usable이 큰
+        // 방향"이 아니라 "source를 감소시키는 방향"만 유효한 후보).
+        const targetSigned = rotatePiece.sourceNotch.signedAngleRad;
+        const sign = Math.sign(targetSigned) || 1;
+        const mag  = Math.min(Math.abs(targetSigned), _budgetRad); // baseMagnitude = min(sourceAngle, budget)
+        let ca = sign * mag;
+        ca = findMaxSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, ca, dartMoveState.cutPoint); // collisionLimit
+        ca = budgetMaxAngle(_fixedSegs, _rotateSegs, _pivotSign, ca, _budgetRad);                // budgetLimit
+        ca = applyTimeSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, ca, _prevBakedForSide);      // 적용시점 델타
+        closeAngle = ca;
+        if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
+          console.log('[closeAngle] source notch 재분배:', 'sourceApertureDeg:',
+            (rotatePiece.sourceNotch.apertureRad*180/Math.PI).toFixed(2),
+            '→ finalDeg:', (ca*180/Math.PI).toFixed(2));
+      } else {
+        // 닿은 기존 notch가 없음(gen-0 또는 완전히 새 위치) — 기존처럼 이 옷 전체의
+        // 기본 다트량을 시작점으로 쓰고, 기하 판정(choosePhysicalCloseAngle)으로 1차
+        // 부호를 잡은 뒤 chooseSignedBaseAngle이 두 부호를 비교해 최종 결정한다.
+        let baseAngle = (dartMoveState.side === "back")
+          ? calcBackBaseDartAngle(buildBackShoulderDartInfo(_d.formula, _d.pts, _B))
+          : calcFrontBaseDartAngle(_d.pts, _B);
+        if (rotatePiece.pts && rotatePiece.pts.length >= 3) {
+          baseAngle = choosePhysicalCloseAngle({
+            pivot: _pivotSign, cutPoint: dartMoveState.cutPoint,
+            rotatePts: rotatePiece.pts, absAngle: baseAngle,
+          });
+        }
+        closeAngle = chooseSignedBaseAngle(_fixedSegs, _rotateSegs, _pivotSign,
+          Math.abs(baseAngle), dartMoveState.cutPoint, _budgetRad, Math.sign(baseAngle) || 1,
+          _prevBakedForSide);
+        if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
+          console.log('[closeAngle] gen-0/신규 위치 (기본 다트량):', (closeAngle*180/Math.PI).toFixed(2));
+      }
 
       // 회전 공간이 사실상 없으면(안전각 0.5° 미만) 여기서 차단하고 조각 선택
       // 상태를 유지한다 — 이대로 적용하면 겹침은 없지만 입구가 안 벌어진 퇴화
