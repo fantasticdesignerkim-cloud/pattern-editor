@@ -124,15 +124,20 @@ function getBackTargetOutline(p, f, B) {
   return buildBackOutline(p, f, B);
 }
 
+// ── 다트이동 진단 로그: 이 한 함수로만 나간다 (DEBUG_DART_MOVE=false면 전부 무음) ──
+function dbg(...args) {
+  if (typeof DEBUG_DART_MOVE !== "undefined" && DEBUG_DART_MOVE) console.log(...args);
+}
+
 function debugCheckSegmentContinuity(segs, label = "segments") {
-  if (typeof DEBUG_DART_MOVE === "undefined" || !DEBUG_DART_MOVE || !Array.isArray(segs)) return;
+  if (!Array.isArray(segs)) return;
   const dist = (a, b) => (!a || !b) ? Infinity : Math.hypot(a.x - b.x, a.y - b.y);
   const breaks = [];
   for (let i = 0; i < segs.length - 1; i++) {
     const gap = dist(segs[i].to, segs[i + 1].from);
     if (gap > 0.05) breaks.push({ index: i, typeA: segs[i].type, typeB: segs[i + 1].type, gap });
   }
-  console.log("[continuity]", label, { count: segs.length, breaks });
+  dbg("[continuity]", label, { count: segs.length, breaks });
 }
 
 // ── 참고선 판별: 물리 검사에서 제외할 순수 내부 연결선 ──
@@ -437,22 +442,6 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle }) {
   const segsB_outline = segsBFull.slice(0, outlineEndIdxB + 1);
   const segsB_trailing = segsBFull.slice(outlineEndIdxB + 1);
 
-  // ── TEMP DEBUG: old-leg fallback 진단 (원인 확정되면 제거) ──
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log("[bake old-leg check]", {
-      outlineEndIdxA,
-      outlineEndIdxB,
-      endA: { x: +endA.x.toFixed(3), y: +endA.y.toFixed(3) },
-      endB: { x: +endB.x.toFixed(3), y: +endB.y.toFixed(3) },
-      endAType: segsAFull[outlineEndIdxA]?.type,
-      endBType: segsBFull[outlineEndIdxB]?.type,
-      trailingA: segsA_trailing.map(s => s.type),
-      trailingB: segsB_trailing.map(s => s.type),
-      willCreateLegOldA: segsA_trailing.length === 0 && Math.hypot(endA.x - pivot.x, endA.y - pivot.y) > 1e-3,
-      willCreateLegOldB: segsB_trailing.length === 0 && Math.hypot(endB.x - pivot.x, endB.y - pivot.y) > 1e-3,
-    });
-  }
-
   const dartId = `dart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   // 새 V자 다트: pivot → cutA, cutB → pivot (입구=cut*, 꼭지점=pivot)
@@ -605,19 +594,6 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   const nn = segments.length;
   if (nn === 0) return { pieceA: null, pieceB: null };
 
-  // ── TEMP DEBUG: pivot 접점 진단 (원인 확정되면 제거) ──
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log(`[pivotCheck] cutSegIndex:${cutSegIndex} nn:${nn} pivot:`, JSON.stringify(pivot));
-    segments.forEach((s, i) => {
-      if (!s?.from || !s?.to) return;
-      const dFrom = Math.hypot(s.from.x - pivot.x, s.from.y - pivot.y);
-      const dTo   = Math.hypot(s.to.x   - pivot.x, s.to.y   - pivot.y);
-      if (dFrom < 0.5 || dTo < 0.5) {
-        console.log(`[pivotCheck] idx${i} ${s.type} disabled:${!!s.disabled} dFrom:${dFrom.toFixed(4)} dTo:${dTo.toFixed(4)}`);
-      }
-    });
-  }
-
   const isNear = (a, b, eps = 1e-3) => a && b && Math.hypot(a.x-b.x, a.y-b.y) < eps;
   const isPivot = (pt) => isNear(pt, pivot);
   const segTouchesPivot = (seg) => isPivot(seg?.from) || isPivot(seg?.to);
@@ -627,26 +603,7 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   // "도착"(포함하고 정지)과 "출발"(포함하지 않고 정지)을 구분한다.
 
   // 1. forward: cutSegIndex 자신부터 시작해 첫 pivot 도달까지 (뒷부분, cutSegIndex 세그먼트 포함)
-  // ── TEMP DEBUG: cutSegIndex 세그먼트 확인 (ChatGPT 지시서, 확인 후 제거) ──
   const cutSeg = segments[cutSegIndex];
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE && cutSeg) {
-    const dFrom = Math.hypot(cutPoint.x - cutSeg.from.x, cutPoint.y - cutSeg.from.y);
-    const dTo   = Math.hypot(cutPoint.x - cutSeg.to.x,   cutPoint.y - cutSeg.to.y);
-    const segLen = Math.hypot(cutSeg.to.x - cutSeg.from.x, cutSeg.to.y - cutSeg.from.y);
-    console.log("[cutSegCheck]", {
-      cutSegIndex,
-      type: cutSeg.type,
-      disabled: !!cutSeg.disabled,
-      from: { x: +cutSeg.from.x.toFixed(3), y: +cutSeg.from.y.toFixed(3) },
-      to:   { x: +cutSeg.to.x.toFixed(3),   y: +cutSeg.to.y.toFixed(3) },
-      cutPoint: { x: +cutPoint.x.toFixed(3), y: +cutPoint.y.toFixed(3) },
-      dFrom: +dFrom.toFixed(3),
-      dTo: +dTo.toFixed(3),
-      segLen: +segLen.toFixed(3),
-      ratioFrom: segLen > 1e-6 ? +(dFrom / segLen).toFixed(3) : null,
-      ratioTo:   segLen > 1e-6 ? +(dTo / segLen).toFixed(3) : null,
-    });
-  }
 
   let forwardSteps = 0;
   for (let step = 0; step < nn; step++) {
@@ -757,17 +714,15 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   const forwardSourceNotch  = buildSourceNotch(forwardNotch,  'A');
   const backwardSourceNotch = buildSourceNotch(backwardNotch, 'B');
 
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[notchInstanceTag]', {
-      notchInstanceCount: notchInstances.length,
-      forwardBoundaryIdx, backwardBoundaryIdx,
-      forwardApertureDeg: forwardSourceNotch ? +(forwardSourceNotch.apertureRad*180/Math.PI).toFixed(2) : null,
-      backwardApertureDeg: backwardSourceNotch ? +(backwardSourceNotch.apertureRad*180/Math.PI).toFixed(2) : null,
-      caseKind: (forwardNotch && backwardNotch)
-        ? (forwardNotch.legIdxA === backwardNotch.legIdxA ? 'sameNotch' : 'differentNotch')
-        : 'oneSidedOrNone',
-    });
-  }
+  dbg('[notchInstanceTag]', {
+    notchInstanceCount: notchInstances.length,
+    forwardBoundaryIdx, backwardBoundaryIdx,
+    forwardApertureDeg: forwardSourceNotch ? +(forwardSourceNotch.apertureRad*180/Math.PI).toFixed(2) : null,
+    backwardApertureDeg: backwardSourceNotch ? +(backwardSourceNotch.apertureRad*180/Math.PI).toFixed(2) : null,
+    caseKind: (forwardNotch && backwardNotch)
+      ? (forwardNotch.legIdxA === backwardNotch.legIdxA ? 'sameNotch' : 'differentNotch')
+      : 'oneSidedOrNone',
+  });
 
   const restSteps = maxBackward - backwardSteps; // 양쪽 국소 조각 사이의 "항상 고정" 영역 (더 이상 트림 없음)
 
@@ -809,20 +764,18 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
     segsAFull.push({ ...seg, from: { ...seg.from }, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
   }
   const segsBFull = segsB.map(s => ({ ...s, from: { ...s.from }, to: { ...s.to }, type: s.type, disabled: !!s.disabled }));
-  // maxBackward가 아니라 restSteps 기준으로 순회해야 한다: dartId 보정으로
-  // forward 쪽에서 rest로 밀려난 분량(forwardTrimDelta)까지 segsBFull이 놓치지 않고
-  // 포함해야 fixedSegs로 쓰였을 때 루프가 끊기지 않는다.
+  // maxBackward가 아니라 restSteps 기준으로 순회해야 한다: rest는 pieceA/pieceB
+  // 양쪽 국소 조각 사이의 "항상 고정" 영역 전체이므로, segsBFull이 이걸 전부
+  // 포함해야 fixedSegs로 쓰였을 때 루프(전체 폐곡선)가 끊기지 않는다.
   for (let step = backwardSteps; step < backwardSteps + restSteps; step++) {
     const idx = (backStart - step + nn) % nn;
     const seg = segments[idx];
     segsBFull.push({ ...seg, from: { ...seg.to }, to: { ...seg.from }, type: seg.type, disabled: !!seg.disabled });
   }
 
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[splitBaked] A:', segsA.length, 'B:', segsB.length, 'rest:', restSteps,
-      'fwd:', forwardSteps, 'bwd:', backwardSteps, 'nn:', nn,
-      '합(A+B+rest):', forwardSteps + backwardSteps + restSteps);
-  }
+  dbg('[splitBaked] A:', segsA.length, 'B:', segsB.length, 'rest:', restSteps,
+    'fwd:', forwardSteps, 'bwd:', backwardSteps, 'nn:', nn,
+    '합(A+B+rest):', forwardSteps + backwardSteps + restSteps);
 
   // pts polygon 닫기: openPts가 이미 boundary(dart-leg)를 따라 pivot에 도달했으면
   // pivot을 중복으로 덧붙이지 않는다. (덧붙이면 실제 종이 조각과 어긋난 삼각형이 생김)
@@ -840,30 +793,6 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   // 새 notch를 여는 경우이므로 호출부가 rawBase(기본 다트량)를 그대로 쓴다.
   const pieceA = { pts: closePolygonPts(ptsA), segs: segsA, segsFull: segsAFull, hit: "mouthA", openPts: ptsA, sourceNotch: forwardSourceNotch };
   const pieceB = { pts: closePolygonPts(ptsB), segs: segsB, segsFull: segsBFull, hit: "mouthB", openPts: ptsB, sourceNotch: backwardSourceNotch };
-
-  // ── TEMP DEBUG: piece polygon 진단 (ChatGPT 지시서, 원인 확정되면 제거) ──
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    const fmtPt = p => p ? { x: +p.x.toFixed(2), y: +p.y.toFixed(2) } : null;
-    console.log("[splitBaked piece summary]", {
-      cutSegIndex,
-      nn,
-      pivot: fmtPt(pivot),
-      cutPoint: fmtPt(cutPoint),
-      pieceA_len: ptsA.length,
-      pieceB_len: ptsB.length,
-      pieceA_area: polygonArea(pieceA.pts).toFixed(2),
-      pieceB_area: polygonArea(pieceB.pts).toFixed(2),
-      pieceA_last: fmtPt(ptsA[ptsA.length - 1]),
-      pieceB_last: fmtPt(ptsB[ptsB.length - 1]),
-      rest: restSteps,
-      segsAFull_len: segsAFull.length,
-      segsBFull_len: segsBFull.length,
-      segsA_types: segsA.map(s => s.type).join(" → "),
-      segsB_types: segsB.map(s => s.type).join(" → "),
-    });
-    console.log("[splitBaked pieceA pts]", pieceA.pts.map(fmtPt));
-    console.log("[splitBaked pieceB pts]", pieceB.pts.map(fmtPt));
-  }
 
   return { pieceA, pieceB };
 }
@@ -968,8 +897,7 @@ function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPo
   const barrierAngle = rotationLegBarrier(fixedClean, pivot, cut, targetAngle);
   const effTarget = (Math.abs(barrierAngle) < Math.abs(targetAngle)) ? barrierAngle : targetAngle;
   if (Math.abs(effTarget) < 1e-9) {
-    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
-      console.log('[findMaxSafeAngle] 각도 배리어로 0까지 축소 (기존 다트 다리 인접)');
+    dbg('[findMaxSafeAngle] 각도 배리어로 0까지 축소 (기존 다트 다리 인접)');
     return effTarget;
   }
 
@@ -996,11 +924,9 @@ function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPo
     const mid = (lo + hi) / 2;
     if (crossesAt(mid)) hi = mid; else lo = mid;
   }
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[findMaxSafeAngle] 축소:', (targetAngle*180/Math.PI).toFixed(2), '° →',
-      (lo*180/Math.PI).toFixed(2), '° (배리어:', (effTarget*180/Math.PI).toFixed(2),
-      '°, 첫 겹침 스텝:', firstUnsafeStep, '/', SCAN_STEPS, ')');
-  }
+  dbg('[findMaxSafeAngle] 축소:', (targetAngle*180/Math.PI).toFixed(2), '° →',
+    (lo*180/Math.PI).toFixed(2), '° (배리어:', (effTarget*180/Math.PI).toFixed(2),
+    '°, 첫 겹침 스텝:', firstUnsafeStep, '/', SCAN_STEPS, ')');
   return lo;
 }
 
@@ -1046,10 +972,8 @@ function budgetMaxAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, budgetR
     const mid = (lo + hi) / 2;
     if (overAt(mid)) hi = mid; else lo = mid;
   }
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[budgetMaxAngle] 예산 축소:', (target*180/Math.PI).toFixed(2), '° →',
-      (lo*180/Math.PI).toFixed(2), '° (예산:', (budgetRad*180/Math.PI).toFixed(2), '°)');
-  }
+  dbg('[budgetMaxAngle] 예산 축소:', (target*180/Math.PI).toFixed(2), '° →',
+    (lo*180/Math.PI).toFixed(2), '° (예산:', (budgetRad*180/Math.PI).toFixed(2), '°)');
   return dir * lo;
 }
 
@@ -1111,9 +1035,7 @@ function applyTimeSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, candidateAngle, 
   if (bestSafeStep === -1) {
     // 스캔한 어떤 지점도 안전하지 않았다 — 이 조각선택 자체를 정직하게 차단한다
     // (호출부 MIN_DART_ANGLE_RAD 체크가 "회전할 공간이 없습니다"로 안내).
-    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-      console.log('[applyTimeSafeAngle] 전체 구간 실패 → 0 (차단)');
-    }
+    dbg('[applyTimeSafeAngle] 전체 구간 실패 → 0 (차단)');
     return 0;
   }
 
@@ -1127,10 +1049,8 @@ function applyTimeSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, candidateAngle, 
     const mid = (lo + hi) / 2;
     if (crossesAt(dir * mid)) hi = mid; else lo = mid;
   }
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[applyTimeSafeAngle] 델타 게이트 스캔 결과:', (mag*180/Math.PI).toFixed(2),
-      '° → 안전 구간 상단', (lo*180/Math.PI).toFixed(2), '° (스텝', bestSafeStep, '/', SCAN_STEPS, ')');
-  }
+  dbg('[applyTimeSafeAngle] 델타 게이트 스캔 결과:', (mag*180/Math.PI).toFixed(2),
+    '° → 안전 구간 상단', (lo*180/Math.PI).toFixed(2), '° (스텝', bestSafeStep, '/', SCAN_STEPS, ')');
   return dir * lo;
 }
 
@@ -1167,8 +1087,8 @@ function chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot, baseMag, cutPoint, 
   const aGeom = usable(sign0);
   const aOpp  = usable(-sign0);
   const mGeom = Math.abs(aGeom), mOpp = Math.abs(aOpp);
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE && mOpp > mGeom + 1e-4) {
-    console.log('[chooseSignedBaseAngle] 반대 부호 선택 (사용가능:',
+  if (mOpp > mGeom + 1e-4) {
+    dbg('[chooseSignedBaseAngle] 반대 부호 선택 (사용가능:',
       (mGeom*180/Math.PI).toFixed(1), '° → ', (mOpp*180/Math.PI).toFixed(1), '°)');
   }
   if (Math.abs(mGeom - mOpp) < 1e-4) return aGeom;   // 동률 → 기하 부호 유지
@@ -1279,19 +1199,19 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   const forward  = walkForward();
   const backward = walkBackward();
 
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE){
-    console.log('[split] forward.hit:', forward.hit, 'pts:', forward.pts.length, 'segs:', forward.segs.length);
-    console.log('[split] backward.hit:', backward.hit, 'pts:', backward.pts.length, 'segs:', backward.segs.length);
-    console.log('[split] GG:', JSON.stringify(GG));
-    console.log('[split] p.G:', JSON.stringify(p.G));
-    console.log('[split] forward types:', forward.segs.map(s=>s.type).join(','));
-    console.log('[split] backward types:', backward.segs.map(s=>s.type).join(','));
-  }
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+  // DEBUG_DART_MOVE가 꺼져 있어도 인자 표현식(map/join/JSON.stringify)은 dbg() 호출
+  // 전에 먼저 평가된다 — 무거운 로그 데이터는 이 가드 안에서만 계산한다.
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    dbg('[split] forward.hit:', forward.hit, 'pts:', forward.pts.length, 'segs:', forward.segs.length);
+    dbg('[split] backward.hit:', backward.hit, 'pts:', backward.pts.length, 'segs:', backward.segs.length);
+    dbg('[split] GG:', JSON.stringify(GG));
+    dbg('[split] p.G:', JSON.stringify(p.G));
+    dbg('[split] forward types:', forward.segs.map(s=>s.type).join(','));
+    dbg('[split] backward types:', backward.segs.map(s=>s.type).join(','));
     const fS = forward.segs, bS = backward.segs;
-    console.log('[check] forward  segs[0].from:', JSON.stringify(fS[0]?.from), '/ segs[last].to:', JSON.stringify(fS[fS.length-1]?.to));
-    console.log('[check] backward segs[0].from:', JSON.stringify(bS[0]?.from), '/ segs[last].to:', JSON.stringify(bS[bS.length-1]?.to));
-    console.log('[check] cutPoint:', JSON.stringify(cutPoint), '/ G:', JSON.stringify(p.G), '/ GG:', JSON.stringify(GG));
+    dbg('[check] forward  segs[0].from:', JSON.stringify(fS[0]?.from), '/ segs[last].to:', JSON.stringify(fS[fS.length-1]?.to));
+    dbg('[check] backward segs[0].from:', JSON.stringify(bS[0]?.from), '/ segs[last].to:', JSON.stringify(bS[bS.length-1]?.to));
+    dbg('[check] cutPoint:', JSON.stringify(cutPoint), '/ G:', JSON.stringify(p.G), '/ GG:', JSON.stringify(GG));
   }
 
   const pathA = [...forward.pts,  { ...p.BP }, { ...cutPoint }];
@@ -1529,7 +1449,7 @@ function resetDartMove() {
 }
 
 function applyDartMove() {
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) console.log('[dartMove] applyDartMove 실행', { cutPoint: dartMoveState.cutPoint, rotateSegs: dartMoveState.rotateSegs?.length, fixedSegs: dartMoveState.fixedSegs?.length });
+  dbg('[dartMove] applyDartMove 실행', { cutPoint: dartMoveState.cutPoint, rotateSegs: dartMoveState.rotateSegs?.length, fixedSegs: dartMoveState.fixedSegs?.length });
   if (!dartMoveState.cutPoint || dartMoveState.cutSegIndex < 0) {
     setHint("먼저 외곽선 위에서 다트 이동 위치를 선택하세요");
     return;
@@ -1553,15 +1473,13 @@ function applyDartMove() {
   // 회전 중심: 앞판=BP, 뒤판=E
   const pivot = (dartMoveState.side === "back") ? p.E : p.BP;
 
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[apply] rotatePts.len:', dartMoveState.rotatePts.length,
-      '/ fixedPts.len:', dartMoveState.fixedPts?.length,
-      '/ rotateArea:', polygonArea(dartMoveState.rotatePts).toFixed(2),
-      '/ fixedArea:', polygonArea(dartMoveState.fixedPts).toFixed(2));
-    console.log('[apply] rotateSegs.len:', dartMoveState.rotateSegs?.length,
-      '/ fixedSegs.len:', dartMoveState.fixedSegs?.length,
-      '/ rotateSegs types:', dartMoveState.rotateSegs?.map(s=>s.type).join(','));
-  }
+  dbg('[apply] rotatePts.len:', dartMoveState.rotatePts.length,
+    '/ fixedPts.len:', dartMoveState.fixedPts?.length,
+    '/ rotateArea:', polygonArea(dartMoveState.rotatePts).toFixed(2),
+    '/ fixedArea:', polygonArea(dartMoveState.fixedPts).toFixed(2));
+  dbg('[apply] rotateSegs.len:', dartMoveState.rotateSegs?.length,
+    '/ fixedSegs.len:', dartMoveState.fixedSegs?.length,
+    '/ rotateSegs types:', dartMoveState.rotateSegs?.map(s=>s.type).join(','));
 
   const side = dartMoveState.side;
 
@@ -1580,19 +1498,18 @@ function applyDartMove() {
   const _cleanFixed  = cleanForBake(dartMoveState.fixedSegs);
   const _cleanRotate = cleanForBake(dartMoveState.rotateSegs);
 
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[apply] cleanForBake fixed:', _rawFixedLen, '→', _cleanFixed.length,
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    dbg('[apply] cleanForBake fixed:', _rawFixedLen, '→', _cleanFixed.length,
       _rawFixedLen !== _cleanFixed.length ? '⚠️ 다트선 혼입 제거됨' : '');
-    console.log('[apply] cleanForBake rotate:', _rawRotateLen, '→', _cleanRotate.length,
+    dbg('[apply] cleanForBake rotate:', _rawRotateLen, '→', _cleanRotate.length,
       _rawRotateLen !== _cleanRotate.length ? '⚠️ 다트선 혼입 제거됨' : '');
-
     const _dist = (a, b) => (a && b) ? Math.hypot(a.x-b.x, a.y-b.y) : Infinity;
     const _fixedGap  = _dist(_cleanFixed[0]?.from,  dartMoveState.cutPoint);
     const _rotateGap = _dist(_cleanRotate[0]?.from, dartMoveState.cutPoint);
-    console.log('[preBake] fixed start gap:',  _fixedGap.toFixed(3),  _fixedGap  < 1e-2 ? '✅' : '❌');
-    console.log('[preBake] rotate start gap:', _rotateGap.toFixed(3), _rotateGap < 1e-2 ? '✅' : '❌');
-    console.log('[preBake] fixed types:',  _cleanFixed.map(s=>s.type).join(','));
-    console.log('[preBake] rotate types:', _cleanRotate.map(s=>s.type).join(','));
+    dbg('[preBake] fixed start gap:',  _fixedGap.toFixed(3),  _fixedGap  < 1e-2 ? '✅' : '❌');
+    dbg('[preBake] rotate start gap:', _rotateGap.toFixed(3), _rotateGap < 1e-2 ? '✅' : '❌');
+    dbg('[preBake] fixed types:',  _cleanFixed.map(s=>s.type).join(','));
+    dbg('[preBake] rotate types:', _cleanRotate.map(s=>s.type).join(','));
   }
 
   // split 결과로 직접 bake (fixedSegs 그대로, rotateSegs만 회전)
@@ -1620,9 +1537,7 @@ function applyDartMove() {
   // 시도할 수 있게 한다.
   const _crossings = findRotationCollisions(_cleanFixed, _cleanRotate, pivot, dartMoveState.userAngle);
   if (_crossings.length > 0) {
-    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-      console.warn('[apply] 조각 간 겹침으로 적용 차단', _crossings);
-    }
+    dbg('[apply] 조각 간 겹침으로 적용 차단', _crossings);
     setHint(`이 위치/각도는 패턴이 겹칩니다 (${_crossings.length}건) — 각도를 줄이거나 다른 조각/위치를 선택하세요`);
     return;
   }
@@ -1647,9 +1562,7 @@ function applyDartMove() {
   const _cross0 = _prevBaked ? findSelfIntersections(_prevBaked, pivot).length : 0;
   const _crossNow = findSelfIntersections(bakedSegments, pivot).length;
   if (_crossNow > _cross0) {
-    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-      console.warn('[apply] 회전이 새 겹침을 만들어 적용 차단 (baseline:', _cross0, '→', _crossNow, ')');
-    }
+    dbg('[apply] 회전이 새 겹침을 만들어 적용 차단 (baseline:', _cross0, '→', _crossNow, ')');
     setHint(`이 위치/각도는 패턴이 겹칩니다 — 각도를 줄이거나 다른 조각/위치를 선택하세요`);
     return;
   }
@@ -1676,20 +1589,18 @@ function applyDartMove() {
   }
   const _usedRad = sumOpenDartAngle(bakedSegments, pivot);
   if (_budgetRad > 1e-6 && _usedRad > _budgetRad * DART_BUDGET_TOL) {
-    if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-      console.warn('[apply] 다트 예산 초과로 차단',
-        { usedDeg: +(_usedRad*180/Math.PI).toFixed(1), budgetDeg: +(_budgetRad*180/Math.PI).toFixed(1),
-          ratio: +(_usedRad/_budgetRad).toFixed(2) });
-    }
+    dbg('[apply] 다트 예산 초과로 차단',
+      { usedDeg: +(_usedRad*180/Math.PI).toFixed(1), budgetDeg: +(_budgetRad*180/Math.PI).toFixed(1),
+        ratio: +(_usedRad/_budgetRad).toFixed(2) });
     setHint(`이 위치/조각은 가슴다트를 복제합니다 (열린 다트 합 ${(_usedRad*180/Math.PI).toFixed(0)}° > 예산 ${(_budgetRad*180/Math.PI).toFixed(0)}°) — 다른 조각/위치를 선택하세요`);
     return;
   }
 
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
     const DART_TYPES = ["dart-leg-new","dart-leg-old","dart-bridge"];
     const outerTypes = bakedSegments.filter(s=>!DART_TYPES.includes(s.type)).map(s=>s.type);
-    console.log('[afterBake] 외곽선 타입:', outerTypes.join(' → '));
-    console.log('[afterBake] 외곽선 수:', outerTypes.length, '/ 전체:', bakedSegments.length);
+    dbg('[afterBake] 외곽선 타입:', outerTypes.join(' → '));
+    dbg('[afterBake] 외곽선 수:', outerTypes.length, '/ 전체:', bakedSegments.length);
   }
 
   if (side === "front") {
@@ -1708,9 +1619,8 @@ function applyDartMove() {
     };
   }
 
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
-    console.log('[apply] bakedSegments:', bakedSegments.length, 'side:', side,
-      'dartLegs:', bakedSegments.filter(s=>s.type==="dart-leg-new").length);
+  dbg('[apply] bakedSegments:', bakedSegments.length, 'side:', side,
+    'dartLegs:', bakedSegments.filter(s=>s.type==="dart-leg-new").length);
 
   // 적용 후: active 유지, 앞/뒤 재선택 대기 상태로 복귀
   const appliedSide = side;
@@ -1985,10 +1895,9 @@ function initDartMoveClickHandler() {
         ca = budgetMaxAngle(_fixedSegs, _rotateSegs, _pivotSign, ca, _budgetRad);                // budgetLimit
         ca = applyTimeSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, ca, _prevBakedForSide);      // 적용시점 델타
         closeAngle = ca;
-        if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
-          console.log('[closeAngle] source notch 재분배:', 'sourceApertureDeg:',
-            (rotatePiece.sourceNotch.apertureRad*180/Math.PI).toFixed(2),
-            '→ finalDeg:', (ca*180/Math.PI).toFixed(2));
+        dbg('[closeAngle] source notch 재분배:', 'sourceApertureDeg:',
+          (rotatePiece.sourceNotch.apertureRad*180/Math.PI).toFixed(2),
+          '→ finalDeg:', (ca*180/Math.PI).toFixed(2));
       } else {
         // 닿은 기존 notch가 없음(gen-0 또는 완전히 새 위치) — 기존처럼 이 옷 전체의
         // 기본 다트량을 시작점으로 쓰고, 기하 판정(choosePhysicalCloseAngle)으로 1차
@@ -2005,8 +1914,7 @@ function initDartMoveClickHandler() {
         closeAngle = chooseSignedBaseAngle(_fixedSegs, _rotateSegs, _pivotSign,
           Math.abs(baseAngle), dartMoveState.cutPoint, _budgetRad, Math.sign(baseAngle) || 1,
           _prevBakedForSide);
-        if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
-          console.log('[closeAngle] gen-0/신규 위치 (기본 다트량):', (closeAngle*180/Math.PI).toFixed(2));
+        dbg('[closeAngle] gen-0/신규 위치 (기본 다트량):', (closeAngle*180/Math.PI).toFixed(2));
       }
 
       // 회전 공간이 사실상 없으면(안전각 0.5° 미만) 여기서 차단하고 조각 선택
@@ -2061,8 +1969,7 @@ function initDartMoveClickHandler() {
         const splitB = _isBakedB
           ? splitBakedOutline(segsBack, resultB.point, resultB.segIndex, d.pts.E)
           : splitBackOutline(segsBack, resultB.point, resultB.segIndex, d.pts, d.formula, B);
-        if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
-          console.log('[splitBack] isBaked:', _isBakedB, 'A.hit:', splitB.pieceA?.hit, 'B.hit:', splitB.pieceB?.hit);
+        dbg('[splitBack] isBaked:', _isBakedB, 'A.hit:', splitB.pieceA?.hit, 'B.hit:', splitB.pieceB?.hit);
         dartMoveState.mode          = "selectPiece";
         dartMoveState.pieceA        = splitB.pieceA;
         dartMoveState.pieceB        = splitB.pieceB;
@@ -2100,8 +2007,7 @@ function initDartMoveClickHandler() {
       const split = _isBakedF
         ? splitBakedOutline(segments, result.point, result.segIndex, d.pts.BP)
         : splitFrontOutline(segments, result.point, result.segIndex, d.pts, B);
-      if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE)
-        console.log('[split] isBaked:', _isBakedF, 'A.hit:', split.pieceA?.hit, 'B.hit:', split.pieceB?.hit);
+      dbg('[split] isBaked:', _isBakedF, 'A.hit:', split.pieceA?.hit, 'B.hit:', split.pieceB?.hit);
       dartMoveState.mode          = "selectPiece";
       dartMoveState.pieceA        = split.pieceA;
       dartMoveState.pieceB        = split.pieceB;
@@ -2421,12 +2327,10 @@ function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
   const forward  = walkForward();
   const backward = walkBackward();
 
-  if(typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[splitBack] forward.hit:', forward.hit, 'pts:', forward.pts.length,
-      'types:', forward.segs.map(s=>s.type).join(','));
-    console.log('[splitBack] backward.hit:', backward.hit, 'pts:', backward.pts.length,
-      'types:', backward.segs.map(s=>s.type).join(','));
-  }
+  dbg('[splitBack] forward.hit:', forward.hit, 'pts:', forward.pts.length,
+    'types:', forward.segs.map(s=>s.type).join(','));
+  dbg('[splitBack] backward.hit:', backward.hit, 'pts:', backward.pts.length,
+    'types:', backward.segs.map(s=>s.type).join(','));
 
   const pathA = [...forward.pts,  { ...info.apex }, { ...cutPoint }];
   const pathB = [...backward.pts, { ...info.apex }, { ...cutPoint }];
@@ -2549,12 +2453,15 @@ function buildBackOutline(p, f, B) {
   addLineSegment(segments, p.E,       dartCenter, { type: "back-shoulder-dart", disabled: true });
 
   // ── DEBUG 검증 ──────────────────────────────
+  // buildBackOutline은 렌더/호버마다 호출되는 hot path라, map/filter/join은
+  // DEBUG_DART_MOVE가 켜져 있을 때만 계산한다(dbg() 자체는 인자를 먼저 평가하므로
+  // 가드 없이 넘기면 꺼져 있어도 매번 순회 비용이 든다).
   if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    console.log('[buildBackOutline] 세그먼트 수:', segments.length);
-    console.log('[buildBackOutline] 타입 순서:', segments.map(s => s.type).join(' → '));
-    console.log('[buildBackOutline] disabled 세그먼트:', segments.filter(s => s.disabled).map(s => s.type));
+    dbg('[buildBackOutline] 세그먼트 수:', segments.length);
+    dbg('[buildBackOutline] 타입 순서:', segments.map(s => s.type).join(' → '));
+    dbg('[buildBackOutline] disabled 세그먼트:', segments.filter(s => s.disabled).map(s => s.type));
     const info = buildBackShoulderDartInfo(f, p, B);
-    console.log('[buildBackOutline] 다트info:', {
+    dbg('[buildBackOutline] 다트info:', {
       apex:        JSON.stringify(info.apex),
       dartCenter:  JSON.stringify(info.dartCenter),
       dartEnd_:    JSON.stringify(info.dartEnd_),
