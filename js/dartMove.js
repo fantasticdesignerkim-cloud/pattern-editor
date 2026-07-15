@@ -752,19 +752,6 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   return { pieceA, pieceB };
 }
 
-// ── 조각의 mouth 끝점 추출 ──
-function pieceMouthPoint(piece, pivot) {
-  if (piece?.openPts?.length) {
-    const last = piece.openPts[piece.openPts.length - 1];
-    return last ? { ...last } : null;
-  }
-  if (piece?.segs?.length) {
-    const last = piece.segs[piece.segs.length - 1];
-    return last?.to ? { ...last.to } : null;
-  }
-  return null;
-}
-
 function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
   const { GG } = calcCloseAngle(p, B);
 
@@ -1560,25 +1547,6 @@ function prepareDartMoveCandidate({
   };
 }
 
-function calcFrontCloseAngleByRotateHit(p, B, rotateHit) {
-  const { GG } = calcCloseAngle(p, B);
-  const pivot = p.BP;
-  const angleG  = Math.atan2(p.G.y  - pivot.y, p.G.x  - pivot.x);
-  const angleGG = Math.atan2(GG.y   - pivot.y, GG.x   - pivot.x);
-
-  let closeAngle;
-  if (rotateHit === "G") {
-    // G 조각이 움직이면 G를 GG 방향으로 닫는다
-    closeAngle = angleGG - angleG;
-  } else {
-    // GG 조각이 움직이면 GG를 G 방향으로 닫는다 (기존 방향)
-    closeAngle = angleG - angleGG;
-  }
-  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
-  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
-  return { closeAngle, GG };
-}
-
 // ── 이 옷 전체의 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
 // 부호는 신경 쓰지 않는다 — choosePhysicalCloseAngle이 최종 결정한다.
 function calcFrontBaseDartAngle(p, B) {
@@ -1590,42 +1558,6 @@ function calcFrontBaseDartAngle(p, B) {
   while (a >  Math.PI) a -= 2 * Math.PI;
   while (a < -Math.PI) a += 2 * Math.PI;
   return Math.abs(a);
-}
-
-// ── 뒤판 다트 닫힘 각도 계산 ──────────────────
-// E점 기준: dartEnd_ → dartCenter 방향으로 닫힘 (음수)
-function calcBackCloseAngle(info) {
-  const angleCenter = Math.atan2(info.dartCenter.y - info.apex.y, info.dartCenter.x - info.apex.x);
-  const angleEnd    = Math.atan2(info.dartEnd_.y   - info.apex.y, info.dartEnd_.x   - info.apex.x);
-  let closeAngle = angleCenter - angleEnd;  // 음수: dartEnd_ → dartCenter 방향
-  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
-  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
-  return { closeAngle };
-}
-
-function calcBackCloseAngleByRotateHit(info, rotateHit) {
-  const angleCenter = Math.atan2(
-    info.dartCenter.y - info.apex.y,
-    info.dartCenter.x - info.apex.x
-  );
-  const angleEnd = Math.atan2(
-    info.dartEnd_.y - info.apex.y,
-    info.dartEnd_.x - info.apex.x
-  );
-
-  let closeAngle;
-  if (rotateHit === "dartEnd") {
-    // dartEnd_ 쪽이 움직이면 dartEnd_를 dartCenter 방향으로 닫는다
-    closeAngle = angleCenter - angleEnd;
-  } else if (rotateHit === "dartCenter") {
-    // dartCenter 쪽이 움직이면 dartCenter를 dartEnd_ 방향으로 닫는다
-    closeAngle = angleEnd - angleCenter;
-  } else {
-    closeAngle = angleCenter - angleEnd;
-  }
-  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
-  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
-  return { closeAngle };
 }
 
 // ── 뒤판 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
@@ -2038,8 +1970,6 @@ function applyDartMove() {
 }
 
 function setDartTheta()  {}
-
-function applyDartMoveToPoint(key, orig) { return orig; }
 
 // ── 드래프트 pts 헬퍼 (중복 방지) ─────────────
 function _getDraftPts() {
