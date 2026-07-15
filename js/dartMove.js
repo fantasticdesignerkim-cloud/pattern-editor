@@ -1547,6 +1547,116 @@ function prepareDartMoveCandidate({
   };
 }
 
+// ══════════════════════════════════════════════
+// evaluateMove 4계층 ① — evaluateEndpoint (2026-07 C1)
+// ══════════════════════════════════════════════
+// **책임: 특정 각도로 bake→normalize한 "최종 형상"만 평가한다.** 그 외 전부 남의 일:
+//   - `piece-collision`은 ②(findPhysicalSweepLimit)의 책임 — 여기서 검사하지 않는다.
+//     같은 검사를 양쪽에 중복시키는 건 "no part" 위반이다.
+//   - 로그/사용자 문구는 controller의 책임 — 이 함수는 **조용하다**(60스텝×양쪽 부호로
+//     불릴 것이라 여기서 로그를 찍으면 느리고 로그가 폭발한다).
+//   - DOM(`n("inpB")` 등)도 `dartMoveState`도 읽지 않고, 입력을 변형하지 않는다.
+//   - source 보존은 `metrics.conservationErrRad`로 **측정만** 한다 — 차단하지 않는다.
+//     (게이트화는 동작 변경이므로 별도 기능 변경으로 검토)
+//
+// reasons는 이 넷으로 제한한다(확정된 계층 계약):
+//   'discontinuous'      — 세그먼트 체인이 끊김(연속성)
+//   'loop-open'          — 폐곡선이 안 닫힘(마지막 to ≠ 첫 from)
+//   'self-intersection'  — 이동 전 형상 대비 자기교차가 늘어남(델타)
+//   'budget-exceeded'    — 열린 다트각 합 > budget×DART_BUDGET_TOL
+//
+// @param ctx {{ fixedSegs, rotateSegs, pivot, budgetRad, prevBakedSegments, sourceNotch }}
+//   fixedSegs/rotateSegs는 cleanForBake를 이미 통과한 것으로 간주하지 않는다 —
+//   여기서 동일 기준으로 필터한다(호출부가 잊어도 안전하도록).
+// @returns {{ angleRad, shape, valid, reasons, metrics }}
+//   shape는 **불변 스냅샷으로 취급**한다 — 호출부가 좌표를 고치면 안 된다(preview와
+//   apply가 같은 객체를 공유하게 될 C6의 전제).
+const EVAL_BREAK_EPS = 0.05;   // cm — debugCheckSegmentContinuity와 같은 기준
+const EVAL_LOOP_EPS  = 0.05;   // cm — 폐곡선 닫힘 허용오차
+
+function evaluateEndpoint(ctx, angleRad) {
+  const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
+    s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
+  const fixedClean  = cleanForBake(ctx.fixedSegs);
+  const rotateClean = cleanForBake(ctx.rotateSegs);
+  const pivot = ctx.pivot;
+
+  const shape = normalizeBakedSegments(
+    bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle: angleRad }),
+    pivot);
+
+  const reasons = [];
+
+  // 연속성: 인접 세그먼트가 끊기지 않았는가
+  let breaks = 0;
+  for (let i = 0; i < shape.length - 1; i++) {
+    const a = shape[i].to, b = shape[i + 1].from;
+    const gap = (!a || !b) ? Infinity : Math.hypot(a.x - b.x, a.y - b.y);
+    if (gap > EVAL_BREAK_EPS) breaks++;
+  }
+  if (breaks > 0) reasons.push("discontinuous");
+
+  // 폐곡선: 마지막 to가 첫 from으로 돌아오는가
+  const first = shape[0]?.from, last = shape[shape.length - 1]?.to;
+  const loopGap = (first && last) ? Math.hypot(last.x - first.x, last.y - first.y) : Infinity;
+  if (!(loopGap <= EVAL_LOOP_EPS)) reasons.push("loop-open");
+
+  // 자기교차 델타: 이동 전 저장 형상이 기준선(각도0 재조립이 아님 — 그건 항등이 아니라
+  // 예전에 게이트를 오염시켰다)
+  const baselineSelfXCount = ctx.prevBakedSegments
+    ? findSelfIntersections(ctx.prevBakedSegments, pivot).length : 0;
+  const selfXCount = findSelfIntersections(shape, pivot).length;
+  if (selfXCount > baselineSelfXCount) reasons.push("self-intersection");
+
+  // 예산: 열린 다트각 합이 예산×허용폭을 넘는가
+  const openDartSumRad = sumOpenDartAngle(shape, pivot);
+  const budgetRatio = ctx.budgetRad > 1e-6 ? openDartSumRad / ctx.budgetRad : 0;
+  if (ctx.budgetRad > 1e-6 && openDartSumRad > ctx.budgetRad * DART_BUDGET_TOL) reasons.push("budget-exceeded");
+
+  // ── 측정만 (차단하지 않음) ──
+  // source 보존: source notch가 |angle|만큼 줄고 새 notch가 |angle|만큼 열려야 한다.
+  // conservationErrRad = |(sourceBefore − |angle|) − sourceAfter| 의 근사.
+  // sourceAfter는 "이동 후 notch 중 기대 잔여각에 가장 가까운 것"으로 추정한다 —
+  // 정확한 신원 추적은 테스트(unrelatedNotchInvariant)가 좌표쌍으로 하고, 여기선
+  // 값만 노출한다(차단에 쓰지 않으므로 근사로 충분).
+  let conservationErrRad = null, sourceApertureAfterRad = null, newNotchRad = null;
+  if (ctx.sourceNotch) {
+    const expectedSourceAfter = Math.max(0, ctx.sourceNotch.apertureRad - Math.abs(angleRad));
+    const isLeg = (s) => s && (s.type === "dart-leg-new" || s.type === "dart-leg-old");
+    const near = (a, b, e) => a && b && Math.hypot(a.x - b.x, a.y - b.y) < e;
+    const aps = [];
+    for (let i = 0; i < shape.length; i++) {
+      const a = shape[i], b = shape[(i + 1) % shape.length];
+      if (isLeg(a) && isLeg(b) && near(a.to, pivot, EPS_CLOSED_DART) && near(b.from, pivot, EPS_CLOSED_DART) &&
+          Math.hypot(a.from.x - b.to.x, a.from.y - b.to.y) >= EPS_CLOSED_DART) {
+        const v1x = a.from.x - pivot.x, v1y = a.from.y - pivot.y;
+        const v2x = b.to.x - pivot.x, v2y = b.to.y - pivot.y;
+        aps.push(Math.abs(Math.atan2(v1x * v2y - v1y * v2x, v1x * v2x + v1y * v2y)));
+      }
+    }
+    if (aps.length) {
+      sourceApertureAfterRad = aps.reduce((best, a) =>
+        Math.abs(a - expectedSourceAfter) < Math.abs(best - expectedSourceAfter) ? a : best, aps[0]);
+      newNotchRad = aps.reduce((best, a) =>
+        Math.abs(a - Math.abs(angleRad)) < Math.abs(best - Math.abs(angleRad)) ? a : best, aps[0]);
+      conservationErrRad = Math.abs(sourceApertureAfterRad - expectedSourceAfter);
+    }
+  }
+
+  return {
+    angleRad,
+    shape,
+    valid: reasons.length === 0,
+    reasons,
+    metrics: {
+      selfXCount, baselineSelfXCount, breaks, loopGap,
+      openDartSumRad, budgetRatio,
+      sourceApertureBeforeRad: ctx.sourceNotch ? ctx.sourceNotch.apertureRad : null,
+      sourceApertureAfterRad, newNotchRad, conservationErrRad,
+    },
+  };
+}
+
 // ── 이 옷 전체의 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
 // 부호는 신경 쓰지 않는다 — choosePhysicalCloseAngle이 최종 결정한다.
 function calcFrontBaseDartAngle(p, B) {

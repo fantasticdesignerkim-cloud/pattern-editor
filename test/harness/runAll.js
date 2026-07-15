@@ -20,6 +20,7 @@ const suites = [
   { file: "multiDartScenarios.js",    golden: true },
   { file: "frontOldestDartAudit.js",  golden: true },
   // 순서 ③(evaluateMove 4계층) 안전망
+  { file: "endpointEquivalence.js",   golden: false },
   { file: "nonMonotonicIntervals.js", golden: true },
   { file: "signSelectionFixture.js",  golden: true },
   { file: "perfBaseline.js",          golden: true },

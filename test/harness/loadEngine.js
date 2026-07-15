@@ -96,6 +96,7 @@ function createEngine(opts = {}) {
       findCutPoint, findCutPointBack,
       isClickableSeg, isBakedBoundarySeg, isDartLegType,
       choosePhysicalCloseAngle, chooseSignedBaseAngle, prepareDartMoveCandidate,
+      evaluateEndpoint,
       findMaxSafeAngle, budgetMaxAngle, applyTimeSafeAngle,
       bakeFromSplitPieces, normalizeBakedSegments,
       findRotationCollisions, findSelfIntersections, sumOpenDartAngle,
