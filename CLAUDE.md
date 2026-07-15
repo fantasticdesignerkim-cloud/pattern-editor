@@ -972,6 +972,13 @@ applicableIntervals: [ { fromRad: 0, toRad: 0.75° }, { fromRad: 17.8°, toRad: 
   if (!ev?.valid) return rejectMove(ev?.reasons);
   commitMove(ev);
   ```
+- **⚠️ C7 할 일 — C1의 임시 `throw` 제거**: `applyDartMove` 커밋 직전의 C1 이중 검증
+  블록(`[C1] endpoint evaluation mismatch`로 `throw`)은 **마이그레이션 기간 한정**이다.
+  브라우저에서 throw로 적용을 막는 건 임시로만 허용되고, C7에서 위 `rejectMove` 단일
+  거부 경로로 바꿔야 한다(사용자 지시). 그때 중복 bake도 함께 사라진다 →
+  C6에서 preview/apply가 같은 shape를 공유하면 이 블록 자체가 불필요해진다.
+  실측 비용: front 964→1043ms, multi 614→645ms, oldest 885→917ms,
+  backRandomStress(40×8) 2573→2638ms (약 +3~8%).
 
 ### 확정된 결정 (사용자 답변)
 
