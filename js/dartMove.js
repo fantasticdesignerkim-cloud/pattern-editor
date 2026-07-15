@@ -2022,6 +2022,56 @@ function applyDartMove() {
     return;
   }
 
+  // ══════════════════════════════════════════════
+  // C1 이중 검증 (임시) — evaluateEndpoint ①가 기존 게이트와 같은 판정을 내는가
+  // ══════════════════════════════════════════════
+  // 여기까지 왔다는 건 기존 게이트가 전부 통과했다는 뜻이다. 그러면 evaluateEndpoint도
+  // valid여야 한다(단, ①은 계약상 piece-collision을 안 보므로 그 항목은 비교 대상이
+  // 아니다 — 이미 위에서 findRotationCollisions가 걸렀다).
+  //
+  // 불일치는 "있을 수 없는 일"이다. setHint로 알리고 console.error로 기록한 뒤 throw한다:
+  //   - 브라우저: throw가 커밋 코드보다 먼저 터지므로 곧 "적용 거부 + 오류 기록"
+  //   - 테스트: 그대로 throw로 즉시 실패
+  // 별도 플래그 없이 둘 다 충족한다.
+  //
+  // ★ 임시로 bake가 중복된다(기존 1회 + evaluateEndpoint 1회). C6에서 preview/apply가
+  //   같은 shape를 공유하면 이 중복이 사라진다. 그때까지 비용을 감수한다.
+  // ★ 이 단계에서는 ev.shape를 저장하지 않는다 — 기존 bakedSegments를 그대로 저장한다.
+  {
+    const _ev = evaluateEndpoint({
+      fixedSegs: _cleanFixed, rotateSegs: _cleanRotate, pivot,
+      budgetRad: _budgetRad, prevBakedSegments: _prevBaked,
+      sourceNotch: null,  // 적용 시점엔 rotatePiece가 없다. 보존 지표는 측정 전용이라 불필요.
+    }, dartMoveState.userAngle);
+
+    const _mismatch = [];
+    if (!_ev.valid) _mismatch.push({ what: "valid", legacy: true, eval: false, reasons: _ev.reasons });
+    if (_ev.shape.length !== bakedSegments.length) {
+      _mismatch.push({ what: "shape.length", legacy: bakedSegments.length, eval: _ev.shape.length });
+    } else {
+      for (let i = 0; i < bakedSegments.length; i++) {
+        const a = bakedSegments[i], b = _ev.shape[i];
+        if (a.type !== b.type ||
+            Math.hypot(a.from.x - b.from.x, a.from.y - b.from.y) > 1e-9 ||
+            Math.hypot(a.to.x - b.to.x, a.to.y - b.to.y) > 1e-9) {
+          _mismatch.push({ what: "shape[" + i + "]", legacyType: a.type, evalType: b.type });
+          break;
+        }
+      }
+    }
+    if (_ev.metrics.selfXCount !== _crossNow) _mismatch.push({ what: "selfX", legacy: _crossNow, eval: _ev.metrics.selfXCount });
+    if (_ev.metrics.baselineSelfXCount !== _cross0) _mismatch.push({ what: "baselineSelfX", legacy: _cross0, eval: _ev.metrics.baselineSelfXCount });
+    if (Math.abs(_ev.metrics.openDartSumRad - _usedRad) > 1e-9) _mismatch.push({ what: "openDartSum", legacy: _usedRad, eval: _ev.metrics.openDartSumRad });
+    const _legacyRatio = _budgetRad > 1e-6 ? _usedRad / _budgetRad : 0;
+    if (Math.abs(_ev.metrics.budgetRatio - _legacyRatio) > 1e-9) _mismatch.push({ what: "budgetRatio", legacy: _legacyRatio, eval: _ev.metrics.budgetRatio });
+
+    if (_mismatch.length > 0) {
+      setHint("내부 오류: 평가 불일치로 적용을 거부했습니다 (콘솔 확인)");
+      console.error("[C1] evaluateEndpoint가 기존 apply 게이트와 불일치 — 적용 거부", _mismatch);
+      throw new Error("[C1] endpoint evaluation mismatch: " + JSON.stringify(_mismatch));
+    }
+  }
+
   if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
     const DART_TYPES = ["dart-leg-new","dart-leg-old","dart-bridge"];
     const outerTypes = bakedSegments.filter(s=>!DART_TYPES.includes(s.type)).map(s=>s.type);
