@@ -1069,7 +1069,7 @@ legIdxA인지 뒤바뀐다(실측: 이동 전후 mouthA가 정확히 자기 aper
 사전순 정규화해 신원을 만든다.
 
 **C0 산출물**: `nonMonotonicIntervals.js`(21) / `signSelectionFixture.js`(12) /
-`unrelatedNotchInvariant.js`(8) / `perfBaseline.js`(4) / `golden/evaluation.json`.
+`unrelatedNotchInvariant.js`(8) / `perfBaseline.js`(4) / `golden/{nonmonotonic,sign-selection,perf-baseline}.json`.
 `perfBaseline`은 **호출 횟수만 실패 조건**(bake·normalize·rotColl·selfX), 벽시계
 시간은 정보용(PC 상태 의존). 800스텝 oracle은 `--oracle800` 선택 실행.
 

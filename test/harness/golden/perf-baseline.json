@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "updatedAt": "2026-07-15T06:07:09.325Z",
+    "reason": "split per-suite golden (no merge branch)"
+  },
+  "perf_gen0_counts": {
+    "bake": 50,
+    "normalize": 50,
+    "rotColl": 79,
+    "selfX": 2
+  },
+  "perf_sourceNotch_counts": {
+    "bake": 25,
+    "normalize": 25,
+    "rotColl": 60,
+    "selfX": 2
+  }
+}

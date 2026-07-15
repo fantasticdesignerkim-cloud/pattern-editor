@@ -160,19 +160,13 @@ class GoldenFile {
     return diffSnapshot(this.data[name], snapshot);
   }
   // UPDATE 모드에서만 실제로 파일을 쓴다. 사유(reason)를 함께 헤더로 남긴다.
-  // ★ 기존 파일과 **병합**한다 — 한 골든 파일을 여러 스위트가 공유할 때
-  //   (예: evaluation.json = nonMonotonicIntervals + signSelectionFixture)
-  //   한쪽 --update가 다른 쪽 항목을 지우면 안 된다.
+  // ★ 파일 하나당 스위트 하나다(병합 없음) — 그래서 `--update`가 그 스위트에서 사라진
+  //   항목을 자동으로 청소한다. 여러 스위트가 한 파일을 공유하면 병합이 필요해지고,
+  //   병합은 삭제된 테스트의 키를 골든에 영구히 남긴다. 파일을 나누는 쪽이 부품이 적다.
   save(reason) {
     if (!this.update) return false;
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    let existing = {};
-    if (fs.existsSync(this.filePath)) {
-      try { existing = JSON.parse(fs.readFileSync(this.filePath, "utf8")); } catch (e) { existing = {}; }
-    }
-    delete existing._meta;
-    const out = { _meta: { updatedAt: new Date().toISOString(), reason: reason || "(no reason given)" },
-      ...existing, ...this._collected };
+    const out = { _meta: { updatedAt: new Date().toISOString(), reason: reason || "(no reason given)" }, ...this._collected };
     fs.writeFileSync(this.filePath, JSON.stringify(out, null, 2) + "\n", "utf8");
     return true;
   }

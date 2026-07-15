@@ -21,7 +21,7 @@ const { createEngine } = require("./loadEngine");
 const { moveContext, resolveCutRecipe, budgetRadOf } = require("./dartDriver");
 const { GoldenFile } = require("./goldenSnapshot");
 
-const golden = new GoldenFile(path.join(__dirname, "golden", "evaluation.json"));
+const golden = new GoldenFile(path.join(__dirname, "golden", "sign-selection.json"));
 
 let pass = 0, fail = 0;
 const failures = [];
