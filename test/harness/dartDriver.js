@@ -1,19 +1,17 @@
 // ══════════════════════════════════════════════
 // 다트이동 "클릭 한 번"을 헤드리스로 재현하는 드라이버.
 //
-// js/dartMove.js의 initDartMoveClickHandler 안 selectPiece 클릭 로직(1944-2038행)을
-// 그대로 옮겨 온 얇은 오케스트레이션이다 — 각도/충돌/예산 판단의 실제 계산은 전부
-// 프로덕션 함수(choosePhysicalCloseAngle/chooseSignedBaseAngle/findMaxSafeAngle/
-// budgetMaxAngle/applyTimeSafeAngle/applyDartMove)를 그대로 호출해서 얻는다.
+// DOM 이벤트 없이 selectPiece → 드래그 → 적용 경로를 재현한다. 판단(각도/충돌/예산)은
+// 전부 프로덕션 함수를 그대로 호출해서 얻는다.
 //
-// ⚠️ 정확히 말하면 "판단 로직은 재구현하지 않지만, 어떤 함수를 어떤 순서로 부르는지
-// 결정하는 오케스트레이션 자체는 클릭 핸들러에서 복제(duplicate)한 것"이다 — 이 복제는
-// 공용 함수가 아니라 손으로 옮겨 적은 것이므로, 다음에 클릭 핸들러의 호출 순서/분기가
-// 바뀌면 이 파일이 조용히 실제 앱과 어긋날 수 있다(테스트가 계속 통과해도 더 이상 실제
-// 앱의 selectPiece 경로를 대표하지 않게 됨). 지금 당장은 안전하지만, 다음 리팩터링
-// 때는 이 오케스트레이션(아래 closeAngle 결정 블록)을 dartMove.js 쪽에
-// `prepareDartMoveCandidate()` 같은 공용 순수 함수로 뽑아서 클릭 핸들러와 이 드라이버가
-// 함께 호출하도록 만들 것 — 그러면 복제가 아니라 진짜 공유가 된다.
+// **각도 결정 오케스트레이션은 복제가 아니라 공유다** (2026-07 추출 이후):
+// `engine.prepareDartMoveCandidate()`를 UI(initDartMoveClickHandler)와 이 드라이버가
+// 함께 호출한다. 예전엔 그 호출 순서/분기가 여기에 손으로 복제돼 있어, 클릭 핸들러가
+// 바뀌면 테스트가 계속 통과하면서도 더 이상 실제 앱 경로를 대표하지 못하는 위험이
+// 있었다 — 이제 구조적으로 불가능하다.
+//
+// 이 파일에 남은 책임은 순수한 배선뿐이다: 컷 위치 선택(무작위/시맨틱 레시피),
+// split 호출, 조각 선택, dartMoveState 세팅 후 applyDartMove 호출.
 // ══════════════════════════════════════════════
 
 function lerp(a, b, t) {
@@ -77,11 +75,11 @@ function moveContext(engine, side, dims) {
  * 다트이동 오케스트레이션의 단일 코어. cut(={point,segIndex})이 이미 정해진 상태에서
  * split → 조각선택 → closeAngle 결정 → applyDartMove까지 수행한다.
  *
- * ⚠️ 오케스트레이션 복제, 동기화 필요: 아래 closeAngle 결정 if/else 분기와 호출 순서는
- * js/dartMove.js의 initDartMoveClickHandler selectPiece 로직(1972-2010행 부근)을 손으로
- * 옮겨 적은 것이다. dartMove.js에서 이 분기가 바뀌면 여기도 같이 고쳐야 한다 — 공용
- * 순수 함수(prepareDartMoveCandidate)로 뽑기 전까지는 두 곳이 어긋나지 않는지 리뷰 시
- * 항상 같이 확인할 것. 무작위/레시피 경로 모두 이 한 함수만 거치므로 복제는 딱 한 벌이다.
+ * closeAngle 결정은 **프로덕션과 같은 함수**(`engine.prepareDartMoveCandidate`)를
+ * 호출한다 — 예전엔 그 오케스트레이션이 여기에 복제돼 있어 dartMove.js와 조용히
+ * 어긋날 수 있었지만(2026-07 추출로 해소), 이제 UI(initDartMoveClickHandler)와
+ * 이 하네스가 같은 코드를 공유하므로 하네스가 실제 앱 경로를 대표한다는 게
+ * 구조적으로 보장된다.
  */
 function performMove(engine, side, dims, ctx, cut, pieceChoice, fraction, rng) {
   const { B, d, pivot, segs, isBaked } = ctx;
@@ -105,43 +103,32 @@ function performMove(engine, side, dims, ctx, cut, pieceChoice, fraction, rng) {
 
   const rotateSegs = rotatePiece.segs;
   const fixedSegs  = fixedPiece.segsFull || fixedPiece.segs;
-  const budgetRad = side === "back"
-    ? Math.abs(engine.calcBackBaseDartAngle(engine.buildBackShoulderDartInfo(d.formula, d.pts, B)))
-    : Math.abs(engine.calcFrontBaseDartAngle(d.pts, B));
+  // calc*BaseDartAngle은 Math.abs()를 반환 — 예산과 gen-0 시작각이 같은 값이지만
+  // 역할이 달라 prepareDartMoveCandidate에 각각의 이름으로 전달한다(UI와 동일).
+  const baseDartAngle = side === "back"
+    ? engine.calcBackBaseDartAngle(engine.buildBackShoulderDartInfo(d.formula, d.pts, B))
+    : engine.calcFrontBaseDartAngle(d.pts, B);
   const prevBaked = side === "back"
     ? engine.dartMoveState.appliedBack?.bakedSegments
     : engine.dartMoveState.appliedFront?.bakedSegments;
 
-  // ── closeAngle 결정 (오케스트레이션 복제 지점, 위 주석 참고) ──
-  let closeAngle, viaSourceNotch = false;
-  if (rotatePiece.sourceNotch) {
-    viaSourceNotch = true;
-    const targetSigned = rotatePiece.sourceNotch.signedAngleRad;
-    const sign = Math.sign(targetSigned) || 1;
-    const mag = Math.min(Math.abs(targetSigned), budgetRad);
-    let ca = sign * mag;
-    ca = engine.findMaxSafeAngle(fixedSegs, rotateSegs, pivot, ca, cut.point);
-    ca = engine.budgetMaxAngle(fixedSegs, rotateSegs, pivot, ca, budgetRad);
-    ca = engine.applyTimeSafeAngle(fixedSegs, rotateSegs, pivot, ca, prevBaked);
-    closeAngle = ca;
-  } else {
-    let baseAngle = side === "back"
-      ? engine.calcBackBaseDartAngle(engine.buildBackShoulderDartInfo(d.formula, d.pts, B))
-      : engine.calcFrontBaseDartAngle(d.pts, B);
-    baseAngle = engine.choosePhysicalCloseAngle({
-      pivot, cutPoint: cut.point, rotatePts: rotatePiece.pts, absAngle: baseAngle,
-    });
-    closeAngle = engine.chooseSignedBaseAngle(
-      fixedSegs, rotateSegs, pivot, Math.abs(baseAngle), cut.point, budgetRad,
-      Math.sign(baseAngle) || 1, prevBaked
-    );
+  // ── closeAngle 결정: UI와 공유하는 프로덕션 순수 함수 (복제 없음) ──
+  const candidate = engine.prepareDartMoveCandidate({
+    pivot,
+    budgetRad: Math.abs(baseDartAngle),
+    rawBaseAngleRad: baseDartAngle,
+    cutPoint: cut.point,
+    rotatePiece, fixedPiece,
+    prevBakedSegments: prevBaked,
+  });
+  const closeAngle = candidate.closeAngleRad;
+  const viaSourceNotch = !!candidate.sourceNotch;
+
+  if (!candidate.valid) {
+    return { status: "no-room", sourceNotch: viaSourceNotch, chosen, reason: candidate.reason };
   }
 
-  if (Math.abs(closeAngle) < engine.MIN_DART_ANGLE_RAD) {
-    return { status: "no-room", sourceNotch: !!rotatePiece.sourceNotch, chosen };
-  }
-
-  const sourceApertureBefore = rotatePiece.sourceNotch ? rotatePiece.sourceNotch.apertureRad : null;
+  const sourceApertureBefore = candidate.sourceApertureBeforeRad;
 
   // ── 실제 applyDartMove()를 그대로 호출 (bake/normalize/충돌게이트/예산게이트 전부 real code) ──
   engine.dartMoveState.side        = side;
