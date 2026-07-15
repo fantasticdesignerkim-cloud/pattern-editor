@@ -1095,6 +1095,101 @@ function chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot, baseMag, cutPoint, 
   return (mGeom >= mOpp) ? aGeom : aOpp;
 }
 
+// ── 다트이동 후보 준비 (2026-07 추출) — UI와 테스트가 함께 쓰는 순수 평가 함수 ──
+//
+// 조각을 선택한 시점에 "이 조각을 어느 방향으로 얼마까지 돌릴 수 있는가"를 결정하는
+// 오케스트레이션. 예전엔 이 순서가 initDartMoveClickHandler와 테스트 하네스
+// (test/harness/dartDriver.js)에 **각각 복제**돼 있어서 한쪽만 고치면 조용히 어긋났다.
+// 이제 두 호출자가 이 함수 하나를 공유한다 — 하네스가 실제 앱 경로를 대표한다는 게
+// 구조적으로 보장된다.
+//
+// **순수 함수**: DOM(`n("inpB")` 등)도 `dartMoveState`도 읽지 않고, 입력 객체
+// (segments/rotatePiece/fixedPiece)를 변형하지 않는다. 필요한 값은 전부 인자로 받는다.
+// 이것이 향후 `evaluateMove` 4계층 분리(evaluateEndpoint / findPhysicalSweepLimit /
+// findApplicableIntervals / resolveRequestedAngle)의 첫 발판이다.
+//
+// @param {object}  pivot            회전 중심 (앞판 BP / 뒤판 E)
+// @param {number}  budgetRad        이 옷 전체의 기본 다트각 "예산"(양수)
+// @param {number}  rawBaseAngleRad  gen-0 경로의 시작 각도 크기(양수, calc*BaseDartAngle).
+//                                   현재 budgetRad와 같은 값이지만 역할이 달라 분리해 받는다.
+// @param {object}  cutPoint
+// @param {object}  rotatePiece      { segs, pts, sourceNotch? }
+// @param {object}  fixedPiece       { segs, segsFull? }
+// @param {Array}   prevBakedSegments 이동 전 저장 형상(델타 게이트 기준선). 없으면 null.
+// @param {number}  minDartAngleRad  퇴화 다트 차단 하한(기본 MIN_DART_ANGLE_RAD)
+// @returns {{closeAngleRad:number, requestedAngleRad:number, sourceNotch:object|null,
+//            sourceApertureBeforeRad:number|null,
+//            limits:{physicalRad:number|null, budgetRad:number|null, applySafeRad:number|null},
+//            valid:boolean, reason:string|null}}
+//   limits는 **단계별로 캡된 각도**다(입력 budgetRad=예산 각도와 이름이 겹치지만 다른 것):
+//     physicalRad  = findMaxSafeAngle 통과 후, budgetRad = budgetMaxAngle 통과 후,
+//     applySafeRad = applyTimeSafeAngle 통과 후(=최종). gen-0 경로는 이 세 캡이
+//     chooseSignedBaseAngle 내부에서 두 부호에 대해 수행되므로 단계별 값을 밖에서
+//     알 수 없다 — 정직하게 null로 둔다(추정값을 지어내지 않는다).
+function prepareDartMoveCandidate({
+  pivot, budgetRad, rawBaseAngleRad, cutPoint, rotatePiece, fixedPiece,
+  prevBakedSegments = null, minDartAngleRad = MIN_DART_ANGLE_RAD,
+}) {
+  // 고정 조각은 rest(항상-고정 영역)까지 포함한 전체 체인 사용 (baked 다중다트).
+  // 1차(splitFront/BackOutline)는 segsFull이 없으므로 기존 segs 그대로 사용.
+  const rotateSegs = rotatePiece.segs;
+  const fixedSegs  = fixedPiece.segsFull || fixedPiece.segs;
+  const sourceNotch = rotatePiece.sourceNotch || null;
+
+  let closeAngleRad, requestedAngleRad;
+  const limits = { physicalRad: null, budgetRad: null, applySafeRad: null };
+
+  if (sourceNotch) {
+    // 회전 조각이 기존 열린 notch(source)의 다리 하나를 물고 있다. 목표는 그
+    // notch를 "정확히" 닫는 것 — 부호와 크기 모두 그 notch의 signedAngleRad에서
+    // 직접 유도한다. rawBase(기본 다트량 전체)는 시작점으로 쓰지 않는다 —
+    // sourceAngle이 새 시작점이다. 반대 부호는 source를 닫는 게 아니라 더 벌리므로
+    // 애초에 시도하지 않는다("usable이 큰 방향"이 아니라 "source를 감소시키는
+    // 방향"만 유효한 후보).
+    const targetSigned = sourceNotch.signedAngleRad;
+    const sign = Math.sign(targetSigned) || 1;
+    const mag  = Math.min(Math.abs(targetSigned), budgetRad); // baseMagnitude = min(sourceAngle, budget)
+    requestedAngleRad = sign * mag;
+    limits.physicalRad  = findMaxSafeAngle(fixedSegs, rotateSegs, pivot, requestedAngleRad, cutPoint);
+    limits.budgetRad    = budgetMaxAngle(fixedSegs, rotateSegs, pivot, limits.physicalRad, budgetRad);
+    limits.applySafeRad = applyTimeSafeAngle(fixedSegs, rotateSegs, pivot, limits.budgetRad, prevBakedSegments);
+    closeAngleRad = limits.applySafeRad;
+    dbg('[closeAngle] source notch 재분배:', 'sourceApertureDeg:',
+      (sourceNotch.apertureRad*180/Math.PI).toFixed(2),
+      '→ finalDeg:', (closeAngleRad*180/Math.PI).toFixed(2));
+  } else {
+    // 닿은 기존 notch가 없음(gen-0 또는 완전히 새 위치) — 이 옷 전체의 기본 다트량을
+    // 시작점으로 쓰고, 기하 판정(choosePhysicalCloseAngle)으로 1차 부호를 잡은 뒤
+    // chooseSignedBaseAngle이 두 부호를 비교해 최종 결정한다.
+    let baseAngle = rawBaseAngleRad;
+    if (rotatePiece.pts && rotatePiece.pts.length >= 3) {
+      baseAngle = choosePhysicalCloseAngle({
+        pivot, cutPoint, rotatePts: rotatePiece.pts, absAngle: baseAngle,
+      });
+    }
+    requestedAngleRad = baseAngle;
+    closeAngleRad = chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot,
+      Math.abs(baseAngle), cutPoint, budgetRad, Math.sign(baseAngle) || 1,
+      prevBakedSegments);
+    dbg('[closeAngle] gen-0/신규 위치 (기본 다트량):', (closeAngleRad*180/Math.PI).toFixed(2));
+  }
+
+  // 회전 공간이 사실상 없으면(안전각 0.5° 미만) 호출부가 차단한다 — 이대로 적용하면
+  // 겹침은 없지만 입구가 안 벌어진 퇴화 다트(다리 두 개가 같은 자리에 겹친 방사선)가
+  // 남는다(실측: 무작위 재현에서 "필요없는 선" 잔선의 직접 원인이 이 케이스였음).
+  const valid = Math.abs(closeAngleRad) >= minDartAngleRad;
+
+  return {
+    closeAngleRad,
+    requestedAngleRad,
+    sourceNotch,
+    sourceApertureBeforeRad: sourceNotch ? sourceNotch.apertureRad : null,
+    limits,
+    valid,
+    reason: valid ? null : "no-room",
+  };
+}
+
 // ── 조각의 mouth 끝점 추출 ──
 function pieceMouthPoint(piece, pivot) {
   if (piece?.openPts?.length) {
@@ -1866,62 +1961,38 @@ function initDartMoveClickHandler() {
       const _d = createDraft(_B, _W, _BL);
       const pivot2 = dartMoveState.side === "back" ? _d.pts.E : _d.pts.BP;
 
-      // ── closeAngle 결정 (2026-07 3차 재설계: source notch 우선) ──
+      // ── closeAngle 결정: UI와 테스트 하네스가 공유하는 순수 평가 함수에 위임 ──
+      // (2026-07 추출. 예전엔 이 오케스트레이션이 여기와 test/harness/dartDriver.js에
+      //  각각 복제돼 있었다 — 이제 prepareDartMoveCandidate 한 곳뿐.)
       const _pivotSign = dartMoveState.side === "back" ? _d.pts.E : _d.pts.BP;
       // 고정 조각은 rest(항상-고정 영역)까지 포함한 전체 체인 사용 (baked 다중다트).
       // 1차(splitFront/BackOutline)는 segsFull이 없으므로 기존 segs 그대로 사용.
       const _rotateSegs = rotatePiece.segs;
       const _fixedSegs  = fixedPiece.segsFull || fixedPiece.segs;
-      const _budgetRad = (dartMoveState.side === "back")
-        ? Math.abs(calcBackBaseDartAngle(buildBackShoulderDartInfo(_d.formula, _d.pts, _B)))
-        : Math.abs(calcFrontBaseDartAngle(_d.pts, _B));
+      // calc*BaseDartAngle은 Math.abs()를 반환하므로 예산과 gen-0 시작각이 같은 값이다.
+      // 역할이 다르므로 prepareDartMoveCandidate에는 각각의 이름으로 전달한다.
+      const _baseDartAngle = (dartMoveState.side === "back")
+        ? calcBackBaseDartAngle(buildBackShoulderDartInfo(_d.formula, _d.pts, _B))
+        : calcFrontBaseDartAngle(_d.pts, _B);
       const _prevBakedForSide = (dartMoveState.side === "back")
         ? dartMoveState.appliedBack?.bakedSegments
         : dartMoveState.appliedFront?.bakedSegments;
 
-      let closeAngle;
-      if (rotatePiece.sourceNotch) {
-        // 회전 조각이 기존 열린 notch(source)의 다리 하나를 물고 있다. 목표는 그
-        // notch를 "정확히" 닫는 것 — 부호와 크기 모두 그 notch의 signedAngleRad에서
-        // 직접 유도한다. rawBase(기본 다트량 전체)는 시작점으로 쓰지 않는다 —
-        // sourceAngle이 새 시작점이다(사용자 지시 3/5). 반대 부호는 source를 닫는 게
-        // 아니라 더 벌리므로 애초에 시도하지 않는다(사용자 지시 4 — "usable이 큰
-        // 방향"이 아니라 "source를 감소시키는 방향"만 유효한 후보).
-        const targetSigned = rotatePiece.sourceNotch.signedAngleRad;
-        const sign = Math.sign(targetSigned) || 1;
-        const mag  = Math.min(Math.abs(targetSigned), _budgetRad); // baseMagnitude = min(sourceAngle, budget)
-        let ca = sign * mag;
-        ca = findMaxSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, ca, dartMoveState.cutPoint); // collisionLimit
-        ca = budgetMaxAngle(_fixedSegs, _rotateSegs, _pivotSign, ca, _budgetRad);                // budgetLimit
-        ca = applyTimeSafeAngle(_fixedSegs, _rotateSegs, _pivotSign, ca, _prevBakedForSide);      // 적용시점 델타
-        closeAngle = ca;
-        dbg('[closeAngle] source notch 재분배:', 'sourceApertureDeg:',
-          (rotatePiece.sourceNotch.apertureRad*180/Math.PI).toFixed(2),
-          '→ finalDeg:', (ca*180/Math.PI).toFixed(2));
-      } else {
-        // 닿은 기존 notch가 없음(gen-0 또는 완전히 새 위치) — 기존처럼 이 옷 전체의
-        // 기본 다트량을 시작점으로 쓰고, 기하 판정(choosePhysicalCloseAngle)으로 1차
-        // 부호를 잡은 뒤 chooseSignedBaseAngle이 두 부호를 비교해 최종 결정한다.
-        let baseAngle = (dartMoveState.side === "back")
-          ? calcBackBaseDartAngle(buildBackShoulderDartInfo(_d.formula, _d.pts, _B))
-          : calcFrontBaseDartAngle(_d.pts, _B);
-        if (rotatePiece.pts && rotatePiece.pts.length >= 3) {
-          baseAngle = choosePhysicalCloseAngle({
-            pivot: _pivotSign, cutPoint: dartMoveState.cutPoint,
-            rotatePts: rotatePiece.pts, absAngle: baseAngle,
-          });
-        }
-        closeAngle = chooseSignedBaseAngle(_fixedSegs, _rotateSegs, _pivotSign,
-          Math.abs(baseAngle), dartMoveState.cutPoint, _budgetRad, Math.sign(baseAngle) || 1,
-          _prevBakedForSide);
-        dbg('[closeAngle] gen-0/신규 위치 (기본 다트량):', (closeAngle*180/Math.PI).toFixed(2));
-      }
+      const _candidate = prepareDartMoveCandidate({
+        pivot: _pivotSign,
+        budgetRad: Math.abs(_baseDartAngle),
+        rawBaseAngleRad: _baseDartAngle,
+        cutPoint: dartMoveState.cutPoint,
+        rotatePiece, fixedPiece,
+        prevBakedSegments: _prevBakedForSide,
+      });
+      const closeAngle = _candidate.closeAngleRad;
 
       // 회전 공간이 사실상 없으면(안전각 0.5° 미만) 여기서 차단하고 조각 선택
       // 상태를 유지한다 — 이대로 적용하면 겹침은 없지만 입구가 안 벌어진 퇴화
       // 다트(다리 두 개가 같은 자리에 겹친 방사선)가 남는다(실측: 무작위 재현에서
       // "필요없는 선" 잔선의 직접 원인이 이 케이스였음).
-      if (Math.abs(closeAngle) < MIN_DART_ANGLE_RAD) {
+      if (!_candidate.valid) {
         setHint("이 위치/조각은 회전할 공간이 없습니다 — 다른 조각이나 위치를 선택하세요");
         render();
         return;

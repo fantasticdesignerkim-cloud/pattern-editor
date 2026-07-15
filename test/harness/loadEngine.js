@@ -95,7 +95,7 @@ function createEngine(opts = {}) {
       splitFrontOutline, splitBackOutline, splitBakedOutline,
       findCutPoint, findCutPointBack,
       isClickableSeg, isBakedBoundarySeg, isDartLegType,
-      choosePhysicalCloseAngle, chooseSignedBaseAngle,
+      choosePhysicalCloseAngle, chooseSignedBaseAngle, prepareDartMoveCandidate,
       findMaxSafeAngle, budgetMaxAngle, applyTimeSafeAngle,
       bakeFromSplitPieces, normalizeBakedSegments,
       findRotationCollisions, findSelfIntersections, sumOpenDartAngle,

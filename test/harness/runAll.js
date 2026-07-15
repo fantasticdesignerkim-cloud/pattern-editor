@@ -12,6 +12,7 @@ const path = require("path");
 const passThrough = process.argv.slice(2); // 예: --update "reason"
 
 const suites = [
+  { file: "purityCheck.js",         golden: false },
   { file: "backDeterministic.js",   golden: false },
   { file: "backRandomStress.js",    golden: false, args: ["40", "8"] },
   { file: "frontDeterministic.js",  golden: true },
