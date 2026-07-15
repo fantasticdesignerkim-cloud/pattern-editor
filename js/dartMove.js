@@ -3,30 +3,21 @@
 // 기준: render.js가 그리는 앞판 최종 외곽선과 같은 계산 사용
 // ══════════════════════════════════════════════
 
-const dartMoveState = {
-  active:        false,
-  side:          null,
-  mode:          "idle",
-  cutPoint:      null,
-  cutSegIndex:   -1,
-  hoverPoint:    null,
-  hoverSegIndex: -1,
-  pieceA:        null,
-  pieceB:        null,
-  baseAngle:     0,
-  userAngle:     0,
-  rotatePts:     null,
-  fixedPts:      null,
-  fixedSegs:     null,
-  rotateSegs:    null,
-  fixedHit:      null,
-  rotateHit:     null,
-  dragging:      false,
-  _splitIsBaked: null,
-  // ── 적용 결과 ──────────────────────────────
-  appliedFront:  null,
-  appliedBack:   null,
-};
+
+// ══════════════════════════════════════════════
+// 【공용】 진단 로그
+// ══════════════════════════════════════════════
+
+// ── 다트이동 진단 로그: 이 한 함수로만 나간다 (DEBUG_DART_MOVE=false면 전부 무음) ──
+function dbg(...args) {
+  if (typeof DEBUG_DART_MOVE !== "undefined" && DEBUG_DART_MOVE) console.log(...args);
+}
+
+
+// ══════════════════════════════════════════════
+// 【GEOMETRY】 점·각도·회전·교차·거리 — 패턴 의미를 모르는 순수 기하.
+// 이 구역은 다트/노치 개념을 몰라야 한다. 세그먼트와 점만 다룬다.
+// ══════════════════════════════════════════════
 
 // ── 유틸 ──────────────────────────────────────
 function closestOnSeg(pt, a, b) {
@@ -107,54 +98,6 @@ function segmentsCross(segA, segB) {
   const o1 = o(p1, p2, p3), o2 = o(p1, p2, p4), o3 = o(p3, p4, p1), o4 = o(p3, p4, p2);
   return o1 !== o2 && o1 !== 0 && o2 !== 0 && o3 !== o4 && o3 !== 0 && o4 !== 0;
 }
-
-// ── 위상 순서 보존 bake ───────────────────────────────
-// ── split 결과로 bakedSegments 생성 ─────────────
-// 다트 입구 = cutPoint / rotatedCutPoint, 꼭지점 = pivot
-// 폐곡선: pivot → cutA → segsA → endA → bridge → endB → reversed(segsB) → cutB → pivot
-// ── 타겟 외곽선 공급 ─────────────────────────────
-function getFrontTargetOutline(p, f, B) {
-  const baked = dartMoveState.appliedFront?.bakedSegments;
-  if (Array.isArray(baked) && baked.length > 0) return baked;
-  return buildFrontOutline(p, f, B);
-}
-function getBackTargetOutline(p, f, B) {
-  const baked = dartMoveState.appliedBack?.bakedSegments;
-  if (Array.isArray(baked) && baked.length > 0) return baked;
-  return buildBackOutline(p, f, B);
-}
-
-// ── 다트이동 진단 로그: 이 한 함수로만 나간다 (DEBUG_DART_MOVE=false면 전부 무음) ──
-function dbg(...args) {
-  if (typeof DEBUG_DART_MOVE !== "undefined" && DEBUG_DART_MOVE) console.log(...args);
-}
-
-function debugCheckSegmentContinuity(segs, label = "segments") {
-  if (!Array.isArray(segs)) return;
-  const dist = (a, b) => (!a || !b) ? Infinity : Math.hypot(a.x - b.x, a.y - b.y);
-  const breaks = [];
-  for (let i = 0; i < segs.length - 1; i++) {
-    const gap = dist(segs[i].to, segs[i + 1].from);
-    if (gap > 0.05) breaks.push({ index: i, typeA: segs[i].type, typeB: segs[i + 1].type, gap });
-  }
-  dbg("[continuity]", label, { count: segs.length, breaks });
-}
-
-// ── 참고선 판별: 물리 검사에서 제외할 순수 내부 연결선 ──
-// dart-bridge만 조립용 내부 연결선(실제 재단 경계가 아님)이라 제외한다.
-// old-dart/back-shoulder-dart/dart-leg-old는 "옛 흔적"이 아니라 현재 baked
-// 결과에 남아있는 실제 패턴 경계일 수 있다(다트를 끝까지 안 닫으면 그 자리에
-// 진짜로 벌어진 틈이 남는다) — 물리 검사에서 제외하면 그 틈과 겹치는 다음
-// 회전을 놓친다. 그래서 더 이상 통째로 빼지 않는다.
-function isReferenceSeg(seg) {
-  return seg?.type === "dart-bridge";
-}
-
-// 이보다 작은 각도의 다트는 만들지 않는다 (0.5° ≈ pivot에서 20cm 거리 기준 폭
-// 0.17cm). 안전각이 이 밑으로 깎였다는 건 그 위치에 회전 공간이 없다는 뜻이고,
-// 그대로 적용하면 입구가 안 벌어진 퇴화 다트(같은 자리에 겹친 다리 두 개 =
-// 화면에 남는 방사형 잔선)만 생긴다.
-const MIN_DART_ANGLE_RAD = 0.5 * Math.PI / 180;
 
 // 곡선 스침 허용오차(GRAZE_EPS)를 적용할 대상: ~1cm 간격 폴리라인으로 샘플링된
 // 곡선 타입만. 직선(다트 다리, 허리/어깨 등)은 샘플링 오차가 없으므로 교차하면
@@ -312,6 +255,34 @@ function findRotationCollisions(fixedSegsIn, rotateSegsIn, pivot, angle) {
     }
   }
   return collisions;
+}
+
+
+// ══════════════════════════════════════════════
+// 【TOPOLOGY】 notch 추출·split·bake·normalize — 폐곡선의 위상 조작.
+// "현재 형상 하나"(젤리/물 지배 모델)를 자르고 재조립해 다시 하나로 만든다.
+// 각도 정책(예산·안전각·부호)은 모르고, 주어진 각도로 형상만 만든다.
+// ══════════════════════════════════════════════
+
+function debugCheckSegmentContinuity(segs, label = "segments") {
+  if (!Array.isArray(segs)) return;
+  const dist = (a, b) => (!a || !b) ? Infinity : Math.hypot(a.x - b.x, a.y - b.y);
+  const breaks = [];
+  for (let i = 0; i < segs.length - 1; i++) {
+    const gap = dist(segs[i].to, segs[i + 1].from);
+    if (gap > 0.05) breaks.push({ index: i, typeA: segs[i].type, typeB: segs[i + 1].type, gap });
+  }
+  dbg("[continuity]", label, { count: segs.length, breaks });
+}
+
+// ── 참고선 판별: 물리 검사에서 제외할 순수 내부 연결선 ──
+// dart-bridge만 조립용 내부 연결선(실제 재단 경계가 아님)이라 제외한다.
+// old-dart/back-shoulder-dart/dart-leg-old는 "옛 흔적"이 아니라 현재 baked
+// 결과에 남아있는 실제 패턴 경계일 수 있다(다트를 끝까지 안 닫으면 그 자리에
+// 진짜로 벌어진 틈이 남는다) — 물리 검사에서 제외하면 그 틈과 겹치는 다음
+// 회전을 놓친다. 그래서 더 이상 통째로 빼지 않는다.
+function isReferenceSeg(seg) {
+  return seg?.type === "dart-bridge";
 }
 
 // ── 2단 검증 구조 ──────────────────────────────
@@ -495,9 +466,7 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle }) {
 //   남기는 쪽으로 안전하게 치우침). 검증: normalize를 3열림 부채꼴에 적용해도 3열림 유지,
 //   세대 간 refeed에서도 2열림 다중다트 도달 가능(열린 다트 파괴 0).
 const EPS_CLOSED_DART = 0.05;
-// 다트 예산 게이트 허용폭 (budgetMaxAngle·applyDartMove 공용). 실측 분포 이봉형
-// (정상 ≤1.05× / 병리 ≥2×)의 빈 구간이라 1.15×는 임시 허용폭 — 1.25×까지 안전.
-const DART_BUDGET_TOL = 1.15;
+
 function normalizeBakedSegments(segs, pivot) {
   if (!Array.isArray(segs) || segs.length === 0 || !pivot) return segs;
   const isLeg = (s) => s && (s.type === "dart-leg-new" || s.type === "dart-leg-old");
@@ -560,24 +529,10 @@ function sumOpenDartAngle(segs, pivot) {
   return total;
 }
 
-// ── 다트 다리 타입 판별 / 클릭 가능 판별 ─────────
-// ── G점을 BP 중심으로 회전시켜 GG(가슴다트 닫힌 위치) 계산 ──
-// buildFrontOutline의 GG 산출 공식과 동일 (B/4 - 2.5도 회전)
-function calcCloseAngle(p, B) {
-  const vx = p.BP.x - p.G.x, vy = p.BP.y - p.G.y;
-  const len = Math.hypot(vx, vy) || 1;
-  const ux = -vx / len, uy = -vy / len;
-  const da = (B / 4 - 2.5) * Math.PI / 180;
-  const GG = {
-    x: p.BP.x + (ux * Math.cos(da) - uy * Math.sin(da)) * len,
-    y: p.BP.y + (ux * Math.sin(da) + uy * Math.cos(da)) * len,
-  };
-  return { GG };
-}
-
 function isDartLegType(seg) {
   return seg?.type === "dart-leg" || seg?.type === "dart-leg-new" || seg?.type === "dart-leg-old";
 }
+
 function isClickableSeg(seg) {
   return !seg.disabled && !isDartLegType(seg) && seg.type !== "dart-bridge";
 }
@@ -795,6 +750,421 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   const pieceB = { pts: closePolygonPts(ptsB), segs: segsB, segsFull: segsBFull, hit: "mouthB", openPts: ptsB, sourceNotch: backwardSourceNotch };
 
   return { pieceA, pieceB };
+}
+
+// ── 조각의 mouth 끝점 추출 ──
+function pieceMouthPoint(piece, pivot) {
+  if (piece?.openPts?.length) {
+    const last = piece.openPts[piece.openPts.length - 1];
+    return last ? { ...last } : null;
+  }
+  if (piece?.segs?.length) {
+    const last = piece.segs[piece.segs.length - 1];
+    return last?.to ? { ...last.to } : null;
+  }
+  return null;
+}
+
+function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
+  const { GG } = calcCloseAngle(p, B);
+
+  const isNear = (a, b, eps = 0.05) => {
+    if (!a || !b) return false;
+    return Math.hypot(a.x - b.x, a.y - b.y) < eps;
+  };
+
+  const isG  = pt => isNear(pt, p.G);
+  const isGG = pt => isNear(pt, GG);
+  const nn = segments.length;
+
+  function walkForward() {
+    // cutSegIndex segment: cutPoint → seg.to (cutPoint 이후 부분만)
+    // 이후 segments: 원본 그대로
+    const pts  = [{ ...cutPoint }];
+    const segs = [];
+    let hit = null;
+    for (let step = 0; step < nn; step++) {
+      const idx = (cutSegIndex + step) % nn;
+      const seg = segments[idx];
+      const next = { ...seg.to };
+      if (seg.disabled && !isG(next) && !isGG(next)) continue;
+      // cutSegIndex segment는 from을 cutPoint로 교체 (cutPoint 이전 구간 제거)
+      const fromPt = (step === 0) ? { ...cutPoint } : { ...seg.from };
+      segs.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+      pts.push(next);
+      if (isG(next))  { hit = "G";  break; }
+      if (isGG(next)) { hit = "GG"; break; }
+    }
+    return { pts, segs, hit };
+  }
+
+  function walkBackward() {
+    const rawSegs = [];
+    let hit = null;
+    for (let step = 0; step < nn; step++) {
+      const idx = (cutSegIndex - step + nn) % nn;
+      const seg = segments[idx];
+      const prev = seg.from;
+      if (seg.disabled && !isG(prev) && !isGG(prev)) continue;
+      rawSegs.push(seg);
+      if (isG(prev))  { hit = "G";  break; }
+      if (isGG(prev)) { hit = "GG"; break; }
+    }
+    const segs = rawSegs.map(seg => ({
+      from: { ...seg.to },
+      to:   { ...seg.from },
+      type: seg.type,
+      disabled: !!seg.disabled,
+    }));
+    if (segs.length > 0) segs[0].from = { ...cutPoint };
+    const pts = [{ ...cutPoint }];
+    for (const seg of segs) pts.push({ ...seg.to });
+    return { pts, segs, hit };
+  }
+  const forward  = walkForward();
+  const backward = walkBackward();
+
+  // DEBUG_DART_MOVE가 꺼져 있어도 인자 표현식(map/join/JSON.stringify)은 dbg() 호출
+  // 전에 먼저 평가된다 — 무거운 로그 데이터는 이 가드 안에서만 계산한다.
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    dbg('[split] forward.hit:', forward.hit, 'pts:', forward.pts.length, 'segs:', forward.segs.length);
+    dbg('[split] backward.hit:', backward.hit, 'pts:', backward.pts.length, 'segs:', backward.segs.length);
+    dbg('[split] GG:', JSON.stringify(GG));
+    dbg('[split] p.G:', JSON.stringify(p.G));
+    dbg('[split] forward types:', forward.segs.map(s=>s.type).join(','));
+    dbg('[split] backward types:', backward.segs.map(s=>s.type).join(','));
+    const fS = forward.segs, bS = backward.segs;
+    dbg('[check] forward  segs[0].from:', JSON.stringify(fS[0]?.from), '/ segs[last].to:', JSON.stringify(fS[fS.length-1]?.to));
+    dbg('[check] backward segs[0].from:', JSON.stringify(bS[0]?.from), '/ segs[last].to:', JSON.stringify(bS[bS.length-1]?.to));
+    dbg('[check] cutPoint:', JSON.stringify(cutPoint), '/ G:', JSON.stringify(p.G), '/ GG:', JSON.stringify(GG));
+  }
+
+  const pathA = [...forward.pts,  { ...p.BP }, { ...cutPoint }];
+  const pathB = [...backward.pts, { ...p.BP }, { ...cutPoint }];
+  return {
+    pieceA: { pts: pathA, segs: forward.segs,  hit: forward.hit  || "G",  openPts: forward.pts  },
+    pieceB: { pts: pathB, segs: backward.segs, hit: backward.hit || "GG", openPts: backward.pts },
+  };
+}
+
+// ── 앞판 실제 패턴선 기준 외곽선 ───────────────
+function buildFrontOutline(p, f, B) {
+  const segments = [];
+
+  const circ = f.fnw(), fnd = f.fnd();
+  const nTR = { x: f.sw(),        y: f.yB()        };
+  const nTL = { x: f.sw() - circ, y: f.yB()        };
+  const nBR = { x: f.sw(),        y: f.yB() + fnd  };
+  const nBL = { x: f.sw() - circ, y: f.yB() + fnd  };
+
+  const deg22 = 22 * Math.PI / 180;
+  const shLen = (nTL.x - (f.sw() - f.fw())) / Math.cos(deg22);
+  const FSP = {
+    x: nTL.x - (shLen + 1.8) * Math.cos(deg22),
+    y: nTL.y + (shLen + 1.8) * Math.sin(deg22),
+  };
+
+  const vx = p.BP.x - p.G.x, vy = p.BP.y - p.G.y;
+  const len = Math.hypot(vx, vy) || 1;
+  const ux = -vx / len, uy = -vy / len;
+  const da = (B / 4 - 2.5) * Math.PI / 180;
+  const GG = {
+    x: p.BP.x + (ux * Math.cos(da) - uy * Math.sin(da)) * len,
+    y: p.BP.y + (ux * Math.sin(da) + uy * Math.cos(da)) * len,
+  };
+
+  const diagLen = Math.hypot(nBL.x - nTR.x, nBL.y - nTR.y) || 1;
+  const diagUx = (nBL.x - nTR.x) / diagLen, diagUy = (nBL.y - nTR.y) / diagLen;
+  const div2   = { x: nTR.x + (nBL.x - nTR.x) * (2/3), y: nTR.y + (nBL.y - nTR.y) * (2/3) };
+  const guideP = { x: div2.x + diagUx * 0.5,            y: div2.y + diagUy * 0.5            };
+
+  const FN = state.fNeckH || { h0: { x: nBR.x, y: nBR.y }, h1: { x: nTL.x, y: nTL.y } };
+
+  const tgx = -(guideP.y - nTR.y), tgy = guideP.x - nTR.x;
+  const tgLen = Math.hypot(tgx, tgy) || 1;
+  const tx = tgx / tgLen, ty = tgy / tgLen;
+  const d1 = Math.hypot(guideP.x - nBR.x, guideP.y - nBR.y) * 0.25;
+  const d2 = Math.hypot(nTL.x - guideP.x, nTL.y - guideP.y) * 0.25;
+  const c2 = { x: guideP.x - tx * d1, y: guideP.y - ty * d1 };
+  const c3 = { x: guideP.x + tx * d2, y: guideP.y + ty * d2 };
+
+  const neck1 = sampleCubic(nBR, FN.h0, c2, guideP, 10);
+  const neck2 = sampleCubic(guideP, c3, FN.h1, nTL, 10);
+  const neckAll = [...neck1, ...neck2.slice(1)];
+
+  const FH = state.fArmH || { hFa: { x: GG.x, y: GG.y }, hFb: { x: FSP.x, y: FSP.y } };
+  // 앞진동 상부: GG → FSP
+  // SIDE_TOP → G 하부 구간은 drawArmhole의 뒤/앞 진동 구조에서 담당한다.
+  const frontArm = sampleCubic(GG, FH.hFa, FH.hFb, FSP, 16);
+
+  addLineSegment(segments, nBR,        p.FRONT_WL,  { type: "front-center"   });
+  addLineSegment(segments, p.FRONT_WL, p.SIDE_BTM,  { type: "front-waist"    });
+  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP,  { type: "side-seam"      });
+  // 앞암홀 하부: SIDE_TOP → G 곡선 (state.armH 핸들 사용, 직선 금지)
+  {
+    const H = state.armH;
+    if (H && H.h2b && H.h3a && H.a3 && H.h3b && H.h4) {
+      // render.js drawArmhole과 동일한 두 구간 cubic
+      const lower1 = sampleCubic(p.SIDE_TOP, H.h2b, H.h3a, H.a3, 8);
+      const lower2 = sampleCubic(H.a3,       H.h3b, H.h4,  p.G,   8);
+      const lowerFrontArm = [...lower1, ...lower2.slice(1)];
+      addSampledSegments(segments, lowerFrontArm, { type: "front-armhole-lower" });
+    } else {
+      // fallback: SIDE_TOP → G 단순 cubic 근사 (직선 회피)
+      const midX = (p.SIDE_TOP.x + p.G.x) / 2;
+      const midY = Math.min(p.SIDE_TOP.y, p.G.y) - 2; // 약간 위로 들어올린 제어점
+      const c1 = { x: p.SIDE_TOP.x, y: midY };
+      const c2 = { x: midX,         y: midY };
+      const fallbackArm = sampleCubic(p.SIDE_TOP, c1, c2, p.G, 16);
+      addSampledSegments(segments, fallbackArm, { type: "front-armhole-lower" });
+    }
+  }
+  addLineSegment(segments, p.G,        p.BP,        { type: "old-dart", disabled: true });
+  addLineSegment(segments, p.BP,       GG,          { type: "old-dart", disabled: true });
+  addSampledSegments(segments, frontArm,             { type: "front-armhole-upper" });
+  addLineSegment(segments, FSP,        nTL,         { type: "front-shoulder" });
+  addSampledSegments(segments, [...neckAll].reverse(),{ type: "front-neckline" });
+
+  return segments;
+}
+
+// ── 뒤판 외곽선을 dartCenter/dartEnd_ 기준으로 두 조각 분할 ──
+// fixedSegs  = dartCenter 포함 (고정)
+// rotateSegs = dartEnd_   포함 (회전 대상)
+function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
+  const info = buildBackShoulderDartInfo(f, p, B);
+
+  const isNear = (a, b, eps = 0.05) => {
+    if (!a || !b) return false;
+    return Math.hypot(a.x - b.x, a.y - b.y) < eps;
+  };
+
+  const isDartCenter = pt => isNear(pt, info.dartCenter);
+  const isDartEnd    = pt => isNear(pt, info.dartEnd_);
+  const nn = segments.length;
+
+  const isDartRelated = seg => seg.type === "back-shoulder-dart";
+
+  function walkForward() {
+    const pts  = [{ ...cutPoint }];
+    const segs = [];
+    let hit = null;
+    for (let step = 0; step < nn; step++) {
+      const idx = (cutSegIndex + step) % nn;
+      const seg = segments[idx];
+      const next = { ...seg.to };
+      if (seg.disabled && !isDartRelated(seg)) continue;
+      const fromPt = (step === 0) ? { ...cutPoint } : { ...seg.from };
+      segs.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+      pts.push(next);
+      if (isDartCenter(next)) { hit = "dartCenter"; break; }
+      if (isDartEnd(next))    { hit = "dartEnd";    break; }
+    }
+    return { pts, segs, hit };
+  }
+
+  function walkBackward() {
+    const rawSegs = [];
+    let hit = null;
+    for (let step = 0; step < nn; step++) {
+      const idx = (cutSegIndex - step + nn) % nn;
+      const seg = segments[idx];
+      const prev = seg.from;
+      if (seg.disabled && !isDartRelated(seg)) continue;
+      rawSegs.push(seg);
+      if (isDartCenter(prev)) { hit = "dartCenter"; break; }
+      if (isDartEnd(prev))    { hit = "dartEnd";    break; }
+    }
+    const segs = rawSegs.map(seg => ({
+      from: { ...seg.to },
+      to:   { ...seg.from },
+      type: seg.type,
+      disabled: !!seg.disabled,
+    }));
+    if (segs.length > 0) segs[0].from = { ...cutPoint };
+    const pts = [{ ...cutPoint }];
+    for (const seg of segs) pts.push({ ...seg.to });
+    return { pts, segs, hit };
+  }
+  const forward  = walkForward();
+  const backward = walkBackward();
+
+  dbg('[splitBack] forward.hit:', forward.hit, 'pts:', forward.pts.length,
+    'types:', forward.segs.map(s=>s.type).join(','));
+  dbg('[splitBack] backward.hit:', backward.hit, 'pts:', backward.pts.length,
+    'types:', backward.segs.map(s=>s.type).join(','));
+
+  const pathA = [...forward.pts,  { ...info.apex }, { ...cutPoint }];
+  const pathB = [...backward.pts, { ...info.apex }, { ...cutPoint }];
+  return {
+    pieceA: { pts: pathA, segs: forward.segs,  hit: forward.hit  || "dartCenter", openPts: forward.pts  },
+    pieceB: { pts: pathB, segs: backward.segs, hit: backward.hit || "dartEnd",    openPts: backward.pts },
+  };
+}
+
+// ── 뒤판 어깨 다트 기하 정보 ──────────────────
+// render.js drawBackShoulder()와 완전히 동일한 공식 사용
+function buildBackShoulderDartInfo(f, p, B) {
+  const deg18  = 18 * Math.PI / 180;
+  const deg22  = 22 * Math.PI / 180;
+
+  const bND = { x: f.bnw(), y: -f.bnd() };
+
+  const fSNP_x2 = f.sw() - f.fnw();
+  const armX2   = f.sw() - f.fw();
+  const fShLen2 = (fSNP_x2 - armX2) / Math.cos(deg22) + 1.8;
+  const bShLen2 = fShLen2 + B / 32 - 0.8;
+
+  // bSP: render.js drawBackShoulder와 동일
+  // (bND 기준이 아닌 bND에서 시작 — render.js는 bND에서 계산)
+  const bSP = {
+    x: bND.x + bShLen2 * Math.cos(deg18),
+    y: bND.y + bShLen2 * Math.sin(deg18),
+  };
+
+  const shDx = Math.cos(deg18);
+  const shDy = Math.sin(deg18);
+
+  // E점이 어깨선 위 어느 t 위치에 있는지
+  const t = (p.E.x - bND.x) / shDx;
+  const dartCenterT = t + 1.5;
+
+  const dartCenter = {
+    x: bND.x + dartCenterT * shDx,
+    y: bND.y + dartCenterT * shDy,
+  };
+
+  const dartLen = B / 32 - 0.8;
+
+  const dartEnd_ = {
+    x: dartCenter.x + dartLen * shDx,
+    y: dartCenter.y + dartLen * shDy,
+  };
+
+  return { apex: p.E, dartCenter, dartEnd_, dartLen };
+}
+
+// ── 뒤판 외곽선 세그먼트 배열 ─────────────────
+// 순서: A → BACK_WL → SIDE_BTM → SIDE_TOP
+//       → [진동곡선: SIDE_TOP→bSP]
+//       → dartEnd_ → E(꼭지점) → dartCenter
+//       → bND → [목곡선: bND→A]
+function buildBackOutline(p, f, B) {
+  const segments = [];
+
+  const deg18 = 18 * Math.PI / 180;
+  const deg22 = 22 * Math.PI / 180;
+
+  // ── 뒤판 기하 재계산 (render.js와 동일) ────
+  const bND = { x: f.bnw(), y: -f.bnd() };
+
+  const fSNP_x2 = f.sw() - f.fnw();
+  const armX2   = f.sw() - f.fw();
+  const fShLen2 = (fSNP_x2 - armX2) / Math.cos(deg22) + 1.8;
+  const bShLen2 = fShLen2 + B / 32 - 0.8;
+
+  const bSP = {
+    x: bND.x + bShLen2 * Math.cos(deg18),
+    y: bND.y + bShLen2 * Math.sin(deg18),
+  };
+
+  const { dartCenter, dartEnd_ } = buildBackShoulderDartInfo(f, p, B);
+
+  // ── 고정 조각: dartCenter → bND → [목선] → A → BACK_WL → SIDE_BTM → SIDE_TOP → [진동] → bSP → dartEnd_ ──
+  // 순서 설명:
+  //   고정(dartCenter 포함): dartCenter → bND → 목선 → A → 뒤중심 → 허리 → 옆선 → 진동 → bSP → dartEnd_
+  //   회전(dartEnd_ 포함):   dartEnd_ → [dart disabled] → dartCenter
+
+  // ── 어깨선: dartCenter → bND ────────────────
+  addLineSegment(segments, dartCenter, bND,      { type: "back-shoulder" });
+
+  // ── 뒤목선 곡선: bND → A ────────────────────
+  {
+    const NH = state.bNeckH;
+    if (NH && NH.h0 && NH.h1) {
+      const neckPts = sampleCubic(bND, NH.h1, NH.h0, p.A, 10);
+      addSampledSegments(segments, neckPts, { type: "back-neckline" });
+    } else {
+      addLineSegment(segments, bND, p.A, { type: "back-neckline" });
+    }
+  }
+
+  // ── 뒤중심/허리/옆선 직선 ────────────────────
+  addLineSegment(segments, p.A,        p.BACK_WL,  { type: "back-center" });
+  addLineSegment(segments, p.BACK_WL,  p.SIDE_BTM, { type: "back-waist"  });
+  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP, { type: "side-seam"   });
+
+  // ── 뒤진동 곡선: SIDE_TOP → bSP ─────────────
+  {
+    const H = state.armH;
+    if (H && H.h2a && H.h1b && H.a1 && H.h1a && H.h0) {
+      const back1 = sampleCubic(p.SIDE_TOP, H.h2a, H.h1b, H.a1, 8);
+      const back2 = sampleCubic(H.a1,       H.h1a, H.h0,  bSP,  8);
+      const backArmPts = [...back1, ...back2.slice(1)];
+      addSampledSegments(segments, backArmPts, { type: "back-armhole" });
+    } else {
+      addLineSegment(segments, p.SIDE_TOP, bSP, { type: "back-armhole" });
+    }
+  }
+
+  // ── 어깨선: bSP → dartEnd_ ──────────────────
+  addLineSegment(segments, bSP,      dartEnd_,  { type: "back-shoulder" });
+
+  // ── 어깨 다트 (disabled): dartEnd_ → E → dartCenter ──
+  addLineSegment(segments, dartEnd_,  p.E,        { type: "back-shoulder-dart", disabled: true });
+  addLineSegment(segments, p.E,       dartCenter, { type: "back-shoulder-dart", disabled: true });
+
+  // ── DEBUG 검증 ──────────────────────────────
+  // buildBackOutline은 렌더/호버마다 호출되는 hot path라, map/filter/join은
+  // DEBUG_DART_MOVE가 켜져 있을 때만 계산한다(dbg() 자체는 인자를 먼저 평가하므로
+  // 가드 없이 넘기면 꺼져 있어도 매번 순회 비용이 든다).
+  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
+    dbg('[buildBackOutline] 세그먼트 수:', segments.length);
+    dbg('[buildBackOutline] 타입 순서:', segments.map(s => s.type).join(' → '));
+    dbg('[buildBackOutline] disabled 세그먼트:', segments.filter(s => s.disabled).map(s => s.type));
+    const info = buildBackShoulderDartInfo(f, p, B);
+    dbg('[buildBackOutline] 다트info:', {
+      apex:        JSON.stringify(info.apex),
+      dartCenter:  JSON.stringify(info.dartCenter),
+      dartEnd_:    JSON.stringify(info.dartEnd_),
+      dartLen:     info.dartLen.toFixed(3),
+    });
+  }
+
+  return segments;
+}
+
+
+// ══════════════════════════════════════════════
+// 【ENGINE】 다트량·회전 방향·안전각·후보 평가 — 각도 정책.
+// 순수 함수 구역: DOM(n("inpB") 등)도 dartMoveState도 읽지 않는다.
+// 필요한 값(pivot/budget/segments)은 전부 인자로 받는다 — UI와 테스트 하네스가
+// 이 구역을 공유한다(prepareDartMoveCandidate). 향후 evaluateMove 4계층 분리의 터.
+// ══════════════════════════════════════════════
+
+// 이보다 작은 각도의 다트는 만들지 않는다 (0.5° ≈ pivot에서 20cm 거리 기준 폭
+// 0.17cm). 안전각이 이 밑으로 깎였다는 건 그 위치에 회전 공간이 없다는 뜻이고,
+// 그대로 적용하면 입구가 안 벌어진 퇴화 다트(같은 자리에 겹친 다리 두 개 =
+// 화면에 남는 방사형 잔선)만 생긴다.
+const MIN_DART_ANGLE_RAD = 0.5 * Math.PI / 180;
+
+// 다트 예산 게이트 허용폭 (budgetMaxAngle·applyDartMove 공용). 실측 분포 이봉형
+// (정상 ≤1.05× / 병리 ≥2×)의 빈 구간이라 1.15×는 임시 허용폭 — 1.25×까지 안전.
+const DART_BUDGET_TOL = 1.15;
+
+// ── 다트 다리 타입 판별 / 클릭 가능 판별 ─────────
+// ── G점을 BP 중심으로 회전시켜 GG(가슴다트 닫힌 위치) 계산 ──
+// buildFrontOutline의 GG 산출 공식과 동일 (B/4 - 2.5도 회전)
+function calcCloseAngle(p, B) {
+  const vx = p.BP.x - p.G.x, vy = p.BP.y - p.G.y;
+  const len = Math.hypot(vx, vy) || 1;
+  const ux = -vx / len, uy = -vy / len;
+  const da = (B / 4 - 2.5) * Math.PI / 180;
+  const GG = {
+    x: p.BP.x + (ux * Math.cos(da) - uy * Math.sin(da)) * len,
+    y: p.BP.y + (ux * Math.sin(da) + uy * Math.cos(da)) * len,
+  };
+  return { GG };
 }
 
 // ── 물리적 닫힘 부호 결정 ───────────────────────
@@ -1190,19 +1560,6 @@ function prepareDartMoveCandidate({
   };
 }
 
-// ── 조각의 mouth 끝점 추출 ──
-function pieceMouthPoint(piece, pivot) {
-  if (piece?.openPts?.length) {
-    const last = piece.openPts[piece.openPts.length - 1];
-    return last ? { ...last } : null;
-  }
-  if (piece?.segs?.length) {
-    const last = piece.segs[piece.segs.length - 1];
-    return last?.to ? { ...last.to } : null;
-  }
-  return null;
-}
-
 function calcFrontCloseAngleByRotateHit(p, B, rotateHit) {
   const { GG } = calcCloseAngle(p, B);
   const pivot = p.BP;
@@ -1235,167 +1592,99 @@ function calcFrontBaseDartAngle(p, B) {
   return Math.abs(a);
 }
 
-function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
-  const { GG } = calcCloseAngle(p, B);
-
-  const isNear = (a, b, eps = 0.05) => {
-    if (!a || !b) return false;
-    return Math.hypot(a.x - b.x, a.y - b.y) < eps;
-  };
-
-  const isG  = pt => isNear(pt, p.G);
-  const isGG = pt => isNear(pt, GG);
-  const nn = segments.length;
-
-  function walkForward() {
-    // cutSegIndex segment: cutPoint → seg.to (cutPoint 이후 부분만)
-    // 이후 segments: 원본 그대로
-    const pts  = [{ ...cutPoint }];
-    const segs = [];
-    let hit = null;
-    for (let step = 0; step < nn; step++) {
-      const idx = (cutSegIndex + step) % nn;
-      const seg = segments[idx];
-      const next = { ...seg.to };
-      if (seg.disabled && !isG(next) && !isGG(next)) continue;
-      // cutSegIndex segment는 from을 cutPoint로 교체 (cutPoint 이전 구간 제거)
-      const fromPt = (step === 0) ? { ...cutPoint } : { ...seg.from };
-      segs.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
-      pts.push(next);
-      if (isG(next))  { hit = "G";  break; }
-      if (isGG(next)) { hit = "GG"; break; }
-    }
-    return { pts, segs, hit };
-  }
-
-  function walkBackward() {
-    const rawSegs = [];
-    let hit = null;
-    for (let step = 0; step < nn; step++) {
-      const idx = (cutSegIndex - step + nn) % nn;
-      const seg = segments[idx];
-      const prev = seg.from;
-      if (seg.disabled && !isG(prev) && !isGG(prev)) continue;
-      rawSegs.push(seg);
-      if (isG(prev))  { hit = "G";  break; }
-      if (isGG(prev)) { hit = "GG"; break; }
-    }
-    const segs = rawSegs.map(seg => ({
-      from: { ...seg.to },
-      to:   { ...seg.from },
-      type: seg.type,
-      disabled: !!seg.disabled,
-    }));
-    if (segs.length > 0) segs[0].from = { ...cutPoint };
-    const pts = [{ ...cutPoint }];
-    for (const seg of segs) pts.push({ ...seg.to });
-    return { pts, segs, hit };
-  }
-  const forward  = walkForward();
-  const backward = walkBackward();
-
-  // DEBUG_DART_MOVE가 꺼져 있어도 인자 표현식(map/join/JSON.stringify)은 dbg() 호출
-  // 전에 먼저 평가된다 — 무거운 로그 데이터는 이 가드 안에서만 계산한다.
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    dbg('[split] forward.hit:', forward.hit, 'pts:', forward.pts.length, 'segs:', forward.segs.length);
-    dbg('[split] backward.hit:', backward.hit, 'pts:', backward.pts.length, 'segs:', backward.segs.length);
-    dbg('[split] GG:', JSON.stringify(GG));
-    dbg('[split] p.G:', JSON.stringify(p.G));
-    dbg('[split] forward types:', forward.segs.map(s=>s.type).join(','));
-    dbg('[split] backward types:', backward.segs.map(s=>s.type).join(','));
-    const fS = forward.segs, bS = backward.segs;
-    dbg('[check] forward  segs[0].from:', JSON.stringify(fS[0]?.from), '/ segs[last].to:', JSON.stringify(fS[fS.length-1]?.to));
-    dbg('[check] backward segs[0].from:', JSON.stringify(bS[0]?.from), '/ segs[last].to:', JSON.stringify(bS[bS.length-1]?.to));
-    dbg('[check] cutPoint:', JSON.stringify(cutPoint), '/ G:', JSON.stringify(p.G), '/ GG:', JSON.stringify(GG));
-  }
-
-  const pathA = [...forward.pts,  { ...p.BP }, { ...cutPoint }];
-  const pathB = [...backward.pts, { ...p.BP }, { ...cutPoint }];
-  return {
-    pieceA: { pts: pathA, segs: forward.segs,  hit: forward.hit  || "G",  openPts: forward.pts  },
-    pieceB: { pts: pathB, segs: backward.segs, hit: backward.hit || "GG", openPts: backward.pts },
-  };
+// ── 뒤판 다트 닫힘 각도 계산 ──────────────────
+// E점 기준: dartEnd_ → dartCenter 방향으로 닫힘 (음수)
+function calcBackCloseAngle(info) {
+  const angleCenter = Math.atan2(info.dartCenter.y - info.apex.y, info.dartCenter.x - info.apex.x);
+  const angleEnd    = Math.atan2(info.dartEnd_.y   - info.apex.y, info.dartEnd_.x   - info.apex.x);
+  let closeAngle = angleCenter - angleEnd;  // 음수: dartEnd_ → dartCenter 방향
+  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
+  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
+  return { closeAngle };
 }
 
-// ── 앞판 실제 패턴선 기준 외곽선 ───────────────
-function buildFrontOutline(p, f, B) {
-  const segments = [];
+function calcBackCloseAngleByRotateHit(info, rotateHit) {
+  const angleCenter = Math.atan2(
+    info.dartCenter.y - info.apex.y,
+    info.dartCenter.x - info.apex.x
+  );
+  const angleEnd = Math.atan2(
+    info.dartEnd_.y - info.apex.y,
+    info.dartEnd_.x - info.apex.x
+  );
 
-  const circ = f.fnw(), fnd = f.fnd();
-  const nTR = { x: f.sw(),        y: f.yB()        };
-  const nTL = { x: f.sw() - circ, y: f.yB()        };
-  const nBR = { x: f.sw(),        y: f.yB() + fnd  };
-  const nBL = { x: f.sw() - circ, y: f.yB() + fnd  };
-
-  const deg22 = 22 * Math.PI / 180;
-  const shLen = (nTL.x - (f.sw() - f.fw())) / Math.cos(deg22);
-  const FSP = {
-    x: nTL.x - (shLen + 1.8) * Math.cos(deg22),
-    y: nTL.y + (shLen + 1.8) * Math.sin(deg22),
-  };
-
-  const vx = p.BP.x - p.G.x, vy = p.BP.y - p.G.y;
-  const len = Math.hypot(vx, vy) || 1;
-  const ux = -vx / len, uy = -vy / len;
-  const da = (B / 4 - 2.5) * Math.PI / 180;
-  const GG = {
-    x: p.BP.x + (ux * Math.cos(da) - uy * Math.sin(da)) * len,
-    y: p.BP.y + (ux * Math.sin(da) + uy * Math.cos(da)) * len,
-  };
-
-  const diagLen = Math.hypot(nBL.x - nTR.x, nBL.y - nTR.y) || 1;
-  const diagUx = (nBL.x - nTR.x) / diagLen, diagUy = (nBL.y - nTR.y) / diagLen;
-  const div2   = { x: nTR.x + (nBL.x - nTR.x) * (2/3), y: nTR.y + (nBL.y - nTR.y) * (2/3) };
-  const guideP = { x: div2.x + diagUx * 0.5,            y: div2.y + diagUy * 0.5            };
-
-  const FN = state.fNeckH || { h0: { x: nBR.x, y: nBR.y }, h1: { x: nTL.x, y: nTL.y } };
-
-  const tgx = -(guideP.y - nTR.y), tgy = guideP.x - nTR.x;
-  const tgLen = Math.hypot(tgx, tgy) || 1;
-  const tx = tgx / tgLen, ty = tgy / tgLen;
-  const d1 = Math.hypot(guideP.x - nBR.x, guideP.y - nBR.y) * 0.25;
-  const d2 = Math.hypot(nTL.x - guideP.x, nTL.y - guideP.y) * 0.25;
-  const c2 = { x: guideP.x - tx * d1, y: guideP.y - ty * d1 };
-  const c3 = { x: guideP.x + tx * d2, y: guideP.y + ty * d2 };
-
-  const neck1 = sampleCubic(nBR, FN.h0, c2, guideP, 10);
-  const neck2 = sampleCubic(guideP, c3, FN.h1, nTL, 10);
-  const neckAll = [...neck1, ...neck2.slice(1)];
-
-  const FH = state.fArmH || { hFa: { x: GG.x, y: GG.y }, hFb: { x: FSP.x, y: FSP.y } };
-  // 앞진동 상부: GG → FSP
-  // SIDE_TOP → G 하부 구간은 drawArmhole의 뒤/앞 진동 구조에서 담당한다.
-  const frontArm = sampleCubic(GG, FH.hFa, FH.hFb, FSP, 16);
-
-  addLineSegment(segments, nBR,        p.FRONT_WL,  { type: "front-center"   });
-  addLineSegment(segments, p.FRONT_WL, p.SIDE_BTM,  { type: "front-waist"    });
-  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP,  { type: "side-seam"      });
-  // 앞암홀 하부: SIDE_TOP → G 곡선 (state.armH 핸들 사용, 직선 금지)
-  {
-    const H = state.armH;
-    if (H && H.h2b && H.h3a && H.a3 && H.h3b && H.h4) {
-      // render.js drawArmhole과 동일한 두 구간 cubic
-      const lower1 = sampleCubic(p.SIDE_TOP, H.h2b, H.h3a, H.a3, 8);
-      const lower2 = sampleCubic(H.a3,       H.h3b, H.h4,  p.G,   8);
-      const lowerFrontArm = [...lower1, ...lower2.slice(1)];
-      addSampledSegments(segments, lowerFrontArm, { type: "front-armhole-lower" });
-    } else {
-      // fallback: SIDE_TOP → G 단순 cubic 근사 (직선 회피)
-      const midX = (p.SIDE_TOP.x + p.G.x) / 2;
-      const midY = Math.min(p.SIDE_TOP.y, p.G.y) - 2; // 약간 위로 들어올린 제어점
-      const c1 = { x: p.SIDE_TOP.x, y: midY };
-      const c2 = { x: midX,         y: midY };
-      const fallbackArm = sampleCubic(p.SIDE_TOP, c1, c2, p.G, 16);
-      addSampledSegments(segments, fallbackArm, { type: "front-armhole-lower" });
-    }
+  let closeAngle;
+  if (rotateHit === "dartEnd") {
+    // dartEnd_ 쪽이 움직이면 dartEnd_를 dartCenter 방향으로 닫는다
+    closeAngle = angleCenter - angleEnd;
+  } else if (rotateHit === "dartCenter") {
+    // dartCenter 쪽이 움직이면 dartCenter를 dartEnd_ 방향으로 닫는다
+    closeAngle = angleEnd - angleCenter;
+  } else {
+    closeAngle = angleCenter - angleEnd;
   }
-  addLineSegment(segments, p.G,        p.BP,        { type: "old-dart", disabled: true });
-  addLineSegment(segments, p.BP,       GG,          { type: "old-dart", disabled: true });
-  addSampledSegments(segments, frontArm,             { type: "front-armhole-upper" });
-  addLineSegment(segments, FSP,        nTL,         { type: "front-shoulder" });
-  addSampledSegments(segments, [...neckAll].reverse(),{ type: "front-neckline" });
+  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
+  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
+  return { closeAngle };
+}
 
-  return segments;
+// ── 뒤판 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
+function calcBackBaseDartAngle(info) {
+  const angleCenter = Math.atan2(info.dartCenter.y - info.apex.y, info.dartCenter.x - info.apex.x);
+  const angleEnd    = Math.atan2(info.dartEnd_.y   - info.apex.y, info.dartEnd_.x   - info.apex.x);
+  let a = angleCenter - angleEnd;
+  while (a >  Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return Math.abs(a);
+}
+
+
+// ══════════════════════════════════════════════
+// 【CONTROLLER】 UI 상태·클릭·드래그·적용·렌더 연결.
+// dartMoveState / DOM 입력값을 읽는 곳은 전부 여기다. get*TargetOutline과
+// findCutPoint(Back)도 상태·DOM을 읽으므로 engine이 아니라 이 구역에 둔다.
+// ══════════════════════════════════════════════
+
+const dartMoveState = {
+  active:        false,
+  side:          null,
+  mode:          "idle",
+  cutPoint:      null,
+  cutSegIndex:   -1,
+  hoverPoint:    null,
+  hoverSegIndex: -1,
+  pieceA:        null,
+  pieceB:        null,
+  baseAngle:     0,
+  userAngle:     0,
+  rotatePts:     null,
+  fixedPts:      null,
+  fixedSegs:     null,
+  rotateSegs:    null,
+  fixedHit:      null,
+  rotateHit:     null,
+  dragging:      false,
+  _splitIsBaked: null,
+  // ── 적용 결과 ──────────────────────────────
+  appliedFront:  null,
+  appliedBack:   null,
+};
+
+// ── 위상 순서 보존 bake ───────────────────────────────
+// ── split 결과로 bakedSegments 생성 ─────────────
+// 다트 입구 = cutPoint / rotatedCutPoint, 꼭지점 = pivot
+// 폐곡선: pivot → cutA → segsA → endA → bridge → endB → reversed(segsB) → cutB → pivot
+// ── 타겟 외곽선 공급 ─────────────────────────────
+function getFrontTargetOutline(p, f, B) {
+  const baked = dartMoveState.appliedFront?.bakedSegments;
+  if (Array.isArray(baked) && baked.length > 0) return baked;
+  return buildFrontOutline(p, f, B);
+}
+
+function getBackTargetOutline(p, f, B) {
+  const baked = dartMoveState.appliedBack?.bakedSegments;
+  if (Array.isArray(baked) && baked.length > 0) return baked;
+  return buildBackOutline(p, f, B);
 }
 
 function findCutPoint(clickPt, segments, pts) {
@@ -1749,6 +2038,7 @@ function applyDartMove() {
 }
 
 function setDartTheta()  {}
+
 function applyDartMoveToPoint(key, orig) { return orig; }
 
 // ── 드래프트 pts 헬퍼 (중복 방지) ─────────────
@@ -2289,256 +2579,4 @@ function findCutPointBack(clickPt, segments, p, f, B) {
   }
 
   return { point: best, segIndex: bestIndex, distance: bestD };
-}
-
-// ── 뒤판 다트 닫힘 각도 계산 ──────────────────
-// E점 기준: dartEnd_ → dartCenter 방향으로 닫힘 (음수)
-function calcBackCloseAngle(info) {
-  const angleCenter = Math.atan2(info.dartCenter.y - info.apex.y, info.dartCenter.x - info.apex.x);
-  const angleEnd    = Math.atan2(info.dartEnd_.y   - info.apex.y, info.dartEnd_.x   - info.apex.x);
-  let closeAngle = angleCenter - angleEnd;  // 음수: dartEnd_ → dartCenter 방향
-  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
-  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
-  return { closeAngle };
-}
-
-function calcBackCloseAngleByRotateHit(info, rotateHit) {
-  const angleCenter = Math.atan2(
-    info.dartCenter.y - info.apex.y,
-    info.dartCenter.x - info.apex.x
-  );
-  const angleEnd = Math.atan2(
-    info.dartEnd_.y - info.apex.y,
-    info.dartEnd_.x - info.apex.x
-  );
-
-  let closeAngle;
-  if (rotateHit === "dartEnd") {
-    // dartEnd_ 쪽이 움직이면 dartEnd_를 dartCenter 방향으로 닫는다
-    closeAngle = angleCenter - angleEnd;
-  } else if (rotateHit === "dartCenter") {
-    // dartCenter 쪽이 움직이면 dartCenter를 dartEnd_ 방향으로 닫는다
-    closeAngle = angleEnd - angleCenter;
-  } else {
-    closeAngle = angleCenter - angleEnd;
-  }
-  while (closeAngle >  Math.PI) closeAngle -= 2 * Math.PI;
-  while (closeAngle < -Math.PI) closeAngle += 2 * Math.PI;
-  return { closeAngle };
-}
-
-// ── 뒤판 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
-function calcBackBaseDartAngle(info) {
-  const angleCenter = Math.atan2(info.dartCenter.y - info.apex.y, info.dartCenter.x - info.apex.x);
-  const angleEnd    = Math.atan2(info.dartEnd_.y   - info.apex.y, info.dartEnd_.x   - info.apex.x);
-  let a = angleCenter - angleEnd;
-  while (a >  Math.PI) a -= 2 * Math.PI;
-  while (a < -Math.PI) a += 2 * Math.PI;
-  return Math.abs(a);
-}
-
-// ── 뒤판 외곽선을 dartCenter/dartEnd_ 기준으로 두 조각 분할 ──
-// fixedSegs  = dartCenter 포함 (고정)
-// rotateSegs = dartEnd_   포함 (회전 대상)
-function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
-  const info = buildBackShoulderDartInfo(f, p, B);
-
-  const isNear = (a, b, eps = 0.05) => {
-    if (!a || !b) return false;
-    return Math.hypot(a.x - b.x, a.y - b.y) < eps;
-  };
-
-  const isDartCenter = pt => isNear(pt, info.dartCenter);
-  const isDartEnd    = pt => isNear(pt, info.dartEnd_);
-  const nn = segments.length;
-
-  const isDartRelated = seg => seg.type === "back-shoulder-dart";
-
-  function walkForward() {
-    const pts  = [{ ...cutPoint }];
-    const segs = [];
-    let hit = null;
-    for (let step = 0; step < nn; step++) {
-      const idx = (cutSegIndex + step) % nn;
-      const seg = segments[idx];
-      const next = { ...seg.to };
-      if (seg.disabled && !isDartRelated(seg)) continue;
-      const fromPt = (step === 0) ? { ...cutPoint } : { ...seg.from };
-      segs.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
-      pts.push(next);
-      if (isDartCenter(next)) { hit = "dartCenter"; break; }
-      if (isDartEnd(next))    { hit = "dartEnd";    break; }
-    }
-    return { pts, segs, hit };
-  }
-
-  function walkBackward() {
-    const rawSegs = [];
-    let hit = null;
-    for (let step = 0; step < nn; step++) {
-      const idx = (cutSegIndex - step + nn) % nn;
-      const seg = segments[idx];
-      const prev = seg.from;
-      if (seg.disabled && !isDartRelated(seg)) continue;
-      rawSegs.push(seg);
-      if (isDartCenter(prev)) { hit = "dartCenter"; break; }
-      if (isDartEnd(prev))    { hit = "dartEnd";    break; }
-    }
-    const segs = rawSegs.map(seg => ({
-      from: { ...seg.to },
-      to:   { ...seg.from },
-      type: seg.type,
-      disabled: !!seg.disabled,
-    }));
-    if (segs.length > 0) segs[0].from = { ...cutPoint };
-    const pts = [{ ...cutPoint }];
-    for (const seg of segs) pts.push({ ...seg.to });
-    return { pts, segs, hit };
-  }
-  const forward  = walkForward();
-  const backward = walkBackward();
-
-  dbg('[splitBack] forward.hit:', forward.hit, 'pts:', forward.pts.length,
-    'types:', forward.segs.map(s=>s.type).join(','));
-  dbg('[splitBack] backward.hit:', backward.hit, 'pts:', backward.pts.length,
-    'types:', backward.segs.map(s=>s.type).join(','));
-
-  const pathA = [...forward.pts,  { ...info.apex }, { ...cutPoint }];
-  const pathB = [...backward.pts, { ...info.apex }, { ...cutPoint }];
-  return {
-    pieceA: { pts: pathA, segs: forward.segs,  hit: forward.hit  || "dartCenter", openPts: forward.pts  },
-    pieceB: { pts: pathB, segs: backward.segs, hit: backward.hit || "dartEnd",    openPts: backward.pts },
-  };
-}
-
-// ── 뒤판 어깨 다트 기하 정보 ──────────────────
-// render.js drawBackShoulder()와 완전히 동일한 공식 사용
-function buildBackShoulderDartInfo(f, p, B) {
-  const deg18  = 18 * Math.PI / 180;
-  const deg22  = 22 * Math.PI / 180;
-
-  const bND = { x: f.bnw(), y: -f.bnd() };
-
-  const fSNP_x2 = f.sw() - f.fnw();
-  const armX2   = f.sw() - f.fw();
-  const fShLen2 = (fSNP_x2 - armX2) / Math.cos(deg22) + 1.8;
-  const bShLen2 = fShLen2 + B / 32 - 0.8;
-
-  // bSP: render.js drawBackShoulder와 동일
-  // (bND 기준이 아닌 bND에서 시작 — render.js는 bND에서 계산)
-  const bSP = {
-    x: bND.x + bShLen2 * Math.cos(deg18),
-    y: bND.y + bShLen2 * Math.sin(deg18),
-  };
-
-  const shDx = Math.cos(deg18);
-  const shDy = Math.sin(deg18);
-
-  // E점이 어깨선 위 어느 t 위치에 있는지
-  const t = (p.E.x - bND.x) / shDx;
-  const dartCenterT = t + 1.5;
-
-  const dartCenter = {
-    x: bND.x + dartCenterT * shDx,
-    y: bND.y + dartCenterT * shDy,
-  };
-
-  const dartLen = B / 32 - 0.8;
-
-  const dartEnd_ = {
-    x: dartCenter.x + dartLen * shDx,
-    y: dartCenter.y + dartLen * shDy,
-  };
-
-  return { apex: p.E, dartCenter, dartEnd_, dartLen };
-}
-
-// ── 뒤판 외곽선 세그먼트 배열 ─────────────────
-// 순서: A → BACK_WL → SIDE_BTM → SIDE_TOP
-//       → [진동곡선: SIDE_TOP→bSP]
-//       → dartEnd_ → E(꼭지점) → dartCenter
-//       → bND → [목곡선: bND→A]
-function buildBackOutline(p, f, B) {
-  const segments = [];
-
-  const deg18 = 18 * Math.PI / 180;
-  const deg22 = 22 * Math.PI / 180;
-
-  // ── 뒤판 기하 재계산 (render.js와 동일) ────
-  const bND = { x: f.bnw(), y: -f.bnd() };
-
-  const fSNP_x2 = f.sw() - f.fnw();
-  const armX2   = f.sw() - f.fw();
-  const fShLen2 = (fSNP_x2 - armX2) / Math.cos(deg22) + 1.8;
-  const bShLen2 = fShLen2 + B / 32 - 0.8;
-
-  const bSP = {
-    x: bND.x + bShLen2 * Math.cos(deg18),
-    y: bND.y + bShLen2 * Math.sin(deg18),
-  };
-
-  const { dartCenter, dartEnd_ } = buildBackShoulderDartInfo(f, p, B);
-
-  // ── 고정 조각: dartCenter → bND → [목선] → A → BACK_WL → SIDE_BTM → SIDE_TOP → [진동] → bSP → dartEnd_ ──
-  // 순서 설명:
-  //   고정(dartCenter 포함): dartCenter → bND → 목선 → A → 뒤중심 → 허리 → 옆선 → 진동 → bSP → dartEnd_
-  //   회전(dartEnd_ 포함):   dartEnd_ → [dart disabled] → dartCenter
-
-  // ── 어깨선: dartCenter → bND ────────────────
-  addLineSegment(segments, dartCenter, bND,      { type: "back-shoulder" });
-
-  // ── 뒤목선 곡선: bND → A ────────────────────
-  {
-    const NH = state.bNeckH;
-    if (NH && NH.h0 && NH.h1) {
-      const neckPts = sampleCubic(bND, NH.h1, NH.h0, p.A, 10);
-      addSampledSegments(segments, neckPts, { type: "back-neckline" });
-    } else {
-      addLineSegment(segments, bND, p.A, { type: "back-neckline" });
-    }
-  }
-
-  // ── 뒤중심/허리/옆선 직선 ────────────────────
-  addLineSegment(segments, p.A,        p.BACK_WL,  { type: "back-center" });
-  addLineSegment(segments, p.BACK_WL,  p.SIDE_BTM, { type: "back-waist"  });
-  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP, { type: "side-seam"   });
-
-  // ── 뒤진동 곡선: SIDE_TOP → bSP ─────────────
-  {
-    const H = state.armH;
-    if (H && H.h2a && H.h1b && H.a1 && H.h1a && H.h0) {
-      const back1 = sampleCubic(p.SIDE_TOP, H.h2a, H.h1b, H.a1, 8);
-      const back2 = sampleCubic(H.a1,       H.h1a, H.h0,  bSP,  8);
-      const backArmPts = [...back1, ...back2.slice(1)];
-      addSampledSegments(segments, backArmPts, { type: "back-armhole" });
-    } else {
-      addLineSegment(segments, p.SIDE_TOP, bSP, { type: "back-armhole" });
-    }
-  }
-
-  // ── 어깨선: bSP → dartEnd_ ──────────────────
-  addLineSegment(segments, bSP,      dartEnd_,  { type: "back-shoulder" });
-
-  // ── 어깨 다트 (disabled): dartEnd_ → E → dartCenter ──
-  addLineSegment(segments, dartEnd_,  p.E,        { type: "back-shoulder-dart", disabled: true });
-  addLineSegment(segments, p.E,       dartCenter, { type: "back-shoulder-dart", disabled: true });
-
-  // ── DEBUG 검증 ──────────────────────────────
-  // buildBackOutline은 렌더/호버마다 호출되는 hot path라, map/filter/join은
-  // DEBUG_DART_MOVE가 켜져 있을 때만 계산한다(dbg() 자체는 인자를 먼저 평가하므로
-  // 가드 없이 넘기면 꺼져 있어도 매번 순회 비용이 든다).
-  if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
-    dbg('[buildBackOutline] 세그먼트 수:', segments.length);
-    dbg('[buildBackOutline] 타입 순서:', segments.map(s => s.type).join(' → '));
-    dbg('[buildBackOutline] disabled 세그먼트:', segments.filter(s => s.disabled).map(s => s.type));
-    const info = buildBackShoulderDartInfo(f, p, B);
-    dbg('[buildBackOutline] 다트info:', {
-      apex:        JSON.stringify(info.apex),
-      dartCenter:  JSON.stringify(info.dartCenter),
-      dartEnd_:    JSON.stringify(info.dartEnd_),
-      dartLen:     info.dartLen.toFixed(3),
-    });
-  }
-
-  return segments;
 }
