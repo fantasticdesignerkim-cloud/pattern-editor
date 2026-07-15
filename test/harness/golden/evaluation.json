@@ -1,0 +1,117 @@
+{
+  "_meta": {
+    "updatedAt": "2026-07-15T05:53:09.979Z",
+    "reason": "perf call-count baseline (pre step-3)"
+  },
+  "case1_pieceA_signPos": {
+    "intervalsDeg": [
+      [
+        0,
+        9.148
+      ],
+      [
+        9.369,
+        10.494
+      ]
+    ],
+    "sweepLimitDeg": 10.95
+  },
+  "case2_pieceA_signNeg": {
+    "intervalsDeg": [
+      [
+        0,
+        0.307
+      ],
+      [
+        0.345,
+        1.369
+      ]
+    ],
+    "sweepLimitDeg": 9.733
+  },
+  "case3_pieceB_signPos": {
+    "intervalsDeg": [
+      [
+        0,
+        0.307
+      ],
+      [
+        0.345,
+        1.369
+      ]
+    ],
+    "sweepLimitDeg": 9.733
+  },
+  "sign_front_waist_A": {
+    "perSign": {
+      "pos": {
+        "physicalDeg": 18.25,
+        "usableDeg": 18.25
+      },
+      "neg": {
+        "physicalDeg": -0.003,
+        "usableDeg": -0.003
+      }
+    },
+    "chosenDeg": 18.25,
+    "chosenSign": "pos",
+    "valid": true
+  },
+  "sign_front_sideseam_B": {
+    "perSign": {
+      "pos": {
+        "physicalDeg": 0.003,
+        "usableDeg": 0.003
+      },
+      "neg": {
+        "physicalDeg": -18.25,
+        "usableDeg": -18.25
+      }
+    },
+    "chosenDeg": -18.25,
+    "chosenSign": "neg",
+    "valid": true
+  },
+  "sign_front_armUp_A": {
+    "perSign": {
+      "pos": {
+        "physicalDeg": 18.25,
+        "usableDeg": 18.25
+      },
+      "neg": {
+        "physicalDeg": -0.95,
+        "usableDeg": -0.95
+      }
+    },
+    "chosenDeg": 18.25,
+    "chosenSign": "pos",
+    "valid": true
+  },
+  "sign_back_shoulder_A": {
+    "perSign": {
+      "pos": {
+        "physicalDeg": 0.006,
+        "usableDeg": 0.006
+      },
+      "neg": {
+        "physicalDeg": -11.38,
+        "usableDeg": -11.38
+      }
+    },
+    "chosenDeg": -11.38,
+    "chosenSign": "neg",
+    "valid": true
+  },
+  "perf_gen0_counts": {
+    "bake": 50,
+    "normalize": 50,
+    "rotColl": 79,
+    "selfX": 2
+  },
+  "perf_sourceNotch_counts": {
+    "bake": 25,
+    "normalize": 25,
+    "rotColl": 60,
+    "selfX": 2
+  }
+}

@@ -95,6 +95,15 @@ function diffSnapshot(golden, current) {
   const diffs = [];
   if (!golden) { diffs.push({ kind: "no-golden" }); return diffs; }
 
+  // shape 스냅샷이 아니면(예: 구간/부호 선택 기록) 범용 심층 비교로 처리한다.
+  // 좌표·각도 ε는 shape 전용 개념이라, 그런 스냅샷은 호출부가 이미 반올림해서 넘긴다.
+  if (!golden.segments || !current.segments) {
+    if (JSON.stringify(golden) !== JSON.stringify(current)) {
+      diffs.push({ kind: "value", golden, current });
+    }
+    return diffs;
+  }
+
   // 세그먼트 수
   if (golden.segments.length !== current.segments.length) {
     diffs.push({ kind: "seg-count", golden: golden.segments.length, current: current.segments.length });
@@ -151,10 +160,19 @@ class GoldenFile {
     return diffSnapshot(this.data[name], snapshot);
   }
   // UPDATE 모드에서만 실제로 파일을 쓴다. 사유(reason)를 함께 헤더로 남긴다.
+  // ★ 기존 파일과 **병합**한다 — 한 골든 파일을 여러 스위트가 공유할 때
+  //   (예: evaluation.json = nonMonotonicIntervals + signSelectionFixture)
+  //   한쪽 --update가 다른 쪽 항목을 지우면 안 된다.
   save(reason) {
     if (!this.update) return false;
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    const out = { _meta: { updatedAt: new Date().toISOString(), reason: reason || "(no reason given)" }, ...this._collected };
+    let existing = {};
+    if (fs.existsSync(this.filePath)) {
+      try { existing = JSON.parse(fs.readFileSync(this.filePath, "utf8")); } catch (e) { existing = {}; }
+    }
+    delete existing._meta;
+    const out = { _meta: { updatedAt: new Date().toISOString(), reason: reason || "(no reason given)" },
+      ...existing, ...this._collected };
     fs.writeFileSync(this.filePath, JSON.stringify(out, null, 2) + "\n", "utf8");
     return true;
   }

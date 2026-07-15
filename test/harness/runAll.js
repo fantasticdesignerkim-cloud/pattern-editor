@@ -12,12 +12,17 @@ const path = require("path");
 const passThrough = process.argv.slice(2); // 예: --update "reason"
 
 const suites = [
-  { file: "purityCheck.js",         golden: false },
-  { file: "backDeterministic.js",   golden: false },
-  { file: "backRandomStress.js",    golden: false, args: ["40", "8"] },
-  { file: "frontDeterministic.js",  golden: true },
-  { file: "multiDartScenarios.js",  golden: true },
-  { file: "frontOldestDartAudit.js", golden: true },
+  { file: "purityCheck.js",           golden: false },
+  { file: "unrelatedNotchInvariant.js", golden: false },
+  { file: "backDeterministic.js",     golden: false },
+  { file: "backRandomStress.js",      golden: false, args: ["40", "8"] },
+  { file: "frontDeterministic.js",    golden: true },
+  { file: "multiDartScenarios.js",    golden: true },
+  { file: "frontOldestDartAudit.js",  golden: true },
+  // 순서 ③(evaluateMove 4계층) 안전망
+  { file: "nonMonotonicIntervals.js", golden: true },
+  { file: "signSelectionFixture.js",  golden: true },
+  { file: "perfBaseline.js",          golden: true },
 ];
 
 let anyFail = false;
