@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "updatedAt": "2026-07-15T06:07:08.437Z",
-    "reason": "split per-suite golden (no merge branch)"
+    "updatedAt": "2026-07-15T07:54:43.779Z",
+    "reason": "add C2 layer-separation case (leg-barrier)"
   },
   "case1_pieceA_signPos": {
     "intervalsDeg": [
@@ -41,5 +41,11 @@
       ]
     ],
     "sweepLimitDeg": 9.733
+  },
+  "layer_separation_legBarrier": {
+    "requestedDeg": 9.125,
+    "endpointValid": true,
+    "sweepLimitDeg": 8.848,
+    "blockedBy": "leg-barrier"
   }
 }

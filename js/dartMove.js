@@ -1241,21 +1241,50 @@ function rotationLegBarrier(fixedClean, pivot, cutPoint, signedTarget) {
   return dir * best;
 }
 
-function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPoint) {
-  if (Math.abs(targetAngle) < 1e-9) return targetAngle;
+// ══════════════════════════════════════════════
+// evaluateMove 4계층 ② — findPhysicalSweepLimit (2026-07 C2)
+// ══════════════════════════════════════════════
+// **책임: 회전 조각이 0→θ로 움직이는 "실제 경로"의 물리적 도달 한계.**
+// endpoint가 나중에 다시 안전해져도 조각 충돌을 통과할 수는 없다 — 그래서 이 한계는
+// ①(evaluateEndpoint)과 독립이고, ③(findApplicableIntervals)은 반드시 이 한계
+// **내부에서만** 스캔한다.
+//
+// 여기서 하지 않는 것(계층 계약):
+//   - endpoint 검사 없음 (①의 책임)
+//   - budget 검사 없음 (①의 reason)
+//   - 캐시 없음
+//
+// blockedBy:
+//   null              — 요청각까지 그대로 도달
+//   'leg-barrier'     — rotationLegBarrier가 먼저 제한
+//   'piece-collision' — 조각 충돌이 더 먼저 제한
+//   두 제한이 ε 이내 동률이면 **기존 실행 순서(배리어 먼저)를 보존해 'leg-barrier'**.
+//
+// 로직은 기존 findMaxSafeAngle에서 **그대로 옮겨 왔다** — 샘플 수(60)·이분탐색
+// 횟수(18)·물리 충돌 알고리즘 전부 불변. 새로 제공하는 건 blockedBy와 scan 정보뿐.
+const SWEEP_TIE_EPS_RAD = 1e-6;
+
+function findPhysicalSweepLimit(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPoint) {
+  // signed zero와 부호를 기존 함수와 동일하게 보존한다(targetAngle을 그대로 반환).
+  if (Math.abs(targetAngle) < 1e-9) {
+    return { limitRad: targetAngle, blockedBy: null, scan: null };
+  }
   const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
     s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
   const fixedClean  = cleanForBake(fixedSegsRaw);
   const rotateClean = cleanForBake(rotateSegsRaw);
-  if (fixedClean.length === 0 || rotateClean.length === 0) return targetAngle;
+  if (fixedClean.length === 0 || rotateClean.length === 0) {
+    return { limitRad: targetAngle, blockedBy: null, scan: null };
+  }
 
   // 1) 각도 배리어: 회전 다리가 기존 다트 다리를 지나치지 못하게 상한을 먼저 좁힌다.
   const cut = cutPoint || rotateClean[0]?.from || fixedClean[0]?.from;
   const barrierAngle = rotationLegBarrier(fixedClean, pivot, cut, targetAngle);
   const effTarget = (Math.abs(barrierAngle) < Math.abs(targetAngle)) ? barrierAngle : targetAngle;
+  const barrierLimited = Math.abs(effTarget) < Math.abs(targetAngle) - SWEEP_TIE_EPS_RAD;
   if (Math.abs(effTarget) < 1e-9) {
     dbg('[findMaxSafeAngle] 각도 배리어로 0까지 축소 (기존 다트 다리 인접)');
-    return effTarget;
+    return { limitRad: effTarget, blockedBy: "leg-barrier", scan: null };
   }
 
   // 2) 회전으로 새로 생기는 겹침(고정×회전 조각 간)만 회전 한계를 결정한다 —
@@ -1271,7 +1300,11 @@ function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPo
   for (let i = 1; i <= SCAN_STEPS; i++) {
     if (crossesAt(effTarget * (i / SCAN_STEPS))) { firstUnsafeStep = i; break; }
   }
-  if (firstUnsafeStep === -1) return effTarget; // 경로 전체가 안전 (배리어 한계까지)
+  if (firstUnsafeStep === -1) {
+    // 경로 전체가 안전 (배리어 한계까지)
+    return { limitRad: effTarget, blockedBy: barrierLimited ? "leg-barrier" : null,
+      scan: { steps: SCAN_STEPS, firstUnsafeStep: -1 } };
+  }
 
   // 마지막으로 안전이 확인된 스텝과 처음 겹친 스텝 사이만 이분 탐색 — 18회면
   // 스캔 간격(effTarget/SCAN_STEPS) 기준 오차가 무시할 수준까지 좁혀진다.
@@ -1284,7 +1317,16 @@ function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPo
   dbg('[findMaxSafeAngle] 축소:', (targetAngle*180/Math.PI).toFixed(2), '° →',
     (lo*180/Math.PI).toFixed(2), '° (배리어:', (effTarget*180/Math.PI).toFixed(2),
     '°, 첫 겹침 스텝:', firstUnsafeStep, '/', SCAN_STEPS, ')');
-  return lo;
+  // 충돌이 배리어 한계와 ε 이내로 동률이면 기존 실행 순서를 보존해 leg-barrier로 본다.
+  const tie = barrierLimited && Math.abs(Math.abs(lo) - Math.abs(effTarget)) <= SWEEP_TIE_EPS_RAD;
+  return { limitRad: lo, blockedBy: tie ? "leg-barrier" : "piece-collision",
+    scan: { steps: SCAN_STEPS, firstUnsafeStep } };
+}
+
+// 호환 wrapper — 호출자 로직을 바꾸지 않기 위해 잠시 유지한다(C4/C5에서 정리).
+// 중복 구현하지 않는다: 실제 로직은 findPhysicalSweepLimit 하나뿐이다.
+function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPoint) {
+  return findPhysicalSweepLimit(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPoint).limitRad;
 }
 
 // ── budget-aware 최대 각도: 이 회전의 결과 총합(열린 다트 BP 각도 합)이 예산을 넘지

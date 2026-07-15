@@ -189,6 +189,53 @@ for (const c of CASES) {
 }
 
 // ══════════════════════════════════════════════
+// 계층 분리 실증 (C2) — "endpoint는 유효한데 물리 스윕이 먼저 막히는" 실제 사례.
+//
+// ①(evaluateEndpoint)과 ②(findPhysicalSweepLimit)를 왜 분리해야 하는지의 증거다.
+// endpoint 유효성만 보면 9.12°까지 허용되지만, 회전 조각이 그 경로를 실제로 지나갈
+// 수 없다(leg barrier가 8.85°에서 막는다). ③이 ②의 한계 내부에서만 스캔해야 하는
+// 이유이기도 하다.
+//
+// 512건 조사(앞판 × gen-0/1다트/2다트/비단조setup × 컷 8종 × 양쪽 부호 × 요청각 4단계)
+// 에서 이 조건을 만족한 유일한 사례다.
+// ══════════════════════════════════════════════
+{
+  console.log(`\n── 계층 분리 실증 (endpoint valid + sweepLimit < requested) ──`);
+  // 위 비단조 케이스와 **같은 레시피**다(BASE_RECIPE) — 케이스1(piece A, sign +)의
+  // 요청각 절반 지점에서 leg barrier가 endpoint보다 먼저 막는다.
+  const { engine } = createEngine();
+  const r0 = applyRecipe(engine, "front", dims, BASE_RECIPE.gen0);
+  check("분리사례: setup applied", r0.status === "applied", r0.status);
+  if (r0.status === "applied") {
+    const ctx = moveContext(engine, "front", dims);
+    const cut = resolveCutRecipe(engine, "front", ctx, BASE_RECIPE.cut2);
+    const split = engine.splitBakedOutline(ctx.segs, cut.point, cut.segIndex, ctx.pivot);
+    const rot = split.pieceA, fix = split.pieceB;
+    const budgetRad = budgetRadOf(engine, "front", dims);
+    const prevBaked = engine.dartMoveState.appliedFront.bakedSegments;
+    const requested = budgetRad * 0.5;   // +9.12°
+
+    const ev = engine.evaluateEndpoint({
+      fixedSegs: fix.segsFull || fix.segs, rotateSegs: rot.segs, pivot: ctx.pivot,
+      budgetRad, prevBakedSegments: prevBaked, sourceNotch: rot.sourceNotch || null,
+    }, requested);
+    const sweep = engine.findPhysicalSweepLimit(fix.segsFull || fix.segs, rot.segs, ctx.pivot, requested, cut.point);
+
+    check("분리사례: endpoint(9.12°)는 valid", ev.valid === true, { reasons: ev.reasons });
+    check("분리사례: sweepLimit < requested (물리 스윕이 먼저 막음)",
+      Math.abs(sweep.limitRad) < Math.abs(requested) - 1e-6,
+      { requestedDeg: +D(requested).toFixed(3), limitDeg: +D(sweep.limitRad).toFixed(3) });
+    check("분리사례: blockedBy = 'leg-barrier'", sweep.blockedBy === "leg-barrier", sweep.blockedBy);
+    console.log(`    requested=${D(requested).toFixed(3)}° endpoint=valid | sweepLimit=${D(sweep.limitRad).toFixed(3)}° blockedBy=${sweep.blockedBy}`);
+
+    const snap = { requestedDeg: +D(requested).toFixed(3), endpointValid: ev.valid,
+      sweepLimitDeg: +D(sweep.limitRad).toFixed(3), blockedBy: sweep.blockedBy };
+    const g = golden.check("layer_separation_legBarrier", snap);
+    check("분리사례: 골든 일치", g.length === 0, g.length ? g.slice(0, 3) : undefined);
+  }
+}
+
+// ══════════════════════════════════════════════
 if (golden.update) {
   const reason = process.argv.slice(2).filter(a => !a.startsWith("--")).join(" ") || "non-monotonic interval baseline (current sourceNotch engine)";
   golden.save(reason);
