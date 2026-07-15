@@ -1,0 +1,7381 @@
+{
+  "_meta": {
+    "updatedAt": "2026-07-14T08:26:21.269Z",
+    "reason": "front deterministic baseline (pre-refactor lock)"
+  },
+  "first_waist_A_full": {
+    "segments": [
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 18.3869,
+          "y": 32.2843
+        },
+        "to": {
+          "x": 33.4781,
+          "y": 37.2606
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 33.4781,
+          "y": 37.2606
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 38
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 47.5,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "to": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "to": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "to": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "to": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "to": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "to": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "to": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "to": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "to": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "to": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "to": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "to": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "to": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "to": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "to": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "to": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "to": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "to": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "to": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "to": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "to": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "to": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "to": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "to": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "to": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "to": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "to": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "to": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "to": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "to": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "to": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "to": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "to": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "to": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "to": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "to": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "to": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "to": {
+          "x": 30.3027,
+          "y": 11.4248
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 30.3027,
+          "y": 11.4248
+        },
+        "to": {
+          "x": 29.9293,
+          "y": 10.9913
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.9293,
+          "y": 10.9913
+        },
+        "to": {
+          "x": 29.5433,
+          "y": 10.6209
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.5433,
+          "y": 10.6209
+        },
+        "to": {
+          "x": 29.1456,
+          "y": 10.3229
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.1456,
+          "y": 10.3229
+        },
+        "to": {
+          "x": 28.7373,
+          "y": 10.1066
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.7373,
+          "y": 10.1066
+        },
+        "to": {
+          "x": 28.3194,
+          "y": 9.9813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.3194,
+          "y": 9.9813
+        },
+        "to": {
+          "x": 27.8928,
+          "y": 9.9562
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.8928,
+          "y": 9.9562
+        },
+        "to": {
+          "x": 27.4585,
+          "y": 10.0407
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.4585,
+          "y": 10.0407
+        },
+        "to": {
+          "x": 27.0177,
+          "y": 10.244
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.0177,
+          "y": 10.244
+        },
+        "to": {
+          "x": 26.5712,
+          "y": 10.5755
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.5712,
+          "y": 10.5755
+        },
+        "to": {
+          "x": 26.1201,
+          "y": 11.0444
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.1201,
+          "y": 11.0444
+        },
+        "to": {
+          "x": 25.6654,
+          "y": 11.66
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.6654,
+          "y": 11.66
+        },
+        "to": {
+          "x": 25.2081,
+          "y": 12.4316
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.2081,
+          "y": 12.4316
+        },
+        "to": {
+          "x": 24.7492,
+          "y": 13.3685
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.7492,
+          "y": 13.3685
+        },
+        "to": {
+          "x": 24.2898,
+          "y": 14.48
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.2898,
+          "y": 14.48
+        },
+        "to": {
+          "x": 23.8307,
+          "y": 15.7753
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.8307,
+          "y": 15.7753
+        },
+        "to": {
+          "x": 18.3869,
+          "y": 32.2843
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 1,
+      "apertureDeg": [
+        18.25
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  },
+  "first_waist_A_half": {
+    "segments": [
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 20.492,
+          "y": 35.3283
+        },
+        "to": {
+          "x": 36.1813,
+          "y": 37.8484
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 36.1813,
+          "y": 37.8484
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 38
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 47.5,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "to": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "to": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "to": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "to": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "to": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "to": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "to": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "to": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "to": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "to": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "to": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "to": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "to": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "to": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "to": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "to": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "to": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "to": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "to": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "to": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "to": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "to": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "to": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "to": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "to": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "to": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "to": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "to": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "to": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "to": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "to": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "to": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "to": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "to": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "to": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "to": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "to": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 29.3812,
+          "y": 13.2672
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.3812,
+          "y": 13.2672
+        },
+        "to": {
+          "x": 28.9488,
+          "y": 12.8431
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.9488,
+          "y": 12.8431
+        },
+        "to": {
+          "x": 28.5115,
+          "y": 12.4743
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.5115,
+          "y": 12.4743
+        },
+        "to": {
+          "x": 28.0716,
+          "y": 12.1699
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.0716,
+          "y": 12.1699
+        },
+        "to": {
+          "x": 27.6317,
+          "y": 11.9387
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.6317,
+          "y": 11.9387
+        },
+        "to": {
+          "x": 27.1943,
+          "y": 11.7899
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.1943,
+          "y": 11.7899
+        },
+        "to": {
+          "x": 26.7617,
+          "y": 11.7324
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.7617,
+          "y": 11.7324
+        },
+        "to": {
+          "x": 26.3365,
+          "y": 11.7753
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.3365,
+          "y": 11.7753
+        },
+        "to": {
+          "x": 25.9212,
+          "y": 11.9276
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.9212,
+          "y": 11.9276
+        },
+        "to": {
+          "x": 25.5182,
+          "y": 12.1982
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.5182,
+          "y": 12.1982
+        },
+        "to": {
+          "x": 25.1299,
+          "y": 12.5963
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.1299,
+          "y": 12.5963
+        },
+        "to": {
+          "x": 24.7589,
+          "y": 13.1308
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.7589,
+          "y": 13.1308
+        },
+        "to": {
+          "x": 24.4076,
+          "y": 13.8107
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.4076,
+          "y": 13.8107
+        },
+        "to": {
+          "x": 24.0784,
+          "y": 14.6451
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.0784,
+          "y": 14.6451
+        },
+        "to": {
+          "x": 23.7739,
+          "y": 15.6429
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.7739,
+          "y": 15.6429
+        },
+        "to": {
+          "x": 23.4966,
+          "y": 16.8132
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.4966,
+          "y": 16.8132
+        },
+        "to": {
+          "x": 23.2488,
+          "y": 18.165
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.2488,
+          "y": 18.165
+        },
+        "to": {
+          "x": 20.492,
+          "y": 35.3283
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 2,
+      "apertureDeg": [
+        9.13,
+        9.12
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  },
+  "first_sideseam_B_full": {
+    "segments": [
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.0531,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 23.0834,
+          "y": 19.2427
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.0834,
+          "y": 19.2427
+        },
+        "to": {
+          "x": 23.1717,
+          "y": 18.0432
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.1717,
+          "y": 18.0432
+        },
+        "to": {
+          "x": 23.3141,
+          "y": 17.0097
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.3141,
+          "y": 17.0097
+        },
+        "to": {
+          "x": 23.5067,
+          "y": 16.1337
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.5067,
+          "y": 16.1337
+        },
+        "to": {
+          "x": 23.7458,
+          "y": 15.4067
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.7458,
+          "y": 15.4067
+        },
+        "to": {
+          "x": 24.0273,
+          "y": 14.8201
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.0273,
+          "y": 14.8201
+        },
+        "to": {
+          "x": 24.3475,
+          "y": 14.3655
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.3475,
+          "y": 14.3655
+        },
+        "to": {
+          "x": 24.7025,
+          "y": 14.0344
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.7025,
+          "y": 14.0344
+        },
+        "to": {
+          "x": 25.0885,
+          "y": 13.8182
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.0885,
+          "y": 13.8182
+        },
+        "to": {
+          "x": 25.5015,
+          "y": 13.7084
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.5015,
+          "y": 13.7084
+        },
+        "to": {
+          "x": 25.9377,
+          "y": 13.6965
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.9377,
+          "y": 13.6965
+        },
+        "to": {
+          "x": 26.3932,
+          "y": 13.7741
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.3932,
+          "y": 13.7741
+        },
+        "to": {
+          "x": 26.8642,
+          "y": 13.9326
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.8642,
+          "y": 13.9326
+        },
+        "to": {
+          "x": 27.3468,
+          "y": 14.1634
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.3468,
+          "y": 14.1634
+        },
+        "to": {
+          "x": 27.8371,
+          "y": 14.4582
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.8371,
+          "y": 14.4582
+        },
+        "to": {
+          "x": 28.3313,
+          "y": 14.8083
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 28.3313,
+          "y": 14.8083
+        },
+        "to": {
+          "x": 28.2755,
+          "y": 14.6896
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 28.2755,
+          "y": 14.6896
+        },
+        "to": {
+          "x": 28.1178,
+          "y": 14.3541
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 28.1178,
+          "y": 14.3541
+        },
+        "to": {
+          "x": 27.8729,
+          "y": 13.8327
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 27.8729,
+          "y": 13.8327
+        },
+        "to": {
+          "x": 27.5552,
+          "y": 13.1565
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 27.5552,
+          "y": 13.1565
+        },
+        "to": {
+          "x": 27.1793,
+          "y": 12.3564
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 27.1793,
+          "y": 12.3564
+        },
+        "to": {
+          "x": 26.7597,
+          "y": 11.4634
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 26.7597,
+          "y": 11.4634
+        },
+        "to": {
+          "x": 26.3111,
+          "y": 10.5084
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 26.3111,
+          "y": 10.5084
+        },
+        "to": {
+          "x": 25.8479,
+          "y": 9.5225
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 25.8479,
+          "y": 9.5225
+        },
+        "to": {
+          "x": 25.3847,
+          "y": 8.5365
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 25.3847,
+          "y": 8.5365
+        },
+        "to": {
+          "x": 24.936,
+          "y": 7.5816
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 24.936,
+          "y": 7.5816
+        },
+        "to": {
+          "x": 24.5164,
+          "y": 6.6886
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 24.5164,
+          "y": 6.6886
+        },
+        "to": {
+          "x": 24.1405,
+          "y": 5.8885
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 24.1405,
+          "y": 5.8885
+        },
+        "to": {
+          "x": 23.8228,
+          "y": 5.2122
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 23.8228,
+          "y": 5.2122
+        },
+        "to": {
+          "x": 23.5779,
+          "y": 4.6909
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 23.5779,
+          "y": 4.6909
+        },
+        "to": {
+          "x": 23.4203,
+          "y": 4.3554
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 23.4203,
+          "y": 4.3554
+        },
+        "to": {
+          "x": 23.3645,
+          "y": 4.2366
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 23.3645,
+          "y": 4.2366
+        },
+        "to": {
+          "x": 32.7368,
+          "y": -3.6976
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 32.7368,
+          "y": -3.6976
+        },
+        "to": {
+          "x": 32.8003,
+          "y": -3.5904
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 32.8003,
+          "y": -3.5904
+        },
+        "to": {
+          "x": 32.9781,
+          "y": -3.2968
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 32.9781,
+          "y": -3.2968
+        },
+        "to": {
+          "x": 33.2513,
+          "y": -2.859
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 33.2513,
+          "y": -2.859
+        },
+        "to": {
+          "x": 33.6007,
+          "y": -2.3192
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 33.6007,
+          "y": -2.3192
+        },
+        "to": {
+          "x": 34.0074,
+          "y": -1.7195
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 34.0074,
+          "y": -1.7195
+        },
+        "to": {
+          "x": 34.4524,
+          "y": -1.1023
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 34.4524,
+          "y": -1.1023
+        },
+        "to": {
+          "x": 34.9167,
+          "y": -0.5096
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 34.9167,
+          "y": -0.5096
+        },
+        "to": {
+          "x": 35.3812,
+          "y": 0.0164
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 35.3812,
+          "y": 0.0164
+        },
+        "to": {
+          "x": 35.827,
+          "y": 0.4334
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 35.827,
+          "y": 0.4334
+        },
+        "to": {
+          "x": 36.2349,
+          "y": 0.6994
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 36.2349,
+          "y": 0.6994
+        },
+        "to": {
+          "x": 36.6784,
+          "y": 0.8475
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 36.6784,
+          "y": 0.8475
+        },
+        "to": {
+          "x": 37.2536,
+          "y": 0.9599
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 37.2536,
+          "y": 0.9599
+        },
+        "to": {
+          "x": 37.9185,
+          "y": 1.0414
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 37.9185,
+          "y": 1.0414
+        },
+        "to": {
+          "x": 38.631,
+          "y": 1.0967
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 38.631,
+          "y": 1.0967
+        },
+        "to": {
+          "x": 39.3492,
+          "y": 1.1305
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 39.3492,
+          "y": 1.1305
+        },
+        "to": {
+          "x": 40.0311,
+          "y": 1.1475
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.0311,
+          "y": 1.1475
+        },
+        "to": {
+          "x": 40.6346,
+          "y": 1.1526
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.6346,
+          "y": 1.1526
+        },
+        "to": {
+          "x": 41.1176,
+          "y": 1.1503
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.1176,
+          "y": 1.1503
+        },
+        "to": {
+          "x": 41.4383,
+          "y": 1.1455
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.4383,
+          "y": 1.1455
+        },
+        "to": {
+          "x": 41.5545,
+          "y": 1.1428
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 41.5545,
+          "y": 1.1428
+        },
+        "to": {
+          "x": 52.4918,
+          "y": 34.311
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 52.4918,
+          "y": 34.311
+        },
+        "to": {
+          "x": 29.2746,
+          "y": 41.9669
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 29.2746,
+          "y": 41.9669
+        },
+        "to": {
+          "x": 26.8249,
+          "y": 34.5379
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 26.8249,
+          "y": 34.5379
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 23.0531,
+          "y": 30.1775
+        },
+        "disabled": true
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.0531,
+          "y": 30.1775
+        },
+        "to": {
+          "x": 23.0531,
+          "y": 20.6167
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 1,
+      "apertureDeg": [
+        18.25
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  },
+  "first_sideseam_B_half": {
+    "segments": [
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.0531,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 23.0834,
+          "y": 19.2427
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.0834,
+          "y": 19.2427
+        },
+        "to": {
+          "x": 23.1717,
+          "y": 18.0432
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.1717,
+          "y": 18.0432
+        },
+        "to": {
+          "x": 23.3141,
+          "y": 17.0097
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.3141,
+          "y": 17.0097
+        },
+        "to": {
+          "x": 23.5067,
+          "y": 16.1337
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.5067,
+          "y": 16.1337
+        },
+        "to": {
+          "x": 23.7458,
+          "y": 15.4067
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.7458,
+          "y": 15.4067
+        },
+        "to": {
+          "x": 24.0273,
+          "y": 14.8201
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.0273,
+          "y": 14.8201
+        },
+        "to": {
+          "x": 24.3475,
+          "y": 14.3655
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.3475,
+          "y": 14.3655
+        },
+        "to": {
+          "x": 24.7025,
+          "y": 14.0344
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.7025,
+          "y": 14.0344
+        },
+        "to": {
+          "x": 25.0885,
+          "y": 13.8182
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.0885,
+          "y": 13.8182
+        },
+        "to": {
+          "x": 25.5015,
+          "y": 13.7084
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.5015,
+          "y": 13.7084
+        },
+        "to": {
+          "x": 25.9377,
+          "y": 13.6965
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.9377,
+          "y": 13.6965
+        },
+        "to": {
+          "x": 26.3932,
+          "y": 13.7741
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.3932,
+          "y": 13.7741
+        },
+        "to": {
+          "x": 26.8642,
+          "y": 13.9326
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.8642,
+          "y": 13.9326
+        },
+        "to": {
+          "x": 27.3468,
+          "y": 14.1634
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.3468,
+          "y": 14.1634
+        },
+        "to": {
+          "x": 27.8371,
+          "y": 14.4582
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.8371,
+          "y": 14.4582
+        },
+        "to": {
+          "x": 28.3313,
+          "y": 14.8083
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 28.3313,
+          "y": 14.8083
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 29.3812,
+          "y": 13.2672
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3812,
+          "y": 13.2672
+        },
+        "to": {
+          "x": 29.345,
+          "y": 13.1411
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.345,
+          "y": 13.1411
+        },
+        "to": {
+          "x": 29.2426,
+          "y": 12.7849
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2426,
+          "y": 12.7849
+        },
+        "to": {
+          "x": 29.0834,
+          "y": 12.2313
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.0834,
+          "y": 12.2313
+        },
+        "to": {
+          "x": 28.877,
+          "y": 11.5132
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 28.877,
+          "y": 11.5132
+        },
+        "to": {
+          "x": 28.6327,
+          "y": 10.6636
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 28.6327,
+          "y": 10.6636
+        },
+        "to": {
+          "x": 28.3601,
+          "y": 9.7154
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 28.3601,
+          "y": 9.7154
+        },
+        "to": {
+          "x": 28.0685,
+          "y": 8.7013
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 28.0685,
+          "y": 8.7013
+        },
+        "to": {
+          "x": 27.7676,
+          "y": 7.6544
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 27.7676,
+          "y": 7.6544
+        },
+        "to": {
+          "x": 27.4666,
+          "y": 6.6075
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 27.4666,
+          "y": 6.6075
+        },
+        "to": {
+          "x": 27.175,
+          "y": 5.5935
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 27.175,
+          "y": 5.5935
+        },
+        "to": {
+          "x": 26.9024,
+          "y": 4.6452
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 26.9024,
+          "y": 4.6452
+        },
+        "to": {
+          "x": 26.6581,
+          "y": 3.7956
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 26.6581,
+          "y": 3.7956
+        },
+        "to": {
+          "x": 26.4517,
+          "y": 3.0776
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 26.4517,
+          "y": 3.0776
+        },
+        "to": {
+          "x": 26.2925,
+          "y": 2.524
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 26.2925,
+          "y": 2.524
+        },
+        "to": {
+          "x": 26.1901,
+          "y": 2.1677
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 26.1901,
+          "y": 2.1677
+        },
+        "to": {
+          "x": 26.1539,
+          "y": 2.0416
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 26.1539,
+          "y": 2.0416
+        },
+        "to": {
+          "x": 36.6659,
+          "y": -4.3059
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 36.6659,
+          "y": -4.3059
+        },
+        "to": {
+          "x": 36.7115,
+          "y": -4.1899
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 36.7115,
+          "y": -4.1899
+        },
+        "to": {
+          "x": 36.8406,
+          "y": -3.8718
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 36.8406,
+          "y": -3.8718
+        },
+        "to": {
+          "x": 37.0408,
+          "y": -3.3962
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 37.0408,
+          "y": -3.3962
+        },
+        "to": {
+          "x": 37.3002,
+          "y": -2.8079
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 37.3002,
+          "y": -2.8079
+        },
+        "to": {
+          "x": 37.6067,
+          "y": -2.1513
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 37.6067,
+          "y": -2.1513
+        },
+        "to": {
+          "x": 37.9482,
+          "y": -1.4713
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 37.9482,
+          "y": -1.4713
+        },
+        "to": {
+          "x": 38.3126,
+          "y": -0.8125
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 38.3126,
+          "y": -0.8125
+        },
+        "to": {
+          "x": 38.6878,
+          "y": -0.2195
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 38.6878,
+          "y": -0.2195
+        },
+        "to": {
+          "x": 39.0618,
+          "y": 0.263
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 39.0618,
+          "y": 0.263
+        },
+        "to": {
+          "x": 39.4224,
+          "y": 0.5902
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 39.4224,
+          "y": 0.5902
+        },
+        "to": {
+          "x": 39.8368,
+          "y": 0.8068
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 39.8368,
+          "y": 0.8068
+        },
+        "to": {
+          "x": 40.3869,
+          "y": 1.009
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.3869,
+          "y": 1.009
+        },
+        "to": {
+          "x": 41.0304,
+          "y": 1.1949
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.0304,
+          "y": 1.1949
+        },
+        "to": {
+          "x": 41.7252,
+          "y": 1.3625
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.7252,
+          "y": 1.3625
+        },
+        "to": {
+          "x": 42.4289,
+          "y": 1.5098
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.4289,
+          "y": 1.5098
+        },
+        "to": {
+          "x": 43.0995,
+          "y": 1.6348
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.0995,
+          "y": 1.6348
+        },
+        "to": {
+          "x": 43.6945,
+          "y": 1.7354
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.6945,
+          "y": 1.7354
+        },
+        "to": {
+          "x": 44.1718,
+          "y": 1.8098
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.1718,
+          "y": 1.8098
+        },
+        "to": {
+          "x": 44.4892,
+          "y": 1.8559
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.4892,
+          "y": 1.8559
+        },
+        "to": {
+          "x": 44.6043,
+          "y": 1.8717
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 44.6043,
+          "y": 1.8717
+        },
+        "to": {
+          "x": 50.1431,
+          "y": 36.3547
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 50.1431,
+          "y": 36.3547
+        },
+        "to": {
+          "x": 26.0056,
+          "y": 40.2317
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 26.0056,
+          "y": 40.2317
+        },
+        "to": {
+          "x": 24.765,
+          "y": 32.5082
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 24.765,
+          "y": 32.5082
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 23.0531,
+          "y": 30.1775
+        },
+        "disabled": true
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.0531,
+          "y": 30.1775
+        },
+        "to": {
+          "x": 23.0531,
+          "y": 20.6167
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 2,
+      "apertureDeg": [
+        9.13,
+        9.12
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  },
+  "sweep_waist_A_10": {
+    "segments": [
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 22.5074,
+          "y": 37.4988
+        },
+        "to": {
+          "x": 38.3898,
+          "y": 38.0049
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.3898,
+          "y": 38.0049
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 38
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 47.5,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "to": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "to": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "to": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "to": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "to": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "to": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "to": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "to": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "to": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "to": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "to": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "to": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "to": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "to": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "to": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "to": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "to": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "to": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "to": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "to": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "to": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "to": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "to": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "to": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "to": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "to": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "to": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "to": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "to": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "to": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "to": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "to": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "to": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "to": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "to": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "to": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "to": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 28.5214,
+          "y": 14.487
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.5214,
+          "y": 14.487
+        },
+        "to": {
+          "x": 28.0386,
+          "y": 14.1213
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.0386,
+          "y": 14.1213
+        },
+        "to": {
+          "x": 27.5579,
+          "y": 13.8111
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.5579,
+          "y": 13.8111
+        },
+        "to": {
+          "x": 27.0829,
+          "y": 13.565
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.0829,
+          "y": 13.565
+        },
+        "to": {
+          "x": 26.6173,
+          "y": 13.3916
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.6173,
+          "y": 13.3916
+        },
+        "to": {
+          "x": 26.1644,
+          "y": 13.2996
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.1644,
+          "y": 13.2996
+        },
+        "to": {
+          "x": 25.7281,
+          "y": 13.2975
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.7281,
+          "y": 13.2975
+        },
+        "to": {
+          "x": 25.3118,
+          "y": 13.3941
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.3118,
+          "y": 13.3941
+        },
+        "to": {
+          "x": 24.9192,
+          "y": 13.5979
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.9192,
+          "y": 13.5979
+        },
+        "to": {
+          "x": 24.5538,
+          "y": 13.9176
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.5538,
+          "y": 13.9176
+        },
+        "to": {
+          "x": 24.2193,
+          "y": 14.3618
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.2193,
+          "y": 14.3618
+        },
+        "to": {
+          "x": 23.9192,
+          "y": 14.9391
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.9192,
+          "y": 14.9391
+        },
+        "to": {
+          "x": 23.6571,
+          "y": 15.6581
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.6571,
+          "y": 15.6581
+        },
+        "to": {
+          "x": 23.4366,
+          "y": 16.5275
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.4366,
+          "y": 16.5275
+        },
+        "to": {
+          "x": 23.2614,
+          "y": 17.556
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.2614,
+          "y": 17.556
+        },
+        "to": {
+          "x": 23.135,
+          "y": 18.752
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.135,
+          "y": 18.752
+        },
+        "to": {
+          "x": 23.061,
+          "y": 20.1243
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.061,
+          "y": 20.1243
+        },
+        "to": {
+          "x": 22.5074,
+          "y": 37.4988
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 2,
+      "apertureDeg": [
+        16.42,
+        1.82
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  },
+  "sweep_waist_A_25": {
+    "segments": [
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 21.7193,
+          "y": 36.7152
+        },
+        "to": {
+          "x": 37.5594,
+          "y": 37.9792
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 37.5594,
+          "y": 37.9792
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 38
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 47.5,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "to": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "to": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "to": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "to": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "to": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "to": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "to": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "to": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "to": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "to": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "to": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "to": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "to": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "to": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "to": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "to": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "to": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "to": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "to": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "to": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "to": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "to": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "to": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "to": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "to": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "to": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "to": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "to": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "to": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "to": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "to": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "to": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "to": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "to": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "to": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "to": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "to": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 28.8255,
+          "y": 14.0169
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.8255,
+          "y": 14.0169
+        },
+        "to": {
+          "x": 28.3608,
+          "y": 13.6285
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.3608,
+          "y": 13.6285
+        },
+        "to": {
+          "x": 27.8955,
+          "y": 13.2957
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.8955,
+          "y": 13.2957
+        },
+        "to": {
+          "x": 27.4328,
+          "y": 13.0272
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.4328,
+          "y": 13.0272
+        },
+        "to": {
+          "x": 26.9759,
+          "y": 12.8317
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.9759,
+          "y": 12.8317
+        },
+        "to": {
+          "x": 26.528,
+          "y": 12.7182
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.528,
+          "y": 12.7182
+        },
+        "to": {
+          "x": 26.0922,
+          "y": 12.6953
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.0922,
+          "y": 12.6953
+        },
+        "to": {
+          "x": 25.6718,
+          "y": 12.7719
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.6718,
+          "y": 12.7719
+        },
+        "to": {
+          "x": 25.2699,
+          "y": 12.9567
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.2699,
+          "y": 12.9567
+        },
+        "to": {
+          "x": 24.8897,
+          "y": 13.2586
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.8897,
+          "y": 13.2586
+        },
+        "to": {
+          "x": 24.5343,
+          "y": 13.6863
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.5343,
+          "y": 13.6863
+        },
+        "to": {
+          "x": 24.207,
+          "y": 14.2486
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.207,
+          "y": 14.2486
+        },
+        "to": {
+          "x": 23.9109,
+          "y": 14.9543
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.9109,
+          "y": 14.9543
+        },
+        "to": {
+          "x": 23.6491,
+          "y": 15.8122
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.6491,
+          "y": 15.8122
+        },
+        "to": {
+          "x": 23.425,
+          "y": 16.8311
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.425,
+          "y": 16.8311
+        },
+        "to": {
+          "x": 23.2416,
+          "y": 18.0197
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.2416,
+          "y": 18.0197
+        },
+        "to": {
+          "x": 23.1021,
+          "y": 19.3869
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.1021,
+          "y": 19.3869
+        },
+        "to": {
+          "x": 21.7193,
+          "y": 36.7152
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 2,
+      "apertureDeg": [
+        13.69,
+        4.56
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  },
+  "sweep_waist_A_50": {
+    "segments": [
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 20.492,
+          "y": 35.3283
+        },
+        "to": {
+          "x": 36.1813,
+          "y": 37.8484
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 36.1813,
+          "y": 37.8484
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 38
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 47.5,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "to": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "to": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "to": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "to": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "to": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "to": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "to": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "to": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "to": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "to": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "to": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "to": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "to": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "to": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "to": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "to": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "to": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "to": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "to": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "to": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "to": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "to": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "to": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "to": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "to": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "to": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "to": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "to": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "to": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "to": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "to": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "to": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "to": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "to": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "to": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "to": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "to": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 29.3812,
+          "y": 13.2672
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.3812,
+          "y": 13.2672
+        },
+        "to": {
+          "x": 28.9488,
+          "y": 12.8431
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.9488,
+          "y": 12.8431
+        },
+        "to": {
+          "x": 28.5115,
+          "y": 12.4743
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.5115,
+          "y": 12.4743
+        },
+        "to": {
+          "x": 28.0716,
+          "y": 12.1699
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.0716,
+          "y": 12.1699
+        },
+        "to": {
+          "x": 27.6317,
+          "y": 11.9387
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.6317,
+          "y": 11.9387
+        },
+        "to": {
+          "x": 27.1943,
+          "y": 11.7899
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.1943,
+          "y": 11.7899
+        },
+        "to": {
+          "x": 26.7617,
+          "y": 11.7324
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.7617,
+          "y": 11.7324
+        },
+        "to": {
+          "x": 26.3365,
+          "y": 11.7753
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.3365,
+          "y": 11.7753
+        },
+        "to": {
+          "x": 25.9212,
+          "y": 11.9276
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.9212,
+          "y": 11.9276
+        },
+        "to": {
+          "x": 25.5182,
+          "y": 12.1982
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.5182,
+          "y": 12.1982
+        },
+        "to": {
+          "x": 25.1299,
+          "y": 12.5963
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.1299,
+          "y": 12.5963
+        },
+        "to": {
+          "x": 24.7589,
+          "y": 13.1308
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.7589,
+          "y": 13.1308
+        },
+        "to": {
+          "x": 24.4076,
+          "y": 13.8107
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.4076,
+          "y": 13.8107
+        },
+        "to": {
+          "x": 24.0784,
+          "y": 14.6451
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.0784,
+          "y": 14.6451
+        },
+        "to": {
+          "x": 23.7739,
+          "y": 15.6429
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.7739,
+          "y": 15.6429
+        },
+        "to": {
+          "x": 23.4966,
+          "y": 16.8132
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.4966,
+          "y": 16.8132
+        },
+        "to": {
+          "x": 23.2488,
+          "y": 18.165
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.2488,
+          "y": 18.165
+        },
+        "to": {
+          "x": 20.492,
+          "y": 35.3283
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 2,
+      "apertureDeg": [
+        9.13,
+        9.12
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  },
+  "sweep_waist_A_75": {
+    "segments": [
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 19.3788,
+          "y": 33.8482
+        },
+        "to": {
+          "x": 34.818,
+          "y": 37.6083
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 34.818,
+          "y": 37.6083
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 38
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 47.5,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "to": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "to": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "to": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "to": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "to": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "to": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "to": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "to": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "to": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "to": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "to": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "to": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "to": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "to": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "to": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "to": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "to": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "to": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "to": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "to": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "to": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "to": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "to": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "to": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "to": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "to": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "to": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "to": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "to": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "to": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "to": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "to": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "to": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "to": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "to": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "to": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "to": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 29.9948,
+          "y": 12.5641
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.9948,
+          "y": 12.5641
+        },
+        "to": {
+          "x": 29.5975,
+          "y": 12.107
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.5975,
+          "y": 12.107
+        },
+        "to": {
+          "x": 29.1909,
+          "y": 11.7046
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.1909,
+          "y": 11.7046
+        },
+        "to": {
+          "x": 28.7766,
+          "y": 11.3661
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.7766,
+          "y": 11.3661
+        },
+        "to": {
+          "x": 28.3565,
+          "y": 11.1007
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.3565,
+          "y": 11.1007
+        },
+        "to": {
+          "x": 27.9323,
+          "y": 10.9175
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.9323,
+          "y": 10.9175
+        },
+        "to": {
+          "x": 27.5057,
+          "y": 10.8258
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.5057,
+          "y": 10.8258
+        },
+        "to": {
+          "x": 27.0784,
+          "y": 10.8348
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.0784,
+          "y": 10.8348
+        },
+        "to": {
+          "x": 26.6523,
+          "y": 10.9535
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.6523,
+          "y": 10.9535
+        },
+        "to": {
+          "x": 26.229,
+          "y": 11.1913
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.229,
+          "y": 11.1913
+        },
+        "to": {
+          "x": 25.8103,
+          "y": 11.5572
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.8103,
+          "y": 11.5572
+        },
+        "to": {
+          "x": 25.3979,
+          "y": 12.0605
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.3979,
+          "y": 12.0605
+        },
+        "to": {
+          "x": 24.9936,
+          "y": 12.7103
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.9936,
+          "y": 12.7103
+        },
+        "to": {
+          "x": 24.5992,
+          "y": 13.5158
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.5992,
+          "y": 13.5158
+        },
+        "to": {
+          "x": 24.2163,
+          "y": 14.4863
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.2163,
+          "y": 14.4863
+        },
+        "to": {
+          "x": 23.8467,
+          "y": 15.6308
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 23.8467,
+          "y": 15.6308
+        },
+        "to": {
+          "x": 23.4922,
+          "y": 16.9586
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.4922,
+          "y": 16.9586
+        },
+        "to": {
+          "x": 19.3788,
+          "y": 33.8482
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 2,
+      "apertureDeg": [
+        4.56,
+        13.69
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  },
+  "sweep_waist_A_90": {
+    "segments": [
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 18.7687,
+          "y": 32.9193
+        },
+        "to": {
+          "x": 34.0107,
+          "y": 37.4125
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 34.0107,
+          "y": 37.4125
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 38
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 47.5,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "to": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "to": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "to": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "to": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "to": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "to": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "to": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "to": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "to": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "to": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "to": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "to": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "to": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "to": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "to": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "to": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "to": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "to": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "to": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "to": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "to": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "to": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "to": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "to": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "to": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "to": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "to": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "to": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "to": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "to": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "to": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "to": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "to": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "to": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "to": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "to": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "to": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-old",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 30.3891,
+          "y": 12.1665
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 30.3891,
+          "y": 12.1665
+        },
+        "to": {
+          "x": 30.0141,
+          "y": 11.6909
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 30.0141,
+          "y": 11.6909
+        },
+        "to": {
+          "x": 29.6271,
+          "y": 11.2696
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.6271,
+          "y": 11.2696
+        },
+        "to": {
+          "x": 29.2295,
+          "y": 10.9117
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.2295,
+          "y": 10.9117
+        },
+        "to": {
+          "x": 28.8226,
+          "y": 10.6265
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.8226,
+          "y": 10.6265
+        },
+        "to": {
+          "x": 28.4076,
+          "y": 10.4233
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.4076,
+          "y": 10.4233
+        },
+        "to": {
+          "x": 27.9858,
+          "y": 10.3113
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.9858,
+          "y": 10.3113
+        },
+        "to": {
+          "x": 27.5586,
+          "y": 10.2998
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.5586,
+          "y": 10.2998
+        },
+        "to": {
+          "x": 27.1273,
+          "y": 10.3981
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.1273,
+          "y": 10.3981
+        },
+        "to": {
+          "x": 26.6932,
+          "y": 10.6153
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.6932,
+          "y": 10.6153
+        },
+        "to": {
+          "x": 26.2575,
+          "y": 10.9609
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.2575,
+          "y": 10.9609
+        },
+        "to": {
+          "x": 25.8215,
+          "y": 11.4439
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.8215,
+          "y": 11.4439
+        },
+        "to": {
+          "x": 25.3867,
+          "y": 12.0736
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.3867,
+          "y": 12.0736
+        },
+        "to": {
+          "x": 24.9542,
+          "y": 12.8594
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.9542,
+          "y": 12.8594
+        },
+        "to": {
+          "x": 24.5254,
+          "y": 13.8105
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.5254,
+          "y": 13.8105
+        },
+        "to": {
+          "x": 24.1016,
+          "y": 14.936
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.1016,
+          "y": 14.936
+        },
+        "to": {
+          "x": 23.684,
+          "y": 16.2454
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.684,
+          "y": 16.2454
+        },
+        "to": {
+          "x": 18.7687,
+          "y": 32.9193
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 2,
+      "apertureDeg": [
+        1.83,
+        16.42
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  },
+  "sweep_waist_A_100": {
+    "segments": [
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 18.3869,
+          "y": 32.2843
+        },
+        "to": {
+          "x": 33.4781,
+          "y": 37.2606
+        },
+        "disabled": false
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 33.4781,
+          "y": 37.2606
+        },
+        "to": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "disabled": true
+      },
+      {
+        "type": "dart-leg-new",
+        "from": {
+          "x": 38.5125,
+          "y": 20.6167
+        },
+        "to": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "disabled": true
+      },
+      {
+        "type": "front-waist",
+        "from": {
+          "x": 38.9436,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 38
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-center",
+        "from": {
+          "x": 47.5,
+          "y": 38
+        },
+        "to": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.5,
+          "y": 3.075
+        },
+        "to": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.3888,
+          "y": 3.0411
+        },
+        "to": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 47.0828,
+          "y": 2.9453
+        },
+        "to": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.6233,
+          "y": 2.7962
+        },
+        "to": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 46.0517,
+          "y": 2.6024
+        },
+        "to": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 45.4095,
+          "y": 2.3727
+        },
+        "to": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.738,
+          "y": 2.1157
+        },
+        "to": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 44.0786,
+          "y": 1.84
+        },
+        "to": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 43.4727,
+          "y": 1.5544
+        },
+        "to": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.9617,
+          "y": 1.2675
+        },
+        "to": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.5869,
+          "y": 0.988
+        },
+        "to": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 42.2827,
+          "y": 0.6077
+        },
+        "to": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.99,
+          "y": 0.072
+        },
+        "to": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.7135,
+          "y": -0.573
+        },
+        "to": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.4582,
+          "y": -1.2813
+        },
+        "to": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.2289,
+          "y": -2.0068
+        },
+        "to": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 41.0304,
+          "y": -2.7037
+        },
+        "to": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.8676,
+          "y": -3.3257
+        },
+        "to": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.7453,
+          "y": -3.8271
+        },
+        "to": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-neckline",
+        "from": {
+          "x": 40.6684,
+          "y": -4.1616
+        },
+        "to": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-shoulder",
+        "from": {
+          "x": 40.6417,
+          "y": -4.2833
+        },
+        "to": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2561,
+          "y": 0.3167
+        },
+        "to": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.2719,
+          "y": 0.447
+        },
+        "to": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3165,
+          "y": 0.815
+        },
+        "to": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.3858,
+          "y": 1.3868
+        },
+        "to": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.4758,
+          "y": 2.1285
+        },
+        "to": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.5822,
+          "y": 3.0061
+        },
+        "to": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.701,
+          "y": 3.9856
+        },
+        "to": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.8281,
+          "y": 5.033
+        },
+        "to": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 29.9592,
+          "y": 6.1144
+        },
+        "to": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.0904,
+          "y": 7.1958
+        },
+        "to": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.2174,
+          "y": 8.2433
+        },
+        "to": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.3362,
+          "y": 9.2227
+        },
+        "to": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.4426,
+          "y": 10.1003
+        },
+        "to": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.5326,
+          "y": 10.842
+        },
+        "to": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6019,
+          "y": 11.4139
+        },
+        "to": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-upper",
+        "from": {
+          "x": 30.6465,
+          "y": 11.7819
+        },
+        "to": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 30.6623,
+          "y": 11.9121
+        },
+        "to": {
+          "x": 30.3027,
+          "y": 11.4248
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 30.3027,
+          "y": 11.4248
+        },
+        "to": {
+          "x": 29.9293,
+          "y": 10.9913
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.9293,
+          "y": 10.9913
+        },
+        "to": {
+          "x": 29.5433,
+          "y": 10.6209
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.5433,
+          "y": 10.6209
+        },
+        "to": {
+          "x": 29.1456,
+          "y": 10.3229
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 29.1456,
+          "y": 10.3229
+        },
+        "to": {
+          "x": 28.7373,
+          "y": 10.1066
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.7373,
+          "y": 10.1066
+        },
+        "to": {
+          "x": 28.3194,
+          "y": 9.9813
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 28.3194,
+          "y": 9.9813
+        },
+        "to": {
+          "x": 27.8928,
+          "y": 9.9562
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.8928,
+          "y": 9.9562
+        },
+        "to": {
+          "x": 27.4585,
+          "y": 10.0407
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.4585,
+          "y": 10.0407
+        },
+        "to": {
+          "x": 27.0177,
+          "y": 10.244
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 27.0177,
+          "y": 10.244
+        },
+        "to": {
+          "x": 26.5712,
+          "y": 10.5755
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.5712,
+          "y": 10.5755
+        },
+        "to": {
+          "x": 26.1201,
+          "y": 11.0444
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 26.1201,
+          "y": 11.0444
+        },
+        "to": {
+          "x": 25.6654,
+          "y": 11.66
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.6654,
+          "y": 11.66
+        },
+        "to": {
+          "x": 25.2081,
+          "y": 12.4316
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 25.2081,
+          "y": 12.4316
+        },
+        "to": {
+          "x": 24.7492,
+          "y": 13.3685
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.7492,
+          "y": 13.3685
+        },
+        "to": {
+          "x": 24.2898,
+          "y": 14.48
+        },
+        "disabled": false
+      },
+      {
+        "type": "front-armhole-lower",
+        "from": {
+          "x": 24.2898,
+          "y": 14.48
+        },
+        "to": {
+          "x": 23.8307,
+          "y": 15.7753
+        },
+        "disabled": false
+      },
+      {
+        "type": "side-seam",
+        "from": {
+          "x": 23.8307,
+          "y": 15.7753
+        },
+        "to": {
+          "x": 18.3869,
+          "y": 32.2843
+        },
+        "disabled": false
+      }
+    ],
+    "notches": {
+      "count": 1,
+      "apertureDeg": [
+        18.25
+      ],
+      "sumDeg": 18.25
+    },
+    "budgetDeg": 18.25
+  }
+}

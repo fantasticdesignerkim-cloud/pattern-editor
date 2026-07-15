@@ -59,19 +59,8 @@ function listOpenNotches(engine, segs, pivot) {
   return notches;
 }
 
-/**
- * 뒤판 또는 앞판 다트이동 한 번을 헤드리스로 시도한다.
- *
- * @param {object} engine  loadEngine.createEngine().engine
- * @param {"front"|"back"} side
- * @param {{B:number,W:number,BL:number}} dims
- * @param {number} fraction  0~1, baseAngle 대비 실제 적용할 비율(중간각 테스트용)
- * @param {"A"|"B"|function} pieceChoice  'A'|'B' 고정, 또는 (pieceA,pieceB)=>chosen 함수
- * @param {function} rng  0~1 난수 생성기 (재현 가능한 시드용)
- * @param {{forceSegIndices?: number[]}} opts  후보 세그먼트 인덱스를 특정 영역으로 제한(예: 특정 옛 다트 근처)
- * @returns {{status:string, [key:string]:any}}
- */
-function attemptDartMove(engine, side, dims, fraction, pieceChoice, rng, opts = {}) {
+// ── 이동 컨텍스트: draft/pivot/outline/baked여부를 한 번에 만든다 ──
+function moveContext(engine, side, dims) {
   const { B, W, BL } = dims;
   const d = engine.createDraft(B, W, BL);
   const pivot = side === "back" ? d.pts.E : d.pts.BP;
@@ -81,12 +70,21 @@ function attemptDartMove(engine, side, dims, fraction, pieceChoice, rng, opts = 
   const isBaked = side === "back"
     ? !!engine.dartMoveState.appliedBack?.bakedSegments
     : !!engine.dartMoveState.appliedFront?.bakedSegments;
+  return { B, W, BL, d, pivot, segs, isBaked };
+}
 
-  const candidates = opts.forceSegIndices || clickableIndices(engine, segs);
-  if (candidates.length === 0) return { status: "no-candidates" };
-
-  const cut = pickCutPoint(engine, side, segs, d, B, rng, candidates);
-  if (!cut) return { status: "no-cut-point" };
+/**
+ * 다트이동 오케스트레이션의 단일 코어. cut(={point,segIndex})이 이미 정해진 상태에서
+ * split → 조각선택 → closeAngle 결정 → applyDartMove까지 수행한다.
+ *
+ * ⚠️ 오케스트레이션 복제, 동기화 필요: 아래 closeAngle 결정 if/else 분기와 호출 순서는
+ * js/dartMove.js의 initDartMoveClickHandler selectPiece 로직(1972-2010행 부근)을 손으로
+ * 옮겨 적은 것이다. dartMove.js에서 이 분기가 바뀌면 여기도 같이 고쳐야 한다 — 공용
+ * 순수 함수(prepareDartMoveCandidate)로 뽑기 전까지는 두 곳이 어긋나지 않는지 리뷰 시
+ * 항상 같이 확인할 것. 무작위/레시피 경로 모두 이 한 함수만 거치므로 복제는 딱 한 벌이다.
+ */
+function performMove(engine, side, dims, ctx, cut, pieceChoice, fraction, rng) {
+  const { B, d, pivot, segs, isBaked } = ctx;
 
   const split = isBaked
     ? engine.splitBakedOutline(segs, cut.point, cut.segIndex, pivot)
@@ -99,7 +97,7 @@ function attemptDartMove(engine, side, dims, fraction, pieceChoice, rng, opts = 
   let chosen;
   if (pieceChoice === "A" || pieceChoice === "B") chosen = pieceChoice;
   else if (typeof pieceChoice === "function") chosen = pieceChoice(split.pieceA, split.pieceB, rng);
-  else chosen = rng() < 0.5 ? "A" : "B";
+  else chosen = (rng ? rng() : Math.random()) < 0.5 ? "A" : "B";
 
   const rotatePiece = chosen === "A" ? split.pieceA : split.pieceB;
   const fixedPiece  = chosen === "A" ? split.pieceB : split.pieceA;
@@ -114,10 +112,7 @@ function attemptDartMove(engine, side, dims, fraction, pieceChoice, rng, opts = 
     ? engine.dartMoveState.appliedBack?.bakedSegments
     : engine.dartMoveState.appliedFront?.bakedSegments;
 
-  // ── closeAngle 결정: initDartMoveClickHandler 1972-2010행과 동일한 순서 ──
-  // ⚠️ 오케스트레이션 복제, 동기화 필요: 아래 if/else 분기와 호출 순서는 그 1972-2010행을
-  // 손으로 옮겨 적은 것이다. dartMove.js에서 이 분기가 바뀌면 여기도 같이 고쳐야 한다 —
-  // 공용 함수로 뽑기 전까지는 두 곳이 어긋나지 않는지 리뷰 시 항상 같이 확인할 것.
+  // ── closeAngle 결정 (오케스트레이션 복제 지점, 위 주석 참고) ──
   let closeAngle, viaSourceNotch = false;
   if (rotatePiece.sourceNotch) {
     viaSourceNotch = true;
@@ -143,7 +138,7 @@ function attemptDartMove(engine, side, dims, fraction, pieceChoice, rng, opts = 
   }
 
   if (Math.abs(closeAngle) < engine.MIN_DART_ANGLE_RAD) {
-    return { status: "no-room", sourceNotch: !!rotatePiece.sourceNotch };
+    return { status: "no-room", sourceNotch: !!rotatePiece.sourceNotch, chosen };
   }
 
   const sourceApertureBefore = rotatePiece.sourceNotch ? rotatePiece.sourceNotch.apertureRad : null;
@@ -166,7 +161,7 @@ function attemptDartMove(engine, side, dims, fraction, pieceChoice, rng, opts = 
 
   const applied = engine.dartMoveState.mode === "idle" && engine.dartMoveState.cutPoint === null;
   if (!applied) {
-    return { status: "blocked", closeAngleDeg: closeAngle * 180 / Math.PI, sourceNotch: viaSourceNotch };
+    return { status: "blocked", chosen, closeAngleDeg: closeAngle * 180 / Math.PI, sourceNotch: viaSourceNotch };
   }
 
   const bakedSegments = side === "back"
@@ -183,6 +178,90 @@ function attemptDartMove(engine, side, dims, fraction, pieceChoice, rng, opts = 
     bakedSegments,
     pivot,
   };
+}
+
+/**
+ * 뒤판 또는 앞판 다트이동 한 번을 무작위 컷으로 시도한다(스트레스용).
+ *
+ * @param {object} engine  loadEngine.createEngine().engine
+ * @param {"front"|"back"} side
+ * @param {{B:number,W:number,BL:number}} dims
+ * @param {number} fraction  0~1, baseAngle 대비 실제 적용할 비율(중간각 테스트용)
+ * @param {"A"|"B"|function} pieceChoice  'A'|'B' 고정, 또는 (pieceA,pieceB)=>chosen 함수
+ * @param {function} rng  0~1 난수 생성기 (재현 가능한 시드용)
+ * @param {{forceSegIndices?: number[]}} opts  후보 세그먼트 인덱스를 특정 영역으로 제한
+ * @returns {{status:string, [key:string]:any}}
+ */
+function attemptDartMove(engine, side, dims, fraction, pieceChoice, rng, opts = {}) {
+  const ctx = moveContext(engine, side, dims);
+  const candidates = opts.forceSegIndices || clickableIndices(engine, ctx.segs);
+  if (candidates.length === 0) return { status: "no-candidates" };
+  const cut = pickCutPoint(engine, side, ctx.segs, ctx.d, ctx.B, rng, candidates);
+  if (!cut) return { status: "no-cut-point" };
+  return performMove(engine, side, dims, ctx, cut, pieceChoice, fraction, rng);
+}
+
+// ── 시맨틱 컷 레시피 ───────────────────────────
+// { type, arcFraction, piece, moveFraction }
+// type + "연속 구간의 호 길이 비율"로 컷 위치를 찾는다(세그먼트 인덱스·절대좌표 금지).
+// 같은 type의 첫 연속 구간(run)을 잡아 그 폴리라인 arcFraction 지점을 계산하고,
+// findCutPoint(Back)으로 스냅한다. 탐색 실패(run 없음/차단/스냅 실패)는 예외로 던진다
+// (사용자 확정: 탐색 실패 = 테스트 실패).
+function findContiguousRun(segs, type) {
+  let start = -1;
+  for (let i = 0; i < segs.length; i++) {
+    if (segs[i].type === type) {
+      start = i;
+      let end = i;
+      while (end + 1 < segs.length && segs[end + 1].type === type) end++;
+      return { start, end };
+    }
+  }
+  return null;
+}
+
+function pointAtArcFraction(runSegs, frac) {
+  const pts = [runSegs[0].from, ...runSegs.map(s => s.to)];
+  let total = 0;
+  const segLens = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const L = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+    segLens.push(L); total += L;
+  }
+  if (total < 1e-9) return { ...pts[0] };
+  let target = Math.max(0, Math.min(1, frac)) * total, acc = 0;
+  for (let i = 0; i < segLens.length; i++) {
+    if (acc + segLens[i] >= target || i === segLens.length - 1) {
+      const t = segLens[i] < 1e-9 ? 0 : (target - acc) / segLens[i];
+      return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * t, y: pts[i].y + (pts[i + 1].y - pts[i].y) * t };
+    }
+    acc += segLens[i];
+  }
+  return { ...pts[pts.length - 1] };
+}
+
+function resolveCutRecipe(engine, side, ctx, recipe) {
+  const { segs, d, B } = ctx;
+  const run = findContiguousRun(segs, recipe.type);
+  if (!run) throw new Error(`resolveCutRecipe: type '${recipe.type}' 연속 구간을 찾을 수 없음`);
+  const runSegs = segs.slice(run.start, run.end + 1);
+  const pt = pointAtArcFraction(runSegs, recipe.arcFraction);
+  const cut = side === "back"
+    ? engine.findCutPointBack(pt, segs, d.pts, d.formula, B)
+    : engine.findCutPoint(pt, segs, d.pts);
+  if (!cut) throw new Error(`resolveCutRecipe: findCutPoint가 null (type=${recipe.type} arcFraction=${recipe.arcFraction})`);
+  if (cut.blocked) throw new Error(`resolveCutRecipe: 컷 위치 차단됨 (reason=${cut.reason} type=${recipe.type} arcFraction=${recipe.arcFraction})`);
+  return { point: cut.point, segIndex: cut.segIndex };
+}
+
+/**
+ * 시맨틱 레시피 하나로 다트이동을 결정론적으로 적용한다.
+ * @param {{type:string, arcFraction:number, piece:"A"|"B", moveFraction:number}} recipe
+ */
+function applyRecipe(engine, side, dims, recipe) {
+  const ctx = moveContext(engine, side, dims);
+  const cut = resolveCutRecipe(engine, side, ctx, recipe); // 실패 시 throw
+  return performMove(engine, side, dims, ctx, cut, recipe.piece, recipe.moveFraction, null);
 }
 
 // ── 사후 검증 헬퍼 ──────────────────────────────
@@ -212,4 +291,16 @@ function countClosedTraces(engine, segs, pivot) {
   return count;
 }
 
-module.exports = { attemptDartMove, listOpenNotches, countBreaks, countClosedTraces, clickableIndices };
+// budget(기본 다트각) 헬퍼 — 시나리오 파일이 예산 대조 시 재사용.
+function budgetRadOf(engine, side, dims) {
+  const d = engine.createDraft(dims.B, dims.W, dims.BL);
+  return side === "back"
+    ? Math.abs(engine.calcBackBaseDartAngle(engine.buildBackShoulderDartInfo(d.formula, d.pts, dims.B)))
+    : Math.abs(engine.calcFrontBaseDartAngle(d.pts, dims.B));
+}
+
+module.exports = {
+  attemptDartMove, applyRecipe, resolveCutRecipe, performMove, moveContext,
+  listOpenNotches, countBreaks, countClosedTraces, clickableIndices,
+  findContiguousRun, pointAtArcFraction, budgetRadOf,
+};
