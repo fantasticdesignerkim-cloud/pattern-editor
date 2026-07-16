@@ -119,6 +119,10 @@ function exportData(){
 //
 // 병합 방식(덮어쓰지 않는다): 기존 항목을 지우지 않고 뒤에 붙인다. 같은 치수가 있으면
 // kv에서 가져온 쪽이 최신이 된다. 되돌릴 수 없는 삭제를 하지 않는 쪽이 안전하다.
+//
+// 멱등성: 같은 파일을 두 번 가져와도 결과가 같아야 한다. 예전엔 무조건 뒤에 붙여서
+// 'JSON 불러오기'를 두 번 누르면 이력이 조용히 2배가 됐다 — kv는 치수키로 덮어쓰니
+// UI 카운트는 그대로라 눈치채기 어려웠다. 회사↔맥을 오갈수록 계속 불어난다.
 function importCurveEntries(entries){
   if(!Array.isArray(entries)) throw new Error('배열이 아닙니다 (내보낸 JSON이 맞는지 확인하세요)');
   const valid = entries.filter(e => e && e.measurements &&
@@ -127,18 +131,49 @@ function importCurveEntries(entries){
 
   const key = 'armhole_data';
   const existing = JSON.parse(localStorage.getItem(key) || '[]');
-  const merged = existing.concat(valid);
+
+  // 이미 있는 항목은 건너뛴다. 같은 치수·같은 순간이라도 내용이 다르면 남긴다
+  // (자동저장 auto:true와 수동저장은 초 단위로 붙어 나오는 별개 항목이다).
+  const seen = new Set(existing.map(curveEntryFingerprint));
+  const fresh = [];
+  for(const e of valid){
+    const fp = curveEntryFingerprint(e);
+    if(seen.has(fp)) continue;
+    seen.add(fp);
+    fresh.push(e);
+  }
+  const merged = existing.concat(fresh);
   localStorage.setItem(key, JSON.stringify(merged));
 
-  // kv 재구성: 순서대로 넣어 같은 치수키는 마지막(=가장 최근 가져온) 것이 남는다.
-  const kv = JSON.parse(localStorage.getItem('armhole_data_kv') || '{}');
-  for(const e of valid){
-    kv[getBodySaveKey(e.measurements.B, e.measurements.W, e.measurements.BL)] = e;
+  // kv는 **새로 들어온 항목으로만** 갱신한다. 전부 중복이면 건드리지 않는다 —
+  // 가져온 뒤 편집해서 자동저장된 최신 곡선이 있는데 같은 파일을 다시 가져오면,
+  // valid 전체로 덮어쓸 경우 그 최신 작업이 파일의 옛 항목으로 되돌아가 버린다.
+  if(fresh.length){
+    const kv = JSON.parse(localStorage.getItem('armhole_data_kv') || '{}');
+    for(const e of fresh){
+      kv[getBodySaveKey(e.measurements.B, e.measurements.W, e.measurements.BL)] = e;
+    }
+    localStorage.setItem('armhole_data_kv', JSON.stringify(kv));
   }
-  localStorage.setItem('armhole_data_kv', JSON.stringify(kv));
 
   updateSaveCount();
-  return { imported: valid.length, skipped: entries.length - valid.length, total: merged.length };
+  return {
+    imported: fresh.length,
+    duplicates: valid.length - fresh.length,
+    skipped: entries.length - valid.length,
+    total: merged.length
+  };
+}
+
+// 항목 동일성 판정: 키 순서에 무관하게 내용이 **완전히** 같은 항목만 같다고 본다.
+// timestamp+measurements로 묶지 않는 이유: 자동저장과 수동저장이 같은 순간에 겹치면
+// 서로 다른 항목이 조용히 하나로 합쳐져 데이터가 사라진다. 완전 일치만 거르면
+// 걸러지는 항목은 정보량이 0이므로 무엇도 잃지 않는다.
+function curveEntryFingerprint(v){
+  if(v === null || typeof v !== 'object') return JSON.stringify(v);
+  if(Array.isArray(v)) return '[' + v.map(curveEntryFingerprint).join(',') + ']';
+  return '{' + Object.keys(v).sort()
+    .map(k => JSON.stringify(k) + ':' + curveEntryFingerprint(v[k])).join(',') + '}';
 }
 
 function importDataFromFile(input){
@@ -152,6 +187,7 @@ function importDataFromFile(input){
       const r = importCurveEntries(parsed);
       let msg = '가져오기 완료!\n' + r.imported + '건 가져옴 (기존 ' + before + '건 → 치수별 '
         + Object.keys(JSON.parse(localStorage.getItem('armhole_data_kv') || '{}')).length + '건)';
+      if(r.duplicates > 0) msg += '\n' + r.duplicates + '건은 이미 있는 항목이라 건너뜀';
       if(r.skipped > 0) msg += '\n' + r.skipped + '건은 형식이 맞지 않아 건너뜀';
       // 현재 치수에 해당하는 곡선이 들어왔으면 바로 화면에 반영한다.
       const applied = loadSavedCurveForCurrentMeasurements(false);
