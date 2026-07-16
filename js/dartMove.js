@@ -1920,6 +1920,10 @@ const dartMoveState = {
   // prepareDartMoveCandidate가 만든 것(자기교차 기준선까지 채워진)을 그대로 들고 있는다 —
   // mousemove마다 다시 조립하면 그 기준선을 매번 다시 계산하게 된다. **불변 취급**.
   evalCtx:       null,
+  // (C6) 마지막 mousemove/더블클릭이 확정한 각도의 evaluation(shape 포함). preview가
+  // 이 shape를 그리고, apply가 같은 shape를 재사용한다(재bake 제거). 재사용 계약:
+  // evaluation.angleRad === userAngle && evaluation.valid. 불변 스냅샷 — 변형 금지.
+  evaluation:    null,
   rotatePts:     null,
   fixedPts:      null,
   fixedSegs:     null,
@@ -2014,6 +2018,7 @@ function startDartMove() {
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
   dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
+  dartMoveState.evaluation    = null;   // (C6) 평가 스냅샷도 함께 폐기 (stale 재사용 방지)
   dartMoveState.rotatePts     = null;
   dartMoveState.fixedPts      = null;
   setBtn("취소", "#cc3333");
@@ -2035,6 +2040,7 @@ function selectDartSide(side) {
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
   dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
+  dartMoveState.evaluation    = null;   // (C6) 평가 스냅샷도 함께 폐기 (stale 재사용 방지)
   dartMoveState.pieceA        = null;
   dartMoveState.pieceB        = null;
   dartMoveState.rotatePts     = null;
@@ -2057,6 +2063,7 @@ function cancelDartMove() {
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
   dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
+  dartMoveState.evaluation    = null;   // (C6) 평가 스냅샷도 함께 폐기 (stale 재사용 방지)
   dartMoveState.pieceA        = null;
   dartMoveState.pieceB        = null;
   dartMoveState.rotatePts     = null;
@@ -2080,6 +2087,7 @@ function resetDartMove() {
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
   dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
+  dartMoveState.evaluation    = null;   // (C6) 평가 스냅샷도 함께 폐기 (stale 재사용 방지)
   dartMoveState.pieceA        = null;
   dartMoveState.pieceB        = null;
   dartMoveState.rotatePts     = null;
@@ -2165,17 +2173,33 @@ function applyDartMove() {
 
   // split 결과로 직접 bake (fixedSegs 그대로, rotateSegs만 회전)
   // 파이프라인: cut → rotate → bake → normalize → validate → render
-  let bakedSegments = bakeFromSplitPieces({
-    fixedSegs:  _cleanFixed,
-    rotateSegs: _cleanRotate,
-    pivot,
-    angle:      dartMoveState.userAngle,
-  });
+  //
+  // (C6) preview/apply 공유: 마지막 mousemove/더블클릭이 확정한 각도의 evaluation.shape가
+  // 곧 이 각도의 bake→normalize 결과다(byte-identical 실측 확인). 재사용 계약이 성립하면
+  // 재bake하지 않고 그 shape를 그대로 커밋한다. 계약: (a) evaluation 존재, (b) 그 각도가
+  // 지금 적용할 userAngle과 정확히 일치(===, 둘 다 같은 resolvedAngleRad 대입 경로),
+  // (c) evaluation.valid. 하나라도 어긋나면(부재·stale·invalid) 재사용하지 않고 재bake로
+  // 안전하게 fallback한다 — 하네스처럼 evaluation을 안 심는 경로도 이쪽으로 정상 동작.
+  const _reuseEval = dartMoveState.evaluation
+    && dartMoveState.evaluation.angleRad === dartMoveState.userAngle
+    && dartMoveState.evaluation.valid;
 
-  // normalize: 닫힌 다트 흔적(면적 0 서브패스)을 녹여 "현재 형상 하나"로 정리.
-  // 열린 다트(부채꼴 다중다트 포함)는 그대로 보존. 이 결과가 저장·렌더·다음 세대
-  // split의 입력이 되므로 과거 찌꺼기가 누적되지 않는다(젤리/물 지배 모델).
-  bakedSegments = normalizeBakedSegments(bakedSegments, pivot);
+  let bakedSegments;
+  if (_reuseEval) {
+    bakedSegments = dartMoveState.evaluation.shape;
+    dbg('[apply] (C6) evaluation.shape 재사용 — 재bake 생략', { angleDeg: (dartMoveState.userAngle*180/Math.PI).toFixed(2) });
+  } else {
+    bakedSegments = bakeFromSplitPieces({
+      fixedSegs:  _cleanFixed,
+      rotateSegs: _cleanRotate,
+      pivot,
+      angle:      dartMoveState.userAngle,
+    });
+    // normalize: 닫힌 다트 흔적(면적 0 서브패스)을 녹여 "현재 형상 하나"로 정리.
+    // 열린 다트(부채꼴 다중다트 포함)는 그대로 보존. 이 결과가 저장·렌더·다음 세대
+    // split의 입력이 되므로 과거 찌꺼기가 누적되지 않는다(젤리/물 지배 모델).
+    bakedSegments = normalizeBakedSegments(bakedSegments, pivot);
+  }
 
   debugCheckSegmentContinuity(bakedSegments, `${side} bakedSegments`);
   validateBakedSegments(bakedSegments, side, pivot);
@@ -2337,6 +2361,7 @@ function applyDartMove() {
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
   dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
+  dartMoveState.evaluation    = null;   // (C6) 평가 스냅샷도 함께 폐기 (stale 재사용 방지)
   dartMoveState.pieceA        = null;
   dartMoveState.pieceB        = null;
   dartMoveState.rotatePts     = null;
@@ -2486,26 +2511,36 @@ function drawDartMoveOverlay(svgEl, p) {
 
   const angle = dartMoveState.userAngle;
 
-  // ── 회전 미리보기 polyline ─────────────────────
-  const rotated = rotatePts.map(pt => rotatePt(pt, pivot, angle));
-  if (rotated.length >= 2) {
-    g.appendChild(E("polyline", {
-      points: ptsToSvgPoints(rotated),
-      fill: "none", stroke: "#44aaff",
-      "stroke-width": 2, opacity: 0.8,
-      "stroke-dasharray": "5,3",
-    }));
-  }
-
-  // ── 고정 조각 polyline (움직이지 않는 나머지 조각) ──
-  const fixedPts = dartMoveState.fixedPts;
-  if (fixedPts?.length >= 2) {
-    g.appendChild(E("polyline", {
-      points: ptsToSvgPoints(fixedPts),
-      fill: "none", stroke: "#ff8800",
-      "stroke-width": 2, opacity: 0.8,
-      "stroke-dasharray": "5,3",
-    }));
+  // ── 회전 미리보기 (C6: preview는 apply와 같은 evaluation.shape를 그린다) ──
+  // 마지막 mousemove가 확정한 evaluation.shape가 있으면 그걸 apply와 동일한 렌더러
+  // (drawAppliedSegments)로 그린다 → "preview 결과 = apply 결과"가 화면에서도 성립.
+  // 반투명·점선 래퍼로 "아직 미확정(드래그 중)"임을 표시(stroke-dasharray는 자식에 상속).
+  // evaluation이 없으면(각도 0/미평가) 기존 조각 폴리라인 근사로 fallback한다.
+  const _previewShape = dartMoveState.evaluation?.shape;
+  if (_previewShape?.length && typeof drawAppliedSegments === "function") {
+    const sg = E("g", { opacity: 0.7, "stroke-dasharray": "5,3", "pointer-events": "none" });
+    drawAppliedSegments(sg, _previewShape, "pattern", "#44aaff", dartMoveState.side);
+    g.appendChild(sg);
+  } else {
+    // fallback: 회전 조각 + 고정 조각 폴리라인 근사
+    const rotated = rotatePts.map(pt => rotatePt(pt, pivot, angle));
+    if (rotated.length >= 2) {
+      g.appendChild(E("polyline", {
+        points: ptsToSvgPoints(rotated),
+        fill: "none", stroke: "#44aaff",
+        "stroke-width": 2, opacity: 0.8,
+        "stroke-dasharray": "5,3",
+      }));
+    }
+    const fixedPts = dartMoveState.fixedPts;
+    if (fixedPts?.length >= 2) {
+      g.appendChild(E("polyline", {
+        points: ptsToSvgPoints(fixedPts),
+        fill: "none", stroke: "#ff8800",
+        "stroke-width": 2, opacity: 0.8,
+        "stroke-dasharray": "5,3",
+      }));
+    }
   }
 
   // ── pivot→cutPoint 절개선 (주황) ──────────────
@@ -2727,6 +2762,7 @@ function initDartMoveClickHandler() {
     const resolved = resolveRequestedAngle(
       dartMoveState.evalCtx, dartMoveState.baseAngle, dartMoveState.baseAngle);
     dartMoveState.userAngle = resolved.resolvedAngleRad;
+    dartMoveState.evaluation = resolved.evaluation;   // (C6) preview·apply 공유
     const pivot = (dartMoveState.side === "back") ? _getDraftPts()?.E : _getDraftPts()?.BP;
     if (pivot && dartMoveState.cutPoint) {
       const openW = dartOpenWidth(dartMoveState.cutPoint, pivot, dartMoveState.userAngle);
@@ -2804,6 +2840,7 @@ function initDartMoveClickHandler() {
     const base = dartMoveState.baseAngle;
     const resolved = resolveRequestedAngle(dartMoveState.evalCtx, userAngle, base);
     dartMoveState.userAngle = resolved.resolvedAngleRad;
+    dartMoveState.evaluation = resolved.evaluation;   // (C6) 이 shape를 preview가 그리고 apply가 재사용
 
     const openW = dartOpenWidth(dartMoveState.cutPoint, pivot, resolved.resolvedAngleRad);
     const baseW = dartOpenWidth(dartMoveState.cutPoint, pivot, base);

@@ -151,6 +151,9 @@ function performMove(engine, side, dims, ctx, cut, pieceChoice, fraction, rng) {
   const resolved = engine.resolveRequestedAngle(
     candidate.evalCtx, closeAngle * fraction, closeAngle);
   engine.dartMoveState.userAngle   = resolved.resolvedAngleRad;
+  // (C6) mousemove와 동일하게 evaluation을 심어 apply가 재사용 경로를 타게 한다 —
+  // 안 심으면 하네스는 fallback bake만 검증하고 재사용 경로가 미검증으로 남는다.
+  engine.dartMoveState.evaluation  = resolved.evaluation;
 
   engine.applyDartMove();
 
