@@ -1,5 +1,5 @@
 let isMeasureDirty = false;
-function markDirty(){
+function markDirty(ev){
   isMeasureDirty = true;
   const el = document.getElementById("dirtyState");
   if(el){
@@ -8,8 +8,11 @@ function markDirty(){
     el.style.fontWeight = "700";
   }
   // 몸판 치수(B/W/BL)가 바뀔 때만 몸판 핸들 리셋
-  // 소매길이/소매단둘레는 소매 핸들에만 영향 → generatePattern에서 처리
-  resetBodyCurveHandles();
+  // 소매단둘레(inpHem)는 소매 하단 폭만 바꾸므로 몸판/소매산 핸들을 리셋하지 않는다
+  const changedId = ev?.target?.id;
+  if(changedId !== "inpHem"){
+    resetBodyCurveHandles();
+  }
 }
 // ── 핸들 초기화 (render 밖에서 실행) ──────────────
 // render()는 state를 읽기만 하고, 핸들 초기화는 여기서만 한다.
@@ -142,3 +145,11 @@ function toggleArmEdit(){
   render();
 }
 
+
+// ── 소매산 앵커 개별 리셋 ──────────────────────
+function resetSleeveAnchors(){
+  resetSleeveCurveHandles();
+  render();
+  const btn = document.getElementById("btnSleeveReset");
+  if(btn){ btn.textContent = "리셋됨 ✓"; setTimeout(()=>{ btn.textContent = "소매산 리셋"; }, 1200); }
+}

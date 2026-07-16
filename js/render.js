@@ -80,7 +80,8 @@ function render(){
     drawDimLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
     drawPoints(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
   }
-  if(showSleeve) drawSleeve(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
+  // isMeasureDirty: 치수 변경 후 패턴 생성 버튼을 아직 안 눌렀으면 소매 패턴 그리지 않음
+  if(showSleeve && !isMeasureDirty) drawSleeve(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
   applyLayerVisibility();
   updateStatusBar(f,p,dr,B,W,BL);
 }
