@@ -83,14 +83,24 @@ function runScenario(label, engine, recipe, expectSourceNotch) {
   });
   check(`${label}: 결정성 (closeAngleRad 동일)`, r1.closeAngleRad === r2.closeAngleRad,
     { first: r1.closeAngleRad, second: r2.closeAngleRad });
-  check(`${label}: 결정성 (limits 동일)`, eq(r1.limits, r2.limits), { l1: r1.limits, l2: r2.limits });
+  // selection = selectRotationSign의 반환(부호별 근거). C4에서 limits를 대체했다.
+  check(`${label}: 결정성 (selection 동일)`, eq(r1.selection, r2.selection),
+    { s1: r1.selection?.reason, s2: r2.selection?.reason });
 
   // 3) 반환 계약
   check(`${label}: valid=true`, r1.valid === true, r1.reason);
   check(`${label}: sourceNotch 반환 형태`,
     expectSourceNotch ? (r1.sourceNotch && typeof r1.sourceNotch.signedAngleRad === "number") : r1.sourceNotch === null);
-  console.log(`  ${label}: closeAngle=${(r1.closeAngleRad*180/Math.PI).toFixed(2)}° requested=${(r1.requestedAngleRad*180/Math.PI).toFixed(2)}° limits=${JSON.stringify(
-    Object.fromEntries(Object.entries(r1.limits).map(([k, v]) => [k, v == null ? null : +(v*180/Math.PI).toFixed(2)])))}`);
+  // 부호 선택 계약: sourceNotch면 후보 1개(닫는 부호만), gen-0이면 양쪽 부호 2개.
+  check(`${label}: 후보 수 (${expectSourceNotch ? "sourceNotch=1" : "gen-0=2"})`,
+    r1.selection.candidates.length === (expectSourceNotch ? 1 : 2),
+    { n: r1.selection.candidates.length, reason: r1.selection.reason });
+  check(`${label}: closeAngleRad = selectedSign × selectedMaxReachableMagRad`,
+    Math.abs(r1.closeAngleRad - r1.selection.selectedSign * r1.selection.selectedMaxReachableMagRad) < 1e-12);
+  const cands = r1.selection.candidates.map(c =>
+    `${c.sign > 0 ? "+" : "-"}${(c.maxReachableMagRad*180/Math.PI).toFixed(2)}°(${c.foundBy},평가${c.scan.evaluated + c.scan.refined})`).join(" / ");
+  console.log(`  ${label}: closeAngle=${(r1.closeAngleRad*180/Math.PI).toFixed(2)}° ` +
+    `requested=${(r1.requestedAngleRad*180/Math.PI).toFixed(2)}° reason=${r1.selection.reason} 후보=${cands}`);
 }
 
 console.log("\n── prepareDartMoveCandidate 순수성/결정성 ──");

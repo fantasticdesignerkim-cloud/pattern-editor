@@ -1517,14 +1517,16 @@ function chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot, baseMag, cutPoint, 
 // @param {Array}   prevBakedSegments 이동 전 저장 형상(델타 게이트 기준선). 없으면 null.
 // @param {number}  minDartAngleRad  퇴화 다트 차단 하한(기본 MIN_DART_ANGLE_RAD)
 // @returns {{closeAngleRad:number, requestedAngleRad:number, sourceNotch:object|null,
-//            sourceApertureBeforeRad:number|null,
-//            limits:{physicalRad:number|null, budgetRad:number|null, applySafeRad:number|null},
+//            sourceApertureBeforeRad:number|null, selection:object,
 //            valid:boolean, reason:string|null}}
-//   limits는 **단계별로 캡된 각도**다(입력 budgetRad=예산 각도와 이름이 겹치지만 다른 것):
-//     physicalRad  = findMaxSafeAngle 통과 후, budgetRad = budgetMaxAngle 통과 후,
-//     applySafeRad = applyTimeSafeAngle 통과 후(=최종). gen-0 경로는 이 세 캡이
-//     chooseSignedBaseAngle 내부에서 두 부호에 대해 수행되므로 단계별 값을 밖에서
-//     알 수 없다 — 정직하게 null로 둔다(추정값을 지어내지 않는다).
+//   `selection`은 `selectRotationSign`의 반환 그대로다 — 부호별 판단 근거(물리 한계·
+//   도달 가능 각도·막은 이유·평가 횟수)가 전부 보인다.
+//   **⚠️ C4에서 `limits`(physicalRad/budgetRad/applySafeRad 단계별 캡)를 대체했다.**
+//   그 세 캡은 이제 존재하지 않는다 — ②가 물리 한계를 정하고, 예산·자기교차 델타·
+//   연속성은 ①의 endpoint 평가 **하나**에 접혀 판정되므로 "예산 캡 통과 후 각도" 같은
+//   중간 단계 자체가 없다. 없는 단계를 null로 남기는 것보다 실제 구조를 노출하는 게
+//   정직하다(gen-0에서 limits가 전부 null이던 것도 이걸로 해소된다).
+//   `reason`은 여전히 호출부용 차단 사유("no-room")다 — 선택 근거는 `selection.reason`.
 function prepareDartMoveCandidate({
   pivot, budgetRad, rawBaseAngleRad, cutPoint, rotatePiece, fixedPiece,
   prevBakedSegments = null, minDartAngleRad = MIN_DART_ANGLE_RAD,
@@ -1535,31 +1537,22 @@ function prepareDartMoveCandidate({
   const fixedSegs  = fixedPiece.segsFull || fixedPiece.segs;
   const sourceNotch = rotatePiece.sourceNotch || null;
 
-  let closeAngleRad, requestedAngleRad;
-  const limits = { physicalRad: null, budgetRad: null, applySafeRad: null };
+  // ①~④가 공유하는 평가 컨텍스트. 자기교차 기준선은 selectRotationSign이 한 번만 구해
+  // 두 부호에 나눠 쓴다(withSelfXBaseline).
+  const evalCtx = { fixedSegs, rotateSegs, pivot, budgetRad, prevBakedSegments, sourceNotch };
 
+  let requestedAngleRad, geomSign;
   if (sourceNotch) {
-    // 회전 조각이 기존 열린 notch(source)의 다리 하나를 물고 있다. 목표는 그
-    // notch를 "정확히" 닫는 것 — 부호와 크기 모두 그 notch의 signedAngleRad에서
-    // 직접 유도한다. rawBase(기본 다트량 전체)는 시작점으로 쓰지 않는다 —
-    // sourceAngle이 새 시작점이다. 반대 부호는 source를 닫는 게 아니라 더 벌리므로
-    // 애초에 시도하지 않는다("usable이 큰 방향"이 아니라 "source를 감소시키는
-    // 방향"만 유효한 후보).
-    const targetSigned = sourceNotch.signedAngleRad;
-    const sign = Math.sign(targetSigned) || 1;
-    const mag  = Math.min(Math.abs(targetSigned), budgetRad); // baseMagnitude = min(sourceAngle, budget)
-    requestedAngleRad = sign * mag;
-    limits.physicalRad  = findMaxSafeAngle(fixedSegs, rotateSegs, pivot, requestedAngleRad, cutPoint);
-    limits.budgetRad    = budgetMaxAngle(fixedSegs, rotateSegs, pivot, limits.physicalRad, budgetRad);
-    limits.applySafeRad = applyTimeSafeAngle(fixedSegs, rotateSegs, pivot, limits.budgetRad, prevBakedSegments);
-    closeAngleRad = limits.applySafeRad;
-    dbg('[closeAngle] source notch 재분배:', 'sourceApertureDeg:',
-      (sourceNotch.apertureRad*180/Math.PI).toFixed(2),
-      '→ finalDeg:', (closeAngleRad*180/Math.PI).toFixed(2));
+    // 회전 조각이 기존 열린 notch(source)의 다리 하나를 물고 있다. 목표는 그 notch를
+    // "정확히" 닫는 것 — 부호와 크기 모두 그 notch에서 직접 유도한다. rawBase(기본
+    // 다트량 전체)는 시작점으로 쓰지 않는다. 반대 부호는 닫는 게 아니라 더 벌리므로
+    // 후보가 아니다(그 규칙은 selectRotationSign이 갖고 있다).
+    geomSign = Math.sign(sourceNotch.signedAngleRad) || 1;
+    requestedAngleRad = geomSign * sourceNotchRequestMagRad(sourceNotch, budgetRad);
   } else {
     // 닿은 기존 notch가 없음(gen-0 또는 완전히 새 위치) — 이 옷 전체의 기본 다트량을
-    // 시작점으로 쓰고, 기하 판정(choosePhysicalCloseAngle)으로 1차 부호를 잡은 뒤
-    // chooseSignedBaseAngle이 두 부호를 비교해 최종 결정한다.
+    // 시작점으로 쓰고, 기하 판정으로 **1차 힌트**만 잡는다. 최종 부호는 선택기가 두 부호의
+    // 도달 가능 각도를 비교해 정하고, 기하 부호는 동률일 때만 tie-breaker로 쓰인다.
     let baseAngle = rawBaseAngleRad;
     if (rotatePiece.pts && rotatePiece.pts.length >= 3) {
       baseAngle = choosePhysicalCloseAngle({
@@ -1567,11 +1560,20 @@ function prepareDartMoveCandidate({
       });
     }
     requestedAngleRad = baseAngle;
-    closeAngleRad = chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot,
-      Math.abs(baseAngle), cutPoint, budgetRad, Math.sign(baseAngle) || 1,
-      prevBakedSegments);
-    dbg('[closeAngle] gen-0/신규 위치 (기본 다트량):', (closeAngleRad*180/Math.PI).toFixed(2));
+    geomSign = Math.sign(baseAngle) || 1;
   }
+
+  // ── C4: 부호와 각도를 ②→탐색 체인 하나로 결정한다 ──
+  // 예전엔 부호마다 findMaxSafeAngle → budgetMaxAngle → applyTimeSafeAngle **세 스캔**을
+  // 따로 돌렸다(gen-0이면 6회, bake 50회). 이제 ②가 물리 한계를 정하고
+  // findMaxApplicableMagnitude가 그 안의 최대 적용 가능 각도를 위에서부터 찾는다 —
+  // 예산·자기교차 델타·연속성이 ①의 endpoint 평가 하나에 접힌다.
+  const selection = selectRotationSign(evalCtx, {
+    baseMagRad: Math.abs(rawBaseAngleRad), cutPoint, geomSign,
+  });
+  const closeAngleRad = selection.selectedSign * selection.selectedMaxReachableMagRad;
+  dbg('[closeAngle]', sourceNotch ? 'source notch 재분배' : 'gen-0/신규 위치',
+    '— reason:', selection.reason, 'finalDeg:', (closeAngleRad*180/Math.PI).toFixed(2));
 
   // 회전 공간이 사실상 없으면(안전각 0.5° 미만) 호출부가 차단한다 — 이대로 적용하면
   // 겹침은 없지만 입구가 안 벌어진 퇴화 다트(다리 두 개가 같은 자리에 겹친 방사선)가
@@ -1583,7 +1585,7 @@ function prepareDartMoveCandidate({
     requestedAngleRad,
     sourceNotch,
     sourceApertureBeforeRad: sourceNotch ? sourceNotch.apertureRad : null,
-    limits,
+    selection,
     valid,
     reason: valid ? null : "no-room",
   };
@@ -1748,6 +1750,18 @@ function evaluateEndpoint(ctx, angleRad) {
 const INTERVAL_SCAN_STEPS   = 60;   // C0 실측: 60은 3케이스 전부 탐지, 40은 케이스2/3을 놓친다
 const INTERVAL_BISECT_ITERS = 18;   // 격자는 "구간 발견"만, 경계 정밀도는 이분탐색이 담당
 
+// 자기교차 델타의 기준선은 prevBakedSegments 하나로 정해져 이 ctx 내내 불변이다 —
+// 스캔 전에 한 번만 구해 파생 ctx에 실어 넘긴다(캐시가 아니라 상수를 상수로 다루는 것).
+// **입력 ctx는 변형하지 않는다**(순수성 — purityCheck가 검증). 이미 있으면 그대로 쓴다.
+function withSelfXBaseline(ctx) {
+  if (ctx.baselineSelfXCount != null) return ctx;
+  return {
+    ...ctx,
+    baselineSelfXCount: ctx.prevBakedSegments
+      ? findSelfIntersections(ctx.prevBakedSegments, ctx.pivot).length : 0,
+  };
+}
+
 function findApplicableIntervals(ctx, limitRad) {
   const limitMagRad = Math.abs(limitRad);
   if (!(limitMagRad > 1e-9)) {
@@ -1759,11 +1773,7 @@ function findApplicableIntervals(ctx, limitRad) {
   // 자기교차 델타의 기준선은 prevBakedSegments 하나로 정해져 스캔 내내 불변이다 —
   // 한 번만 구해 파생 ctx로 넘긴다(캐시가 아니라 상수를 상수로 다루는 것). 입력 ctx는
   // 변형하지 않는다(순수성 — purityCheck가 검증). 호출부가 이미 넣어줬으면 그대로 쓴다.
-  const scanCtx = (ctx.baselineSelfXCount != null) ? ctx : {
-    ...ctx,
-    baselineSelfXCount: ctx.prevBakedSegments
-      ? findSelfIntersections(ctx.prevBakedSegments, ctx.pivot).length : 0,
-  };
+  const scanCtx = withSelfXBaseline(ctx);
 
   // 격자: [0, limitMag]를 steps등분해 각 지점의 endpoint 유효성을 구한다. 0°도 포함한다.
   const grid = new Array(steps + 1);
@@ -1802,6 +1812,173 @@ function findApplicableIntervals(ctx, limitRad) {
   if (startMag !== null) intervals.push({ fromMagRad: startMag, toMagRad: limitMagRad });
 
   return { sign, intervals, scan: { steps, limitMagRad } };
+}
+
+// ══════════════════════════════════════════════
+// 최대 적용 가능 각도 탐색 (2026-07 C4)
+// ══════════════════════════════════════════════
+// **책임: ②가 정한 한계 안에서 "실제로 적용 가능한 가장 큰 각도" 하나를 찾는다.**
+//
+// **왜 findApplicableIntervals를 쓰지 않는가 (C4 실측 근거)**: 부호 선택에 필요한 건
+// `maxReachable` **한 값**뿐인데, 구간 목록 전체를 만들면 격자 61점을 **무조건** 다 돈다.
+// 실측: 그렇게 배선하니 gen-0 bake 50→122(2.44×), 시간 81→316ms(3.9×)로 합의된 1.2×
+// 게이트를 넘었다. 반면 legacy는 부호당 25 bake였다(budgetMaxAngle 24회 + applyTimeSafeAngle
+// 1회 — applyTimeSafeAngle은 끝점이 안전하면 즉시 반환한다). **CLAUDE.md가 예상했던
+// "두 그리드가 따로 bake하는 중복"은 실재하지 않았다** — 정상 경로에서 두 번째 그리드는
+// 아예 열리지 않기 때문이다. 즉 흡수할 중복이 없었고, 늘어난 비용은 전부 "새로 하는 일"
+// (더 조밀한 격자 + 격자점마다 자기교차 검사)이었다.
+//
+// **해법: 위에서 아래로 훑는다.** 우리가 원하는 건 "가장 높은 valid"이므로 한계각부터
+// 내려오면 정상 경로(한계각이 그대로 적용 가능)는 **평가 1회**로 끝난다. 스텝을 줄이지도
+// (SCAN_STEPS=60 유지), 캐시를 넣지도 않는다 — **탐색 방향만 바꾼다.**
+//
+// ⚠️ **아래에서 위로 올라가면 안 된다**: 0 근처의 좁은 안전구간에서 멈춰 더 높은 구간을
+// 통째로 놓친다 — `applyTimeSafeAngle` 1차 구현이 정확히 그 실수를 했다(0.752°만 찾고
+// 18.06°를 놓침). 위에서 내려오면 비단조여도 **가장 높은 valid를 먼저** 만난다.
+//
+// **MIN_DART_ANGLE_RAD를 적용하지 않는다** — ④(C5)의 책임이다.
+//
+// @param ctx      evaluateEndpoint와 동일한 컨텍스트
+// @param limitRad ②(findPhysicalSweepLimit)가 돌려준 **부호 있는** 한계각.
+//   (이름은 Magnitude지만 입력은 부호가 있어야 한다 — evaluateEndpoint가 부호 있는 각도를
+//    받기 때문이고, ③ findApplicableIntervals와 같은 관례다. 반환은 크기다.)
+// @returns {{ maxMagRad, valid, reason, scan:{steps, evaluated, refined} }}
+//   reason: 'limit-valid'   — 한계각이 그대로 적용 가능(정상 경로, 평가 1회)
+//           'scan-boundary' — 한계각은 막혔고, 아래로 훑어 찾은 경계
+//           'none-valid'    — 격자 전체에 valid가 없음(maxMagRad 0)
+//           'zero-limit'    — ②가 0으로 막음(평가 0회)
+//   scan.evaluated = 격자/끝점 평가 횟수, scan.refined = 경계 이분탐색 평가 횟수.
+function findMaxApplicableMagnitude(ctx, limitRad) {
+  const limitMagRad = Math.abs(limitRad);
+  const steps = INTERVAL_SCAN_STEPS;
+  if (!(limitMagRad > 1e-9)) {
+    return { maxMagRad: 0, valid: false, reason: "zero-limit", scan: { steps: 0, evaluated: 0, refined: 0 } };
+  }
+  const sign = Math.sign(limitRad);
+  const scanCtx = withSelfXBaseline(ctx);
+
+  let evaluated = 0, refined = 0;
+  const validAt = (magRad) => { evaluated++; return evaluateEndpoint(scanCtx, sign * magRad).valid; };
+
+  // 정상 경로: 한계각을 **정확히** 평가해서 통과하면 그대로 끝. (평가 1회)
+  if (validAt(limitMagRad)) {
+    return { maxMagRad: limitMagRad, valid: true, reason: "limit-valid", scan: { steps, evaluated, refined } };
+  }
+
+  // 한계각이 막혔다 — 격자를 위에서 아래로 훑어 **가장 높은 valid 샘플**을 찾는다.
+  for (let i = steps - 1; i >= 0; i--) {
+    const magRad = limitMagRad * (i / steps);
+    if (!validAt(magRad)) continue;
+    // 바로 위 샘플은 방금 invalid로 확인됐다(i+1 샘플, i=steps-1이면 한계각 자신).
+    // 그 사이만 이분탐색해 경계를 정밀화한다 — 격자는 "발견", 정밀도는 이분탐색 담당.
+    let lo = magRad, hi = limitMagRad * ((i + 1) / steps);
+    for (let k = 0; k < INTERVAL_BISECT_ITERS; k++) {
+      const mid = (lo + hi) / 2;
+      refined++;
+      if (evaluateEndpoint(scanCtx, sign * mid).valid) lo = mid; else hi = mid;
+    }
+    return { maxMagRad: lo, valid: true, reason: "scan-boundary", scan: { steps, evaluated, refined } };
+  }
+
+  // 0을 포함해 어떤 격자점도 통과하지 못했다 — 진짜로 적용 가능한 각도가 없다.
+  return { maxMagRad: 0, valid: false, reason: "none-valid", scan: { steps, evaluated, refined } };
+}
+
+// ══════════════════════════════════════════════
+// evaluateMove 4계층 — 부호 선택 (2026-07 C4)
+// ══════════════════════════════════════════════
+// **책임: 어느 방향으로 도는 것이 실제로 가장 멀리 갈 수 있는가를 ②→탐색 체인으로 고른다.**
+//
+// 예전 `chooseSignedBaseAngle`은 부호마다 `findMaxSafeAngle → budgetMaxAngle →
+// applyTimeSafeAngle` **세 스캔**을 따로 돌려 나온 단일 각도로 비교했다. 이제 ②가 물리
+// 한계를 정하고 `findMaxApplicableMagnitude`가 그 안의 최대 적용 가능 각도를 찾는다 —
+// 예산·자기교차 델타·연속성이 전부 ①의 endpoint 평가 한 번에 접힌다.
+//
+// 선택 기준(사용자 확정): **각 부호의 `maxMagRad`가 큰 쪽.** 두 부호가 `SIGN_TIE_EPS_RAD`
+// 이내로 동률이면 기하 부호(`choosePhysicalCloseAngle`)를 **tie-breaker로만** 쓴다.
+//
+// **sourceNotch 이동은 부호를 비교하지 않는다**: `signedAngleRad`가 "그 notch를 닫는
+// 방향"을 해석적으로 정한다 — 반대 부호는 닫는 게 아니라 더 벌리므로 애초에 후보가
+// 아니다(후보로 만들면 "여는 쪽"이 더 멀리 간다고 이겨버린다).
+//
+// **이 계층이 하지 않는 것**: MIN_DART_ANGLE_RAD 적용과 마우스 요청각 해석은 ④(C5)의 몫.
+//
+// @param ctx   evaluateEndpoint와 동일한 컨텍스트 (sourceNotch 포함 여부가 분기를 정한다)
+// @param opts  { baseMagRad, cutPoint, geomSign }
+//   baseMagRad = gen-0 경로에서 탐색할 각도 크기(양수, calc*BaseDartAngle).
+//                sourceNotch 경로는 notch에서 직접 유도하므로 이 값을 쓰지 않는다.
+//   geomSign   = choosePhysicalCloseAngle의 기하 부호 — **동률일 때만** 쓰는 tie-breaker.
+// @returns {{ selectedSign, selectedMaxReachableMagRad, candidates, reason }}
+//   candidates = [{ sign, physicalLimitMagRad, maxReachableMagRad, blockedBy, foundBy, scan }]
+//     — 부호별 판단 근거를 그대로 노출한다(왜 그 부호가 이겼는지 밖에서 보이도록).
+//       gen-0은 [기하부호, 반대부호] 2개, sourceNotch는 1개.
+//   reason: 'source-notch'   — notch가 부호를 해석적으로 결정(비교 없음)
+//           'max-reachable'  — 도달 가능 각도가 큰 쪽을 선택
+//           'tie-geometric'  — 동률이라 기하 부호 유지
+//           'no-room'        — 양쪽 다 적용 가능한 각도 없음(④가 차단)
+const SIGN_TIE_EPS_RAD = 1e-4;   // legacy chooseSignedBaseAngle과 같은 동률 판정 폭
+
+// sourceNotch 이동에서 "얼마를 요청하는가" — 규칙이 selectRotationSign과 호출부 양쪽에
+// 필요하므로 한 곳에 둔다(복제하면 한쪽만 고쳐도 조용히 어긋난다). notch를 닫는 데 필요한
+// 각도를 넘지 않고(넘으면 지나쳐서 반대로 벌린다), 이 옷의 예산도 넘지 않는다.
+function sourceNotchRequestMagRad(sourceNotch, budgetRad) {
+  return Math.min(Math.abs(sourceNotch.signedAngleRad), sourceNotch.apertureRad, budgetRad);
+}
+
+function selectRotationSign(ctx, { baseMagRad, cutPoint, geomSign }) {
+  // 두 부호가 같은 기준선을 공유하므로 여기서 한 번만 구한다(부호마다 다시 구하면 같은
+  // 상수를 두 번 계산하게 된다).
+  const scanCtx = withSelfXBaseline(ctx);
+
+  const evalOne = (sign, magRad) => {
+    const sweep = findPhysicalSweepLimit(scanCtx.fixedSegs, scanCtx.rotateSegs, scanCtx.pivot,
+      sign * magRad, cutPoint);
+    const found = findMaxApplicableMagnitude(scanCtx, sweep.limitRad);
+    return {
+      sign,
+      physicalLimitMagRad: Math.abs(sweep.limitRad),
+      maxReachableMagRad: found.maxMagRad,
+      blockedBy: sweep.blockedBy,
+      foundBy: found.reason,
+      scan: found.scan,
+    };
+  };
+
+  // ── sourceNotch: 닫는 부호 하나만 평가한다(반대는 후보가 아니다) ──
+  if (ctx.sourceNotch) {
+    const sign = Math.sign(ctx.sourceNotch.signedAngleRad) || 1;
+    const cand = evalOne(sign, sourceNotchRequestMagRad(ctx.sourceNotch, ctx.budgetRad));
+    return {
+      selectedSign: sign,
+      selectedMaxReachableMagRad: cand.maxReachableMagRad,
+      candidates: [cand],
+      reason: "source-notch",
+    };
+  }
+
+  // ── gen-0/신규 위치: 두 부호를 ②→탐색 전체 체인으로 평가해 비교한다 ──
+  const sign0 = Math.sign(geomSign) || 1;
+  const candGeom = evalOne(sign0, baseMagRad);
+  const candOpp  = evalOne(-sign0, baseMagRad);
+  const candidates = [candGeom, candOpp];   // [기하부호, 반대부호]
+
+  const delta = candGeom.maxReachableMagRad - candOpp.maxReachableMagRad;
+  let selected, reason;
+  if (candGeom.maxReachableMagRad <= 0 && candOpp.maxReachableMagRad <= 0) {
+    // 양쪽 다 갈 곳이 없다 — 진짜 no-room. 부호는 기하 판정을 유지하고 ④가 차단한다.
+    selected = candGeom; reason = "no-room";
+  } else if (Math.abs(delta) < SIGN_TIE_EPS_RAD) {
+    selected = candGeom; reason = "tie-geometric";
+  } else {
+    selected = (delta > 0) ? candGeom : candOpp; reason = "max-reachable";
+  }
+
+  return {
+    selectedSign: selected.sign,
+    selectedMaxReachableMagRad: selected.maxReachableMagRad,
+    candidates,
+    reason,
+  };
 }
 
 // ── 이 옷 전체의 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
