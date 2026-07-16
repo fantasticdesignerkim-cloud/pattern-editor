@@ -1,17 +1,17 @@
 {
   "_meta": {
-    "updatedAt": "2026-07-15T06:07:09.325Z",
-    "reason": "split per-suite golden (no merge branch)"
+    "updatedAt": "2026-07-16T04:31:54.194Z",
+    "reason": "C4: sign selection via findMaxApplicableMagnitude (top-down search)"
   },
   "perf_gen0_counts": {
-    "bake": 50,
-    "normalize": 50,
+    "bake": 2,
+    "normalize": 2,
     "rotColl": 79,
     "selfX": 2
   },
   "perf_sourceNotch_counts": {
-    "bake": 25,
-    "normalize": 25,
+    "bake": 1,
+    "normalize": 1,
     "rotColl": 60,
     "selfX": 2
   }
