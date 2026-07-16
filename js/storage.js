@@ -105,6 +105,68 @@ function exportData(){
   setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
+// ── 데이터 가져오기 (exportData()의 역방향) ─────────
+// 왜 필요한가: 진동선 앵커/핸들은 **localStorage에만** 있고 git에는 없다. 그래서 PC를
+// 옮기면(회사↔집) 같은 치수여도 곡선이 달라져 도안 자체가 달라진다 — CLAUDE.md
+// 2026-07-03 #7의 "어쩔 때는 맞고 어쩔 때는 틀리다"가 정확히 이 데이터 차이였다.
+// 내보내기만 있고 가져오기가 없어서 그동안 이전 수단이 없었다.
+//
+// ★ **두 키를 모두 복원한다** — saveCurveData/autoSaveCurveData가 항상 양쪽에 쓰기 때문:
+//   - `armhole_data`    : append-only 배열(내보내기 형식). 이력 전체.
+//   - `armhole_data_kv` : 치수키(B-W-BL)별 최신 1건. getSavedCurveEntries가 **먼저** 읽고
+//                         updateSaveCount가 세는 곳. 여기를 안 채우면 "저장 0건"으로 보인다.
+//   kv는 배열에서 재구성한다(같은 치수는 뒤 항목이 이김 — setSavedCurveEntry와 같은 규칙).
+//
+// 병합 방식(덮어쓰지 않는다): 기존 항목을 지우지 않고 뒤에 붙인다. 같은 치수가 있으면
+// kv에서 가져온 쪽이 최신이 된다. 되돌릴 수 없는 삭제를 하지 않는 쪽이 안전하다.
+function importCurveEntries(entries){
+  if(!Array.isArray(entries)) throw new Error('배열이 아닙니다 (내보낸 JSON이 맞는지 확인하세요)');
+  const valid = entries.filter(e => e && e.measurements &&
+    e.measurements.B != null && e.measurements.W != null && e.measurements.BL != null);
+  if(valid.length === 0) throw new Error('가져올 항목이 없습니다 (measurements가 있는 항목이 하나도 없음)');
+
+  const key = 'armhole_data';
+  const existing = JSON.parse(localStorage.getItem(key) || '[]');
+  const merged = existing.concat(valid);
+  localStorage.setItem(key, JSON.stringify(merged));
+
+  // kv 재구성: 순서대로 넣어 같은 치수키는 마지막(=가장 최근 가져온) 것이 남는다.
+  const kv = JSON.parse(localStorage.getItem('armhole_data_kv') || '{}');
+  for(const e of valid){
+    kv[getBodySaveKey(e.measurements.B, e.measurements.W, e.measurements.BL)] = e;
+  }
+  localStorage.setItem('armhole_data_kv', JSON.stringify(kv));
+
+  updateSaveCount();
+  return { imported: valid.length, skipped: entries.length - valid.length, total: merged.length };
+}
+
+function importDataFromFile(input){
+  const file = input && input.files && input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const parsed = JSON.parse(reader.result);
+      const before = getSavedCurveEntries().length;
+      const r = importCurveEntries(parsed);
+      let msg = '가져오기 완료!\n' + r.imported + '건 가져옴 (기존 ' + before + '건 → 치수별 '
+        + Object.keys(JSON.parse(localStorage.getItem('armhole_data_kv') || '{}')).length + '건)';
+      if(r.skipped > 0) msg += '\n' + r.skipped + '건은 형식이 맞지 않아 건너뜀';
+      // 현재 치수에 해당하는 곡선이 들어왔으면 바로 화면에 반영한다.
+      const applied = loadSavedCurveForCurrentMeasurements(false);
+      msg += applied ? '\n현재 치수의 곡선을 불러왔습니다.' : '\n현재 치수와 일치하는 곡선은 없습니다.';
+      alert(msg);
+      if(typeof render === 'function') render();
+    } catch(e){
+      alert('가져오기 실패: ' + e.message);
+    }
+    input.value = '';   // 같은 파일을 다시 고를 수 있게 초기화
+  };
+  reader.onerror = () => { alert('파일을 읽지 못했습니다.'); input.value = ''; };
+  reader.readAsText(file);
+}
+
 function updateSaveCount(){
   try{
     const kvData = localStorage.getItem('armhole_data_kv');
