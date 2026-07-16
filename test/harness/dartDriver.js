@@ -142,7 +142,15 @@ function performMove(engine, side, dims, ctx, cut, pieceChoice, fraction, rng) {
   engine.dartMoveState.fixedHit    = fixedPiece.hit;
   engine.dartMoveState.mode        = "drag";
   engine.dartMoveState.baseAngle   = closeAngle;
-  engine.dartMoveState.userAngle   = closeAngle * fraction;
+  engine.dartMoveState.evalCtx     = candidate.evalCtx;
+
+  // ── 요청각 확정: UI의 mousemove와 **같은 ④를 탄다** (C5) ──
+  // 예전엔 `userAngle = closeAngle * fraction`으로 직접 세팅해서 UI의 clamp를 아예
+  // 건너뛰었다 — 그래서 드래그 각도를 정하는 코드가 하네스에서 검증된 적이 없었다.
+  // 이제 프로덕션과 같은 경로로 요청각을 해석한다(복제 금지 원칙).
+  const resolved = engine.resolveRequestedAngle(
+    candidate.evalCtx, closeAngle * fraction, closeAngle);
+  engine.dartMoveState.userAngle   = resolved.resolvedAngleRad;
 
   engine.applyDartMove();
 
@@ -159,7 +167,9 @@ function performMove(engine, side, dims, ctx, cut, pieceChoice, fraction, rng) {
     status: "applied",
     chosen, viaSourceNotch,
     fraction,
-    userAngleDeg: closeAngle * fraction * 180 / Math.PI,
+    // 요청각이 아니라 **④가 확정한 각도**다 — 스냅됐으면 요청과 다르다.
+    userAngleDeg: resolved.resolvedAngleRad * 180 / Math.PI,
+    resolveReason: resolved.reason,
     baseAngleDeg: closeAngle * 180 / Math.PI,
     sourceApertureBeforeDeg: sourceApertureBefore != null ? sourceApertureBefore * 180 / Math.PI : null,
     bakedSegments,

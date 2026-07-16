@@ -1517,10 +1517,14 @@ function chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot, baseMag, cutPoint, 
 // @param {Array}   prevBakedSegments 이동 전 저장 형상(델타 게이트 기준선). 없으면 null.
 // @param {number}  minDartAngleRad  퇴화 다트 차단 하한(기본 MIN_DART_ANGLE_RAD)
 // @returns {{closeAngleRad:number, requestedAngleRad:number, sourceNotch:object|null,
-//            sourceApertureBeforeRad:number|null, selection:object,
+//            sourceApertureBeforeRad:number|null, selection:object, evalCtx:object,
 //            valid:boolean, reason:string|null}}
 //   `selection`은 `selectRotationSign`의 반환 그대로다 — 부호별 판단 근거(물리 한계·
 //   도달 가능 각도·막은 이유·평가 횟수)가 전부 보인다.
+//   `evalCtx`는 ①~④가 공유하는 평가 컨텍스트(자기교차 기준선까지 채워진 것)다.
+//   **드래그 중 ④(resolveRequestedAngle)가 이걸 그대로 받아 쓴다** — 조각 선택이 끝난 뒤
+//   같은 ctx를 다시 조립하면 기준선을 mousemove마다 다시 계산하게 된다. 호출부는 이
+//   객체를 **변형하지 않는다**(불변 취급 — purityCheck가 감시).
 //   **⚠️ C4에서 `limits`(physicalRad/budgetRad/applySafeRad 단계별 캡)를 대체했다.**
 //   그 세 캡은 이제 존재하지 않는다 — ②가 물리 한계를 정하고, 예산·자기교차 델타·
 //   연속성은 ①의 endpoint 평가 **하나**에 접혀 판정되므로 "예산 캡 통과 후 각도" 같은
@@ -1537,9 +1541,14 @@ function prepareDartMoveCandidate({
   const fixedSegs  = fixedPiece.segsFull || fixedPiece.segs;
   const sourceNotch = rotatePiece.sourceNotch || null;
 
-  // ①~④가 공유하는 평가 컨텍스트. 자기교차 기준선은 selectRotationSign이 한 번만 구해
-  // 두 부호에 나눠 쓴다(withSelfXBaseline).
-  const evalCtx = { fixedSegs, rotateSegs, pivot, budgetRad, prevBakedSegments, sourceNotch };
+  // ①~④가 공유하는 평가 컨텍스트. 자기교차 기준선은 `prevBakedSegments` 하나로 정해져
+  // **이 조각 선택 내내 불변**이므로 여기서 한 번만 구한다 — 두 부호(C4)뿐 아니라 이어질
+  // **드래그의 ④(C5)까지** 같은 값을 나눠 쓴다(mousemove마다 다시 구하면 순수 낭비).
+  // selectRotationSign의 withSelfXBaseline은 이미 채워진 ctx를 그대로 통과시킨다 —
+  // 값의 출처는 여전히 prevBakedSegments 하나다.
+  const evalCtx = withSelfXBaseline({
+    fixedSegs, rotateSegs, pivot, budgetRad, prevBakedSegments, sourceNotch,
+  });
 
   let requestedAngleRad, geomSign;
   if (sourceNotch) {
@@ -1586,6 +1595,7 @@ function prepareDartMoveCandidate({
     sourceNotch,
     sourceApertureBeforeRad: sourceNotch ? sourceNotch.apertureRad : null,
     selection,
+    evalCtx,
     valid,
     reason: valid ? null : "no-room",
   };
@@ -1981,6 +1991,139 @@ function selectRotationSign(ctx, { baseMagRad, cutPoint, geomSign }) {
   };
 }
 
+// ══════════════════════════════════════════════
+// evaluateMove 4계층 ④ — resolveRequestedAngle (2026-07 C5)
+// ══════════════════════════════════════════════
+// **책임: 마우스가 요청한 각도를 "실제로 적용 가능한 각도" 하나로 확정한다.**
+//
+// 예전엔 mousemove의 `userAngle = clamp(0, baseAngle)` 한 줄이었다. 그건 **[0, baseAngle]
+// 사이가 전부 안전하다고 가정**한 것인데 endpoint 유효성은 비단조라 그 가정이 성립하지
+// 않는다(C0 실측 `[0, 9.148] ∪ [9.369, 10.494]` — 9.2°는 막혔는데 10.4°는 다시 가능).
+// 요청각이 금지구간에 떨어지면 가장 가까운 경계로 스냅한다.
+//
+// **왜 ③ findApplicableIntervals를 쓰지 않는가 (C5 확정)**: 이 함수는 **mousemove마다**
+// 돈다. ③는 구간 목록을 만들려고 격자 61점을 **무조건** 다 돌아 C3 실측 115평가(~265ms)가
+// 든다 — 드래그가 ~4fps로 죽는다. 반면 정상 경로(요청각이 그대로 valid)는 **평가 1회**로
+// 끝난다. C4가 부호 선택에서 "열거하지 말고 탐색"으로 얻은 결론과 같은 이유다.
+// (그래서 ③는 프로덕션 소비자가 영원히 없다 — C5d에서 삭제.)
+//
+// **⚠️ 경계 탐색은 스냅 보조일 뿐 안전 판정 기관이 아니다 (사용자 확정)**: 유한 격자는
+// 스텝보다 좁은 valid island를 놓칠 수 있어 "항상 수학적으로 가장 가까운 경계"를 보장하지
+// 못한다(③도 같은 한계였다 — C0 케이스2의 금지구간 0.038°는 스텝 0.162°의 4배 좁고,
+// 잡힌 건 샘플이 우연히 안에 떨어져서였다). **안전 판정은 오직 반환된 `evaluation.valid`**
+// 하나다. 이 단일 차단은 **C7에서도 제거 금지.**
+//
+// **중복 평가 금지 (사용자 확정)**: 호출부가 resolved 각도를 다시 평가하면 안 된다 —
+// 탐색 중 그 각도를 이미 정확히 평가했으므로 결과를 `evaluation`으로 함께 돌려준다.
+// **계약: `evaluation.angleRad === resolvedAngleRad`** — 요청각의 평가가 아니라 **확정된
+// 각도의** 평가다(스냅했으면 스냅한 각도의 것). resolved가 0이면 회전이 없어 형상이 원본
+// 그대로이므로 `evaluation`은 null이다 — 적용 차단은 applyDartMove의 MIN 게이트가 한다.
+//
+// **순수하다**: `dartMoveState`도 DOM도 읽지 않고 입력을 변형하지 않는다. **드래그 방향
+// 이력을 보지 않는다** — 같은 요청각은 항상 같은 결과를 낸다(히스테리시스 금지: preview
+// 재현성이 깨진다). 로그도 찍지 않는다(controller 책임).
+//
+// @param ctx          evaluateEndpoint와 동일한 컨텍스트
+// @param requestedRad 사용자가 요청한 **부호 있는** 각도(마우스에서 유도)
+// @param limitRad     드래그 상한 = C4가 고른 **부호 있는** 최대 적용 가능 각도
+//                     (`selectedSign * selectedMaxReachableMagRad`). 그 바깥은 협상 대상이
+//                     아니다 — ②/C4가 이미 막았다.
+// @returns {{ resolvedAngleRad, evaluation, reason, scan:{steps, evaluated, refined} }}
+//   reason: 'request-valid' — 요청각이 그대로 적용 가능(정상 경로, 평가 1회)
+//           'zero-request'  — 요청이 0이거나 MIN 미만 → 중립 0°(평가 0회)
+//           'snap-boundary' — 요청각이 금지구간 → 가장 가까운 경계로 스냅
+//           'none-valid'    — MIN~한계 안에 적용 가능한 각도가 없음 → 0°
+//           'zero-limit'    — 상한이 0(평가 0회)
+const RESOLVE_TIE_EPS_RAD = 1e-9;   // 양쪽 경계가 사실상 같은 거리일 때만 동률로 본다
+
+function resolveRequestedAngle(ctx, requestedRad, limitRad) {
+  const steps = INTERVAL_SCAN_STEPS;
+  const limitMagRad = Math.abs(limitRad);
+  const neutral = (reason, evaluated = 0, refined = 0) => ({
+    resolvedAngleRad: 0, evaluation: null, reason, scan: { steps, evaluated, refined },
+  });
+  if (!(limitMagRad > 1e-9)) return neutral("zero-limit");
+
+  const sign = Math.sign(limitRad);
+  // 요청각을 상한 방향으로 투영하고 [0, limitMag]로 자른다. 반대 부호 요청은 0이 된다
+  // (예전 clamp `base>=0 ? max(0,min(base,u)) : max(base,min(0,u))`와 같은 의미).
+  const reqMag = Math.max(0, Math.min(limitMagRad, requestedRad * sign));
+
+  // 0° 보존: 드래그 시작점 0이 MIN(0.5°)으로 튀면 안 된다. ②/③/C4가 일부러 안 자른 것을
+  // 여기서 자른다 — MIN 적용은 ④의 책임이다.
+  if (reqMag < MIN_DART_ANGLE_RAD) return neutral("zero-request");
+
+  const scanCtx = withSelfXBaseline(ctx);
+  let evaluated = 0, refined = 0;
+  const evalAt = (magRad) => { evaluated++; return evaluateEndpoint(scanCtx, sign * magRad); };
+
+  // 정상 경로: 요청각을 **정확히** 평가해 통과하면 그대로 끝(평가 1회).
+  const reqEv = evalAt(reqMag);
+  if (reqEv.valid) {
+    return {
+      resolvedAngleRad: sign * reqMag, evaluation: reqEv,
+      reason: "request-valid", scan: { steps, evaluated, refined },
+    };
+  }
+
+  // 요청각이 금지구간 안이다 — 격자 간격으로 **양쪽을 동시에** 벌려 나가며 가장 가까운
+  // valid 샘플을 찾는다. 한쪽씩 끝까지 훑으면 반대쪽의 더 가까운 경계를 놓친다.
+  // 탐색 하한은 MIN이다 — 그 아래로 스냅해봐야 적용이 거부되는 퇴화 다트다.
+  const stepMag = limitMagRad / steps;
+  // (valid, invalid) 쌍 사이를 이분탐색해 valid 쪽 끝을 좁힌다. **valid로 확정된 각도와
+  // 그 평가를 함께** 돌려준다 — 호출부가 다시 평가하지 않도록.
+  const refineToward = (validMag, validEv, invalidMag) => {
+    let vm = validMag, vEv = validEv, im = invalidMag;
+    for (let k = 0; k < INTERVAL_BISECT_ITERS; k++) {
+      const mid = (vm + im) / 2;
+      refined++;
+      const ev = evaluateEndpoint(scanCtx, sign * mid);
+      if (ev.valid) { vm = mid; vEv = ev; } else { im = mid; }
+    }
+    return { mag: vm, ev: vEv };
+  };
+
+  for (let k = 1; k <= steps; k++) {
+    // 직전 링의 앵커가 아직 범위 안이어야 이번 링을 볼 의미가 있다. 상한/하한에 닿으면
+    // 그 값을 한 번만 보고 그 방향은 닫는다(같은 각도를 두 번 평가하지 않는다).
+    const dAnchor = reqMag - (k - 1) * stepMag;
+    const uAnchor = reqMag + (k - 1) * stepMag;
+    const dOpen = dAnchor > MIN_DART_ANGLE_RAD;
+    const uOpen = uAnchor < limitMagRad;
+    if (!dOpen && !uOpen) break;
+
+    let down = null, up = null;
+    if (dOpen) {
+      const dMag = Math.max(MIN_DART_ANGLE_RAD, reqMag - k * stepMag);
+      const ev = evalAt(dMag);
+      if (ev.valid) down = refineToward(dMag, ev, dAnchor);   // dAnchor는 invalid로 확인됨
+    }
+    if (uOpen) {
+      const uMag = Math.min(limitMagRad, reqMag + k * stepMag);
+      const ev = evalAt(uMag);
+      if (ev.valid) up = refineToward(uMag, ev, uAnchor);     // uAnchor도 invalid로 확인됨
+    }
+    if (!down && !up) continue;
+
+    // 가장 가까운 경계. **동률이면 작은 각도**(사용자 확정) — 위쪽이 EPS보다 확실히
+    // 가까울 때만 위쪽을 고른다.
+    let pick;
+    if (down && up) {
+      const dDist = reqMag - down.mag, uDist = up.mag - reqMag;
+      pick = (uDist < dDist - RESOLVE_TIE_EPS_RAD) ? up : down;
+    } else {
+      pick = down || up;
+    }
+    return {
+      resolvedAngleRad: sign * pick.mag, evaluation: pick.ev,
+      reason: "snap-boundary", scan: { steps, evaluated, refined },
+    };
+  }
+
+  // MIN~한계 어디에도 valid가 없다 — 중립 0°로 두고 적용은 MIN 게이트가 막는다.
+  return neutral("none-valid", evaluated, refined);
+}
+
 // ── 이 옷 전체의 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
 // 부호는 신경 쓰지 않는다 — choosePhysicalCloseAngle이 최종 결정한다.
 function calcFrontBaseDartAngle(p, B) {
@@ -2023,6 +2166,10 @@ const dartMoveState = {
   pieceB:        null,
   baseAngle:     0,
   userAngle:     0,
+  // ④(resolveRequestedAngle)가 드래그 중 쓰는 평가 컨텍스트. 조각 선택 때
+  // prepareDartMoveCandidate가 만든 것(자기교차 기준선까지 채워진)을 그대로 들고 있는다 —
+  // mousemove마다 다시 조립하면 그 기준선을 매번 다시 계산하게 된다. **불변 취급**.
+  evalCtx:       null,
   rotatePts:     null,
   fixedPts:      null,
   fixedSegs:     null,
@@ -2116,6 +2263,7 @@ function startDartMove() {
   dartMoveState.hoverSegIndex = -1;
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
+  dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
   dartMoveState.rotatePts     = null;
   dartMoveState.fixedPts      = null;
   setBtn("취소", "#cc3333");
@@ -2136,6 +2284,7 @@ function selectDartSide(side) {
   dartMoveState.hoverSegIndex = -1;
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
+  dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
   dartMoveState.pieceA        = null;
   dartMoveState.pieceB        = null;
   dartMoveState.rotatePts     = null;
@@ -2157,6 +2306,7 @@ function cancelDartMove() {
   dartMoveState.hoverSegIndex = -1;
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
+  dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
   dartMoveState.pieceA        = null;
   dartMoveState.pieceB        = null;
   dartMoveState.rotatePts     = null;
@@ -2179,6 +2329,7 @@ function resetDartMove() {
   dartMoveState.hoverSegIndex = -1;
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
+  dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
   dartMoveState.pieceA        = null;
   dartMoveState.pieceB        = null;
   dartMoveState.rotatePts     = null;
@@ -2435,6 +2586,7 @@ function applyDartMove() {
   dartMoveState.hoverSegIndex = -1;
   dartMoveState.userAngle     = 0;
   dartMoveState.baseAngle     = 0;
+  dartMoveState.evalCtx       = null;   // 스냅샷 폐기 — 옛 세그먼트를 붙들고 있지 않는다
   dartMoveState.pieceA        = null;
   dartMoveState.pieceB        = null;
   dartMoveState.rotatePts     = null;
@@ -2703,8 +2855,10 @@ function initDartMoveClickHandler() {
       }
 
       dartMoveState.mode          = "drag";
-      dartMoveState.baseAngle     = closeAngle;   // 드래그 최대 한계 (부호 검증 + 겹침 없는 한계)
+      dartMoveState.baseAngle     = closeAngle;   // 드래그 상한 = C4가 고른 최대 적용 가능 각도
       dartMoveState.userAngle     = 0;             // 항상 0에서 시작
+      // ④가 드래그 내내 쓸 평가 컨텍스트(자기교차 기준선 포함)를 그대로 넘겨받는다.
+      dartMoveState.evalCtx       = _candidate.evalCtx;
       dartMoveState.rotatePts     = rotatePiece.pts;
       dartMoveState.fixedPts      = fixedPiece.pts;
       dartMoveState.rotateSegs    = _rotateSegs;
@@ -2809,7 +2963,10 @@ function initDartMoveClickHandler() {
     svg.style.cursor = "grabbing";
   });
 
-  // ── 드래그 핸들: 더블클릭 = 끝까지 이동 (userAngle = baseAngle, 이미 겹침 없는 한계로 clamp됨) ──
+  // ── 드래그 핸들: 더블클릭 = 끝까지 이동 ──
+  // baseAngle은 C4가 valid로 확인한 각도지만 **그래도 ④를 통과시킨다** — 드래그와
+  // 더블클릭이 서로 다른 경로로 각도를 정하면 같은 각도가 두 경로에서 다르게 나올 수
+  // 있다. 정상 경로라 평가 1회로 끝난다.
   svg.addEventListener("dblclick", e => {
     if (!dartMoveState.active) return;
     const handle = e.target.closest(".dart-rotate-handle");
@@ -2817,7 +2974,9 @@ function initDartMoveClickHandler() {
     e.preventDefault();
     e.stopPropagation();
     dartMoveState.dragging = false;
-    dartMoveState.userAngle = dartMoveState.baseAngle;
+    const resolved = resolveRequestedAngle(
+      dartMoveState.evalCtx, dartMoveState.baseAngle, dartMoveState.baseAngle);
+    dartMoveState.userAngle = resolved.resolvedAngleRad;
     const pivot = (dartMoveState.side === "back") ? _getDraftPts()?.E : _getDraftPts()?.BP;
     if (pivot && dartMoveState.cutPoint) {
       const openW = dartOpenWidth(dartMoveState.cutPoint, pivot, dartMoveState.userAngle);
@@ -2888,19 +3047,22 @@ function initDartMoveClickHandler() {
     while (userAngle >  Math.PI) userAngle -= 2 * Math.PI;
     while (userAngle < -Math.PI) userAngle += 2 * Math.PI;
 
-    // 드래그 범위 제한: 0 ~ baseAngle (겹침 방지)
+    // ④(C5): 요청각을 실제 적용 가능한 각도로 확정한다. 예전엔 `clamp(0, baseAngle)`
+    // 한 줄이었는데, 그건 [0, baseAngle] 사이가 전부 안전하다는 가정이었다 — endpoint
+    // 유효성은 비단조라 성립하지 않는다. 금지구간에 떨어지면 ④가 가장 가까운 경계로
+    // 스냅하고, **resolved 각도의 평가**를 함께 돌려준다(호출부가 다시 평가하지 않는다).
     const base = dartMoveState.baseAngle;
-    if (base >= 0) {
-      userAngle = Math.max(0, Math.min(base, userAngle));
-    } else {
-      userAngle = Math.max(base, Math.min(0, userAngle));
-    }
+    const resolved = resolveRequestedAngle(dartMoveState.evalCtx, userAngle, base);
+    dartMoveState.userAngle = resolved.resolvedAngleRad;
 
-    dartMoveState.userAngle = userAngle;
-
-    const openW = dartOpenWidth(dartMoveState.cutPoint, pivot, userAngle);
+    const openW = dartOpenWidth(dartMoveState.cutPoint, pivot, resolved.resolvedAngleRad);
     const baseW = dartOpenWidth(dartMoveState.cutPoint, pivot, base);
-    setHint(`다트 벌림: ${openW.toFixed(1)}cm / 최대 ${baseW.toFixed(1)}cm`);
+    // 스냅됐다는 걸 숨기지 않는다 — 마우스를 따라오지 않는 이유가 보여야 한다.
+    const snapped = (resolved.reason === "snap-boundary");
+    setHint(`다트 벌림: ${openW.toFixed(1)}cm / 최대 ${baseW.toFixed(1)}cm`
+      + (snapped ? " — 이 각도는 겹쳐서 가장 가까운 가능 위치로 맞췄습니다" : ""));
+    dbg('[resolve]', resolved.reason, 'deg:', (resolved.resolvedAngleRad*180/Math.PI).toFixed(2),
+      'eval:', resolved.scan.evaluated, 'refine:', resolved.scan.refined);
     render();
   });
 
