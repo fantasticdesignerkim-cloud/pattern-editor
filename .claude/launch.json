@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pattern-editor",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8420"],
+      "port": 8420,
+      "autoPort": false
+    }
+  ]
+}
