@@ -27,6 +27,8 @@ const suites = [
   { file: "resolveRequestedAngle.js", golden: false },
   // C4: 부호 선택 — 분기별 계약(실기하 + 스텁)을 독립 oracle과 대조.
   { file: "rotationSignSelection.js", golden: false },
+  // 잠긴 sign-selection.json 골든을 현재 C4 API로 재현·검증(legacy 삭제 후 최소 검증기).
+  { file: "signSelectionFixture.js",  golden: true },
   { file: "perfBaseline.js",          golden: true },
 ];
 

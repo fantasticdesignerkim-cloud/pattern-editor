@@ -1,0 +1,66 @@
+{
+  "_meta": {
+    "updatedAt": "2026-07-15T06:07:08.997Z",
+    "reason": "split per-suite golden (no merge branch)"
+  },
+  "sign_front_waist_A": {
+    "perSign": {
+      "pos": {
+        "physicalDeg": 18.25,
+        "usableDeg": 18.25
+      },
+      "neg": {
+        "physicalDeg": -0.003,
+        "usableDeg": -0.003
+      }
+    },
+    "chosenDeg": 18.25,
+    "chosenSign": "pos",
+    "valid": true
+  },
+  "sign_front_sideseam_B": {
+    "perSign": {
+      "pos": {
+        "physicalDeg": 0.003,
+        "usableDeg": 0.003
+      },
+      "neg": {
+        "physicalDeg": -18.25,
+        "usableDeg": -18.25
+      }
+    },
+    "chosenDeg": -18.25,
+    "chosenSign": "neg",
+    "valid": true
+  },
+  "sign_front_armUp_A": {
+    "perSign": {
+      "pos": {
+        "physicalDeg": 18.25,
+        "usableDeg": 18.25
+      },
+      "neg": {
+        "physicalDeg": -0.95,
+        "usableDeg": -0.95
+      }
+    },
+    "chosenDeg": 18.25,
+    "chosenSign": "pos",
+    "valid": true
+  },
+  "sign_back_shoulder_A": {
+    "perSign": {
+      "pos": {
+        "physicalDeg": 0.006,
+        "usableDeg": 0.006
+      },
+      "neg": {
+        "physicalDeg": -11.38,
+        "usableDeg": -11.38
+      }
+    },
+    "chosenDeg": -11.38,
+    "chosenSign": "neg",
+    "valid": true
+  }
+}
