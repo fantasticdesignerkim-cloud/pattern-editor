@@ -100,7 +100,7 @@ function runScenario(label, engine, recipe, expectSourceNotch) {
   const cands = r1.selection.candidates.map(c =>
     `${c.sign > 0 ? "+" : "-"}${(c.maxReachableMagRad*180/Math.PI).toFixed(2)}°(${c.foundBy},평가${c.scan.evaluated + c.scan.refined})`).join(" / ");
   console.log(`  ${label}: closeAngle=${(r1.closeAngleRad*180/Math.PI).toFixed(2)}° ` +
-    `requested=${(r1.requestedAngleRad*180/Math.PI).toFixed(2)}° reason=${r1.selection.reason} 후보=${cands}`);
+    `reason=${r1.selection.reason} 후보=${cands}`);
 }
 
 console.log("\n── prepareDartMoveCandidate 순수성/결정성 ──");

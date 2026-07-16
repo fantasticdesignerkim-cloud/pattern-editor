@@ -23,7 +23,7 @@
 const vm = require("vm");
 const { createEngine } = require("./loadEngine");
 const { applyRecipe, moveContext, clickableIndices, budgetRadOf } = require("./dartDriver");
-const { setupCase, sweepLimitMag, CASES } = require("./nonMonotonicFixture");
+const { setupCase, sweepLimitMag, scanIntervals, SCAN_STEPS, CASES } = require("./nonMonotonicFixture");
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -180,21 +180,24 @@ section("Layer 1: ★ 비단조에서 위→아래 탐색이 먼 구간을 찾�
     budgetRad: s.budgetRad, prevBakedSegments: s.prevBaked, sourceNotch: s.sourceNotch,
   };
   const oracleLimMag = sweepLimitMag(s, cs.sign);
-  const ivOracle = s.engine.findApplicableIntervals(evalCtx, cs.sign * oracleLimMag);
-  check("비단조: ③가 구간 2개를 본다 (전제 확인)", ivOracle.intervals.length === 2,
-    { got: ivOracle.intervals.length });
+  // 독립 oracle(scanIntervals — 프로덕션을 호출하지 않는 재구현)로 비단조 구간을 얻는다.
+  // 예전엔 프로덕션 ③(findApplicableIntervals)을 oracle로 썼는데, 그건 "프로덕션으로
+  // 프로덕션을 검증"하는 셈이라 C5d에서 ③를 삭제하며 독립 oracle로 교체했다.
+  const ivOracle = scanIntervals(s, cs.sign, oracleLimMag, SCAN_STEPS);  // [[fromMag,toMag],...]
+  check("비단조: oracle이 구간 2개를 본다 (전제 확인)", ivOracle.length === 2,
+    { got: ivOracle.length });
 
   const found = s.engine.findMaxApplicableMagnitude(evalCtx, cs.sign * oracleLimMag);
-  if (ivOracle.intervals.length === 2) {
-    const farTop  = ivOracle.intervals[1].toMagRad;
-    const nearTop = ivOracle.intervals[0].toMagRad;
+  if (ivOracle.length === 2) {
+    const farTop  = ivOracle[1][1];
+    const nearTop = ivOracle[0][1];
     check("★ 비단조: 위→아래 탐색이 **먼 구간의 상단**을 찾음 (가까운 구간에 안 갇힘)",
       Math.abs(D(found.maxMagRad) - D(farTop)) <= 0.1,
       { found: +D(found.maxMagRad).toFixed(4), farTop: +D(farTop).toFixed(4), nearTop: +D(nearTop).toFixed(4) });
     check("비단조: 찾은 값이 가까운 구간 상단보다 큼 (아래→위였다면 여기 갇혔을 값)",
       found.maxMagRad > nearTop + 1e-9,
       { found: +D(found.maxMagRad).toFixed(4), nearTop: +D(nearTop).toFixed(4) });
-    console.log(`    구간 ${ivOracle.intervals.map(iv => `${D(iv.fromMagRad).toFixed(3)}~${D(iv.toMagRad).toFixed(3)}`).join(" ∪ ")}` +
+    console.log(`    구간 ${ivOracle.map(iv => `${D(iv[0]).toFixed(3)}~${D(iv[1]).toFixed(3)}`).join(" ∪ ")}` +
       ` → 탐색 결과 ${D(found.maxMagRad).toFixed(3)}° (${found.reason}, 평가 ${found.scan.evaluated}+정밀 ${found.scan.refined})`);
   }
   check("비단조: 반환값이 exact evaluateEndpoint에서 valid",
@@ -230,11 +233,11 @@ section("Layer 1: C0 비단조 setup — 프로덕션 ②→탐색 체인에서�
   // ③를 oracle 한계(barrier 무시)로 직접 호출하면 비단조 2구간이 여전히 존재한다 —
   // 비단조가 사라진 게 아니라 ②가 그 앞에서 막는다는 걸 대조로 보인다.
   const oracleLimMag = sweepLimitMag(s, cand.sign);
-  const ivOracle = s.engine.findApplicableIntervals(evalCtx, cand.sign * oracleLimMag);
-  check("C0setup: ③는 oracle 한계(barrier 미포함)에서 여전히 2구간 (비단조 실재)",
-    ivOracle.intervals.length === 2,
-    { got: ivOracle.intervals.length,
-      iv: ivOracle.intervals.map(iv => `${D(iv.fromMagRad).toFixed(3)}~${D(iv.toMagRad).toFixed(3)}`) });
+  const ivOracle = scanIntervals(s, cand.sign, oracleLimMag, SCAN_STEPS);  // 독립 oracle
+  check("C0setup: oracle 한계(barrier 미포함)에서 여전히 2구간 (비단조 실재)",
+    ivOracle.length === 2,
+    { got: ivOracle.length,
+      iv: ivOracle.map(iv => `${D(iv[0]).toFixed(3)}~${D(iv[1]).toFixed(3)}`) });
 
   check("C0setup: 프로덕션 ②가 oracle 한계보다 낮게 캡 (leg-barrier 포함)",
     cand.physicalLimitMagRad < oracleLimMag - 1e-9,
@@ -247,10 +250,10 @@ section("Layer 1: C0 비단조 setup — 프로덕션 ②→탐색 체인에서�
     cand.maxReachableMagRad <= cand.physicalLimitMagRad + 1e-9,
     { physLimit: +D(cand.physicalLimitMagRad).toFixed(3),
       maxReach: +D(cand.maxReachableMagRad).toFixed(3) });
-  if (ivOracle.intervals.length === 2) {
+  if (ivOracle.length === 2) {
     check("C0setup: 비단조 구멍이 프로덕션 ② 한계 위에 있음 (그래서 안 보인다)",
-      D(ivOracle.intervals[0].toMagRad) > D(cand.physicalLimitMagRad) - 1e-9,
-      { gapStart: +D(ivOracle.intervals[0].toMagRad).toFixed(3),
+      D(ivOracle[0][1]) > D(cand.physicalLimitMagRad) - 1e-9,
+      { gapStart: +D(ivOracle[0][1]).toFixed(3),
         physLimit: +D(cand.physicalLimitMagRad).toFixed(3) });
   }
   checkExactAngleValid("C0setup", s.engine, evalCtx, sel);
@@ -258,7 +261,7 @@ section("Layer 1: C0 비단조 setup — 프로덕션 ②→탐색 체인에서�
   console.log(`    프로덕션 ②=${D(cand.physicalLimitMagRad).toFixed(3)}° (${cand.blockedBy}) → ` +
     `maxReach=${D(cand.maxReachableMagRad).toFixed(3)}° (${cand.foundBy}, 평가 ${cand.scan.evaluated}+정밀 ${cand.scan.refined})`);
   console.log(`    oracle ②=${D(oracleLimMag).toFixed(3)}° (barrier 미포함) → 구간 ` +
-    `${ivOracle.intervals.map(iv => `${D(iv.fromMagRad).toFixed(3)}~${D(iv.toMagRad).toFixed(3)}`).join(" ∪ ")}` +
+    `${ivOracle.map(iv => `${D(iv[0]).toFixed(3)}~${D(iv[1]).toFixed(3)}`).join(" ∪ ")}` +
     `  ⇒ 비단조는 실재하나 ② 한계 밖`);
 }
 

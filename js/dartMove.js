@@ -1323,177 +1323,6 @@ function findPhysicalSweepLimit(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle,
     scan: { steps: SCAN_STEPS, firstUnsafeStep } };
 }
 
-// 호환 wrapper — 호출자 로직을 바꾸지 않기 위해 잠시 유지한다(C4/C5에서 정리).
-// 중복 구현하지 않는다: 실제 로직은 findPhysicalSweepLimit 하나뿐이다.
-function findMaxSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPoint) {
-  return findPhysicalSweepLimit(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPoint).limitRad;
-}
-
-// ── budget-aware 최대 각도: 이 회전의 결과 총합(열린 다트 BP 각도 합)이 예산을 넘지
-// 않는 최대 각도. findMaxSafeAngle과 min으로 결합해 baseAngle(드래그 한계)에 반영하면,
-// 사용자가 손으로 드래그할 때 이미 예산 한계에서 멈춘다(적용 버튼을 눌러야 막히는 게
-// 아니라). 적용 시점 budget 게이트는 최종 안전망으로 그대로 유지된다.
-//
-// 판정은 findMaxSafeAngle과 같은 스캔+이분탐색이되, 기준이 "자기교차"가 아니라
-// "sumOpenDartAngle > budget×DART_BUDGET_TOL"이다. 정상 재분배는 총합이 예산에서
-// 보존되므로 targetAngle 전체가 통과(축소 없음, 실측 186/190), 병리적 팽창 이동만
-// 총합이 예산을 넘는 각도에서 잘린다(실측 4/190이 18.2°→1.4°로 축소). 비단조
-// (다트가 0폭을 지나며 총합이 출렁이는) 경우를 놓치지 않도록 끝점만 보지 않고
-// 경로를 스캔한다.
-function budgetMaxAngle(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, budgetRad) {
-  if (Math.abs(targetAngle) < 1e-9 || !(budgetRad > 1e-6)) return targetAngle;
-  const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
-    s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
-  const fixedClean  = cleanForBake(fixedSegsRaw);
-  const rotateClean = cleanForBake(rotateSegsRaw);
-  if (fixedClean.length === 0 || rotateClean.length === 0) return targetAngle;
-
-  const limit  = budgetRad * DART_BUDGET_TOL;
-  const dir    = Math.sign(targetAngle) || 1;
-  const target = Math.abs(targetAngle);
-  const overAt = (mag) => {
-    const baked = normalizeBakedSegments(
-      bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle: dir * mag }),
-      pivot);
-    return sumOpenDartAngle(baked, pivot) > limit;
-  };
-
-  const SCAN_STEPS = 24;
-  let firstOverStep = -1;
-  for (let i = 1; i <= SCAN_STEPS; i++) {
-    if (overAt(target * (i / SCAN_STEPS))) { firstOverStep = i; break; }
-  }
-  if (firstOverStep === -1) return targetAngle;   // 경로 전체가 예산 이내 (정상 재분배)
-
-  let lo = target * ((firstOverStep - 1) / SCAN_STEPS);
-  let hi = target * (firstOverStep / SCAN_STEPS);
-  for (let i = 0; i < 16; i++) {
-    const mid = (lo + hi) / 2;
-    if (overAt(mid)) hi = mid; else lo = mid;
-  }
-  dbg('[budgetMaxAngle] 예산 축소:', (target*180/Math.PI).toFixed(2), '° →',
-    (lo*180/Math.PI).toFixed(2), '° (예산:', (budgetRad*180/Math.PI).toFixed(2), '°)');
-  return dir * lo;
-}
-
-// ── 적용 시점 델타 게이트를 후보각 탐색에 반영 ("발견 5" 수정, 2026-07 2차 재설계) ──
-// findMaxSafeAngle(=findRotationCollisions 세그먼트쌍 교차 스캔)과 applyDartMove의
-// 최종 델타 게이트(findSelfIntersections 폴리곤 전체 자기교차, 이동 전 저장 형상
-// 기준)가 같은 bake·같은 각도에서 서로 다른 판정을 낼 수 있다(실측 2026-07:
-// findRotationCollisions=충돌 0건→안전 판정, 그런데 실제 bake는 자기교차가
-// 1건 새로 생겨 적용 게이트가 거부 — "드래그는 OK, 적용은 거부" 증상의 원인).
-//
-// findMaxSafeAngle 자체를 델타 기준으로 전면 교체하면 첫 다트가 18.25°→1.3°로
-// 과소회전하는 회귀가 재현된다(2026-07-08 시도 후 폐기 — 회전 경로 스캔이 회전
-// 중 일시적으로만 나타나는 접선 노이즈를 "새 자기교차"로 오판했다). 그래서
-// findRotationCollisions 스캔(findMaxSafeAngle 내부)은 그대로 두고, 여기서는
-// 이미 collision-safe로 확인된 [0, candidateAngle] 범위 안에서 델타 게이트
-// 기준으로 "실제 적용 가능한 최대각"을 찾는다.
-//
-// ★ 2026-07 1차 구현(단순 0~candidate 이분 탐색)은 "0이 안전하면 그 위는 단조롭게
-//   안전/불안전이 갈린다"고 가정했는데, 이 가정이 findMaxSafeAngle 자신의 주석이
-//   경고하는 것과 똑같은 비단조 자기교차(회전 경로 중간에서만 생겼다 사라짐) 문제에
-//   취약했다. 그래서 [0, candidate] 전체를 촘촘히 스캔해 "가장 큰(=candidate에 가장
-//   가까운) 안전 구간"을 먼저 찾고, 그 구간의 상단 경계만 이분 탐색으로 정밀화한다
-//   (findMaxSafeAngle의 SCAN_STEPS+이분탐색 관례와 동일한 패턴). candidateAngle
-//   자체가 이미 collision-safe 범위의 끝점이므로 0쪽에서 노이즈가 있어도 candidate에
-//   가까운 쪽에 더 넓은 안전 구간이 있을 수 있다 — 그걸 놓치지 않기 위해 0에서
-//   실패해도 즉시 포기하지 않고 끝까지 스캔한다. 전체 스캔에서 단 하나도 안전한
-//   지점이 없을 때만 0(차단)을 반환한다.
-function applyTimeSafeAngle(fixedSegsRaw, rotateSegsRaw, pivot, candidateAngle, prevBakedSegments) {
-  if (Math.abs(candidateAngle) < 1e-9) return candidateAngle;
-  const cleanForBake = (segsArr) => (segsArr || []).filter(s =>
-    s?.from && s?.to && s.type !== "dart-leg" && s.type !== "dart-bridge");
-  const fixedClean  = cleanForBake(fixedSegsRaw);
-  const rotateClean = cleanForBake(rotateSegsRaw);
-  if (fixedClean.length === 0 || rotateClean.length === 0) return candidateAngle;
-
-  // 기준선은 적용 게이트와 동일하게 "이동 전 저장된 형상"이다(각도0 재조립이 아님 —
-  // 그게 항등이 아니라서 예전 델타 게이트가 오염됐던 전례가 있다, 2026-07-07/08 기록).
-  const cross0 = prevBakedSegments ? findSelfIntersections(prevBakedSegments, pivot).length : 0;
-  const crossesAt = (angle) => {
-    const baked = normalizeBakedSegments(
-      bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle }), pivot);
-    return findSelfIntersections(baked, pivot).length > cross0;
-  };
-
-  const dir = Math.sign(candidateAngle) || 1;
-  const mag = Math.abs(candidateAngle);
-
-  if (!crossesAt(dir * mag)) return candidateAngle; // 끝점 자체가 안전 — 스캔 불필요
-
-  // [0, mag] 전체를 촘촘히 스캔해 "가장 큰 안전 지점"을 찾는다. 0이 실패해도 계속
-  // 진행 — candidate 쪽에 더 넓은 안전 구간이 있을 수 있다(비단조 대비).
-  const SCAN_STEPS = 40;
-  let bestSafeStep = -1;
-  for (let i = 0; i <= SCAN_STEPS; i++) {
-    const m = mag * (i / SCAN_STEPS);
-    if (!crossesAt(dir * m)) bestSafeStep = i; // 안전한 지점을 찾을 때마다 갱신 → 마지막(최대) 값이 남는다
-  }
-
-  if (bestSafeStep === -1) {
-    // 스캔한 어떤 지점도 안전하지 않았다 — 이 조각선택 자체를 정직하게 차단한다
-    // (호출부 MIN_DART_ANGLE_RAD 체크가 "회전할 공간이 없습니다"로 안내).
-    dbg('[applyTimeSafeAngle] 전체 구간 실패 → 0 (차단)');
-    return 0;
-  }
-
-  // bestSafeStep은 스캔에서 찾은 가장 큰 안전 지점 — 정의상 그 다음 스텝(bestSafeStep+1,
-  // 끝점 mag 자체는 이미 위에서 실패 확인했으므로 bestSafeStep < SCAN_STEPS 항상 성립)은
-  // 안전하지 않다(더 큰 인덱스는 전부 실패했으니 bestSafeStep이 갱신되지 않고 남았을 것).
-  // 그 마지막 경계만 이분 탐색으로 정밀화한다.
-  let lo = mag * (bestSafeStep / SCAN_STEPS);
-  let hi = mag * ((bestSafeStep + 1) / SCAN_STEPS);
-  for (let i = 0; i < 18; i++) {
-    const mid = (lo + hi) / 2;
-    if (crossesAt(dir * mid)) hi = mid; else lo = mid;
-  }
-  dbg('[applyTimeSafeAngle] 델타 게이트 스캔 결과:', (mag*180/Math.PI).toFixed(2),
-    '° → 안전 구간 상단', (lo*180/Math.PI).toFixed(2), '° (스텝', bestSafeStep, '/', SCAN_STEPS, ')');
-  return dir * lo;
-}
-
-// ── 부호 + 회전 한계 통합 선택 (2026-07-08 재설계, 2026-07 2차 확장) ──
-// 회전 크기(θ)는 정확하다 — 새 다트 각도 = θ로 선형 대응. 틀린 건 회전 방향(부호).
-// 두 부호(+/−)를 각각 실제 파이프라인 **findMaxSafeAngle → budgetMaxAngle →
-// applyTimeSafeAngle** 전체까지 통과시켜 "최종적으로 적용 가능한 각도"를 구하고,
-// 그 값이 큰 부호를 최종 선택한다.
-//   - 팽창 부호: budgetMaxAngle이 예산 넘는 지점에서 잘라 작아짐 → 짐(다트량 보존).
-//   - 회전 공간 없는 부호: findMaxSafeAngle이 0으로 잘라 짐 → 반대 부호에 공간이 있으면
-//     그쪽을 자동 선택(no-room 오차단 회복).
-//   - findRotationCollisions는 안전하다 했지만 실제 적용(findSelfIntersections)은
-//     거부하는 부호: applyTimeSafeAngle이 그 부호의 사용가능 각도를 줄이므로,
-//     반대 부호가 (delta까지 통과한) 더 큰 값을 갖고 있으면 자동으로 그쪽이 선택된다
-//     ("발견 5" 수정 — 부호 선택 단계에서부터 적용 시점 델타를 반영).
-//   - 둘 다 0: 진짜 no-room(호출부에서 MIN 미만이면 차단).
-// 동률(차이 무시)이면 1차 기하 부호(geomSign) 유지.
-//
-// ★ 이전 chooseConservingSign(폐기)은 full 각도에서 sumOpenDartAngle을 재서 부호를
-//   골랐는데, full 각도에선 두 부호 다 자기교차하는 "쓰레기 형상"이라 총합이 무의미했다.
-//   그 결과 회전 공간이 실제로 있는 반대 부호를 놓쳐 "회전 공간 없음"으로 오차단했다
-//   (실측: 다중다트 상태의 no-room 65건 중 51건=78%가 이 버그). 여기서는 total이 아니라
-//   "파이프라인 통과 후 사용 가능 각도"로 판정하므로 팽창/공간 문제를 동시에 올바로 처리.
-// θ 크기(baseMag)는 안 건드리고 부호만 재선택. 폭 미사용, BP 각도만 사용.
-function chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot, baseMag, cutPoint, budgetRad, geomSign, prevBakedSegments) {
-  if (baseMag < 1e-9) return 0;
-  const usable = (s) => {
-    let a = findMaxSafeAngle(fixedSegs, rotateSegs, pivot, s * baseMag, cutPoint);
-    a = budgetMaxAngle(fixedSegs, rotateSegs, pivot, a, budgetRad);
-    a = applyTimeSafeAngle(fixedSegs, rotateSegs, pivot, a, prevBakedSegments);
-    return a;
-  };
-  const sign0 = Math.sign(geomSign) || 1;
-  const aGeom = usable(sign0);
-  const aOpp  = usable(-sign0);
-  const mGeom = Math.abs(aGeom), mOpp = Math.abs(aOpp);
-  if (mOpp > mGeom + 1e-4) {
-    dbg('[chooseSignedBaseAngle] 반대 부호 선택 (사용가능:',
-      (mGeom*180/Math.PI).toFixed(1), '° → ', (mOpp*180/Math.PI).toFixed(1), '°)');
-  }
-  if (Math.abs(mGeom - mOpp) < 1e-4) return aGeom;   // 동률 → 기하 부호 유지
-  return (mGeom >= mOpp) ? aGeom : aOpp;
-}
-
 // ── 다트이동 후보 준비 (2026-07 추출) — UI와 테스트가 함께 쓰는 순수 평가 함수 ──
 //
 // 조각을 선택한 시점에 "이 조각을 어느 방향으로 얼마까지 돌릴 수 있는가"를 결정하는
@@ -1516,7 +1345,7 @@ function chooseSignedBaseAngle(fixedSegs, rotateSegs, pivot, baseMag, cutPoint, 
 // @param {object}  fixedPiece       { segs, segsFull? }
 // @param {Array}   prevBakedSegments 이동 전 저장 형상(델타 게이트 기준선). 없으면 null.
 // @param {number}  minDartAngleRad  퇴화 다트 차단 하한(기본 MIN_DART_ANGLE_RAD)
-// @returns {{closeAngleRad:number, requestedAngleRad:number, sourceNotch:object|null,
+// @returns {{closeAngleRad:number, sourceNotch:object|null,
 //            sourceApertureBeforeRad:number|null, selection:object, evalCtx:object,
 //            valid:boolean, reason:string|null}}
 //   `selection`은 `selectRotationSign`의 반환 그대로다 — 부호별 판단 근거(물리 한계·
@@ -1550,14 +1379,12 @@ function prepareDartMoveCandidate({
     fixedSegs, rotateSegs, pivot, budgetRad, prevBakedSegments, sourceNotch,
   });
 
-  let requestedAngleRad, geomSign;
+  let geomSign;
   if (sourceNotch) {
     // 회전 조각이 기존 열린 notch(source)의 다리 하나를 물고 있다. 목표는 그 notch를
-    // "정확히" 닫는 것 — 부호와 크기 모두 그 notch에서 직접 유도한다. rawBase(기본
-    // 다트량 전체)는 시작점으로 쓰지 않는다. 반대 부호는 닫는 게 아니라 더 벌리므로
-    // 후보가 아니다(그 규칙은 selectRotationSign이 갖고 있다).
+    // "정확히" 닫는 것 — 부호는 그 notch에서 직접 유도한다. 반대 부호는 닫는 게 아니라
+    // 더 벌리므로 후보가 아니다(그 규칙은 selectRotationSign이 갖고 있다).
     geomSign = Math.sign(sourceNotch.signedAngleRad) || 1;
-    requestedAngleRad = geomSign * sourceNotchRequestMagRad(sourceNotch, budgetRad);
   } else {
     // 닿은 기존 notch가 없음(gen-0 또는 완전히 새 위치) — 이 옷 전체의 기본 다트량을
     // 시작점으로 쓰고, 기하 판정으로 **1차 힌트**만 잡는다. 최종 부호는 선택기가 두 부호의
@@ -1568,7 +1395,6 @@ function prepareDartMoveCandidate({
         pivot, cutPoint, rotatePts: rotatePiece.pts, absAngle: baseAngle,
       });
     }
-    requestedAngleRad = baseAngle;
     geomSign = Math.sign(baseAngle) || 1;
   }
 
@@ -1591,7 +1417,6 @@ function prepareDartMoveCandidate({
 
   return {
     closeAngleRad,
-    requestedAngleRad,
     sourceNotch,
     sourceApertureBeforeRad: sourceNotch ? sourceNotch.apertureRad : null,
     selection,
@@ -1720,43 +1545,20 @@ function evaluateEndpoint(ctx, angleRad) {
 }
 
 // ══════════════════════════════════════════════
-// evaluateMove 4계층 ③ — findApplicableIntervals (2026-07 C3)
+// evaluateMove 4계층 — 각도 스캔 공용 인프라 (2026-07 C3~C5)
 // ══════════════════════════════════════════════
-// **책임: ②가 정한 물리 한계 안에서 ①을 스캔해 "적용 가능한 각도 구간 목록"을 만든다.**
+// ②의 물리 한계 안에서 ①(evaluateEndpoint)을 격자로 스캔하는 함수들(③ 부호 선택의
+// findMaxApplicableMagnitude, ④ resolveRequestedAngle)이 공유하는 상수와 헬퍼.
 //
-// 왜 "최대 안전각 하나"가 아니라 구간 목록인가: endpoint 유효성은 단조롭지 않다. 5°는
-// 불가능한데 10°는 다시 가능할 수 있다(실측 픽스처 `test/harness/nonMonotonicIntervals.js`
-// 케이스1 = `[0, 9.148] ∪ [9.369, 10.494]`). 최대각 하나로 표현하면 "드래그에선
-// 가능했는데 적용에서 거부"가 사라지지 않는다. **단순 이분탐색 금지** — 0이 안전하면
-// 그 위는 단조롭게 갈린다는 가정으로 0.752°만 찾고 18.06°를 통째로 놓쳤던 전례가 있다.
+// **비단조 주의**: endpoint 유효성은 단조롭지 않다 — 9°는 막혔는데 10°는 다시 가능할 수
+// 있다(실측 `test/harness/nonMonotonicIntervals.js` 케이스1 `[0,9.148]∪[9.369,10.494]`).
+// 그래서 "0이 안전하면 그 위는 단조"라는 단순 이분탐색은 금지다(0.752°만 찾고 18.06°를
+// 놓쳤던 전례). 격자로 구간을 발견하고 경계만 이분탐색으로 정밀화한다.
 //
-// 계층 경계(위반 금지):
-//   - **①만 쓴다**(evaluateEndpoint). `piece-collision`은 검사하지 않는다 — ②의 책임이고,
-//     같은 검사를 양쪽에 중복시키는 건 "no part" 위반이다.
-//   - **②의 한계 내부만 스캔한다.** limit 바깥에서 endpoint가 다시 valid가 되어도 회전
-//     조각이 그 경로를 실제로 지나갈 수 없으므로, 존재해도 버린다.
-//   - **조용하다** — 로그·사용자 문구 없이 구조 데이터만 반환한다(60스텝 × 양쪽 부호로
-//     불릴 것이라 여기서 로그를 찍으면 느리고 로그가 폭발한다).
-//   - **0°를 자르지 않고 그대로 평가하고, MIN_DART_ANGLE_RAD 트리밍도 하지 않는다.**
-//     0° 중립 처리와 최소 적용각은 ④(resolveRequestedAngle)의 책임이다 — 여기서 미리
-//     자르면 0 근처의 좁은 안전구간 정보가 ④에 닿기 전에 손실된다.
-//
-// ⚠️ **이 함수는 최종 안전 판정 기관이 아니다.** 격자 스캔은 원리적으로 스텝보다 좁은
-// 금지구간을 보장 탐지할 수 없다(실측: 케이스2의 금지구간 0.049°는 60스텝 간격 0.162°
-// 보다 3.3배 좁다 — 잡힌 건 샘플이 우연히 안에 떨어져서지 보장이 아니다. 스텝을 늘려도
-// "더 좁은 구간"이 있으면 같은 문제다). 반드시 이 순서를 유지한다:
-//     resolved angle → evaluateEndpoint(ctx, resolvedAngle) → ev.valid → valid일 때만 preview/commit
-// 스캔이 좁은 금지구간을 놓쳐도 정확한 요청각의 evaluateEndpoint가 마지막에 잡는다.
-// 이 단일 실제 차단은 **C7에서도 제거 금지**.
-//
-// @param ctx      evaluateEndpoint와 동일한 컨텍스트
-// @param limitRad ②(findPhysicalSweepLimit)가 돌려준 **부호 있는** 한계각
-// @returns {{ sign:number, intervals:Array<{fromMagRad:number,toMagRad:number}>,
-//             scan:{steps:number, limitMagRad:number} }}
-//   intervals는 **크기(magnitude)**다 — 항상 `0 ≤ fromMagRad ≤ toMagRad ≤ limitMagRad`이고
-//   실제 각도는 `sign`을 곱해서 얻는다. 부호 있는 from/to로 두면 음수 부호에서 from>to가
-//   되어 비교하는 쪽마다 부호 버그가 생기므로 이름부터 Mag로 못 박는다. 구간은 오름차순
-//   정렬되고 서로 겹치지 않는다. limitRad가 0이면 스캔할 구간 자체가 없다 → sign:0, [].
+// ⚠️ **격자 스캔은 최종 안전 판정 기관이 아니다.** 원리적으로 스텝보다 좁은 금지구간을
+// 보장 탐지할 수 없다(케이스2의 0.049°는 60스텝 간격 0.162°보다 3.3배 좁다). 반드시
+// 확정된 각도를 evaluateEndpoint로 재평가해 valid일 때만 preview/commit한다 — ④가
+// resolved 각도의 evaluation을 함께 반환하는 이유다. 이 단일 실제 차단은 **C7에서도 제거 금지**.
 const INTERVAL_SCAN_STEPS   = 60;   // C0 실측: 60은 3케이스 전부 탐지, 40은 케이스2/3을 놓친다
 const INTERVAL_BISECT_ITERS = 18;   // 격자는 "구간 발견"만, 경계 정밀도는 이분탐색이 담당
 
@@ -1770,58 +1572,6 @@ function withSelfXBaseline(ctx) {
     baselineSelfXCount: ctx.prevBakedSegments
       ? findSelfIntersections(ctx.prevBakedSegments, ctx.pivot).length : 0,
   };
-}
-
-function findApplicableIntervals(ctx, limitRad) {
-  const limitMagRad = Math.abs(limitRad);
-  if (!(limitMagRad > 1e-9)) {
-    return { sign: 0, intervals: [], scan: { steps: 0, limitMagRad: 0 } };
-  }
-  const sign  = Math.sign(limitRad);
-  const steps = INTERVAL_SCAN_STEPS;
-
-  // 자기교차 델타의 기준선은 prevBakedSegments 하나로 정해져 스캔 내내 불변이다 —
-  // 한 번만 구해 파생 ctx로 넘긴다(캐시가 아니라 상수를 상수로 다루는 것). 입력 ctx는
-  // 변형하지 않는다(순수성 — purityCheck가 검증). 호출부가 이미 넣어줬으면 그대로 쓴다.
-  const scanCtx = withSelfXBaseline(ctx);
-
-  // 격자: [0, limitMag]를 steps등분해 각 지점의 endpoint 유효성을 구한다. 0°도 포함한다.
-  const grid = new Array(steps + 1);
-  for (let i = 0; i <= steps; i++) {
-    const magRad = limitMagRad * (i / steps);
-    grid[i] = { magRad, valid: evaluateEndpoint(scanCtx, sign * magRad).valid };
-  }
-
-  // 경계 정밀화. **같은 각도를 두 번 평가하지 않는다**: 양 끝 격자점의 유효성은 이미
-  // 위에서 구했으므로 인자로 받은 걸 그대로 신뢰하고 중점만 새로 평가한다(중점은 항상
-  // 격자 셀 내부라 격자점과 겹치지 않고, 셀마다 경계는 최대 하나라 서로 겹치지도 않는다).
-  //   wantValid=true  → invalid→valid 상승 경계: 가장 작은 valid를 반환
-  //   wantValid=false → valid→invalid 하강 경계: 가장 큰 valid를 반환
-  const refine = (loMag, hiMag, wantValid) => {
-    let lo = loMag, hi = hiMag;
-    for (let i = 0; i < INTERVAL_BISECT_ITERS; i++) {
-      const mid = (lo + hi) / 2;
-      if (evaluateEndpoint(scanCtx, sign * mid).valid === wantValid) hi = mid; else lo = mid;
-    }
-    return wantValid ? hi : lo;
-  };
-
-  const intervals = [];
-  let startMag = null;
-  for (let i = 0; i <= steps; i++) {
-    if (grid[i].valid && startMag === null) {
-      // i===0이면 0° 자체가 valid — 이분탐색할 하단 경계가 없다(구간이 0에서 시작).
-      startMag = (i === 0) ? 0 : refine(grid[i - 1].magRad, grid[i].magRad, true);
-    }
-    if (!grid[i].valid && startMag !== null) {
-      intervals.push({ fromMagRad: startMag, toMagRad: refine(grid[i - 1].magRad, grid[i].magRad, false) });
-      startMag = null;
-    }
-  }
-  // 마지막 격자점까지 valid로 끝났으면 한계각이 곧 상단 경계다(그 위는 ②가 이미 막았다).
-  if (startMag !== null) intervals.push({ fromMagRad: startMag, toMagRad: limitMagRad });
-
-  return { sign, intervals, scan: { steps, limitMagRad } };
 }
 
 // ══════════════════════════════════════════════
@@ -1926,7 +1676,7 @@ function findMaxApplicableMagnitude(ctx, limitRad) {
 //           'max-reachable'  — 도달 가능 각도가 큰 쪽을 선택
 //           'tie-geometric'  — 동률이라 기하 부호 유지
 //           'no-room'        — 양쪽 다 적용 가능한 각도 없음(④가 차단)
-const SIGN_TIE_EPS_RAD = 1e-4;   // legacy chooseSignedBaseAngle과 같은 동률 판정 폭
+const SIGN_TIE_EPS_RAD = 1e-4;   // 두 부호 도달각이 이 폭 이내면 동률로 보고 기하 부호 유지
 
 // sourceNotch 이동에서 "얼마를 요청하는가" — 규칙이 selectRotationSign과 호출부 양쪽에
 // 필요하므로 한 곳에 둔다(복제하면 한쪽만 고쳐도 조용히 어긋난다). notch를 닫는 데 필요한
