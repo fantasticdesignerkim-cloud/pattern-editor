@@ -22,6 +22,8 @@ const suites = [
   // 순서 ③(evaluateMove 4계층) 안전망
   { file: "endpointEquivalence.js",   golden: false },
   { file: "nonMonotonicIntervals.js", golden: true },
+  // C3: 프로덕션 ③를 위 픽스처의 독립 oracle·경계 상수와 대조 (자체 골든 없음)
+  { file: "applicableIntervals.js",   golden: false },
   { file: "signSelectionFixture.js",  golden: true },
   { file: "perfBaseline.js",          golden: true },
 ];

@@ -1699,6 +1699,94 @@ function evaluateEndpoint(ctx, angleRad) {
   };
 }
 
+// ══════════════════════════════════════════════
+// evaluateMove 4계층 ③ — findApplicableIntervals (2026-07 C3)
+// ══════════════════════════════════════════════
+// **책임: ②가 정한 물리 한계 안에서 ①을 스캔해 "적용 가능한 각도 구간 목록"을 만든다.**
+//
+// 왜 "최대 안전각 하나"가 아니라 구간 목록인가: endpoint 유효성은 단조롭지 않다. 5°는
+// 불가능한데 10°는 다시 가능할 수 있다(실측 픽스처 `test/harness/nonMonotonicIntervals.js`
+// 케이스1 = `[0, 9.148] ∪ [9.369, 10.494]`). 최대각 하나로 표현하면 "드래그에선
+// 가능했는데 적용에서 거부"가 사라지지 않는다. **단순 이분탐색 금지** — 0이 안전하면
+// 그 위는 단조롭게 갈린다는 가정으로 0.752°만 찾고 18.06°를 통째로 놓쳤던 전례가 있다.
+//
+// 계층 경계(위반 금지):
+//   - **①만 쓴다**(evaluateEndpoint). `piece-collision`은 검사하지 않는다 — ②의 책임이고,
+//     같은 검사를 양쪽에 중복시키는 건 "no part" 위반이다.
+//   - **②의 한계 내부만 스캔한다.** limit 바깥에서 endpoint가 다시 valid가 되어도 회전
+//     조각이 그 경로를 실제로 지나갈 수 없으므로, 존재해도 버린다.
+//   - **조용하다** — 로그·사용자 문구 없이 구조 데이터만 반환한다(60스텝 × 양쪽 부호로
+//     불릴 것이라 여기서 로그를 찍으면 느리고 로그가 폭발한다).
+//   - **0°를 자르지 않고 그대로 평가하고, MIN_DART_ANGLE_RAD 트리밍도 하지 않는다.**
+//     0° 중립 처리와 최소 적용각은 ④(resolveRequestedAngle)의 책임이다 — 여기서 미리
+//     자르면 0 근처의 좁은 안전구간 정보가 ④에 닿기 전에 손실된다.
+//
+// ⚠️ **이 함수는 최종 안전 판정 기관이 아니다.** 격자 스캔은 원리적으로 스텝보다 좁은
+// 금지구간을 보장 탐지할 수 없다(실측: 케이스2의 금지구간 0.049°는 60스텝 간격 0.162°
+// 보다 3.3배 좁다 — 잡힌 건 샘플이 우연히 안에 떨어져서지 보장이 아니다. 스텝을 늘려도
+// "더 좁은 구간"이 있으면 같은 문제다). 반드시 이 순서를 유지한다:
+//     resolved angle → evaluateEndpoint(ctx, resolvedAngle) → ev.valid → valid일 때만 preview/commit
+// 스캔이 좁은 금지구간을 놓쳐도 정확한 요청각의 evaluateEndpoint가 마지막에 잡는다.
+// 이 단일 실제 차단은 **C7에서도 제거 금지**.
+//
+// @param ctx      evaluateEndpoint와 동일한 컨텍스트
+// @param limitRad ②(findPhysicalSweepLimit)가 돌려준 **부호 있는** 한계각
+// @returns {{ sign:number, intervals:Array<{fromMagRad:number,toMagRad:number}>,
+//             scan:{steps:number, limitMagRad:number} }}
+//   intervals는 **크기(magnitude)**다 — 항상 `0 ≤ fromMagRad ≤ toMagRad ≤ limitMagRad`이고
+//   실제 각도는 `sign`을 곱해서 얻는다. 부호 있는 from/to로 두면 음수 부호에서 from>to가
+//   되어 비교하는 쪽마다 부호 버그가 생기므로 이름부터 Mag로 못 박는다. 구간은 오름차순
+//   정렬되고 서로 겹치지 않는다. limitRad가 0이면 스캔할 구간 자체가 없다 → sign:0, [].
+const INTERVAL_SCAN_STEPS   = 60;   // C0 실측: 60은 3케이스 전부 탐지, 40은 케이스2/3을 놓친다
+const INTERVAL_BISECT_ITERS = 18;   // 격자는 "구간 발견"만, 경계 정밀도는 이분탐색이 담당
+
+function findApplicableIntervals(ctx, limitRad) {
+  const limitMagRad = Math.abs(limitRad);
+  if (!(limitMagRad > 1e-9)) {
+    return { sign: 0, intervals: [], scan: { steps: 0, limitMagRad: 0 } };
+  }
+  const sign  = Math.sign(limitRad);
+  const steps = INTERVAL_SCAN_STEPS;
+
+  // 격자: [0, limitMag]를 steps등분해 각 지점의 endpoint 유효성을 구한다. 0°도 포함한다.
+  const grid = new Array(steps + 1);
+  for (let i = 0; i <= steps; i++) {
+    const magRad = limitMagRad * (i / steps);
+    grid[i] = { magRad, valid: evaluateEndpoint(ctx, sign * magRad).valid };
+  }
+
+  // 경계 정밀화. **같은 각도를 두 번 평가하지 않는다**: 양 끝 격자점의 유효성은 이미
+  // 위에서 구했으므로 인자로 받은 걸 그대로 신뢰하고 중점만 새로 평가한다(중점은 항상
+  // 격자 셀 내부라 격자점과 겹치지 않고, 셀마다 경계는 최대 하나라 서로 겹치지도 않는다).
+  //   wantValid=true  → invalid→valid 상승 경계: 가장 작은 valid를 반환
+  //   wantValid=false → valid→invalid 하강 경계: 가장 큰 valid를 반환
+  const refine = (loMag, hiMag, wantValid) => {
+    let lo = loMag, hi = hiMag;
+    for (let i = 0; i < INTERVAL_BISECT_ITERS; i++) {
+      const mid = (lo + hi) / 2;
+      if (evaluateEndpoint(ctx, sign * mid).valid === wantValid) hi = mid; else lo = mid;
+    }
+    return wantValid ? hi : lo;
+  };
+
+  const intervals = [];
+  let startMag = null;
+  for (let i = 0; i <= steps; i++) {
+    if (grid[i].valid && startMag === null) {
+      // i===0이면 0° 자체가 valid — 이분탐색할 하단 경계가 없다(구간이 0에서 시작).
+      startMag = (i === 0) ? 0 : refine(grid[i - 1].magRad, grid[i].magRad, true);
+    }
+    if (!grid[i].valid && startMag !== null) {
+      intervals.push({ fromMagRad: startMag, toMagRad: refine(grid[i - 1].magRad, grid[i].magRad, false) });
+      startMag = null;
+    }
+  }
+  // 마지막 격자점까지 valid로 끝났으면 한계각이 곧 상단 경계다(그 위는 ②가 이미 막았다).
+  if (startMag !== null) intervals.push({ fromMagRad: startMag, toMagRad: limitMagRad });
+
+  return { sign, intervals, scan: { steps, limitMagRad } };
+}
+
 // ── 이 옷 전체의 "기본 다트량" 각도 크기 (몇 차 다트이동이든 항상 동일) ──
 // 부호는 신경 쓰지 않는다 — choosePhysicalCloseAngle이 최종 결정한다.
 function calcFrontBaseDartAngle(p, B) {
