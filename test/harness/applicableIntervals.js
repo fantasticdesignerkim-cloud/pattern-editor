@@ -31,16 +31,21 @@ function check(label, cond, detail) {
   else { fail++; failures.push({ label, detail }); console.error("  ✗ FAIL:", label, detail ?? ""); }
 }
 
-// ── 계측: vm 컨텍스트 **내부**의 전역 evaluateEndpoint를 감싼다. loadEngine이 export한
-//    참조만 바꾸면 findApplicableIntervals 내부 호출이 안 잡힌다(perfBaseline과 같은 이유).
+// ── 계측: vm 컨텍스트 **내부**의 전역 바인딩을 감싼다. loadEngine이 export한 참조만
+//    바꾸면 findApplicableIntervals 내부 호출이 안 잡힌다(perfBaseline과 같은 이유).
+//    findSelfIntersections도 함께 센다 — 기준선 재계산 제거(C3 발견)의 효과를 본다.
 function instrumentEval(context) {
   vm.runInContext(`
     globalThis.__evalLog = [];
+    globalThis.__selfXCalls = 0;
     var _ee = evaluateEndpoint;
     evaluateEndpoint = function (ctx, angleRad) { __evalLog.push(angleRad); return _ee(ctx, angleRad); };
+    var _sx = findSelfIntersections;
+    findSelfIntersections = function (...a) { __selfXCalls++; return _sx(...a); };
   `, context);
 }
-const readEvalLog = (context) => JSON.parse(vm.runInContext("JSON.stringify(__evalLog)", context));
+const readEvalLog   = (context) => JSON.parse(vm.runInContext("JSON.stringify(__evalLog)", context));
+const readSelfXCalls = (context) => vm.runInContext("__selfXCalls", context);
 
 // 프로덕션 ①에 넘길 컨텍스트 — oracle은 이걸 쓰지 않는다(독립성 유지).
 const evalCtxOf = (s) => ({
@@ -67,8 +72,9 @@ for (const c of CASES) {
   const got = s.engine.findApplicableIntervals(evalCtx, c.sign * limMag);
   const ms = Date.now() - t0;
   const log = readEvalLog(s.context);
+  const selfXCalls = readSelfXCalls(s.context);
   const total = log.length, distinct = new Set(log).size, dup = total - distinct;
-  perfRows.push({ name: c.name, total, distinct, dup, ms });
+  perfRows.push({ name: c.name, total, distinct, dup, selfXCalls, ms });
 
   const ivDeg = got.intervals.map(iv => [D(iv.fromMagRad), D(iv.toMagRad)]);
   console.log(`    sweepLimit=${D(limMag).toFixed(3)}° 구간: ` +
@@ -143,6 +149,48 @@ for (const c of CASES) {
 
   // ── 계측: 중복 평가 0 (실패 조건) ──
   check(`${c.name}: 같은 각도 중복 평가 0`, dup === 0, { total, distinct, dup });
+
+  // ── 기준선(baselineSelfXCount) 재사용: 호출 수는 줄고 결과는 같아야 한다 ──
+  // 기준선은 ctx당 불변이므로 스캔 전체에서 findSelfIntersections는
+  // "기준선 1회 + 평가마다 shape 1회" = total + 1 이어야 한다(평가마다 기준선을
+  // 다시 계산하던 예전이면 2×total 이었다).
+  check(`${c.name}: findSelfIntersections = 평가수+1 (기준선 1회만 계산)`,
+    selfXCalls === total + 1, { selfXCalls, expected: total + 1, evals: total });
+}
+
+// ══════════════════════════════════════════════
+// 기준선 재사용 동치: baselineSelfXCount를 넘기든 안 넘기든 결과가 같아야 한다.
+// (성능 수정이 판정을 바꾸지 않았다는 증거 — 값의 출처는 여전히 prevBakedSegments 하나다)
+// ══════════════════════════════════════════════
+{
+  console.log(`\n── 기준선 재사용 동치 (baselineSelfXCount 유/무) ──`);
+  const s = setupCase("A");
+  const base = evalCtxOf(s);
+  const precomputed = s.engine.findSelfIntersections(s.prevBaked, s.pivot).length;
+  const withBase = { ...base, baselineSelfXCount: precomputed };
+
+  // 대표 각도들에서 evaluateEndpoint의 판정이 완전히 일치하는가
+  let mismatch = 0;
+  for (let i = 0; i <= 20; i++) {
+    const ang = (i / 20) * s.budgetRad;
+    const a = s.engine.evaluateEndpoint(base, ang);
+    const b = s.engine.evaluateEndpoint(withBase, ang);
+    if (a.valid !== b.valid || a.reasons.join() !== b.reasons.join() ||
+        a.metrics.baselineSelfXCount !== b.metrics.baselineSelfXCount) mismatch++;
+  }
+  check("기준선 유/무 evaluateEndpoint 판정 동일 (21각도)", mismatch === 0, { mismatch });
+
+  // ③ 전체 결과도 동일한가
+  const limMag = sweepLimitMag(s, +1);
+  const ivA = s.engine.findApplicableIntervals(base, limMag);
+  const ivB = s.engine.findApplicableIntervals(withBase, limMag);
+  check("기준선 유/무 findApplicableIntervals 결과 동일",
+    JSON.stringify(ivA) === JSON.stringify(ivB), { a: ivA.intervals.length, b: ivB.intervals.length });
+
+  // 입력 ctx를 변형하지 않는다 (파생 ctx를 쓴다 — 순수성)
+  check("③가 입력 ctx에 baselineSelfXCount를 주입하지 않음 (입력 비변형)",
+    !("baselineSelfXCount" in base), { keys: Object.keys(base) });
+  console.log(`    기준선=${precomputed} · 판정 불일치 ${mismatch}건 · 입력 ctx 비변형 확인`);
 }
 
 // ══════════════════════════════════════════════
@@ -168,9 +216,11 @@ for (const c of CASES) {
 console.log(`\n── ③ 단독 비용 (배선 전 · 정보용) ──`);
 for (const r of perfRows) {
   console.log(`  ${r.name.padEnd(22)} evaluateEndpoint 총 ${String(r.total).padStart(3)} · ` +
-    `서로 다른 angle ${String(r.distinct).padStart(3)} · 중복 ${r.dup}   (${r.ms}ms · 정보용)`);
+    `서로 다른 angle ${String(r.distinct).padStart(3)} · 중복 ${r.dup} · ` +
+    `selfX ${String(r.selfXCalls).padStart(3)}   (${r.ms}ms · 정보용)`);
 }
 console.log(`  ※ 격자 ${SCAN_STEPS + 1}점 + 경계당 이분탐색 18회. 중복 0 = 격자점을 재평가하지 않는다는 뜻.`);
+console.log(`  ※ selfX = 평가수+1 (기준선 1회 + 평가마다 shape 1회). 기준선 재계산 제거 전이면 2×평가수였다.`);
 console.log(`  ※ ≤1.2× 판정은 C4/C5 배선 후 실제 프로덕션 경로에서 내린다(perf-baseline.json 기준).`);
 
 console.log(`\n══════════════════════════════════════════════`);

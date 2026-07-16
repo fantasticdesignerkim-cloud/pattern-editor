@@ -1607,9 +1607,16 @@ function prepareDartMoveCandidate({
 //   'self-intersection'  — 이동 전 형상 대비 자기교차가 늘어남(델타)
 //   'budget-exceeded'    — 열린 다트각 합 > budget×DART_BUDGET_TOL
 //
-// @param ctx {{ fixedSegs, rotateSegs, pivot, budgetRad, prevBakedSegments, sourceNotch }}
+// @param ctx {{ fixedSegs, rotateSegs, pivot, budgetRad, prevBakedSegments, sourceNotch,
+//               baselineSelfXCount? }}
 //   fixedSegs/rotateSegs는 cleanForBake를 이미 통과한 것으로 간주하지 않는다 —
 //   여기서 동일 기준으로 필터한다(호출부가 잊어도 안전하도록).
+//   `baselineSelfXCount`는 **선택적 최적화 입력**이다(생략하면 prevBakedSegments에서
+//   직접 계산 — 동작은 완전히 동일하다). 자기교차 델타의 기준선은 `prevBakedSegments`
+//   하나로 정해지므로 **스캔 내내 불변**인데, 예전엔 매 호출마다 다시 계산했다(③의
+//   60스텝 스캔이면 115회 중 114회가 순수 낭비 — C3 실측). 스캔하는 쪽이 한 번 구해
+//   넘기면 캐시(Map) 없이 구조로 사라진다. **값의 출처는 여전히 prevBakedSegments
+//   하나이고, 넘기든 안 넘기든 결과는 같아야 한다**(harness가 동치를 상시 검증).
 // @returns {{ angleRad, shape, valid, reasons, metrics }}
 //   shape는 **불변 스냅샷으로 취급**한다 — 호출부가 좌표를 고치면 안 된다(preview와
 //   apply가 같은 객체를 공유하게 될 C6의 전제).
@@ -1644,9 +1651,10 @@ function evaluateEndpoint(ctx, angleRad) {
   if (!(loopGap <= EVAL_LOOP_EPS)) reasons.push("loop-open");
 
   // 자기교차 델타: 이동 전 저장 형상이 기준선(각도0 재조립이 아님 — 그건 항등이 아니라
-  // 예전에 게이트를 오염시켰다)
-  const baselineSelfXCount = ctx.prevBakedSegments
-    ? findSelfIntersections(ctx.prevBakedSegments, pivot).length : 0;
+  // 예전에 게이트를 오염시켰다). 기준선은 이 ctx에서 불변이므로 호출부가 미리 구해
+  // 넘겼으면 그대로 쓴다(?? 이므로 0도 정상적으로 재사용된다 — || 였다면 0을 놓친다).
+  const baselineSelfXCount = ctx.baselineSelfXCount ?? (ctx.prevBakedSegments
+    ? findSelfIntersections(ctx.prevBakedSegments, pivot).length : 0);
   const selfXCount = findSelfIntersections(shape, pivot).length;
   if (selfXCount > baselineSelfXCount) reasons.push("self-intersection");
 
@@ -1748,11 +1756,20 @@ function findApplicableIntervals(ctx, limitRad) {
   const sign  = Math.sign(limitRad);
   const steps = INTERVAL_SCAN_STEPS;
 
+  // 자기교차 델타의 기준선은 prevBakedSegments 하나로 정해져 스캔 내내 불변이다 —
+  // 한 번만 구해 파생 ctx로 넘긴다(캐시가 아니라 상수를 상수로 다루는 것). 입력 ctx는
+  // 변형하지 않는다(순수성 — purityCheck가 검증). 호출부가 이미 넣어줬으면 그대로 쓴다.
+  const scanCtx = (ctx.baselineSelfXCount != null) ? ctx : {
+    ...ctx,
+    baselineSelfXCount: ctx.prevBakedSegments
+      ? findSelfIntersections(ctx.prevBakedSegments, ctx.pivot).length : 0,
+  };
+
   // 격자: [0, limitMag]를 steps등분해 각 지점의 endpoint 유효성을 구한다. 0°도 포함한다.
   const grid = new Array(steps + 1);
   for (let i = 0; i <= steps; i++) {
     const magRad = limitMagRad * (i / steps);
-    grid[i] = { magRad, valid: evaluateEndpoint(ctx, sign * magRad).valid };
+    grid[i] = { magRad, valid: evaluateEndpoint(scanCtx, sign * magRad).valid };
   }
 
   // 경계 정밀화. **같은 각도를 두 번 평가하지 않는다**: 양 끝 격자점의 유효성은 이미
@@ -1764,7 +1781,7 @@ function findApplicableIntervals(ctx, limitRad) {
     let lo = loMag, hi = hiMag;
     for (let i = 0; i < INTERVAL_BISECT_ITERS; i++) {
       const mid = (lo + hi) / 2;
-      if (evaluateEndpoint(ctx, sign * mid).valid === wantValid) hi = mid; else lo = mid;
+      if (evaluateEndpoint(scanCtx, sign * mid).valid === wantValid) hi = mid; else lo = mid;
     }
     return wantValid ? hi : lo;
   };
