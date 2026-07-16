@@ -180,15 +180,19 @@ section("2+5. 오래된 다트 재이동 (전수조사 + 보존 검증)");
 
           const rotateSegs = rotatePiece.segs, fixedSegs = fixedPiece.segsFull || fixedPiece.segs;
           const budgetRad = Math.abs(engine.calcBackBaseDartAngle(engine.buildBackShoulderDartInfo(d3.formula, d3.pts, B)));
-          const targetSigned = rotatePiece.sourceNotch.signedAngleRad;
-          const sign = Math.sign(targetSigned) || 1;
-          const mag = Math.min(Math.abs(targetSigned), budgetRad);
-          let ca = sign * mag;
-          ca = engine.findMaxSafeAngle(fixedSegs, rotateSegs, pivot, ca, cutRes.point);
-          ca = engine.budgetMaxAngle(fixedSegs, rotateSegs, pivot, ca, budgetRad);
-          ca = engine.applyTimeSafeAngle(fixedSegs, rotateSegs, pivot, ca, engine.dartMoveState.appliedBack.bakedSegments);
 
-          if (Math.abs(ca) < engine.MIN_DART_ANGLE_RAD) { console.log(`  (via=${via} pct=${pct} no-room — 스킵)`); continue; }
+          // ── baseAngle 결정: 프로덕션과 같은 순수 함수 (legacy findMaxSafeAngle→budgetMaxAngle→
+          //    applyTimeSafeAngle 3줄 복제를 제거, C5c) ──
+          const candidate = engine.prepareDartMoveCandidate({
+            pivot,
+            budgetRad,
+            rawBaseAngleRad: rotatePiece.sourceNotch.signedAngleRad,
+            cutPoint: cutRes.point,
+            rotatePiece, fixedPiece,
+            prevBakedSegments: engine.dartMoveState.appliedBack.bakedSegments,
+          });
+          if (!candidate.valid) { console.log(`  (via=${via} pct=${pct} no-room — 스킵)`); continue; }
+          const ca = candidate.closeAngleRad;
 
           const sourceApertureBefore = rotatePiece.sourceNotch.apertureRad;
 
@@ -203,10 +207,13 @@ section("2+5. 오래된 다트 재이동 (전수조사 + 보존 검증)");
           engine.dartMoveState.fixedHit = fixedPiece.hit;
           engine.dartMoveState.mode = "drag";
           engine.dartMoveState.baseAngle = ca;
-          engine.dartMoveState.userAngle = ca * pct;
+          engine.dartMoveState.evalCtx = candidate.evalCtx;
+          // 요청각도 프로덕션과 같은 ④를 탄다(직접 userAngle 세팅 금지, C5c).
+          const _resolved = engine.resolveRequestedAngle(candidate.evalCtx, ca * pct, ca);
+          engine.dartMoveState.userAngle = _resolved.resolvedAngleRad;
           engine.applyDartMove();
 
-          const theta = ca * pct; // 실제 적용되는 회전각 (userAngle) — ca(base) 자체가 아니다.
+          const theta = _resolved.resolvedAngleRad; // ④가 확정한 실제 회전각.
           const applied = engine.dartMoveState.mode === "idle" && engine.dartMoveState.cutPoint === null;
           const label = `oldest-retarget via=${via} pct=${(pct * 100).toFixed(0)}%`;
 

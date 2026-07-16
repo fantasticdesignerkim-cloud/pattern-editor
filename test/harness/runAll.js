@@ -24,6 +24,9 @@ const suites = [
   { file: "nonMonotonicIntervals.js", golden: true },
   // C3: 프로덕션 ③를 위 픽스처의 독립 oracle·경계 상수와 대조 (자체 골든 없음)
   { file: "applicableIntervals.js",   golden: false },
+  // C5: 프로덕션 ④ resolveRequestedAngle — 비단조·스냅·0/MIN·계약을 oracle과 대조
+  // (applicableIntervals의 비단조 커버리지를 이어받는다. 자체 골든 없음)
+  { file: "resolveRequestedAngle.js", golden: false },
   // C4: 부호 선택 — 분기별 계약(실기하 + 스텁) / legacy 병렬 동치.
   // migration은 stride=1이면 868조합 108초라 러너에선 4로 표본을 줄인다(전수는 수동 실행).
   { file: "rotationSignSelection.js", golden: false },
