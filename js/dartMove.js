@@ -2180,9 +2180,13 @@ function applyDartMove() {
   // 지금 적용할 userAngle과 정확히 일치(===, 둘 다 같은 resolvedAngleRad 대입 경로),
   // (c) evaluation.valid. 하나라도 어긋나면(부재·stale·invalid) 재사용하지 않고 재bake로
   // 안전하게 fallback한다 — 하네스처럼 evaluation을 안 심는 경로도 이쪽으로 정상 동작.
-  const _reuseEval = dartMoveState.evaluation
+  const _reuseEval =
+    dartMoveState.evalCtx
+    && dartMoveState.evaluation
+    && dartMoveState.evaluation.valid
     && dartMoveState.evaluation.angleRad === dartMoveState.userAngle
-    && dartMoveState.evaluation.valid;
+    && dartMoveState.evaluation.shape
+    && dartMoveState.evaluation.shape.length > 0;
 
   let bakedSegments;
   if (_reuseEval) {
@@ -2515,11 +2519,21 @@ function drawDartMoveOverlay(svgEl, p) {
   // 마지막 mousemove가 확정한 evaluation.shape가 있으면 그걸 apply와 동일한 렌더러
   // (drawAppliedSegments)로 그린다 → "preview 결과 = apply 결과"가 화면에서도 성립.
   // 반투명·점선 래퍼로 "아직 미확정(드래그 중)"임을 표시(stroke-dasharray는 자식에 상속).
-  // evaluation이 없으면(각도 0/미평가) 기존 조각 폴리라인 근사로 fallback한다.
-  const _previewShape = dartMoveState.evaluation?.shape;
-  if (_previewShape?.length && typeof drawAppliedSegments === "function") {
+  //
+  // ★ 재사용 계약은 apply의 `_reuseEval`과 **정확히 동일**해야 한다 — preview가 그린
+  //   shape와 apply가 커밋하는 shape가 갈리면 "preview = apply" 불변식이 깨진다.
+  //   evalCtx 존재 / evaluation 존재·valid / angleRad===userAngle / shape 비어있지 않음.
+  //   하나라도 어긋나면(각도 0·미평가·stale·invalid) 기존 폴리라인 근사로 fallback.
+  const _previewReuse =
+    dartMoveState.evalCtx
+    && dartMoveState.evaluation
+    && dartMoveState.evaluation.valid
+    && dartMoveState.evaluation.angleRad === dartMoveState.userAngle
+    && dartMoveState.evaluation.shape
+    && dartMoveState.evaluation.shape.length > 0;
+  if (_previewReuse && typeof drawAppliedSegments === "function") {
     const sg = E("g", { opacity: 0.7, "stroke-dasharray": "5,3", "pointer-events": "none" });
-    drawAppliedSegments(sg, _previewShape, "pattern", "#44aaff", dartMoveState.side);
+    drawAppliedSegments(sg, dartMoveState.evaluation.shape, "pattern", "#44aaff", dartMoveState.side);
     g.appendChild(sg);
   } else {
     // fallback: 회전 조각 + 고정 조각 폴리라인 근사
