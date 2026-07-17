@@ -189,14 +189,13 @@ console.log("\n── C6: preview/apply evaluation.shape 공유 계약 ──");
   console.log(`  [1] object identity(appliedFront.bakedSegments === evaluation.shape): ${identity} · [8] deep 불변 확인`);
 }
 
-// [2][3] 재사용 경로: initial bake/normalize 0회, C1 때문에 총 1회
+// [2][3] 재사용 경로: initial bake/normalize 0회이므로 apply 전체가 C1의 1회뿐
 {
   const { engine, context } = setupReuse();
   instrumentBN(context);
   engine.applyDartMove();
   const c = readBN(context);
-  check("C6[2] 재사용 경로: initial bake/normalize 0회 (총 1 = C1만)", c.bake === 1 && c.normalize === 1, c);
-  check("C6[3] C1 때문에 apply 전체 bake 1 / normalize 1", c.bake === 1 && c.normalize === 1, c);
+  check("C6[2][3] 재사용 apply: bake 1 / normalize 1 (initial 0, C1만 1)", c.bake === 1 && c.normalize === 1, c);
   console.log(`  [2][3] 재사용 apply: bake ${c.bake} / normalize ${c.normalize} (initial 0 + C1 1 = 1)`);
 }
 

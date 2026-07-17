@@ -2107,6 +2107,21 @@ function resetDartMove() {
   render();
 }
 
+// (C6) apply와 preview가 공유하는 **단일** 재사용 계약. "두 코드가 항상 같아야 한다"면
+// 조건식을 두 벌 관리할 게 아니라 한 벌만 존재해야 한다 — 복제하면 한쪽만 고쳐도 조용히
+// 갈라지고, preview는 헤드리스 테스트가 불가능해 더 위험하다. 재사용 가능한 evaluation을
+// 반환하고, 계약을 하나라도 못 채우면 null(각 호출부는 각자의 fallback으로 간다).
+// 계약: evalCtx 존재 / evaluation 존재·valid / angleRad===userAngle(정확 비교) /
+//       shape가 배열이고 비어있지 않음.
+function getReusableDartEvaluation() {
+  const ev = dartMoveState.evaluation;
+  if (!dartMoveState.evalCtx) return null;
+  if (!ev || !ev.valid) return null;
+  if (ev.angleRad !== dartMoveState.userAngle) return null;
+  if (!Array.isArray(ev.shape) || ev.shape.length === 0) return null;
+  return ev;
+}
+
 function applyDartMove() {
   dbg('[dartMove] applyDartMove 실행', { cutPoint: dartMoveState.cutPoint, rotateSegs: dartMoveState.rotateSegs?.length, fixedSegs: dartMoveState.fixedSegs?.length });
   if (!dartMoveState.cutPoint || dartMoveState.cutSegIndex < 0) {
@@ -2175,22 +2190,14 @@ function applyDartMove() {
   // 파이프라인: cut → rotate → bake → normalize → validate → render
   //
   // (C6) preview/apply 공유: 마지막 mousemove/더블클릭이 확정한 각도의 evaluation.shape가
-  // 곧 이 각도의 bake→normalize 결과다(byte-identical 실측 확인). 재사용 계약이 성립하면
-  // 재bake하지 않고 그 shape를 그대로 커밋한다. 계약: (a) evaluation 존재, (b) 그 각도가
-  // 지금 적용할 userAngle과 정확히 일치(===, 둘 다 같은 resolvedAngleRad 대입 경로),
-  // (c) evaluation.valid. 하나라도 어긋나면(부재·stale·invalid) 재사용하지 않고 재bake로
-  // 안전하게 fallback한다 — 하네스처럼 evaluation을 안 심는 경로도 이쪽으로 정상 동작.
-  const _reuseEval =
-    dartMoveState.evalCtx
-    && dartMoveState.evaluation
-    && dartMoveState.evaluation.valid
-    && dartMoveState.evaluation.angleRad === dartMoveState.userAngle
-    && dartMoveState.evaluation.shape
-    && dartMoveState.evaluation.shape.length > 0;
+  // 곧 이 각도의 bake→normalize 결과다(byte-identical 실측 확인). 재사용 계약(단일 함수
+  // getReusableDartEvaluation)이 성립하면 재bake하지 않고 그 shape를 그대로 커밋한다.
+  // 계약을 못 채우면 null → 재bake로 안전 fallback(하네스처럼 evaluation을 안 심는 경로 포함).
+  const _reuseEval = getReusableDartEvaluation();
 
   let bakedSegments;
   if (_reuseEval) {
-    bakedSegments = dartMoveState.evaluation.shape;
+    bakedSegments = _reuseEval.shape;
     dbg('[apply] (C6) evaluation.shape 재사용 — 재bake 생략', { angleDeg: (dartMoveState.userAngle*180/Math.PI).toFixed(2) });
   } else {
     bakedSegments = bakeFromSplitPieces({
@@ -2520,20 +2527,13 @@ function drawDartMoveOverlay(svgEl, p) {
   // (drawAppliedSegments)로 그린다 → "preview 결과 = apply 결과"가 화면에서도 성립.
   // 반투명·점선 래퍼로 "아직 미확정(드래그 중)"임을 표시(stroke-dasharray는 자식에 상속).
   //
-  // ★ 재사용 계약은 apply의 `_reuseEval`과 **정확히 동일**해야 한다 — preview가 그린
-  //   shape와 apply가 커밋하는 shape가 갈리면 "preview = apply" 불변식이 깨진다.
-  //   evalCtx 존재 / evaluation 존재·valid / angleRad===userAngle / shape 비어있지 않음.
-  //   하나라도 어긋나면(각도 0·미평가·stale·invalid) 기존 폴리라인 근사로 fallback.
-  const _previewReuse =
-    dartMoveState.evalCtx
-    && dartMoveState.evaluation
-    && dartMoveState.evaluation.valid
-    && dartMoveState.evaluation.angleRad === dartMoveState.userAngle
-    && dartMoveState.evaluation.shape
-    && dartMoveState.evaluation.shape.length > 0;
-  if (_previewReuse && typeof drawAppliedSegments === "function") {
+  // ★ 재사용 판정은 apply와 **같은 함수**(getReusableDartEvaluation)를 쓴다 — 조건식을
+  //   복제하지 않으므로 preview가 그린 shape와 apply가 커밋하는 shape가 구조적으로 갈릴 수
+  //   없다. null이면(각도 0·미평가·stale·invalid) 기존 폴리라인 근사로 fallback.
+  const _previewEval = getReusableDartEvaluation();
+  if (_previewEval && typeof drawAppliedSegments === "function") {
     const sg = E("g", { opacity: 0.7, "stroke-dasharray": "5,3", "pointer-events": "none" });
-    drawAppliedSegments(sg, dartMoveState.evaluation.shape, "pattern", "#44aaff", dartMoveState.side);
+    drawAppliedSegments(sg, _previewEval.shape, "pattern", "#44aaff", dartMoveState.side);
     g.appendChild(sg);
   } else {
     // fallback: 회전 조각 + 고정 조각 폴리라인 근사
