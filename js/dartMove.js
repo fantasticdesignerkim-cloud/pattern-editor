@@ -2304,8 +2304,6 @@ function applyDartMove() {
   render();
 }
 
-function setDartTheta()  {}
-
 // ── 드래프트 pts 헬퍼 (중복 방지) ─────────────
 function _getDraftPts() {
   const B = n("inpB"), W = n("inpW"), BL = n("inpBL");
