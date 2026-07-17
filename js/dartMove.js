@@ -23,8 +23,10 @@ function cleanForBake(segs) {
 
 
 // ══════════════════════════════════════════════
-// 【GEOMETRY】 점·각도·회전·교차·거리 — 패턴 의미를 모르는 순수 기하.
-// 이 구역은 다트/노치 개념을 몰라야 한다. 세그먼트와 점만 다룬다.
+// 【GEOMETRY】 점·각도·회전·교차·거리 + 세그먼트 충돌 판정.
+// 대부분은 점·세그먼트만 다루는 저수준 기하지만, findSelfIntersections·
+// findRotationCollisions는 물리 검사 대상을 고를 때 세그먼트 타입 정책
+// (isReferenceSeg / CURVE_SAMPLED_TYPES)을 참조하므로 완전히 도메인 무관하지는 않다.
 // ══════════════════════════════════════════════
 
 // ── 유틸 ──────────────────────────────────────
@@ -116,6 +118,8 @@ const CURVE_SAMPLED_TYPES = new Set([
 ]);
 
 // ── 자기교차 탐지 (물리 검사 대상만: 실제 외곽선 + 현재 열린/미완전히 닫힌 다트 다리) ──
+// ⚠️ 완전한 도메인-무관 geometry가 아니다: isReferenceSeg(dart-bridge)와 세그먼트 타입
+// 정책(CURVE_SAMPLED_TYPES)을 참조해 물리 검사 대상을 고른다. 순수 점·선 함수가 아님.
 // DEBUG 플래그와 무관하게 항상 동작 — applyDartMove에서 적용 차단 판단에도 쓰인다.
 // dart-leg-new/dart-leg-old는 종이가 실제로 벌어질 수 있는 경계이므로 검사에
 // 포함한다 — 빼면 다리가 외곽선(또는 다른 다트의 다리)을 관통하는 진짜 겹침을
@@ -205,6 +209,8 @@ function findSelfIntersections(segs, pivot) {
 // 회귀). 그래서 회전 한계/적용 차단 판단은 [고정 조각 ∪ 고정쪽 다트다리] ×
 // [회전 조각 ∪ 회전쪽 다트다리] 쌍만 검사한다. 스침(graze) 판정은
 // findSelfIntersections와 동일한 기준점(junction) 방식.
+// ⚠️ findSelfIntersections와 마찬가지로 순수 geometry가 아니다 — isReferenceSeg로
+// 세그먼트 타입을 걸러 검사 대상을 정한다.
 function findRotationCollisions(fixedSegsIn, rotateSegsIn, pivot, angle) {
   const clean = (arr) => (arr || []).filter(s => s?.from && s?.to && !isReferenceSeg(s));
   const fixedC  = clean(fixedSegsIn);
@@ -1149,7 +1155,10 @@ const DART_BUDGET_TOL = 1.15;
 
 // ── 다트 다리 타입 판별 / 클릭 가능 판별 ─────────
 // ── G점을 BP 중심으로 회전시켜 GG(가슴다트 닫힌 위치) 계산 ──
-// buildFrontOutline의 GG 산출 공식과 동일 (B/4 - 2.5도 회전)
+// buildFrontOutline의 GG 산출 공식과 동일 (B/4 - 2.5도 회전).
+// ★ 이 함수는 ENGINE 구역에 있지만 TOPOLOGY(splitFrontOutline)·ENGINE(calcFrontBaseDartAngle)·
+//   CONTROLLER(getFrontTargetOutline)가 함께 쓰는 Bunka 다트 공식 helper다. 구역 경계는
+//   관례일 뿐이며(모듈 없는 전역 스코프) 위치는 이동하지 않는다.
 function calcCloseAngle(p, B) {
   const vx = p.BP.x - p.G.x, vy = p.BP.y - p.G.y;
   const len = Math.hypot(vx, vy) || 1;

@@ -1475,10 +1475,22 @@ post-normalize를 잠그되 **영구 정답이 아니라 리팩터 기간의 호
   `evaluation.shape`를 `getCurrentDartEvaluation()`로 공유하며(C6), apply 안전성은
   **`evaluation.valid` 단일 진실**로 축소됐다(C7, `7e0dafd`). legacy 부호 체인·③ 구간
   열거·apply 중복 게이트·C1 이중검증 전부 삭제. **4계층 evaluateMove 통합 단계 종료.**
-- **(다음 단계 후보, 자동 착수 금지) geometry/topology 파일 추출·구조 개편** — 재설계
-  순서 ④(`dartGeometry.js`/`dartTopology.js`/`dartEngine.js`/`dartMove.js` 분리). 회귀 골든
-  + 구역 경계가 섰으므로 가능하지만, **별도 설계·승인 후 진행**한다(C7 완료가 자동으로
-  파일 분리를 시작시키지 않는다).
+- **✅ (완료, 2026-07) 파일 분리 타당성 감사 — 4파일 분리 기각, 한 파일 유지** — C0~C7
+  이후 재설계 순서 ④(`dartMove.js`를 geometry/topology/engine/controller 4파일로 분리)의
+  타당성을 읽기 전용으로 감사한 결과 **기각**한다.
+  - **이유**: (1) 모듈 없는 전역 `<script>` 방식이라 파일 경계가 캡슐화를 **강제하지 못한다**
+    — 나눠도 61개 함수가 전부 전역으로 남아 계층 규약은 지금 배너와 똑같이 관례일 뿐이다.
+    (2) 전역/DOM 의존 감소 **0**(위치만 이동). (3) 테스트 단순화 **0**(loadEngine 로드 목록만
+    +3). (4) 실제 외부 재사용 소비자 **0**(sleeve/render/draft 어디도 geometry 헬퍼 미사용).
+    (5) 새 `<script>` 태그·캐시 버전·로드 순서 규약만 영구 증가.
+  - 계획이 분리로 얻으려던 **engine 순수성**(dartMoveState/DOM 미접근)과 **UI·하네스 단일
+    경로**는 순서 ②·③(C0~C7)에서 **이미 달성**됐다.
+  - **결정: 현재 한 파일 + 배너 구역 유지.** 감사 중 드러난 배너 과장(GEOMETRY가 "순수
+    기하"라 했으나 findSelfIntersections/findRotationCollisions가 세그먼트 타입 정책 참조)은
+    주석만 정정(함수 이동 없음). `cleanForBake` 정책 사본 3→1 통합은 커밋 `17bf770`.
+  - **재검토 조건**(셋 중 하나 발생 시에만): ES 모듈 전환 / geometry 헬퍼의 실제 외부
+    소비자 발생 / bake 재설계(순서 ⑥) 완료. **bake/normalize 재설계는 자동 착수하지 않고
+    실제 요구 + 별도 승인 후 진행한다.**
 - **✅ legacy 순수 삭제 완료** — `chooseSignedBaseAngle`·`budgetMaxAngle`·
   `applyTimeSafeAngle`·`findMaxSafeAngle`·`findApplicableIntervals`는 C5d에서, apply의
   self-intersection/budget 게이트·C1 블록은 C7에서 삭제. 위 "Dead code 감사"의
