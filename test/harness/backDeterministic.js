@@ -211,6 +211,9 @@ section("2+5. 오래된 다트 재이동 (전수조사 + 보존 검증)");
           // 요청각도 프로덕션과 같은 ④를 탄다(직접 userAngle 세팅 금지, C5c).
           const _resolved = engine.resolveRequestedAngle(candidate.evalCtx, ca * pct, ca);
           engine.dartMoveState.userAngle = _resolved.resolvedAngleRad;
+          // (C7) apply는 각도-일치 evaluation을 요구한다(재bake fallback 없음) — 프로덕션
+          // mousemove/dartDriver와 동일하게 evaluation을 심는다.
+          engine.dartMoveState.evaluation = _resolved.evaluation;
           engine.applyDartMove();
 
           const theta = _resolved.resolvedAngleRad; // ④가 확정한 실제 회전각.

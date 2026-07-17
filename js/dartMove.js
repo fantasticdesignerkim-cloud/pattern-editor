@@ -2107,16 +2107,20 @@ function resetDartMove() {
   render();
 }
 
-// (C6) apply와 preview가 공유하는 **단일** 재사용 계약. "두 코드가 항상 같아야 한다"면
-// 조건식을 두 벌 관리할 게 아니라 한 벌만 존재해야 한다 — 복제하면 한쪽만 고쳐도 조용히
-// 갈라지고, preview는 헤드리스 테스트가 불가능해 더 위험하다. 재사용 가능한 evaluation을
-// 반환하고, 계약을 하나라도 못 채우면 null(각 호출부는 각자의 fallback으로 간다).
-// 계약: evalCtx 존재 / evaluation 존재·valid / angleRad===userAngle(정확 비교) /
-//       shape가 배열이고 비어있지 않음.
-function getReusableDartEvaluation() {
+// (C6/C7) apply와 preview가 공유하는 **단일** 조회 — "현재 각도와 일치하는 evaluation"을
+// 반환한다. "두 코드가 항상 같아야 한다"면 조건식을 두 벌 관리할 게 아니라 한 벌만 존재해야
+// 한다 — 복제하면 한쪽만 고쳐도 조용히 갈라지고, preview는 헤드리스 테스트가 불가능해 더 위험하다.
+//
+// **valid 여부는 보지 않는다(C7).** valid는
+// endpoint 안전성의 단일 진실이므로 호출부가 직접 `.valid`로 분기한다 — apply는 invalid면
+// reasons로 거부, preview는 invalid면 폴리라인 fallback. 여기서 valid까지 섞으면 "일치하는데
+// invalid"와 "애초에 일치 안 함"을 구분 못 해 apply가 정확한 사유를 못 낸다.
+// 계약: evalCtx 존재 / evaluation 존재 / angleRad===userAngle(정확 비교) /
+//       shape가 배열이고 비어있지 않음. 하나라도 어긋나면 null.
+function getCurrentDartEvaluation() {
   const ev = dartMoveState.evaluation;
   if (!dartMoveState.evalCtx) return null;
-  if (!ev || !ev.valid) return null;
+  if (!ev) return null;
   if (ev.angleRad !== dartMoveState.userAngle) return null;
   if (!Array.isArray(ev.shape) || ev.shape.length === 0) return null;
   return ev;
@@ -2186,41 +2190,19 @@ function applyDartMove() {
     dbg('[preBake] rotate types:', _cleanRotate.map(s=>s.type).join(','));
   }
 
-  // split 결과로 직접 bake (fixedSegs 그대로, rotateSegs만 회전)
-  // 파이프라인: cut → rotate → bake → normalize → validate → render
-  //
-  // (C6) preview/apply 공유: 마지막 mousemove/더블클릭이 확정한 각도의 evaluation.shape가
-  // 곧 이 각도의 bake→normalize 결과다(byte-identical 실측 확인). 재사용 계약(단일 함수
-  // getReusableDartEvaluation)이 성립하면 재bake하지 않고 그 shape를 그대로 커밋한다.
-  // 계약을 못 채우면 null → 재bake로 안전 fallback(하네스처럼 evaluation을 안 심는 경로 포함).
-  const _reuseEval = getReusableDartEvaluation();
-
-  let bakedSegments;
-  if (_reuseEval) {
-    bakedSegments = _reuseEval.shape;
-    dbg('[apply] (C6) evaluation.shape 재사용 — 재bake 생략', { angleDeg: (dartMoveState.userAngle*180/Math.PI).toFixed(2) });
-  } else {
-    bakedSegments = bakeFromSplitPieces({
-      fixedSegs:  _cleanFixed,
-      rotateSegs: _cleanRotate,
-      pivot,
-      angle:      dartMoveState.userAngle,
-    });
-    // normalize: 닫힌 다트 흔적(면적 0 서브패스)을 녹여 "현재 형상 하나"로 정리.
-    // 열린 다트(부채꼴 다중다트 포함)는 그대로 보존. 이 결과가 저장·렌더·다음 세대
-    // split의 입력이 되므로 과거 찌꺼기가 누적되지 않는다(젤리/물 지배 모델).
-    bakedSegments = normalizeBakedSegments(bakedSegments, pivot);
+  // (C7) 단일 진실: apply가 커밋하는 형상은 항상 evaluateEndpoint 결과(evaluation.shape)다.
+  // C6에서 preview·apply가 같은 shape를 공유하므로 여기서 재bake하지 않는다. mousemove/
+  // 더블클릭이 확정한 각도의 evaluation을 조회하고(각도 일치 — valid는 아래서 분기),
+  // 없으면 재bake·재평가하지 않고 정상 거부한다(단일 소스 유지, 상태는 그대로).
+  const _ev = getCurrentDartEvaluation();
+  if (!_ev) {
+    setHint("평가 결과가 없습니다 — 핸들을 다시 드래그해 주세요");
+    return;   // mode/userAngle/evaluation/evalCtx 미변경 (드래그 유지)
   }
 
-  debugCheckSegmentContinuity(bakedSegments, `${side} bakedSegments`);
-  validateBakedSegments(bakedSegments, side, pivot);
-
-  // ── 겹침은 판단이 아니라 차단 대상이다: 겹치는 결과는 애초에 적용되지 않는다.
-  // 검사 기준은 findMaxSafeAngle과 동일하게 "회전으로 새로 생기는 겹침"(고정×회전
-  // 조각 간)만 본다 — bake 전체의 자기교차를 보면 같은 조각 내부의 접선 노이즈
-  // (원본부터 있던 것)까지 걸려 멀쩡한 적용을 차단한다. 드래그 상태(mode/
-  // rotateSegs/cutPoint 등)는 그대로 유지해 사용자가 각도나 조각을 바꿔서 다시
-  // 시도할 수 있게 한다.
+  // ── piece-collision (②의 책임 — evaluation.valid에 없다). bake 없이 각도만으로 검사한다.
+  //    resolved ≤ sweepLimit이면 발화하지 않지만(실측), resolver 상한의 apply-time 재확인
+  //    이다. ①에 합치지 않고 별도 게이트로 유지한다. 드래그 상태(mode/userAngle 등)는 그대로.
   const _crossings = findRotationCollisions(_cleanFixed, _cleanRotate, pivot, dartMoveState.userAngle);
   if (_crossings.length > 0) {
     dbg('[apply] 조각 간 겹침으로 적용 차단', _crossings);
@@ -2228,109 +2210,33 @@ function applyDartMove() {
     return;
   }
 
-  // ── 델타 안전망: 이 이동이 "이동 전 형상" 대비 자기교차를 새로 늘리면 거부.
-  // findRotationCollisions는 조각 본체 간 겹침은 잡지만, bake가 새로 만들어내는
-  // 잔여벽(legOld) 등이 본체를 관통하는 경우는 검사 대상에 없어 놓친다.
-  //
-  // 기준선은 반드시 "이동 전 저장된 검증필 형상"(appliedFront/Back.bakedSegments)을
-  // 쓴다. 예전엔 각도 0 재조립(baked0)을 기준선으로 삼았는데, bakeFromSplitPieces의
-  // 각도 0 재조립이 항등이 아니라서 깨끗한 저장 형상(교차 0)을 split→rebake하면
-  // 없던 교차가 생겼다(실측: 저장본 0 → baked0 2). 그 오염된 기준선이 진짜로 몸판을
-  // 관통하는 결과(교차 1)를 "기준선보다 적다"며 통과시켜 영구 누적됐다(스트레스
-  // 60런×8세대에서 겹침 적용 59건, 13/60 run이 교차로 종료). 저장 형상은 이미 이
-  // 게이트를 통과한 깨끗한 형상이므로 정직한 기준선이다 — 불변식: 정상 다트 이동은
-  // 이동 전보다 자기교차를 늘리지 않는다. (기준선 교체 후 스트레스: 겹침 적용
-  // 59→0건, 교차 종료 13→0건, 정상 적용 480건 그대로 — 오차단 0.)
-  // 제1법칙 — 물리적으로 겹치는 결과는 종이가 될 수 없다.
-  const _prevBaked = (side === "back")
-    ? dartMoveState.appliedBack?.bakedSegments
-    : dartMoveState.appliedFront?.bakedSegments;
-  const _cross0 = _prevBaked ? findSelfIntersections(_prevBaked, pivot).length : 0;
-  const _crossNow = findSelfIntersections(bakedSegments, pivot).length;
-  if (_crossNow > _cross0) {
-    dbg('[apply] 회전이 새 겹침을 만들어 적용 차단 (baseline:', _cross0, '→', _crossNow, ')');
-    setHint(`이 위치/각도는 패턴이 겹칩니다 — 각도를 줄이거나 다른 조각/위치를 선택하세요`);
-    return;
-  }
-
-  // ── 다트 예산 게이트 (사후, 각도 기준) ──
-  // 지배 결정(2026-07-08): 다중다트는 매 다트에 기본각을 복제하는 게 아니라, 적용 후
-  // 열린 다트들의 BP 기준 각도 합이 이 옷 전체의 기본 다트각 "예산"을 넘지 않아야 한다.
-  // 정상적인 "다른 위치" 다트이동은 재분배(새 다트 열림 ↔ 기존 다트 닫힘)라 예산을
-  // 보존하지만(실측 90%가 ≤1.05×budget), 병리적 이동(기존 다트 다리를 팽창 방향으로
-  // 끌고 감)은 총합을 2~8배로 폭발시킨다(실측 최대 149.8°=8.2×, 7다트 부채꼴).
-  // ★ 사전 clamp(remaining=budget-used로 새 다트 축소)가 아니라 사후 게이트다 —
-  //   잔여 다트가 예산을 먹고 있어도 "닫으며 여는" 정상 재분배를 막지 않기 위함.
-  //   폭(mouthWidth)이 아니라 반드시 pivot 기준 각도로만 계산한다(폭은 pivot 거리에
-  //   비례해 보존되지 않음 — 2026-07-03 #5 calcCloseAngleByMouthPair 폭주 버그의 교훈).
-  // 임계값 DART_BUDGET_TOL(=1.15×, 모듈 상단 상수): 실측 분포가 이봉형(정상 ≤1.05× /
-  //   병리 ≥2×)이라 그 사이 빈 구간의 보수적 값. (1.25×까지 올려도 안전.)
-  let _budgetRad;
-  const _bB = n("inpB");
-  if (side === "back") {
-    const _bd = createDraft(_bB, n("inpW"), n("inpBL"));
-    _budgetRad = Math.abs(calcBackBaseDartAngle(buildBackShoulderDartInfo(_bd.formula, _bd.pts, _bB)));
-  } else {
-    _budgetRad = Math.abs(calcFrontBaseDartAngle(p, _bB));
-  }
-  const _usedRad = sumOpenDartAngle(bakedSegments, pivot);
-  if (_budgetRad > 1e-6 && _usedRad > _budgetRad * DART_BUDGET_TOL) {
-    dbg('[apply] 다트 예산 초과로 차단',
-      { usedDeg: +(_usedRad*180/Math.PI).toFixed(1), budgetDeg: +(_budgetRad*180/Math.PI).toFixed(1),
-        ratio: +(_usedRad/_budgetRad).toFixed(2) });
-    setHint(`이 위치/조각은 가슴다트를 복제합니다 (열린 다트 합 ${(_usedRad*180/Math.PI).toFixed(0)}° > 예산 ${(_budgetRad*180/Math.PI).toFixed(0)}°) — 다른 조각/위치를 선택하세요`);
-    return;
-  }
-
-  // ══════════════════════════════════════════════
-  // C1 이중 검증 (임시) — evaluateEndpoint ①가 기존 게이트와 같은 판정을 내는가
-  // ══════════════════════════════════════════════
-  // 여기까지 왔다는 건 기존 게이트가 전부 통과했다는 뜻이다. 그러면 evaluateEndpoint도
-  // valid여야 한다(단, ①은 계약상 piece-collision을 안 보므로 그 항목은 비교 대상이
-  // 아니다 — 이미 위에서 findRotationCollisions가 걸렀다).
-  //
-  // 불일치는 "있을 수 없는 일"이다. setHint로 알리고 console.error로 기록한 뒤 throw한다:
-  //   - 브라우저: throw가 커밋 코드보다 먼저 터지므로 곧 "적용 거부 + 오류 기록"
-  //   - 테스트: 그대로 throw로 즉시 실패
-  // 별도 플래그 없이 둘 다 충족한다.
-  //
-  // ★ 임시로 bake가 중복된다(기존 1회 + evaluateEndpoint 1회). C6에서 preview/apply가
-  //   같은 shape를 공유하면 이 중복이 사라진다. 그때까지 비용을 감수한다.
-  // ★ 이 단계에서는 ev.shape를 저장하지 않는다 — 기존 bakedSegments를 그대로 저장한다.
-  {
-    const _ev = evaluateEndpoint({
-      fixedSegs: _cleanFixed, rotateSegs: _cleanRotate, pivot,
-      budgetRad: _budgetRad, prevBakedSegments: _prevBaked,
-      sourceNotch: null,  // 적용 시점엔 rotatePiece가 없다. 보존 지표는 측정 전용이라 불필요.
-    }, dartMoveState.userAngle);
-
-    const _mismatch = [];
-    if (!_ev.valid) _mismatch.push({ what: "valid", legacy: true, eval: false, reasons: _ev.reasons });
-    if (_ev.shape.length !== bakedSegments.length) {
-      _mismatch.push({ what: "shape.length", legacy: bakedSegments.length, eval: _ev.shape.length });
+  // ── endpoint 안전성의 단일 진실 = evaluation.valid. legacy self-intersection/budget
+  //    게이트와 C1 이중검증이 전부 이 한 판정으로 접혔다(동치는 endpointEquivalence.js가
+  //    하네스에서 legacyGates 독립 재구현으로 강제). 격자가 스텝보다 좁은 금지구간을 놓쳐도
+  //    정확 요청각의 evaluateEndpoint가 마지막에 잡는다(C5/C6 원칙) — 이 차단은 제거 금지.
+  if (!_ev.valid) {
+    const _r = _ev.reasons || [];
+    const _m = _ev.metrics || {};
+    if (_r.includes("budget-exceeded")) {
+      const _usedDeg = ((_m.openDartSumRad || 0) * 180 / Math.PI).toFixed(0);
+      const _budDeg = (_m.budgetRatio > 1e-9)
+        ? ((_m.openDartSumRad / _m.budgetRatio) * 180 / Math.PI).toFixed(0) : "?";
+      setHint(`이 위치/조각은 가슴다트를 복제합니다 (열린 다트 합 ${_usedDeg}° > 예산 ${_budDeg}°) — 다른 조각/위치를 선택하세요`);
+    } else if (_r.includes("self-intersection")) {
+      setHint(`이 위치/각도는 패턴이 겹칩니다 — 각도를 줄이거나 다른 조각/위치를 선택하세요`);
+    } else if (_r.includes("discontinuous") || _r.includes("loop-open")) {
+      setHint(`형상이 제대로 연결되지 않았습니다 — 다른 조각/위치를 선택하세요`);
     } else {
-      for (let i = 0; i < bakedSegments.length; i++) {
-        const a = bakedSegments[i], b = _ev.shape[i];
-        if (a.type !== b.type ||
-            Math.hypot(a.from.x - b.from.x, a.from.y - b.from.y) > 1e-9 ||
-            Math.hypot(a.to.x - b.to.x, a.to.y - b.to.y) > 1e-9) {
-          _mismatch.push({ what: "shape[" + i + "]", legacyType: a.type, evalType: b.type });
-          break;
-        }
-      }
+      setHint(`이 위치/각도는 적용할 수 없습니다 — 다른 조각/위치를 선택하세요`);
     }
-    if (_ev.metrics.selfXCount !== _crossNow) _mismatch.push({ what: "selfX", legacy: _crossNow, eval: _ev.metrics.selfXCount });
-    if (_ev.metrics.baselineSelfXCount !== _cross0) _mismatch.push({ what: "baselineSelfX", legacy: _cross0, eval: _ev.metrics.baselineSelfXCount });
-    if (Math.abs(_ev.metrics.openDartSumRad - _usedRad) > 1e-9) _mismatch.push({ what: "openDartSum", legacy: _usedRad, eval: _ev.metrics.openDartSumRad });
-    const _legacyRatio = _budgetRad > 1e-6 ? _usedRad / _budgetRad : 0;
-    if (Math.abs(_ev.metrics.budgetRatio - _legacyRatio) > 1e-9) _mismatch.push({ what: "budgetRatio", legacy: _legacyRatio, eval: _ev.metrics.budgetRatio });
-
-    if (_mismatch.length > 0) {
-      setHint("내부 오류: 평가 불일치로 적용을 거부했습니다 (콘솔 확인)");
-      console.error("[C1] evaluateEndpoint가 기존 apply 게이트와 불일치 — 적용 거부", _mismatch);
-      throw new Error("[C1] endpoint evaluation mismatch: " + JSON.stringify(_mismatch));
-    }
+    dbg('[apply] evaluation invalid로 차단', _r);
+    return;   // mode/userAngle/evaluation/evalCtx 미변경 (드래그 유지)
   }
+
+  // valid — commit. 커밋 형상은 evaluation.shape(재사용) 그 자체다(재bake 0).
+  const bakedSegments = _ev.shape;
+  debugCheckSegmentContinuity(bakedSegments, `${side} bakedSegments`);
+  validateBakedSegments(bakedSegments, side, pivot);   // DEBUG 진단(프로덕션 no-op)
 
   if (typeof DEBUG_DART_MOVE !== 'undefined' && DEBUG_DART_MOVE) {
     const DART_TYPES = ["dart-leg-new","dart-leg-old","dart-bridge"];
@@ -2527,11 +2433,12 @@ function drawDartMoveOverlay(svgEl, p) {
   // (drawAppliedSegments)로 그린다 → "preview 결과 = apply 결과"가 화면에서도 성립.
   // 반투명·점선 래퍼로 "아직 미확정(드래그 중)"임을 표시(stroke-dasharray는 자식에 상속).
   //
-  // ★ 재사용 판정은 apply와 **같은 함수**(getReusableDartEvaluation)를 쓴다 — 조건식을
+  // ★ 각도-일치 조회는 apply와 **같은 함수**(getCurrentDartEvaluation)를 쓴다 — 조건식을
   //   복제하지 않으므로 preview가 그린 shape와 apply가 커밋하는 shape가 구조적으로 갈릴 수
-  //   없다. null이면(각도 0·미평가·stale·invalid) 기존 폴리라인 근사로 fallback.
-  const _previewEval = getReusableDartEvaluation();
-  if (_previewEval && typeof drawAppliedSegments === "function") {
+  //   없다. valid는 여기서 직접 본다(C7: 함수는 valid를 안 봄) — invalid면 apply가 거부할
+  //   형상이므로 preview로 그리지 않고 폴리라인 근사로 fallback한다.
+  const _previewEval = getCurrentDartEvaluation();
+  if (_previewEval && _previewEval.valid && typeof drawAppliedSegments === "function") {
     const sg = E("g", { opacity: 0.7, "stroke-dasharray": "5,3", "pointer-events": "none" });
     drawAppliedSegments(sg, _previewEval.shape, "pattern", "#44aaff", dartMoveState.side);
     g.appendChild(sg);

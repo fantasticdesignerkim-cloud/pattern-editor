@@ -165,103 +165,108 @@ function instrumentBN(context) {
 }
 const readBN = (context) => JSON.parse(vm.runInContext("JSON.stringify(__bn)", context));
 
-console.log("\n── C6: preview/apply evaluation.shape 공유 계약 ──");
+// 거부 시 보존돼야 할 상태 스냅샷 (mode/userAngle/evaluation/evalCtx는 그대로 유지)
+const rejectState = (s) => ({ mode: s.mode, userAngle: s.userAngle, evaluation: s.evaluation, evalCtx: s.evalCtx });
+const preserved = (b, s) => b.mode === s.mode && b.userAngle === s.userAngle && b.evaluation === s.evaluation && b.evalCtx === s.evalCtx;
 
-// 전제: setupReuse의 evaluation은 valid이고 shape가 비어있지 않아야 한다(재사용 대상).
+console.log("\n── C6/C7: preview·apply evaluation.shape 공유 + 단일 거부/commit ──");
+
+// 전제: setupReuse의 evaluation은 valid이고 shape가 비어있지 않아야 한다(commit 대상).
 {
   const { engine } = setupReuse();
   const ev = engine.dartMoveState.evaluation;
-  check("C6 전제: evaluation valid & shape 비어있지 않음",
+  check("전제: evaluation valid & shape 비어있지 않음",
     !!ev && ev.valid === true && ev.angleRad === engine.dartMoveState.userAngle && ev.shape.length > 0);
 }
 
-// [1] 참조 동일성 + [8] apply 전후 deep 불변
+// [1] 참조 동일성 + [8] apply 전후 deep 불변 + valid apply bake/normalize 0/0 (C7: C1 제거)
 {
-  const { engine } = setupReuse();
+  const { engine, context } = setupReuse();
   const shapeRef = engine.dartMoveState.evaluation.shape;   // apply가 null 처리하기 전 캡처
   const deepBefore = clone(shapeRef);
+  instrumentBN(context);
   engine.applyDartMove();
+  const c = readBN(context);
   const app = engine.dartMoveState.appliedFront;
   const identity = !!app && app.bakedSegments === shapeRef;
-  check("C6[1] 재사용 apply: appliedFront.bakedSegments === evaluation.shape (object identity)", identity);
-  check("C6[8] apply 전후 evaluation.shape deep snapshot 불변",
-    !!app && eq(app.bakedSegments, deepBefore));
-  console.log(`  [1] object identity(appliedFront.bakedSegments === evaluation.shape): ${identity} · [8] deep 불변 확인`);
+  check("[1] valid apply: appliedFront.bakedSegments === evaluation.shape (object identity)", identity);
+  check("[8] apply 전후 evaluation.shape deep snapshot 불변", !!app && eq(app.bakedSegments, deepBefore));
+  check("[2][3] valid apply: bake/normalize 0/0 (C7 — 재bake·C1 없음)", c.bake === 0 && c.normalize === 0, c);
+  check("[7] valid apply 성공 후 evaluation=null (폐기)", engine.dartMoveState.evaluation === null);
+  console.log(`  [1] identity=${identity} · [8] deep 불변 · [2][3] valid apply bake/normalize ${c.bake}/${c.normalize}`);
 }
 
-// [2][3] 재사용 경로: initial bake/normalize 0회이므로 apply 전체가 C1의 1회뿐
+// [4] angle mismatch → getReusable null → "평가 없음" 거부, commit 없음, 상태 유지, bake 0
 {
   const { engine, context } = setupReuse();
+  engine.dartMoveState.userAngle = engine.dartMoveState.evaluation.angleRad * 0.9;  // 각도 불일치(≥MIN)
+  const before = rejectState(engine.dartMoveState);
   instrumentBN(context);
   engine.applyDartMove();
   const c = readBN(context);
-  check("C6[2][3] 재사용 apply: bake 1 / normalize 1 (initial 0, C1만 1)", c.bake === 1 && c.normalize === 1, c);
-  console.log(`  [2][3] 재사용 apply: bake ${c.bake} / normalize ${c.normalize} (initial 0 + C1 1 = 1)`);
+  check("[4] angle mismatch: commit 없음", engine.dartMoveState.appliedFront === null);
+  check("[4] angle mismatch: bake/normalize 0/0 (재평가 없음)", c.bake === 0 && c.normalize === 0, c);
+  check("[4] angle mismatch: mode/userAngle/evaluation/evalCtx 유지", preserved(before, engine.dartMoveState));
 }
 
-// [4] angle mismatch → 재사용 안 함, fallback(bake 2)
+// [5] evalCtx=null → getReusable null → 거부, commit 없음, 상태 유지, bake 0
 {
   const { engine, context } = setupReuse();
-  const shapeRef = engine.dartMoveState.evaluation.shape;
-  engine.dartMoveState.userAngle = engine.dartMoveState.evaluation.angleRad * 0.9;  // 불일치(여전히 valid 범위)
-  instrumentBN(context);
-  engine.applyDartMove();
-  const c = readBN(context);
-  const app = engine.dartMoveState.appliedFront;
-  check("C6[4] angle mismatch: 재사용 안 함 → fallback bake 2 / normalize 2", c.bake === 2 && c.normalize === 2, c);
-  check("C6[4] angle mismatch: 저장 shape !== evaluation.shape", !!app && app.bakedSegments !== shapeRef);
-}
-
-// [5] evalCtx=null → 재사용 안 함, fallback
-{
-  const { engine, context } = setupReuse();
-  const shapeRef = engine.dartMoveState.evaluation.shape;
   engine.dartMoveState.evalCtx = null;
+  const before = rejectState(engine.dartMoveState);
   instrumentBN(context);
   engine.applyDartMove();
   const c = readBN(context);
-  const app = engine.dartMoveState.appliedFront;
-  check("C6[5] evalCtx=null: 재사용 안 함 → fallback bake 2", c.bake === 2 && c.normalize === 2, c);
-  check("C6[5] evalCtx=null: 저장 shape !== evaluation.shape", !!app && app.bakedSegments !== shapeRef);
+  check("[5] evalCtx=null: commit 없음", engine.dartMoveState.appliedFront === null);
+  check("[5] evalCtx=null: bake/normalize 0/0", c.bake === 0 && c.normalize === 0, c);
+  check("[5] evalCtx=null: 상태 유지", preserved(before, engine.dartMoveState));
 }
 
-// [6] invalid evaluation → 재사용 안 함
+// [6] invalid evaluation → getReusable 반환(valid 미검사) → apply가 !valid로 reasons 거부,
+//     commit 없음, 상태 유지, bake 0. (valid는 endpoint 안전성의 단일 진실 — 함수는 안 봄)
+for (const reasons of [["budget-exceeded"], ["self-intersection"], ["discontinuous"], ["loop-open"], ["unknown"]]) {
+  const { engine, context } = setupReuse();
+  engine.dartMoveState.evaluation = { ...engine.dartMoveState.evaluation, valid: false, reasons };
+  const before = rejectState(engine.dartMoveState);
+  instrumentBN(context);
+  engine.applyDartMove();
+  const c = readBN(context);
+  check(`[6] invalid(${reasons[0]}): commit 없음`, engine.dartMoveState.appliedFront === null);
+  check(`[6] invalid(${reasons[0]}): bake/normalize 0/0`, c.bake === 0 && c.normalize === 0, c);
+  check(`[6] invalid(${reasons[0]}): 상태 유지`, preserved(before, engine.dartMoveState));
+}
+
+// [4b] missing evaluation(null) → 거부, commit 없음, 상태 유지, bake 0
 {
   const { engine, context } = setupReuse();
-  const shapeRef = engine.dartMoveState.evaluation.shape;
-  engine.dartMoveState.evaluation = { ...engine.dartMoveState.evaluation, valid: false };
+  engine.dartMoveState.evaluation = null;
+  const before = rejectState(engine.dartMoveState);
   instrumentBN(context);
   engine.applyDartMove();
   const c = readBN(context);
-  const app = engine.dartMoveState.appliedFront;
-  check("C6[6] invalid evaluation: 재사용 안 함 → fallback bake 2", c.bake === 2 && c.normalize === 2, c);
-  check("C6[6] invalid evaluation: 저장 shape !== evaluation.shape", !!app && app.bakedSegments !== shapeRef);
+  check("[4b] missing evaluation: commit 없음", engine.dartMoveState.appliedFront === null);
+  check("[4b] missing evaluation: bake/normalize 0/0", c.bake === 0 && c.normalize === 0, c);
+  check("[4b] missing evaluation: 상태 유지", preserved(before, engine.dartMoveState));
 }
 
-// [7] dispose: 각 상태 전이 후 evaluation=null
-{
-  const { engine } = setupReuse();
-  engine.applyDartMove();
-  check("C6[7] apply 성공 후 evaluation=null", engine.dartMoveState.evaluation === null);
-}
+// [7] dispose: reset/start/cancel/selectSide 전이 후 evaluation=null (apply 성공은 [1]에서 확인)
 {
   const { engine } = setupReuse();
   engine.resetDartMove();
-  check("C6[7] reset 후 evaluation=null", engine.dartMoveState.evaluation === null);
+  check("[7] reset 후 evaluation=null", engine.dartMoveState.evaluation === null);
 }
 for (const call of ["startDartMove()", "cancelDartMove()", "selectDartSide('back')"]) {
   const { engine, context } = setupReuse();
-  // 실제 shape 대신 감지용 sentinel을 심어 dispose가 확실히 null로 덮는지 본다.
   engine.dartMoveState.evaluation = { angleRad: 1, valid: true, shape: [{ type: "x", from: { x: 0, y: 0 }, to: { x: 1, y: 1 } }] };
   try {
     vm.runInContext(call, context);
-    check(`C6[7] ${call} 후 evaluation=null`, engine.dartMoveState.evaluation === null);
+    check(`[7] ${call} 후 evaluation=null`, engine.dartMoveState.evaluation === null);
   } catch (e) {
-    check(`C6[7] ${call} 후 evaluation=null`, false, e.message.split("\n")[0]);
+    check(`[7] ${call} 후 evaluation=null`, false, e.message.split("\n")[0]);
   }
 }
-console.log(`  [4]angle mismatch [5]evalCtx=null [6]invalid → 전부 fallback(bake 2, 저장≠evaluation.shape)`);
-console.log(`  [7] apply/reset/start/cancel/selectSide 전이 후 evaluation=null 확인`);
+console.log(`  [4]mismatch [5]evalCtx=null [6]invalid(reasons) [4b]missing → 전부 commit 0·bake 0·상태 유지`);
+console.log(`  [7] apply성공/reset/start/cancel/selectSide 전이 후 evaluation=null`);
 
 console.log(`\n══════════════════════════════════════════════`);
 console.log(`결과: ${pass} PASS / ${fail} FAIL`);

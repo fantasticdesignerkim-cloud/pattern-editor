@@ -1,22 +1,22 @@
 // ══════════════════════════════════════════════
-// C1 동치 검사 — `evaluateEndpoint`(신규 ①)와 **기존 apply 게이트**가 같은 판정을
-// 내는지 확인한다.
+// endpoint ↔ legacy-gate 동치 검사 — `evaluateEndpoint`(①)가 **예전 apply 게이트**와
+// 같은 판정을 내는지 확인한다.
 //
-// C1에서는 기존 게이트를 삭제하지 않는다. 두 경로가 공존하며, 이 테스트가 둘의
-// 판정이 갈리는 순간 **즉시 throw**한다. 운영 브라우저에서는 기존 게이트가 계속
-// 실제 차단 역할을 한다. 불일치가 한 번이라도 나오면 C2 이후로 진행하지 않는다.
+// **C7 이후 역할 (2026-07)**: 프로덕션 apply는 이제 self-intersection/budget 게이트와
+// C1 이중검증을 삭제하고 `evaluation.valid` 하나로 거부·commit한다. 그래서 이 스위트의
+// `legacyGates()`는 프로덕션 코드가 아니라 **독립 동결 기준**이다 — 예전 게이트 로직을
+// 재구현해 evaluateEndpoint와 대조함으로써, 프로덕션 C1을 지운 뒤에도 그 동치를 하네스가
+// 계속 강제한다(프로덕션 C1에 비의존). 불일치가 한 번이라도 나오면 즉시 throw = 중단.
+// legacyGates는 이 시점부터 프로덕션과 함께 바뀌지 않는 **회귀 앵커**다.
 //
-// **비교 항목** (아직 같은 객체일 필요는 없다 — C6에서 통합):
-//   - valid 판정
-//   - reasons
-//   - canonicalized shape 좌표
-//   - selfX, breaks, loop gap
-//   - 열린 다트각 합, budget ratio
+// **비교 항목**:
+//   - valid 판정 / reasons / canonicalized shape 좌표
+//   - selfX, breaks, loop gap / 열린 다트각 합, budget ratio
 //
 // ★ 주의: `evaluateEndpoint`는 계층 계약상 `piece-collision`을 검사하지 않는다(②의
-//   책임). 기존 apply 게이트는 findRotationCollisions로 그걸 본다. 따라서 두 판정이
-//   갈릴 수 있는 유일한 정당한 경우가 "조각 충돌만 있고 endpoint는 멀쩡" 이다 —
-//   그 경우는 동치 비교에서 제외하고 별도로 센다(계약대로의 차이지 버그가 아니다).
+//   책임). 예전 apply 게이트(및 C7 이후에도 유지되는 apply의 piece-collision)는
+//   findRotationCollisions로 그걸 본다. 따라서 두 판정이 갈릴 수 있는 유일한 정당한
+//   경우가 "조각 충돌만 있고 endpoint는 멀쩡" 이다 — 동치 비교에서 제외하고 별도로 센다.
 //
 // 실행: node test/harness/endpointEquivalence.js
 // ══════════════════════════════════════════════
