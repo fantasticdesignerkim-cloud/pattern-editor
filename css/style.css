@@ -1,8 +1,5 @@
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,sans-serif;background:#fff;height:100vh;overflow:hidden;display:flex}
-.sidebar{width:220px;min-width:220px;height:100vh;background:#f7f7f4;border-right:1px solid #ddd;display:flex;flex-direction:column;overflow-y:auto;padding:12px 12px 60px;gap:8px;flex-shrink:0}
-.sidebar-title{font-weight:800;color:#185FA5;font-size:14px;padding-bottom:6px;border-bottom:1px solid #ddd}
-.sec{font-size:10px;font-weight:700;color:#888;margin-top:4px}
+body{font-family:-apple-system,sans-serif;background:#fff;height:100vh;overflow:hidden;display:flex;flex-direction:column}
 .row{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .row label{font-size:12px;font-weight:700;color:#444}
 .row input[type=number]{width:72px;padding:5px 7px;border:1px solid #ccc;border-radius:7px;text-align:right;font-size:13px;background:#fff}
@@ -59,3 +56,25 @@ svg#cv{width:100%;height:100%;touch-action:none;background:#fff;display:block}
 
 .txt-dep{font-size:9px;fill:#8a5cf6;font-weight:700}
 .txt-dark{font-size:9px;fill:#333;font-weight:700}
+
+/* ── 블루프린트 캔버스 중심 레이아웃 ── */
+.topbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#f7f7f4;border-bottom:1px solid #ddd;flex-shrink:0;position:relative;z-index:20}
+.brand{font-weight:800;color:#185FA5;font-size:14px;white-space:nowrap;margin-right:6px}
+.topbar>.btn{width:auto;padding:8px 14px;white-space:nowrap}
+.spacer{flex:1}
+
+.pop{position:relative}
+.pop>summary{list-style:none;cursor:pointer;padding:8px 14px;border-radius:8px;background:#eef0f3;color:#333;font-weight:800;font-size:12px;white-space:nowrap;user-select:none}
+.pop>summary::-webkit-details-marker{display:none}
+.pop>summary::marker{content:""}
+.pop>summary::after{content:"\25BE";margin-left:5px;color:#999;font-size:10px}
+.pop[open]>summary{background:#185FA5;color:#fff}
+.pop[open]>summary::after{color:#fff}
+.pop-body{position:absolute;top:calc(100% + 6px);left:0;z-index:30;background:#fff;border:1px solid #ccc;border-radius:10px;padding:12px;width:252px;display:flex;flex-direction:column;gap:8px;box-shadow:0 6px 20px rgba(0,0,0,.14)}
+.pop-right .pop-body{left:auto;right:0}
+
+.context-strip{display:none;align-items:center;gap:10px;padding:6px 10px;background:#fff4e8;border-bottom:1px solid #f0c88a;flex-shrink:0;position:relative;z-index:15}
+.context-strip:has(#dartSideRow:not([style*="none"])){display:flex}
+.context-strip .row{width:auto}
+.context-strip .btn{width:auto;padding:7px 14px;white-space:nowrap}
+.context-strip #dartMoveHint{min-width:0}
