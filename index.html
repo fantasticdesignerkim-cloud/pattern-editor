@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026072001">
+<link rel="stylesheet" href="css/style.css?v=2026072003">
 </head>
 <body>
 
@@ -14,9 +14,9 @@
     <span class="brand-sub">문화식 원형</span>
   </div>
 
-  <nav class="stage-bar" aria-label="작업 단계">
-    <span class="stage is-active" aria-current="step">원형</span>
-    <button type="button" class="stage" disabled aria-disabled="true" title="다음 단계에서 연결">디자인</button>
+  <nav class="stage-bar" aria-label="작업 단계" role="tablist">
+    <button type="button" class="stage" role="tab" data-stage="draft"  aria-selected="true"  title="원형">원형</button>
+    <button type="button" class="stage" role="tab" data-stage="design" aria-selected="false" title="디자인">디자인</button>
     <button type="button" class="stage" disabled aria-disabled="true" title="준비 중">재단</button>
     <button type="button" class="stage" disabled aria-disabled="true" title="준비 중">출력</button>
   </nav>
@@ -30,23 +30,26 @@
 <div class="workspace">
 
   <nav class="tool-rail" aria-label="도구">
-    <!-- 실제 동작하는 유일한 도구. JS(setBtn)가 textContent/inline background를 덮으므로
-         자식 <svg>를 넣지 않고 ::before 아이콘 + 텍스트 숨김으로 처리한다. -->
-    <button class="tool tool-dart" id="btnDartMove" onclick="toggleDartMove()" aria-label="다트 이동" title="다트 이동">다트이동 시작</button>
-
-    <button type="button" class="tool" disabled aria-disabled="true" aria-label="곡선 편집" title="다음 단계에서 연결">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>곡선 편집</title><path d="M3 18c4 0 6-12 10-12s5 6 8 6"/><circle cx="3" cy="18" r="1.5"/><circle cx="21" cy="12" r="1.5"/></svg>
-    </button>
-
-    <button type="button" class="tool" disabled aria-disabled="true" aria-label="보기" title="다음 단계에서 연결">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>보기</title><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/></svg>
-    </button>
-
-    <button type="button" class="tool" disabled aria-disabled="true" aria-label="치수" title="다음 단계에서 연결">
+    <button type="button" class="tool" data-tool="measurements" aria-pressed="true" aria-label="치수" title="치수">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>치수</title><rect x="2" y="8" width="20" height="8" rx="1"/><path d="M7 8v3M12 8v4M17 8v3"/></svg>
     </button>
 
-    <button type="button" class="tool" disabled aria-disabled="true" aria-label="저장 / 데이터" title="다음 단계에서 연결">
+    <!-- 실제 기능은 기존 onclick(toggleDartMove)이 담당. JS(setBtn)가 textContent/inline
+         background를 덮으므로 자식 <svg> 대신 ::before 아이콘 + 텍스트 숨김.
+         aria-label은 ui.js가 실제 DOM 텍스트에서 파생해 동기화한다. -->
+    <button class="tool tool-dart" id="btnDartMove" data-tool="dart" onclick="toggleDartMove()" aria-pressed="false" aria-label="다트 이동 시작" title="다트 이동 시작">다트이동 시작</button>
+
+    <button type="button" class="tool" data-tool="curves" aria-pressed="false" aria-label="곡선 편집" title="곡선 편집">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>곡선 편집</title><path d="M3 18c4 0 6-12 10-12s5 6 8 6"/><circle cx="3" cy="18" r="1.5"/><circle cx="21" cy="12" r="1.5"/></svg>
+    </button>
+
+    <div class="rail-sep" aria-hidden="true"></div>
+
+    <button type="button" class="tool" data-tool="view" aria-pressed="false" aria-label="보기" title="보기">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>보기</title><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/></svg>
+    </button>
+
+    <button type="button" class="tool" data-tool="data" aria-pressed="false" aria-label="저장 / 데이터" title="저장 / 데이터">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>저장 / 데이터</title><path d="M4 4h12l4 4v12H4z"/><path d="M8 4v5h7"/><path d="M8 20v-6h8v6"/></svg>
     </button>
   </nav>
@@ -57,7 +60,7 @@
 
   <aside class="inspector" aria-label="속성">
 
-    <details class="insp" open>
+    <details class="insp" open data-panel="measurements">
       <summary>원형 · 치수</summary>
       <div class="insp-body">
         <div class="row"><label>B 가슴둘레</label><input type="number" id="inpB" value="83" step="0.5" oninput="markDirty(event)"></div>
@@ -73,7 +76,7 @@
       </div>
     </details>
 
-    <details class="insp">
+    <details class="insp" open data-panel="curves" hidden>
       <summary>곡선 편집</summary>
       <div class="insp-body">
         <div class="row"><label>진동선</label><button class="btn" id="btnArmEdit" onclick="toggleArmEdit()">편집 시작</button></div>
@@ -84,7 +87,7 @@
       </div>
     </details>
 
-    <details class="insp">
+    <details class="insp" open data-panel="view" hidden>
       <summary>보기</summary>
       <div class="insp-body">
         <div class="row seg" style="gap:4px">
@@ -102,7 +105,7 @@
       </div>
     </details>
 
-    <details class="insp">
+    <details class="insp" open data-panel="data" hidden>
       <summary>저장 / 데이터</summary>
       <div class="insp-body">
         <div class="row"><label>곡선 저장</label><button class="btn" onclick="saveCurveData()">저장</button></div>
@@ -114,18 +117,22 @@
       </div>
     </details>
 
-    <!-- 다트 작업 중에만 표시. 기존 setSideRowVisible 의 display "" / "none" 계약에 얹혀 있다. -->
-    <section class="context-strip" aria-label="다트 이동">
+    <!-- 다트 도구 선택 시 표시. idle/busy 는 ui.js 가 실제 DOM 에서 파생해 hidden 으로만
+         전환한다. 내부 앞/뒤 행은 기존 setSideRowVisible 의 display "" / "none" 계약 유지. -->
+    <section class="context-strip" aria-label="다트 이동" data-panel="dart" hidden>
       <div class="insp-title">다트 이동</div>
-      <div class="row" id="dartSideRow" style="display:none;gap:4px">
-        <button class="btn" id="btnDartSideFront" onclick="selectDartSide('front')">앞판</button>
-        <button class="btn" id="btnDartSideBack"  onclick="selectDartSide('back')">뒤판</button>
+      <p class="note" data-dart-idle>다트 이동 도구를 눌러 작업을 시작하세요.</p>
+      <div class="dart-busy" data-dart-busy hidden>
+        <div class="row" id="dartSideRow" style="display:none;gap:4px">
+          <button class="btn" id="btnDartSideFront" onclick="selectDartSide('front')">앞판</button>
+          <button class="btn" id="btnDartSideBack"  onclick="selectDartSide('back')">뒤판</button>
+        </div>
+        <div class="row" style="gap:4px">
+          <button class="btn action-primary" id="btnDartApply" onclick="applyDartMove()" disabled>적용</button>
+          <button class="btn" onclick="resetDartMove()">리셋</button>
+        </div>
+        <div class="row note" id="dartMoveHint"></div>
       </div>
-      <div class="row" style="gap:4px">
-        <button class="btn action-primary" id="btnDartApply" onclick="applyDartMove()" disabled>적용</button>
-        <button class="btn" onclick="resetDartMove()">리셋</button>
-      </div>
-      <div class="row note" id="dartMoveHint"></div>
     </section>
 
   </aside>
@@ -146,6 +153,8 @@
 <script>const DEBUG_DART_MOVE = false;</script>
 <script src="js/dartMove.js?v=2026070733"></script>
 <script src="js/init.js?v=2026070731"></script>
+<!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
+<script src="js/ui.js?v=2026072003"></script>
 
 </body>
 </html>

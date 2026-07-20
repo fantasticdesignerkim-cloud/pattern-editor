@@ -84,8 +84,9 @@ svg#cv{width:100%;height:100%;touch-action:none;background:transparent;display:b
 .brand-block{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
 .brand-sub{font-size:11px;color:var(--muted)}
 .stage-bar{display:flex;align-items:center;gap:2px}
-.stage{font:inherit;font-size:12px;font-weight:500;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 12px;line-height:1.2}
-.stage.is-active{color:var(--navy);background:color-mix(in srgb,var(--cyan) 16%,var(--surface));border-color:var(--cyan)}
+.stage{font:inherit;font-size:12px;font-weight:500;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 12px;line-height:1.2;cursor:pointer}
+.stage:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface))}
+.stage[aria-selected="true"]{color:var(--navy);background:color-mix(in srgb,var(--cyan) 16%,var(--surface));border-color:var(--cyan)}
 .stage:disabled{color:var(--muted);opacity:.45;cursor:default}
 .header-actions{margin-left:auto;display:flex;gap:6px}
 .header-actions .btn{width:auto;padding:5px 10px;white-space:nowrap}
@@ -94,7 +95,9 @@ svg#cv{width:100%;height:100%;touch-action:none;background:transparent;display:b
 .tool-rail{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0;background:var(--surface);border-right:1px solid var(--border)}
 .tool{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:transparent;color:var(--navy);border:1px solid transparent;border-radius:6px;cursor:pointer;padding:0}
 .tool:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface));border-color:var(--cyan)}
+.tool[aria-pressed="true"]:not(:disabled){background:color-mix(in srgb,var(--cyan) 16%,var(--surface));border-color:var(--cyan)}
 .tool:disabled{color:var(--muted);opacity:.4;cursor:default}
+.rail-sep{width:20px;height:1px;background:var(--border);margin:4px 0}
 /* btnDartMove 는 JS가 textContent/inline background 를 덮으므로 자식 대신 ::before 아이콘 */
 .tool-dart{font-size:0}
 .tool-dart::before{content:"";width:18px;height:18px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317376B' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 3 6 21M12 3l6 18'/%3E%3Cpath d='M8.2 15a6 6 0 0 0 7.6 0'/%3E%3C/svg%3E") center/contain no-repeat}
@@ -115,7 +118,9 @@ svg#cv{width:100%;height:100%;touch-action:none;background:transparent;display:b
 
 .statusbar{display:flex;align-items:center;gap:12px;height:22px;padding:0 10px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
 
-.context-strip{display:none;flex-direction:column;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--cyan) 6%,var(--surface))}
-.context-strip:has(#dartSideRow:not([style*="none"])){display:flex}
+/* 노출은 ui.js 가 hidden 으로 제어한다. display 를 author 규칙으로 주면 UA 의
+   [hidden] 이 밀리므로 :not([hidden]) 으로 한정한다. */
+.context-strip:not([hidden]){display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--cyan) 6%,var(--surface))}
+.dart-busy:not([hidden]){display:flex;flex-direction:column;gap:6px}
 .context-strip .btn{padding:6px 10px}
 .context-strip #dartMoveHint{min-width:0;font-size:11px;color:var(--muted);white-space:normal}
