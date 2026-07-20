@@ -4,94 +4,136 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026071903">
+<link rel="stylesheet" href="css/style.css?v=2026072001">
 </head>
 <body>
 
-<div class="topbar">
-  <div class="brand">DOROBO</div>
+<header class="app-header">
+  <div class="brand-block">
+    <span class="brand">DOROBO</span>
+    <span class="brand-sub">문화식 원형</span>
+  </div>
 
-  <button class="btn" id="btnDartMove" onclick="toggleDartMove()">다트이동 시작</button>
+  <nav class="stage-bar" aria-label="작업 단계">
+    <span class="stage is-active" aria-current="step">원형</span>
+    <button type="button" class="stage" disabled aria-disabled="true" title="다음 단계에서 연결">디자인</button>
+    <button type="button" class="stage" disabled aria-disabled="true" title="준비 중">재단</button>
+    <button type="button" class="stage" disabled aria-disabled="true" title="준비 중">출력</button>
+  </nav>
 
-  <details class="pop">
-    <summary>곡선 편집</summary>
-    <div class="pop-body">
-      <div class="row"><label>진동선 편집모드</label><button class="btn" id="btnArmEdit" onclick="toggleArmEdit()">편집 시작</button></div>
-      <div class="row"><label>네크라인 편집모드</label><button class="btn" id="btnNeckEdit" onclick="toggleNeckEdit()">편집 시작</button></div>
-      <div class="row"><label>소매산 편집모드</label><button class="btn" id="btnSleeveEdit" onclick="toggleSleeveEdit()">편집 시작</button></div>
-      <div class="row"><label>소매산 리셋</label><button class="btn" id="btnSleeveReset" onclick="resetSleeveAnchors()">소매산 리셋</button></div>
-      <div class="row"><label>곡선핸들 전체리셋</label><button class="btn" onclick="resetCurveHandles();render()">리셋</button></div>
-    </div>
-  </details>
+  <div class="header-actions">
+    <button class="btn" onclick="undoEdit()">실행취소</button>
+    <button class="btn" onclick="redoEdit()">다시실행</button>
+  </div>
+</header>
 
-  <details class="pop">
-    <summary>치수</summary>
-    <div class="pop-body">
-      <div class="row"><label>B 가슴둘레</label><input type="number" id="inpB" value="83" step="0.5" oninput="markDirty(event)"></div>
-      <div class="row"><label>W 허리둘레</label><input type="number" id="inpW" value="64" step="0.5" oninput="markDirty(event)"></div>
-      <div class="row"><label>BL 등길이</label><input type="number" id="inpBL" value="38" step="0.5" oninput="markDirty(event)"></div>
-      <div class="row"><label>소매길이</label><input type="number" id="inpSL" value="52" step="0.5" oninput="markDirty(event)"></div>
-      <div class="row"><label>소매단둘레</label><input type="number" id="inpHem" value="30" step="0.5" oninput="markDirty(event)"></div>
-      <div class="row"><label>소매산 공식</label><select id="selCapFormula" onchange="if(!isMeasureDirty) render()" style="width:96px;padding:5px;border:1px solid #ccc;border-radius:7px;font-size:12px;background:#fff"><option value="culture" selected>문화식</option><option value="recommended">추천식</option></select></div>
-      <div class="row"><label>소매산 보정</label><input type="range" id="inpCapAdj" min="-3" max="3" step="0.1" value="3" oninput="if(!isMeasureDirty) render()"><span class="slv" id="capAdjVal">0.0</span></div>
-      <div class="row"><label>다트 총량 (cm)</label><input type="number" id="inpDart" value="12.5" step="0.5" oninput="render()"></div>
-      <div class="row" id="dirtyState" style="font-size:11px;color:#888">패턴 생성 버튼을 누르세요</div>
-      <div class="row"><button class="btn action-primary" id="btnGenerate" onclick="generatePattern()">패턴 생성 / 다시 계산</button></div>
-    </div>
-  </details>
+<div class="workspace">
 
-  <details class="pop">
-    <summary>보기</summary>
-    <div class="pop-body">
-      <div class="row" style="gap:4px">
-        <button class="mode-btn active" id="modeAll" onclick="setWorkMode('all')">전체</button>
-        <button class="mode-btn" id="modeBody" onclick="setWorkMode('body')">몸판</button>
-        <button class="mode-btn" id="modeSleeve" onclick="setWorkMode('sleeve')">소매</button>
+  <nav class="tool-rail" aria-label="도구">
+    <!-- 실제 동작하는 유일한 도구. JS(setBtn)가 textContent/inline background를 덮으므로
+         자식 <svg>를 넣지 않고 ::before 아이콘 + 텍스트 숨김으로 처리한다. -->
+    <button class="tool tool-dart" id="btnDartMove" onclick="toggleDartMove()" aria-label="다트 이동" title="다트 이동">다트이동 시작</button>
+
+    <button type="button" class="tool" disabled aria-disabled="true" aria-label="곡선 편집" title="다음 단계에서 연결">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>곡선 편집</title><path d="M3 18c4 0 6-12 10-12s5 6 8 6"/><circle cx="3" cy="18" r="1.5"/><circle cx="21" cy="12" r="1.5"/></svg>
+    </button>
+
+    <button type="button" class="tool" disabled aria-disabled="true" aria-label="보기" title="다음 단계에서 연결">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>보기</title><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/></svg>
+    </button>
+
+    <button type="button" class="tool" disabled aria-disabled="true" aria-label="치수" title="다음 단계에서 연결">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>치수</title><rect x="2" y="8" width="20" height="8" rx="1"/><path d="M7 8v3M12 8v4M17 8v3"/></svg>
+    </button>
+
+    <button type="button" class="tool" disabled aria-disabled="true" aria-label="저장 / 데이터" title="다음 단계에서 연결">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>저장 / 데이터</title><path d="M4 4h12l4 4v12H4z"/><path d="M8 4v5h7"/><path d="M8 20v-6h8v6"/></svg>
+    </button>
+  </nav>
+
+  <main class="canvas-wrap">
+    <svg id="cv" xmlns="http://www.w3.org/2000/svg"></svg>
+  </main>
+
+  <aside class="inspector" aria-label="속성">
+
+    <details class="insp" open>
+      <summary>원형 · 치수</summary>
+      <div class="insp-body">
+        <div class="row"><label>B 가슴둘레</label><input type="number" id="inpB" value="83" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>W 허리둘레</label><input type="number" id="inpW" value="64" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>BL 등길이</label><input type="number" id="inpBL" value="38" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>소매길이</label><input type="number" id="inpSL" value="52" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>소매단둘레</label><input type="number" id="inpHem" value="30" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>소매산 공식</label><select id="selCapFormula" onchange="if(!isMeasureDirty) render()"><option value="culture" selected>문화식</option><option value="recommended">추천식</option></select></div>
+        <div class="row"><label>소매산 보정</label><input type="range" id="inpCapAdj" min="-3" max="3" step="0.1" value="3" oninput="if(!isMeasureDirty) render()"><span class="slv" id="capAdjVal">0.0</span></div>
+        <div class="row"><label>다트 총량 (cm)</label><input type="number" id="inpDart" value="12.5" step="0.5" oninput="render()"></div>
+        <div class="row note" id="dirtyState">패턴 생성 버튼을 누르세요</div>
+        <div class="row"><button class="btn action-primary" id="btnGenerate" onclick="generatePattern()">패턴 생성 / 다시 계산</button></div>
       </div>
-      <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="toggleLayer('layer-base',this.checked)"></div>
-      <div class="row"><label>허리다트</label><input type="checkbox" id="chkDartWaist" checked onchange="applyLayerVisibility()"></div>
-      <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="toggleLayer('layer-dim',this.checked)"></div>
-      <div class="row"><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
-      <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" checked onchange="toggleLayer('layer-points',this.checked)"></div>
-      <div class="row"><label>종속선</label><input type="checkbox" id="chkDep" checked onchange="toggleLayer('layer-dep',this.checked)"></div>
-      <div class="row"><button class="btn" onclick="resetView()">화면 초기화</button></div>
-    </div>
-  </details>
+    </details>
 
-  <div class="spacer"></div>
+    <details class="insp">
+      <summary>곡선 편집</summary>
+      <div class="insp-body">
+        <div class="row"><label>진동선</label><button class="btn" id="btnArmEdit" onclick="toggleArmEdit()">편집 시작</button></div>
+        <div class="row"><label>네크라인</label><button class="btn" id="btnNeckEdit" onclick="toggleNeckEdit()">편집 시작</button></div>
+        <div class="row"><label>소매산</label><button class="btn" id="btnSleeveEdit" onclick="toggleSleeveEdit()">편집 시작</button></div>
+        <div class="row"><label>소매산 리셋</label><button class="btn" id="btnSleeveReset" onclick="resetSleeveAnchors()">소매산 리셋</button></div>
+        <div class="row"><label>곡선핸들 전체리셋</label><button class="btn" onclick="resetCurveHandles();render()">리셋</button></div>
+      </div>
+    </details>
 
-  <button class="btn" onclick="undoEdit()">실행취소</button>
-  <button class="btn" onclick="redoEdit()">다시실행</button>
+    <details class="insp">
+      <summary>보기</summary>
+      <div class="insp-body">
+        <div class="row seg" style="gap:4px">
+          <button class="mode-btn active" id="modeAll" onclick="setWorkMode('all')">전체</button>
+          <button class="mode-btn" id="modeBody" onclick="setWorkMode('body')">몸판</button>
+          <button class="mode-btn" id="modeSleeve" onclick="setWorkMode('sleeve')">소매</button>
+        </div>
+        <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="toggleLayer('layer-base',this.checked)"></div>
+        <div class="row"><label>허리다트</label><input type="checkbox" id="chkDartWaist" checked onchange="applyLayerVisibility()"></div>
+        <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="toggleLayer('layer-dim',this.checked)"></div>
+        <div class="row"><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
+        <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" checked onchange="toggleLayer('layer-points',this.checked)"></div>
+        <div class="row"><label>종속선</label><input type="checkbox" id="chkDep" checked onchange="toggleLayer('layer-dep',this.checked)"></div>
+        <div class="row"><button class="btn" onclick="resetView()">화면 초기화</button></div>
+      </div>
+    </details>
 
-  <details class="pop pop-right">
-    <summary>저장/데이터</summary>
-    <div class="pop-body">
-      <div class="row"><label>곡선 저장</label><button class="btn" onclick="saveCurveData()">저장</button></div>
-      <div class="row"><label>마지막 저장선</label><button class="btn" onclick="loadSavedCurveForCurrentMeasurements(true)">불러오기</button></div>
-      <div class="row" id="saveCount" style="font-size:11px;color:#888">저장 0건</div>
-      <div class="row"><label>데이터 내보내기</label><button class="btn" onclick="exportData()">JSON 다운로드</button></div>
-      <div class="row"><label>데이터 가져오기</label><input type="file" id="inpImportData" accept="application/json,.json" style="display:none" onchange="importDataFromFile(this)"><button class="btn" onclick="document.getElementById('inpImportData').click()">JSON 불러오기</button></div>
-      <div class="row"><label>패턴 내보내기</label><button class="btn" onclick="exportDXF()">DXF 다운로드</button></div>
-    </div>
-  </details>
+    <details class="insp">
+      <summary>저장 / 데이터</summary>
+      <div class="insp-body">
+        <div class="row"><label>곡선 저장</label><button class="btn" onclick="saveCurveData()">저장</button></div>
+        <div class="row"><label>마지막 저장선</label><button class="btn" onclick="loadSavedCurveForCurrentMeasurements(true)">불러오기</button></div>
+        <div class="row note" id="saveCount">저장 0건</div>
+        <div class="row"><label>데이터 내보내기</label><button class="btn" onclick="exportData()">JSON 다운로드</button></div>
+        <div class="row"><label>데이터 가져오기</label><input type="file" id="inpImportData" accept="application/json,.json" style="display:none" onchange="importDataFromFile(this)"><button class="btn" onclick="document.getElementById('inpImportData').click()">JSON 불러오기</button></div>
+        <div class="row"><label>패턴 내보내기</label><button class="btn" onclick="exportDXF()">DXF 다운로드</button></div>
+      </div>
+    </details>
+
+    <!-- 다트 작업 중에만 표시. 기존 setSideRowVisible 의 display "" / "none" 계약에 얹혀 있다. -->
+    <section class="context-strip" aria-label="다트 이동">
+      <div class="insp-title">다트 이동</div>
+      <div class="row" id="dartSideRow" style="display:none;gap:4px">
+        <button class="btn" id="btnDartSideFront" onclick="selectDartSide('front')">앞판</button>
+        <button class="btn" id="btnDartSideBack"  onclick="selectDartSide('back')">뒤판</button>
+      </div>
+      <div class="row" style="gap:4px">
+        <button class="btn action-primary" id="btnDartApply" onclick="applyDartMove()" disabled>적용</button>
+        <button class="btn" onclick="resetDartMove()">리셋</button>
+      </div>
+      <div class="row note" id="dartMoveHint"></div>
+    </section>
+
+  </aside>
 </div>
 
-<div class="context-strip">
-  <div class="row" id="dartSideRow" style="display:none;gap:4px">
-    <button class="btn" id="btnDartSideFront" onclick="selectDartSide('front')">앞판</button>
-    <button class="btn" id="btnDartSideBack"  onclick="selectDartSide('back')">뒤판</button>
-  </div>
-  <div class="row" style="gap:4px">
-    <button class="btn action-primary" id="btnDartApply" onclick="applyDartMove()" disabled>적용</button>
-    <button class="btn" onclick="resetDartMove()">리셋</button>
-  </div>
-  <div class="row" id="dartMoveHint"></div>
-</div>
-
-<div class="canvas-wrap">
-  <svg id="cv" xmlns="http://www.w3.org/2000/svg"></svg>
+<footer class="statusbar">
   <div class="sb" id="sb"></div>
-</div>
+</footer>
 
 <!-- JS 파일 순서 중요: 의존성 순서대로 로드 -->
 <script src="js/state.js?v=2026070731"></script>

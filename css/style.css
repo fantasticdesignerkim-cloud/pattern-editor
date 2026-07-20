@@ -13,9 +13,9 @@ body{font-family:-apple-system,sans-serif;background:var(--surface);color:var(--
 .action-primary{background:var(--orange);color:#fff;border-color:var(--orange)}
 .action-primary:not(:disabled):hover{background:color-mix(in srgb,var(--orange) 88%,#000);border-color:color-mix(in srgb,var(--orange) 88%,#000)}
 hr{border:none;border-top:1px solid #eee;margin:2px 0}
-.canvas-wrap{flex:1;position:relative;overflow:hidden;background-color:var(--canvas)}
+.canvas-wrap{flex:1;position:relative;overflow:hidden;background-color:var(--canvas);min-width:0;min-height:0}
 svg#cv{width:100%;height:100%;touch-action:none;background:transparent;display:block}
-.sb{position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,.92);border-top:1px solid var(--border);font-size:11px;color:var(--muted);padding:4px 10px;white-space:nowrap;overflow:hidden}
+.sb{flex:1;min-width:0;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .grid-m{stroke:var(--grid-minor);stroke-width:0.5}
 .grid-M{stroke:var(--grid-major);stroke-width:0.9}
 .base{stroke:#888;stroke-width:0.9;fill:none}
@@ -79,8 +79,43 @@ svg#cv{width:100%;height:100%;touch-action:none;background:transparent;display:b
 .pop-body{position:absolute;top:calc(100% + 6px);left:0;z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;width:248px;display:flex;flex-direction:column;gap:8px;box-shadow:0 4px 14px rgba(23,55,107,.10)}
 .pop-right .pop-body{left:auto;right:0}
 
-.context-strip{display:none;position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:15;align-items:center;gap:10px;padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 14px rgba(23,55,107,.12)}
+/* ── CAD workspace shell (S2) ── */
+.app-header{display:flex;align-items:center;gap:16px;height:44px;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.brand-block{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.brand-sub{font-size:11px;color:var(--muted)}
+.stage-bar{display:flex;align-items:center;gap:2px}
+.stage{font:inherit;font-size:12px;font-weight:500;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 12px;line-height:1.2}
+.stage.is-active{color:var(--navy);background:color-mix(in srgb,var(--cyan) 16%,var(--surface));border-color:var(--cyan)}
+.stage:disabled{color:var(--muted);opacity:.45;cursor:default}
+.header-actions{margin-left:auto;display:flex;gap:6px}
+.header-actions .btn{width:auto;padding:5px 10px;white-space:nowrap}
+
+.workspace{flex:1;min-height:0;display:grid;grid-template-columns:46px minmax(0,1fr) 280px}
+.tool-rail{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0;background:var(--surface);border-right:1px solid var(--border)}
+.tool{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:transparent;color:var(--navy);border:1px solid transparent;border-radius:6px;cursor:pointer;padding:0}
+.tool:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface));border-color:var(--cyan)}
+.tool:disabled{color:var(--muted);opacity:.4;cursor:default}
+/* btnDartMove 는 JS가 textContent/inline background 를 덮으므로 자식 대신 ::before 아이콘 */
+.tool-dart{font-size:0}
+.tool-dart::before{content:"";width:18px;height:18px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317376B' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 3 6 21M12 3l6 18'/%3E%3Cpath d='M8.2 15a6 6 0 0 0 7.6 0'/%3E%3C/svg%3E") center/contain no-repeat}
+
+.inspector{background:var(--surface);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.insp{border-bottom:1px solid var(--border)}
+.insp>summary{list-style:none;cursor:pointer;font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.04em;padding:8px 12px;user-select:none}
+.insp>summary::-webkit-details-marker{display:none}
+.insp>summary::marker{content:""}
+.insp>summary::after{content:"\25BE";float:right;font-size:9px;color:var(--muted)}
+.insp[open]>summary{color:var(--navy)}
+.insp-body{display:flex;flex-direction:column;gap:8px;padding:2px 12px 12px}
+.insp-body .row label{white-space:nowrap}
+.insp-body .row label~.btn{width:auto;padding:5px 10px;white-space:nowrap}
+.insp-title{font-size:11px;font-weight:500;color:var(--navy);letter-spacing:.04em}
+.note{font-size:11px;color:var(--muted)}
+.row select{width:96px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--navy)}
+
+.statusbar{display:flex;align-items:center;gap:12px;height:22px;padding:0 10px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+
+.context-strip{display:none;flex-direction:column;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--cyan) 6%,var(--surface))}
 .context-strip:has(#dartSideRow:not([style*="none"])){display:flex}
-.context-strip .row{width:auto}
-.context-strip .btn{width:auto;padding:6px 12px;white-space:nowrap}
-.context-strip #dartMoveHint{min-width:0;font-size:11px;color:var(--muted)}
+.context-strip .btn{padding:6px 10px}
+.context-strip #dartMoveHint{min-width:0;font-size:11px;color:var(--muted);white-space:normal}
