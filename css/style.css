@@ -13,8 +13,8 @@ body{font-family:-apple-system,sans-serif;background:var(--surface);color:var(--
 .action-primary{background:var(--orange);color:#fff;border-color:var(--orange)}
 .action-primary:not(:disabled):hover{background:color-mix(in srgb,var(--orange) 88%,#000);border-color:color-mix(in srgb,var(--orange) 88%,#000)}
 hr{border:none;border-top:1px solid #eee;margin:2px 0}
-.canvas-wrap{flex:1;position:relative;overflow:hidden;background-color:var(--canvas);min-width:0;min-height:0}
-svg#cv{width:100%;height:100%;touch-action:none;background:transparent;display:block}
+.canvas-wrap{flex:1;position:relative;overflow:hidden;background-color:var(--canvas);min-width:0;min-height:0;display:flex;flex-direction:column}
+svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;display:block}
 .sb{flex:1;min-width:0;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .grid-m{stroke:var(--grid-minor);stroke-width:0.5}
 .grid-M{stroke:var(--grid-major);stroke-width:0.9}
@@ -98,6 +98,16 @@ svg#cv{width:100%;height:100%;touch-action:none;background:transparent;display:b
 .tool[aria-pressed="true"]:not(:disabled){background:color-mix(in srgb,var(--cyan) 16%,var(--surface));border-color:var(--cyan)}
 .tool:disabled{color:var(--muted);opacity:.4;cursor:default}
 .rail-sep{width:20px;height:1px;background:var(--border);margin:4px 0}
+
+/* 캔버스 상단 툴바: SVG 를 덮지 않고 형제로 앉는다 */
+.canvas-toolbar{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.canvas-toolbar .seg{display:flex;gap:4px}
+.canvas-toolbar .mode-btn{flex:0 0 auto;padding:4px 12px}
+.canvas-toolbar .btn{width:auto;padding:4px 12px;white-space:nowrap}
+
+/* 파일 메뉴 잠금 표시 (summary 에는 disabled 속성이 없다) */
+.pop>summary[aria-disabled="true"]{opacity:.45;cursor:default}
+.pop>summary[aria-disabled="true"]:hover{background:transparent}
 /* btnDartMove 는 JS가 textContent/inline background 를 덮으므로 자식 대신 ::before 아이콘 */
 .tool-dart{font-size:0}
 .tool-dart::before{content:"";width:18px;height:18px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317376B' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 3 6 21M12 3l6 18'/%3E%3Cpath d='M8.2 15a6 6 0 0 0 7.6 0'/%3E%3C/svg%3E") center/contain no-repeat}
