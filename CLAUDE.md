@@ -1586,6 +1586,125 @@ S0 DOM 조사·기준선 ✅ → **S1 CLAUDE.md 결정 기록** → S2 정적 CA
 접근 가능 유지) → S3 `js/ui.js` 상태 함수·점진적 공개 → S4 기존 기능을 도구별 연결 →
 S5 다트 inspector → S6 좁은 화면 → S7 실사용 검증 후 옛 UI 정리.
 
+## ✅ CAD workspace S0~S7 완료 (2026-07) — 위 채택 섹션의 완료 기록
+
+위 "컨텍스추얼 CAD workspace 채택"에서 확정한 방향이 **전부 구현됐다**. 아래는 과정
+일지가 아니라 **확정된 결정·불변식·경계**다. 채택 섹션의 불변식은 그대로 유효하며,
+이 섹션은 그것이 실제로 어떤 형태로 코드에 고정됐는지를 기록한다.
+
+| 단계 | 내용 | 커밋 |
+|---|---|---|
+| S0 | DOM id → JS 의존성 전수조사와 기준선 (문서화만) | — |
+| S1 | 방향·불변식 문서화 | `412acfb` Adopt contextual CAD workspace direction |
+| S2 | 정적 CAD shell (기존 기능 전부 접근 가능 유지) | `8d75f99` Build static contextual CAD workspace shell |
+| S3 | 중앙 UI 노출 상태 (`js/ui.js`) | `809bc77` Centralize contextual CAD workspace visibility |
+| S4 | 기능을 올바른 표면에 배치 | `ba5604c` Place CAD utilities in their correct workspace surfaces |
+| S5 | 읽기 전용 다트 inspector | `854359e` Expose a minimal read-only dart inspector snapshot |
+| S6 | 좁은 화면 대응 | `29111e0` Adapt the CAD workspace for narrow screens |
+| S7 | **증명된** dead CSS만 제거 | `e116845` Remove proven-dead legacy UI styles |
+
+### 최종 레이아웃
+
+- **상단**: `DOROBO` + 정적 `문화식 원형` / 수동 stage(`원형`·`디자인`) / `보기`·`파일`
+  팝오버 / **곡선 편집 전용** undo·redo.
+- **왼쪽 tool rail**: 실제 캔버스 상호작용 모드를 가진 **다트·곡선 둘만**.
+- **중앙**: canvas toolbar(`전체`/`몸판`/`소매`, `화면 초기화`) + `svg#cv`.
+  toolbar 는 **overlay 가 아니라 svg 의 형제**다.
+- **오른쪽 inspector**: 현재 stage/tool 의 패널만.
+- **하단**: 기존 `#sb` 상태바.
+- **모바일 ≤615px**: 2행 header → 가로 tool bar → canvas → **일반 레이아웃 하단**
+  inspector. **fixed/absolute overlay bottom sheet 를 만들지 않는다.**
+
+### UI 상태 불변식 (위반 금지)
+
+- `uiState` 는 **`stage` + `tool` 두 값이 전부**다. `stage ∈ {draft, design}`,
+  `tool ∈ {null, dart, curves}`.
+- `measurements` 는 상태가 아니라 **draft stage 에서 파생**된다(`activePanel()`).
+- **`보기`·`파일`은 tool 이 아니라 상단 utility** 다 — tool rail 에 넣지 않는다.
+- `재단`·`출력` stage 는 `disabled` + `aria-disabled="true"` + tooltip `준비 중`.
+- **절개 / 길이 측정 / PDF / snap / grid on-off / fit / zoom 버튼 / 좌표 상태 표시는
+  미구현이며 미노출**이다. 빈 패널·가짜 수치·동작하지 않는 버튼을 만들지 않는다.
+- **자동 stage 진행·완료 체크·진척도 모델 없음.** stage 는 수동 전환만.
+- `innerHTML` 재생성 없음 — `hidden`/`disabled`/`aria-*`/`textContent` 만 갱신한다.
+- 기존 DOM **id 42개**와 **inline handler 37개** 계약 유지.
+- 중앙 UI 함수는 `js/ui.js` 한 파일의 4개뿐: `setWorkspaceStage` / `setActiveTool` /
+  `updateContextInspector` / `updateContextActions`.
+
+### busy 안전성
+
+- **dart/curve 의 "작업 중"을 별도 상태로 저장하지 않는다** — 매번 실제 DOM 에서
+  파생한다(`btnDartMove` 텍스트, `dartSideRow` 의 display, 편집 버튼 텍스트).
+  저장하면 엔진과 UI 두 곳에 진실이 생겨 반드시 어긋난다.
+- busy 중에는 **stage 전환과 다른 tool 전환을 차단**하고 **현재 inspector 를 유지**한다.
+- busy 중 **`보기`는 허용**(레이어 확인은 작업 중에도 필요), **`파일` 메뉴는 차단**.
+- **UI 가 엔진 함수를 호출해 작업을 강제 종료하지 않는다** — 노출만 바꾼다.
+  MutationObserver 는 `btnDartMove` 와 `dartMoveHint` **두 곳뿐**(document 전역 금지).
+
+### 다트 inspector 경계 — `getDartMoveUiSnapshot()`
+
+**11키**: `active`, `side`, `stepKey`, `viaSourceNotch`, `budgetRad`,
+`sourceApertureBeforeRad`, `maxReachableRad`, `userAngleRad`, `openWidthCm`,
+`valid`, `reasons`.
+
+불변식:
+- 매 호출 **새 plain object**, `reasons` 는 **복사본**.
+- `shape` / `evalCtx` / `segments` / `pieces` 를 **노출하지 않는다**.
+- getter 는 `bake`/`normalize`/`evaluateEndpoint` 를 **추가로 호출하지 않는다**
+  (이미 계산된 `dartMoveState` 를 읽기만).
+- UI 는 snapshot 을 **저장하지 않고 그 순간 읽는다**.
+- gen-0(sourceNotch 없음)은 `새 다트 생성` 문구 하나만.
+  `sourceNotch` 경로에서만 **소스 다트각**을 표시한다.
+- 표시 항목: **이동 가능각** / **회전량(deg + cm)** / **전체 다트각**.
+
+**★ `sourceApertureAfterRad` / `newNotchRad` 를 공개 snapshot 과 UI 에서 제외한 이유**:
+이 둘은 source **identity 추적이 아니라 "열린 노치 중 최근접 각도"를 고르는 진단
+휴리스틱**이다. 소스가 완전히 닫히면(잔여 mouth < `EPS_CLOSED_DART`) normalize 가
+그 노치를 지우므로 휴리스틱이 **새 노치를 소스로 잘못 집어낸다**(실측: 진실 0° 인데
+9.125° 로 보고). **엔진 결함이 아니라, 진단값을 제품 수치로 승격하지 않겠다는 결정**이다.
+따라서 **잔여각·이동된 각은 표시하지 않는다.** 필요해지면 휴리스틱을 고치는 게 아니라
+notch identity 를 실제로 추적하는 설계가 먼저다.
+
+### 반응형 계약
+
+- **breakpoint 는 실측 임계 `@media (max-width:615px)` 하나뿐**이다(데스크톱 header
+  콘텐츠 최소폭 616px). **616px 부터 데스크톱**, 615px 부터 모바일.
+- 모바일 **터치 타깃 최소 40px**(데스크톱 밀도는 불변 — media query 안에서만 확대).
+- inspector 는 overlay 가 아니라 **일반 그리드 행**이고 **내부만 스크롤**한다
+  (문서 이중 스크롤 없음).
+- **320×568 에서 SVG 높이 190px** 확보.
+- canvas toolbar 와 SVG 는 겹치지 않는다: `toolbar.bottom === svg.top`.
+- **`svgPt` 및 `c2p`/`p2c_` 좌표 계약 유지**(전 viewport 왕복 오차 0 실측).
+
+### 계속 유지되는 기존 계약
+
+- **엔진 무변경**: dartMove 의 계산·split·bake·normalize·검증 로직을 UI 작업으로
+  건드리지 않는다. **엔진 변경과 UI 변경을 같은 커밋에 섞지 않는다.**
+- **shape/perf 골든 무변경** (S0~S7 전 구간 diff 0).
+- **SVG 격자는 `render.js` 가 만드는 한 벌만** 쓴다(CSS 배경 격자 금지 — 두 벌이면
+  줌·이동에서 어긋난다).
+- **저장 기능 테스트는 격리 origin(`127.0.0.1:8420`) 또는 Node VM 에서만.**
+  실제 사용자 origin 에서 `saveCurveData`/`autoSaveCurveData`/`import*` **실행 금지**.
+- `armhole_data_2026-07-16.json` 은 **권위 백업**이며 **미추적 보존**. `AGENTS.md` 도
+  미추적 보존. 둘 다 커밋하지 않는다.
+
+### 알려진 한계 (기능이 없는 것이지 버그가 아니다)
+
+- **undo/redo 는 곡선 핸들 편집 전용**이다(`pushUndoSnapshot` 이 편집모드에서만 호출).
+  다트 이동은 undo 대상이 아니다.
+- **`화면 초기화`는 고정 view reset 이고 fit 이 아니다** — 패턴에 맞춰 맞추지 않는다.
+- **zoom 은 휠/핀치만** 있고 **버튼이 없다**.
+- **snap 없음**, **grid on/off 없음**.
+- **상태바의 좌표·줌·선택 상태 표시 미구현**(`#sb` 는 치수 요약만).
+- **`재단`·`출력` stage 와 절개·길이 측정·PDF 미구현.**
+- 위 항목들은 **자동 착수 금지** — 실제 사용에서 필요가 확인되고 별도 승인이 있을 때만.
+
+### 다음 작업
+
+- **UI 기능 추가가 아니라 실제 사용 검증.** 김이 직접 써 보고 **반복적으로 확인되는
+  불편만** 후속 수정한다. 새 UI 부품을 선제적으로 추가하지 않는다.
+- 이전 후보인 **"뒤어깨선 정리 + 앞/뒤 어깨 길이 맞춤"은 자동 착수 금지** —
+  별도 조사·설계 승인 후 진행한다.
+
 ## 다음에 확인할 것 (열려있는 이슈)
 
 - **✅ (완료, 2026-07-08) `normalizeBakedSegments`** — 위 "normalizeBakedSegments 구현"
