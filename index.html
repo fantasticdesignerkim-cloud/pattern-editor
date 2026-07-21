@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026072006">
+<link rel="stylesheet" href="css/style.css?v=2026072007">
 </head>
 <body>
 
@@ -26,7 +26,7 @@
     <button class="btn" onclick="undoEdit()" aria-label="곡선 편집 실행취소" title="곡선 편집 실행취소">실행취소</button>
     <button class="btn" onclick="redoEdit()" aria-label="곡선 편집 다시실행" title="곡선 편집 다시실행">다시실행</button>
 
-    <details class="pop" data-menu="view">
+    <details class="pop pop-right" data-menu="view">
       <summary aria-label="보기 메뉴" title="보기">보기</summary>
       <div class="pop-body">
         <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="toggleLayer('layer-base',this.checked)"></div>

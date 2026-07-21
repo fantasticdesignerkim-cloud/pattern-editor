@@ -137,5 +137,42 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* hidden 속성이 author 규칙(.row{display:flex} 등)에 밀리지 않도록 마지막에 한 번 선언.
    `:not([hidden])` 로 표시를 정의한 규칙들과는 서로 매치 조건이 배타적이라 충돌하지 않는다. */
 [hidden]{display:none}
+
+/* ── 좁은 화면 (S6) ────────────────────────────────────────────
+   breakpoint 는 하나뿐이다. 615px 는 실측값 — 데스크톱 header 의 콘텐츠 최소폭이
+   616px 라 615 부터 문서 가로 스크롤이 생긴다(캔버스 최소폭 제약 548px 도 함께 해소).
+   DOM 순서·JS·상태 추가 없이 grid 배치와 표시 규칙만 바꾼다. */
+@media (max-width:615px){
+  /* header: DOM 순서(brand → stage → actions)를 그대로 두고 grid-area 로만 2행 구성.
+     1행 = DOROBO | 보기·파일·undo·redo, 2행 = stage bar 전체 폭. */
+  .app-header{display:grid;grid-template-columns:auto minmax(0,1fr);
+    grid-template-areas:"brand actions" "stage stage";
+    height:auto;row-gap:2px;padding:4px 8px;position:relative}
+  .brand-block{grid-area:brand}
+  .brand-sub{display:none}                    /* 정적 보조문구만 숨김 (DOROBO 는 유지) */
+  .header-actions{grid-area:actions;justify-self:end;margin-left:0;gap:4px}
+  .header-actions .btn{padding:5px 7px}
+  .stage-bar{grid-area:stage}
+  .stage{padding:5px 8px}
+
+  /* workspace: 1열 3행. DOM 순서 그대로 tool bar → canvas → inspector */
+  .workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  .tool-rail{flex-direction:row;width:auto;padding:4px 6px;
+    border-right:0;border-bottom:1px solid var(--border)}
+
+  /* inspector: overlay 가 아니라 일반 하단 행. 내부만 스크롤(문서 이중 스크롤 없음) */
+  .inspector{border-left:0;border-top:1px solid var(--border);
+    height:clamp(180px,32vh,260px);min-height:0;overflow-y:auto}
+
+  /* 팝오버: .pop 을 static 으로 두면 절대위치 기준이 .app-header(=viewport 폭)가 되어
+     좌우 8px 인셋만으로 화면 안에 들어온다. 새 JS·새 상태 없음. */
+  .pop{position:static}
+  .pop-body,.pop-right .pop-body{left:8px;right:8px;width:auto;top:100%}
+
+  /* 터치 타깃: 모바일에서만 40px 확보 (데스크톱 밀도 불변) */
+  .tool{min-width:40px;min-height:40px}
+  .stage,.mode-btn,.pop>summary{min-height:40px}
+  .context-strip .btn{min-height:40px}
+}
 .context-strip .btn{padding:6px 10px}
 .context-strip #dartMoveHint{min-width:0;font-size:11px;color:var(--muted);white-space:normal}
