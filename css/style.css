@@ -12,7 +12,6 @@ body{font-family:-apple-system,sans-serif;background:var(--surface);color:var(--
 .btn:disabled{opacity:.45;cursor:default}
 .action-primary{background:var(--orange);color:#fff;border-color:var(--orange)}
 .action-primary:not(:disabled):hover{background:color-mix(in srgb,var(--orange) 88%,#000);border-color:color-mix(in srgb,var(--orange) 88%,#000)}
-hr{border:none;border-top:1px solid #eee;margin:2px 0}
 .canvas-wrap{flex:1;position:relative;overflow:hidden;background-color:var(--canvas);min-width:0;min-height:0;display:flex;flex-direction:column}
 svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;display:block}
 .sb{flex:1;min-width:0;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -28,11 +27,6 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .pt-dep{fill:#8a5cf6;stroke:white;stroke-width:1.2}
 .pt-main{fill:#cc3333;stroke:white;stroke-width:1.2}
 .dart{stroke:#cc3333;stroke-width:1.4;fill:none}
-.dart-b{stroke:#0F6E56;stroke-width:1.4;fill:none}
-.dart-c{stroke:#185FA5;stroke-width:1.4;fill:none}
-.dart-d{stroke:#9933cc;stroke-width:1.4;fill:none}
-.dart-e{stroke:#ff8800;stroke-width:1.4;fill:none}
-.dart-f{stroke:#111;stroke-width:1.4;fill:none}
 .dart-guide{stroke:#aaa;stroke-width:.8;stroke-dasharray:4,3;fill:none}
 .dart-waist{stroke:#e07800;stroke-width:1.4;fill:none}
 .dart-struct{stroke:#cc3333;stroke-width:1.4;fill:none}
@@ -63,9 +57,7 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .txt-dark{font-size:9px;fill:#333;font-weight:700}
 
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */
-.topbar{display:flex;align-items:center;gap:8px;padding:0 12px;height:44px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;position:relative;z-index:20}
 .brand{font-weight:600;color:var(--navy);font-size:15px;letter-spacing:.06em;white-space:nowrap;margin-right:8px}
-.topbar>.btn{width:auto;padding:6px 12px;white-space:nowrap}
 .spacer{flex:1}
 
 .pop{position:relative}
@@ -97,7 +89,6 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .tool:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface));border-color:var(--cyan)}
 .tool[aria-pressed="true"]:not(:disabled){background:color-mix(in srgb,var(--cyan) 16%,var(--surface));border-color:var(--cyan)}
 .tool:disabled{color:var(--muted);opacity:.4;cursor:default}
-.rail-sep{width:20px;height:1px;background:var(--border);margin:4px 0}
 
 /* 캔버스 상단 툴바: SVG 를 덮지 않고 형제로 앉는다 */
 .canvas-toolbar{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
