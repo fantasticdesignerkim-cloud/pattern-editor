@@ -130,6 +130,51 @@
   function refresh() {
     updateContextActions();
     updateContextInspector();
+    updateDartInspector();
+  }
+
+  // ── 다트 inspector 표시 ───────────────────────
+  // 엔진 스냅샷을 **그 순간 읽기만** 한다. uiState 에 저장하지 않는다.
+  const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  const setShown = (id, on) => { const el = document.getElementById(id); if (el) el.hidden = !on; };
+
+  // 크기만 표기(부호는 사용자에게 노출하지 않음), 소수 2자리에서 불필요한 0 제거
+  function degText(rad) {
+    if (rad == null) return "—";
+    let t = (Math.abs(rad) * 180 / Math.PI).toFixed(2);
+    if (t.indexOf(".") >= 0) t = t.replace(/0+$/, "").replace(/\.$/, "");
+    return (t === "" ? "0" : t) + "°";
+  }
+
+  function stepLabel(s) {
+    if (!s.active) return "대기";
+    if (!s.side) return "앞판 / 뒤판 선택";
+    if (s.valid === false) return "회전 · 적용 불가";
+    if (s.stepKey === "selectCut") return "절개 위치 선택";
+    if (s.stepKey === "selectPiece") return "조각 선택";
+    if (s.stepKey === "drag") return s.valid === null ? "회전 준비" : "회전";
+    return "대기";
+  }
+
+  function updateDartInspector() {
+    if (typeof getDartMoveUiSnapshot !== "function") return;
+    const s = getDartMoveUiSnapshot();
+    const ready = s.maxReachableRad != null;          // 조각 선택 이후에만 수치가 존재
+
+    setText("dartPropSide", s.side === "front" ? "앞판" : s.side === "back" ? "뒤판" : "—");
+    setText("dartPropStep", stepLabel(s));
+    setText("dartPropRange",  ready ? "0–" + degText(s.maxReachableRad) : "—");
+    setText("dartPropBudget", s.budgetRad == null ? "—" : degText(s.budgetRad));
+    setText("dartPropRotation", !ready ? "—"
+      : degText(s.userAngleRad) + (s.openWidthCm == null ? "" : " · " + s.openWidthCm.toFixed(1) + "cm"));
+
+    // 소스 다트각은 sourceNotch 경로에서만(이동 전 확정값). gen-0 은 보조 문구 하나만.
+    // "이동된 각 / 잔여각"은 엔진 metrics 가 최근접 휴리스틱이라 완전 이동에서 틀리므로
+    // 표시하지 않는다(S5 조사 결론 C).
+    const src = s.viaSourceNotch;
+    setShown("dartPropSourceRow", src && s.sourceApertureBeforeRad != null);
+    setShown("dartPropNewNote",   ready && !src);
+    if (src) setText("dartPropSource", degText(s.sourceApertureBeforeRad));
   }
 
   // ── btnDartMove 라벨: 별도 boolean 없이 실제 DOM 텍스트에서 파생 ──
@@ -163,11 +208,19 @@
         if ((e.key === "Enter" || e.key === " ") && busyTool()) e.preventDefault();
       });
     }
-    // MutationObserver 는 btnDartMove 하나에만 (attributes 는 관찰하지 않아 루프 없음).
+    // MutationObserver 는 두 곳에만 (attributes 는 관찰하지 않아 루프 없음):
+    //  · btnDartMove — 시작/취소/적용 전이
+    //  · dartMoveHint — 절개 위치·조각 선택·드래그 (setHint 가 매 전이/드래그마다 호출)
+    // polling·rAF 루프·document 전역 Observer 는 쓰지 않는다.
     const dart = document.getElementById("btnDartMove");
     if (dart) {
       new MutationObserver(refresh)
         .observe(dart, { childList: true, characterData: true, subtree: true });
+    }
+    const hint = document.getElementById("dartMoveHint");
+    if (hint) {
+      new MutationObserver(updateDartInspector)
+        .observe(hint, { childList: true, characterData: true, subtree: true });
     }
   }
 

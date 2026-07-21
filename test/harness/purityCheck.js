@@ -268,6 +268,167 @@ for (const call of ["startDartMove()", "cancelDartMove()", "selectDartSide('back
 console.log(`  [4]mismatch [5]evalCtx=null [6]invalid(reasons) [4b]missing → 전부 commit 0·bake 0·상태 유지`);
 console.log(`  [7] apply성공/reset/start/cancel/selectSide 전이 후 evaluation=null`);
 
+// ══════════════════════════════════════════════
+// (S5) getDartMoveUiSnapshot 읽기 전용 계약
+//  UI가 엔진 내부를 소유하지 않고 "그 순간 읽기만" 하는지 못박는다.
+// ══════════════════════════════════════════════
+console.log("\n── S5: getDartMoveUiSnapshot 읽기 전용 계약 ──");
+
+const snapOf = (context) => JSON.parse(vm.runInContext("JSON.stringify(getDartMoveUiSnapshot())", context));
+const SNAP_KEYS = ["active","side","stepKey","viaSourceNotch","budgetRad","sourceApertureBeforeRad",
+  "maxReachableRad","userAngleRad","openWidthCm","valid","reasons"];
+// 내부 참조 금지 + 진단용 최근접 휴리스틱 금지.
+// sourceApertureAfterRad / newNotchRad 는 신원 추적이 아니라 "열린 노치 중 기대값에 가장
+// 가까운 것"이라, 소스가 완전히 닫히면 새 노치를 집어 값이 틀린다 → 공개 계약에서 제외.
+const FORBIDDEN = ["shape","evaluation","evalCtx","segments","pieces","candidate","fixedSegs","rotateSegs",
+  "pieceA","pieceB","metrics","cutPoint","pivot","sourceApertureAfterRad","newNotchRad"];
+
+// [S5-1] idle 스냅샷 (아무 것도 시작하지 않은 엔진)
+{
+  const { engine, context } = createEngine();
+  const s = snapOf(context);
+  check("[S5-1] idle: active=false", s.active === false, s.active);
+  check("[S5-1] idle: side=null / stepKey=idle", s.side === null && s.stepKey === "idle", [s.side, s.stepKey]);
+  check("[S5-1] idle: evalCtx 없음 → budget/source/maxReachable=null",
+    s.budgetRad === null && s.sourceApertureBeforeRad === null && s.maxReachableRad === null);
+  check("[S5-1] idle: openWidthCm=null (cutPoint 없음)", s.openWidthCm === null, s.openWidthCm);
+  check("[S5-1] idle: valid=null, reasons=[]", s.valid === null && Array.isArray(s.reasons) && s.reasons.length === 0);
+  check("[S5-1] 스키마 키 정확히 11개", eq(Object.keys(s).sort(), SNAP_KEYS.slice().sort()), Object.keys(s));
+  void engine;
+}
+
+// [S5-2] active/side 선택 전  [S5-3] selectCut  [S5-4] selectPiece
+{
+  const { engine, context } = createEngine();
+  vm.runInContext("startDartMove()", context);
+  let s = snapOf(context);
+  check("[S5-2] start 후 active=true, side=null", s.active === true && s.side === null, [s.active, s.side]);
+  vm.runInContext("selectDartSide('front')", context);
+  s = snapOf(context);
+  check("[S5-3] selectCut: stepKey=selectCut, side=front", s.stepKey === "selectCut" && s.side === "front", [s.stepKey, s.side]);
+  check("[S5-3] selectCut: 수치 아직 없음", s.maxReachableRad === null && s.budgetRad === null);
+  // selectPiece 상태를 mode 만으로 재현(엔진 계산 없이 상태 필드만)
+  engine.dartMoveState.mode = "selectPiece";
+  s = snapOf(context);
+  check("[S5-4] selectPiece: stepKey 반영", s.stepKey === "selectPiece", s.stepKey);
+}
+
+// [S5-5] drag gen-0  +  [S5-9] 금지 키 미노출  +  [S5-12] 단위  +  [S5-14] openWidthCm 일치
+{
+  const { engine, context } = setupReuse();          // gen-0(front-waist) drag 상태
+  const s = snapOf(context);
+  check("[S5-5] drag: stepKey=drag, active/side", s.stepKey === "drag" && s.active === true && s.side === "front");
+  check("[S5-5] gen-0: viaSourceNotch=false, source=null",
+    s.viaSourceNotch === false && s.sourceApertureBeforeRad === null, [s.viaSourceNotch, s.sourceApertureBeforeRad]);
+  check("[S5-5] drag: budget/maxReachable/valid 존재",
+    typeof s.budgetRad === "number" && typeof s.maxReachableRad === "number" && typeof s.valid === "boolean");
+  check("[S5-9] 금지 키 미노출", FORBIDDEN.every(k => !(k in s)), Object.keys(s).filter(k => FORBIDDEN.includes(k)));
+  // 단위: budget 은 rad(18.25° ≈ 0.3185), openWidthCm 은 cm(수 cm 스케일)
+  const budgetDeg = s.budgetRad * 180 / Math.PI;
+  check("[S5-12] budgetRad 단위=rad (deg 환산 18.25±0.01)", Math.abs(budgetDeg - 18.25) < 0.01, budgetDeg);
+  check("[S5-12] userAngleRad 단위=rad (|rad| ≤ 2π)", Math.abs(s.userAngleRad) <= 2 * Math.PI, s.userAngleRad);
+  const expectCm = engine.dartOpenWidth
+    ? engine.dartOpenWidth(engine.dartMoveState.cutPoint, engine.dartMoveState.evalCtx.pivot, engine.dartMoveState.userAngle)
+    : JSON.parse(vm.runInContext(
+        "JSON.stringify(dartOpenWidth(dartMoveState.cutPoint, dartMoveState.evalCtx.pivot, dartMoveState.userAngle))", context));
+  check("[S5-14] openWidthCm === dartOpenWidth 결과", Math.abs(s.openWidthCm - expectCm) < 1e-9, [s.openWidthCm, expectCm]);
+  check("[S5-12] openWidthCm 단위=cm (0 < v < 100)", s.openWidthCm > 0 && s.openWidthCm < 100, s.openWidthCm);
+}
+
+// [S5-6] sourceNotch drag (2차 다트)
+{
+  const { engine, context } = createEngine();
+  const r1 = applyRecipe(engine, "front", dims, { type: "front-waist", arcFraction: 0.35, piece: "A", moveFraction: 0.5 });
+  check("[S5-6] 1차 적용 성공(전제)", r1.status === "applied", r1.status);
+  const ctx2 = moveContext(engine, "front", dims);
+  const cut2 = resolveCutRecipe(engine, "front", ctx2, { type: "side-seam", arcFraction: 0.45 });
+  const split2 = engine.splitBakedOutline(ctx2.segs, cut2.point, cut2.segIndex, ctx2.pivot);
+  const rot2 = split2.pieceB, fix2 = split2.pieceA;
+  const budget2 = budgetRadOf(engine, "front", dims);
+  const cand2 = engine.prepareDartMoveCandidate({
+    pivot: ctx2.pivot, budgetRad: budget2, rawBaseAngleRad: budget2,
+    cutPoint: cut2.point, rotatePiece: rot2, fixedPiece: fix2,
+    prevBakedSegments: engine.dartMoveState.appliedFront?.bakedSegments,
+  });
+  if (cand2.valid) {
+    const res2 = engine.resolveRequestedAngle(cand2.evalCtx, cand2.closeAngleRad * 0.5, cand2.closeAngleRad);
+    Object.assign(engine.dartMoveState, {
+      active: true, side: "front", mode: "drag", cutPoint: cut2.point, cutSegIndex: cut2.segIndex,
+      baseAngle: cand2.closeAngleRad, evalCtx: cand2.evalCtx,
+      userAngle: res2.resolvedAngleRad, evaluation: res2.evaluation,
+    });
+    const s = snapOf(context);
+    check("[S5-6] sourceNotch: viaSourceNotch=true", s.viaSourceNotch === true);
+    check("[S5-6] sourceNotch: 소스 다트각(이동 전 확정값) 숫자",
+      typeof s.sourceApertureBeforeRad === "number", s.sourceApertureBeforeRad);
+    // 잔여/이동된 각은 휴리스틱이라 스냅샷에 없어야 한다(FORBIDDEN 계약).
+    check("[S5-6] sourceNotch: 잔여/이동된 각 키 미노출",
+      !("sourceApertureAfterRad" in s) && !("newNotchRad" in s), Object.keys(s));
+  } else {
+    check("[S5-6] sourceNotch 후보 준비", false, "candidate invalid: " + cand2.reason);
+  }
+}
+
+// [S5-7] invalid evaluation → reasons 복사  [S5-10] 반환 배열 변형이 엔진에 무영향
+{
+  const { engine, context } = setupReuse();
+  engine.dartMoveState.evaluation = {
+    angleRad: engine.dartMoveState.userAngle, valid: false, reasons: ["self-intersection", "budget-exceeded"],
+    shape: engine.dartMoveState.evaluation.shape, metrics: engine.dartMoveState.evaluation.metrics,
+  };
+  const s = snapOf(context);
+  check("[S5-7] invalid: valid=false", s.valid === false, s.valid);
+  check("[S5-7] invalid: reasons 전달", eq(s.reasons, ["self-intersection", "budget-exceeded"]), s.reasons);
+  // 반환 배열을 변형해도 엔진 원본은 그대로
+  const mutated = JSON.parse(vm.runInContext(`(function(){
+    var a = getDartMoveUiSnapshot(); a.reasons.push("__mutated__"); a.userAngleRad = 999;
+    var b = getDartMoveUiSnapshot();
+    return JSON.stringify({ engineReasons: dartMoveState.evaluation.reasons,
+                            bReasons: b.reasons, bUser: b.userAngleRad });
+  })()`, context));
+  check("[S5-10] reasons 변형 → 엔진 원본 무영향",
+    eq(mutated.engineReasons, ["self-intersection", "budget-exceeded"]), mutated.engineReasons);
+  check("[S5-11] 스냅샷 변형 후 재조회 정상", eq(mutated.bReasons, ["self-intersection", "budget-exceeded"])
+    && Math.abs(mutated.bUser - engine.dartMoveState.userAngle) < 1e-12, [mutated.bReasons, mutated.bUser]);
+}
+
+// [S5-8] apply / reset / cancel 후 초기화
+{
+  for (const call of ["applyDartMove()", "resetDartMove()", "cancelDartMove()"]) {
+    const { engine, context } = setupReuse();
+    try { vm.runInContext(call, context); } catch (e) { /* 거부되어도 상태 계약만 본다 */ }
+    const s = snapOf(context);
+    const cleared = s.stepKey === "idle" && s.side === null && s.maxReachableRad === null
+      && s.budgetRad === null && s.valid === null && s.reasons.length === 0 && s.openWidthCm === null;
+    check(`[S5-8] ${call} 후 스냅샷 초기화`, cleared, s);
+    void engine;
+  }
+}
+
+// [S5-13] getter 호출이 bake/normalize/evaluateEndpoint 를 추가로 부르지 않음
+{
+  const { engine, context } = setupReuse();
+  instrumentBN(context);
+  vm.runInContext(`
+    globalThis.__ev = 0;
+    var _e = evaluateEndpoint; evaluateEndpoint = function (...a) { __ev++; return _e(...a); };
+  `, context);
+  const before = readBN(context);
+  const evBefore = JSON.parse(vm.runInContext("JSON.stringify(__ev)", context));
+  for (let i = 0; i < 5; i++) snapOf(context);
+  const after = readBN(context);
+  const evAfter = JSON.parse(vm.runInContext("JSON.stringify(__ev)", context));
+  check("[S5-13] getter 5회 호출 → bake 증가 0", after.bake === before.bake, [before.bake, after.bake]);
+  check("[S5-13] getter 5회 호출 → normalize 증가 0", after.normalize === before.normalize, [before.normalize, after.normalize]);
+  check("[S5-13] getter 5회 호출 → evaluateEndpoint 증가 0", evAfter === evBefore, [evBefore, evAfter]);
+  void engine;
+}
+console.log(`  [S5-1~4] idle/start/selectCut/selectPiece 단계 값`);
+console.log(`  [S5-5,6] gen-0(source=null) / sourceNotch(소스·잔여·이동된 각)`);
+console.log(`  [S5-7,10,11] invalid reasons 복사 · 변형 무영향`);
+console.log(`  [S5-8] apply/reset/cancel 후 초기화  [S5-9] 금지 키 미노출`);
+console.log(`  [S5-12,14] 단위 rad/cm · openWidthCm=dartOpenWidth  [S5-13] bake/normalize/evaluate 추가 호출 0`);
+
 console.log(`\n══════════════════════════════════════════════`);
 console.log(`결과: ${pass} PASS / ${fail} FAIL`);
 if (fail > 0) {

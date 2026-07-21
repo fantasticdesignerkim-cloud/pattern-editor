@@ -2139,6 +2139,43 @@ function getCurrentDartEvaluation() {
   return ev;
 }
 
+// ── (S5) UI 읽기 전용 스냅샷 ─────────────────────────────
+// UI가 엔진 내부를 뒤지지 않도록, 표시에 필요한 값만 **원시값으로 복사해** 돌려준다.
+//
+// 계약:
+//  - 매 호출 새 plain object. reasons 는 복사본.
+//  - shape / evaluation / evalCtx / segments / pieces / candidate / 함수·setter **미노출**.
+//  - bake·normalize·evaluateEndpoint 를 호출하지 않는다(이미 계산된 값 조회만).
+//    openWidthCm 만 기존 dartOpenWidth 로 파생한다(회전 1회 + 거리, 평가 아님).
+//  - 단위는 rad / cm 원본 그대로. deg 변환·표기는 UI 책임.
+//  - applyEnabled 같은 DOM 상태는 **넣지 않는다** — 엔진 getter 가 DOM 을 읽으면
+//    의존 방향이 역전된다. 적용 가능 여부는 UI 가 btnDartApply.disabled 로 이미 안다.
+//  - metrics 의 sourceApertureAfterRad / newNotchRad 는 **넣지 않는다**: 신원 추적이
+//    아니라 "열린 노치 목록에서 기대값에 가장 가까운 것"을 고르는 근사라, 소스가
+//    완전히 닫히면(잔여 입 < EPS_CLOSED_DART) 그 노치가 목록에서 사라져 **새 노치를
+//    대신 집는다**. 끝까지 드래그하는 가장 흔한 동작에서 값이 틀리므로 UI 계약에서 제외한다.
+//    (진단 목적의 근사값이라는 점은 evaluateEndpoint 주석에도 명시돼 있다.)
+function getDartMoveUiSnapshot() {
+  const s   = dartMoveState;
+  const ctx = s.evalCtx || null;
+  const ev  = getCurrentDartEvaluation();          // 각도 불일치/미평가면 null (추가 계산 없음)
+  const pivot = ctx ? ctx.pivot : null;
+
+  return {
+    active:  !!s.active,
+    side:    s.side || null,
+    stepKey: s.mode,
+    viaSourceNotch: !!(ctx && ctx.sourceNotch),
+    budgetRad:               ctx ? ctx.budgetRad : null,
+    sourceApertureBeforeRad: (ctx && ctx.sourceNotch) ? ctx.sourceNotch.apertureRad : null,
+    maxReachableRad:         ctx ? Math.abs(s.baseAngle) : null,
+    userAngleRad:            s.userAngle,
+    openWidthCm: (s.cutPoint && pivot) ? dartOpenWidth(s.cutPoint, pivot, s.userAngle) : null,
+    valid:                   ev ? !!ev.valid : null,
+    reasons:                 (ev && Array.isArray(ev.reasons)) ? ev.reasons.slice() : [],
+  };
+}
+
 function applyDartMove() {
   dbg('[dartMove] applyDartMove 실행', { cutPoint: dartMoveState.cutPoint, rotateSegs: dartMoveState.rotateSegs?.length, fixedSegs: dartMoveState.fixedSegs?.length });
   if (!dartMoveState.cutPoint || dartMoveState.cutSegIndex < 0) {

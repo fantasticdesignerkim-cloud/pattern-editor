@@ -132,5 +132,10 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
    [hidden] 이 밀리므로 :not([hidden]) 으로 한정한다. */
 .context-strip:not([hidden]){display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--cyan) 6%,var(--surface))}
 .dart-busy:not([hidden]){display:flex;flex-direction:column;gap:6px}
+.prop-val{font-size:12px;color:var(--navy);white-space:nowrap}
+
+/* hidden 속성이 author 규칙(.row{display:flex} 등)에 밀리지 않도록 마지막에 한 번 선언.
+   `:not([hidden])` 로 표시를 정의한 규칙들과는 서로 매치 조건이 배타적이라 충돌하지 않는다. */
+[hidden]{display:none}
 .context-strip .btn{padding:6px 10px}
 .context-strip #dartMoveHint{min-width:0;font-size:11px;color:var(--muted);white-space:normal}
