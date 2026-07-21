@@ -141,7 +141,12 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
     height:auto;row-gap:2px;padding:4px 8px;position:relative}
   .brand-block{grid-area:brand}
   .brand-sub{display:none}                    /* 정적 보조문구만 숨김 (DOROBO 는 유지) */
-  .header-actions{grid-area:actions;justify-self:end;margin-left:0;gap:4px}
+  /* 320px 에서 actions 가 1fr 셀보다 넓어 brand 위로 겹쳐 그려졌다(실측 -17.9px).
+     DOROBO 전체 문자열은 유지한 채 폭만 줄인다. margin-right:8px 는 brand-sub 가
+     숨겨진 모바일에선 죽은 여백이라 0. actions 는 버튼 사이 수평 gap 만 줄인다
+     (터치 타깃 40px 불변). 실측 결과 320px 간격 -17.9px → +5.4px. */
+  .brand{font-size:12px;letter-spacing:.02em;margin-right:0}
+  .header-actions{grid-area:actions;justify-self:end;margin-left:0;gap:2px}
   .header-actions .btn{padding:5px 7px}
   .stage-bar{grid-area:stage}
   .stage{padding:5px 8px}

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026072008">
+<link rel="stylesheet" href="css/style.css?v=2026072101">
 </head>
 <body>
 
@@ -29,12 +29,17 @@
     <details class="pop pop-right" data-menu="view">
       <summary aria-label="보기 메뉴" title="보기">보기</summary>
       <div class="pop-body">
+        <!-- 실측상 동작하지 않는 3개(chkDartWaist/chkPattern/chkDep)는 wrapper 에 hidden 을
+             주어 시각·키보드 접근에서 제거한다. render.js 가 layer-pattern / layer-dep 그룹을
+             만들지 않아 toggleLayer 가 대상 없이 끝나는 **기존 결함**이며, 이번 UI 작업에서
+             엔진을 고치지 않는다. input 의 id·onchange·checked 는 그대로 보존한다
+             (DOM id 계약 유지 + 렌더 결함이 고쳐지면 hidden 만 떼면 된다). -->
         <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="toggleLayer('layer-base',this.checked)"></div>
-        <div class="row"><label>허리다트</label><input type="checkbox" id="chkDartWaist" checked onchange="applyLayerVisibility()"></div>
+        <div class="row" hidden><label>허리다트</label><input type="checkbox" id="chkDartWaist" checked onchange="applyLayerVisibility()"></div>
         <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="toggleLayer('layer-dim',this.checked)"></div>
-        <div class="row"><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
+        <div class="row" hidden><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
         <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" checked onchange="toggleLayer('layer-points',this.checked)"></div>
-        <div class="row"><label>종속선</label><input type="checkbox" id="chkDep" checked onchange="toggleLayer('layer-dep',this.checked)"></div>
+        <div class="row" hidden><label>종속선</label><input type="checkbox" id="chkDep" checked onchange="toggleLayer('layer-dep',this.checked)"></div>
       </div>
     </details>
 
