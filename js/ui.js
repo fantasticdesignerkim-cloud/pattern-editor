@@ -16,8 +16,10 @@
   "use strict";
 
   // stage 별 도구. draft 는 도구 없이 치수 패널만 쓴다.
+  // design 진입 시 도구를 자동 선택하지 않는다(tool=null). 도구·context 는 사용자가
+  // 캔버스 상단 바에서 직접 고를 때만 나타난다.
   const STAGE_TOOLS  = { draft: [], design: ["dart", "curves"] };
-  const DEFAULT_TOOL = { draft: null, design: "curves" };
+  const DEFAULT_TOOL = { draft: null, design: null };
 
   // ── UI 상태: 이 두 값이 전부 ──────────────────
   const uiState = { stage: "draft", tool: null };
@@ -72,12 +74,31 @@
     refresh();
   }
 
+  // ── tool 동기화: busy(실제 DOM 파생)에서 tool 을 맞춘다 ──
+  // refresh 맨 앞에서 1회만 실행해, 뒤이은 updateContextActions(aria-pressed) 와
+  // updateContextInspector(패널 표시) 가 **같은 tool 값**을 보게 한다. 이 조정을
+  // inspector 안에 두면 actions 가 먼저 옛 tool 로 aria-pressed 를 굳혀 버린다
+  // (Reset 후 tool=null 인데 도구 버튼이 계속 눌린 것처럼 보이던 순서 버그).
+  function syncToolFromBusy() {
+    const busy = busyTool();
+    if (busy && uiState.tool !== busy) uiState.tool = busy;   // busy 면 그 도구로
+    // dart Apply 는 현재 다트만 커밋하고 세션을 유지한다(busy=dart) → 이 분기에 안 걸려
+    // tool=dart 가 유지된다(다중다트 연속 작업). Cancel·Reset 만 세션을 닫아 busy=false 가
+    // 되고, 그때 tool=null 로 되돌린다. curves 는 편집 종료 후에도 tool=curves 를 유지한다.
+    // dartMove.js 를 바꾸지 않고 실제 DOM 파생(busyTool)만으로 판정한다.
+    if (uiState.tool === "dart" && busy !== "dart") uiState.tool = null;
+  }
+
   // ── 필수 함수 3: 현재 컨텍스트의 inspector만 노출 ──
   function updateContextInspector() {
-    const busy = busyTool();
-    if (busy && uiState.tool !== busy) uiState.tool = busy;   // 작업 인스펙터 유지
     const active = activePanel();
     panelEls().forEach(p => { p.hidden = p.dataset.panel !== active; });
+
+    // 원형 stage 만 우측 치수 inspector 를 쓴다. design stage 는 inspector 자체를 숨기고
+    // (CSS :has 가 280px column 도 함께 제거), 도구 조작은 상단 context host 가 담당한다.
+    // 새 상태 저장 없이 stage 로만 파생한다.
+    const inspector = document.querySelector(".inspector");
+    if (inspector) inspector.hidden = uiState.stage !== "draft";
 
     // 다트 패널: idle 안내 / busy 컨텍스트 전환 (가짜 수치 없음)
     const dartBusy = isDartBusy();
@@ -128,6 +149,7 @@
   }
 
   function refresh() {
+    syncToolFromBusy();
     updateContextActions();
     updateContextInspector();
     updateDartInspector();

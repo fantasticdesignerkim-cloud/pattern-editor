@@ -83,18 +83,27 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .header-actions{margin-left:auto;display:flex;gap:6px}
 .header-actions .btn{width:auto;padding:5px 10px;white-space:nowrap}
 
-.workspace{flex:1;min-height:0;display:grid;grid-template-columns:46px minmax(0,1fr) 280px}
-.tool-rail{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0;background:var(--surface);border-right:1px solid var(--border)}
+/* 좌측 tool rail 제거: 캔버스 + (원형 stage 만) 우측 inspector 2열.
+   design stage 는 inspector 를 ui.js 가 hidden 처리하고 :has 로 280px column 도 없앤다. */
+.workspace{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 280px}
+.workspace:has(> .inspector[hidden]){grid-template-columns:minmax(0,1fr)}
 .tool{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:transparent;color:var(--navy);border:1px solid transparent;border-radius:6px;cursor:pointer;padding:0}
 .tool:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface));border-color:var(--cyan)}
 .tool[aria-pressed="true"]:not(:disabled){background:color-mix(in srgb,var(--cyan) 16%,var(--surface));border-color:var(--cyan)}
 .tool:disabled{color:var(--muted);opacity:.4;cursor:default}
 
-/* 캔버스 상단 툴바: SVG 를 덮지 않고 형제로 앉는다 */
+/* 캔버스 상단 1행 primary bar: 도구 ‖ 모드. SVG 를 덮지 않고 형제로 앉는다.
+   (1단계는 위치·표시만 — 곡률/그림자/cyan 카드 마감은 2단계) */
 .canvas-toolbar{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
 .canvas-toolbar .seg{display:flex;gap:4px}
 .canvas-toolbar .mode-btn{flex:0 0 auto;padding:4px 12px}
 .canvas-toolbar .btn{width:auto;padding:4px 12px;white-space:nowrap}
+.bar-divider{width:1px;height:18px;background:var(--border);flex-shrink:0}
+
+/* 2행 context host: 선택 도구가 있을 때만 표시. 안에 표시된 [data-panel] 이 없으면
+   display:none 이라 높이 0(빈 자리 없음). overlay 아님 — svg 앞선 일반 형제 행. */
+.context-host{display:none}
+.context-host:has(> [data-panel]:not([hidden])){display:flex;flex-direction:column;flex-shrink:0;border-bottom:1px solid var(--border)}
 
 /* 파일 메뉴 잠금 표시 (summary 에는 disabled 속성이 없다) */
 .pop>summary[aria-disabled="true"]{opacity:.45;cursor:default}
