@@ -6,7 +6,7 @@ body{font-family:-apple-system,sans-serif;background:var(--surface);color:var(--
 .row input[type=number]{width:72px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;text-align:right;font-size:13px;background:var(--surface);color:var(--navy)}
 .row input[type=number]:focus{outline:none;border-color:var(--cyan)}
 .row input[type=checkbox]{width:16px;height:16px;accent-color:var(--cyan)}
-.btn{border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--navy);font-weight:500;padding:7px 10px;cursor:pointer;font-size:12px;width:100%}
+.btn{border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--navy);font-weight:500;padding:7px 10px;cursor:pointer;font-size:12px;width:100%}
 .btn:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface));border-color:var(--cyan)}
 .btn:active{filter:brightness(.98)}
 .btn:disabled{opacity:.45;cursor:default}
@@ -68,7 +68,7 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .pop>summary:hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface))}
 .pop[open]>summary{background:color-mix(in srgb,var(--cyan) 16%,var(--surface));color:var(--navy);border-color:var(--cyan)}
 .pop[open]>summary::after{color:var(--navy)}
-.pop-body{position:absolute;top:calc(100% + 6px);left:0;z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;width:248px;display:flex;flex-direction:column;gap:8px;box-shadow:0 4px 14px rgba(23,55,107,.10)}
+.pop-body{position:absolute;top:calc(100% + 6px);left:0;z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;width:248px;display:flex;flex-direction:column;gap:8px;box-shadow:0 4px 14px rgba(23,55,107,.10)}
 .pop-right .pop-body{left:auto;right:0}
 
 /* ── CAD workspace shell (S2) ── */
@@ -93,17 +93,42 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .tool:disabled{color:var(--muted);opacity:.4;cursor:default}
 
 /* 캔버스 상단 1행 primary bar: 도구 ‖ 모드. SVG 를 덮지 않고 형제로 앉는다.
-   (1단계는 위치·표시만 — 곡률/그림자/cyan 카드 마감은 2단계) */
-.canvas-toolbar{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
-.canvas-toolbar .seg{display:flex;gap:4px}
-.canvas-toolbar .mode-btn{flex:0 0 auto;padding:4px 12px}
+   (2단계) iOS 곡률 — 세그먼트는 연회색 트랙 위 둥근 알약, 선택 칸만 떠오른다. */
+.canvas-toolbar{display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.canvas-toolbar .seg{display:flex;gap:2px;background:color-mix(in srgb,var(--navy) 6%,var(--surface));border-radius:9px;padding:2px}
+.canvas-toolbar .mode-btn{flex:0 0 auto;padding:4px 12px;border:0;border-radius:7px;background:transparent}
+.canvas-toolbar .mode-btn.active{background:var(--surface);border:0;box-shadow:0 1px 3px rgba(23,55,107,.18);color:var(--navy)}
 .canvas-toolbar .btn{width:auto;padding:4px 12px;white-space:nowrap}
 .bar-divider{width:1px;height:18px;background:var(--border);flex-shrink:0}
+/* 도구 버튼: 트랙 안 알약. 활성(aria-pressed)은 navy 채움 + 흰 글자/아이콘.
+   busy 중 setBtn(JS) 이 inline background(빨강/주황)를 덮는 것은 기능 상태 표시 계약이라
+   그대로 두고, 그때는 글자·아이콘만 흰색으로 맞춘다([style*="background"] 파생). */
+.canvas-toolbar .tool{width:auto;min-width:30px;height:26px;padding:0 12px;border:0;border-radius:7px;gap:6px}
+.canvas-toolbar .tool:not(:disabled):hover{border:0;background:color-mix(in srgb,var(--navy) 10%,var(--surface))}
+.canvas-toolbar .tool[aria-pressed="true"]:not(:disabled){background:var(--navy);border:0;color:#fff}
+.canvas-toolbar .tool-dart{font-size:12px;font-weight:500;white-space:nowrap}
+.canvas-toolbar .tool-dart[aria-pressed="true"]::before,
+.canvas-toolbar .tool-dart[style*="background"]::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 3 6 21M12 3l6 18'/%3E%3Cpath d='M8.2 15a6 6 0 0 0 7.6 0'/%3E%3C/svg%3E")}
+.canvas-toolbar .tool-dart[style*="background"]{color:#fff}
 
 /* 2행 context host: 선택 도구가 있을 때만 표시. 안에 표시된 [data-panel] 이 없으면
-   display:none 이라 높이 0(빈 자리 없음). overlay 아님 — svg 앞선 일반 형제 행. */
+   display:none 이라 높이 0(빈 자리 없음). overlay 아님 — svg 앞선 일반 형제 행.
+   (2단계) 떠 있는 둥근 카드: 일반 흐름에서 margin+radius+shadow 로만 부양감. */
 .context-host{display:none}
-.context-host:has(> [data-panel]:not([hidden])){display:flex;flex-direction:column;flex-shrink:0;border-bottom:1px solid var(--border)}
+.context-host:has(> [data-panel]:not([hidden])){display:flex;flex-direction:column;flex-shrink:0;margin:8px 10px;border:1px solid color-mix(in srgb,var(--cyan) 40%,var(--surface));border-radius:12px;background:color-mix(in srgb,var(--cyan) 8%,var(--surface));box-shadow:0 2px 10px rgba(23,55,107,.08);overflow:hidden}
+/* 카드 내부는 가로 흐름(구조·상태는 1단계 그대로, 배치만 가로) */
+.context-host .context-strip:not([hidden]){flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:8px 14px;border-top:0;background:transparent}
+.context-host .insp-title{display:none}
+.context-host .dart-busy:not([hidden]){flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 14px;flex:1;min-width:0}
+.context-host .row{width:auto;justify-content:flex-start;gap:6px}
+.context-host .row label{color:var(--muted);font-size:11px}
+.context-host .btn{width:auto;padding:5px 12px}
+.context-host #dartMoveHint{flex:1 1 160px;min-width:140px}
+.context-host .dart-busy > .row:has(#btnDartApply){margin-left:auto}
+.context-host .insp{border-bottom:0}
+.context-host .insp[data-panel]:not([hidden]){display:flex;align-items:center;flex-wrap:wrap}
+.context-host .insp>summary{flex-shrink:0;padding:8px 14px;color:var(--navy)}
+.context-host .insp-body{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 14px 8px 0;flex:1;min-width:0}
 
 /* 파일 메뉴 잠금 표시 (summary 에는 disabled 속성이 없다) */
 .pop>summary[aria-disabled="true"]{opacity:.45;cursor:default}
