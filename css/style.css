@@ -113,18 +113,25 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 
 /* 2행 context host: 선택 도구가 있을 때만 표시. 안에 표시된 [data-panel] 이 없으면
    display:none 이라 높이 0(빈 자리 없음). overlay 아님 — svg 앞선 일반 형제 행.
-   (2단계) 떠 있는 둥근 카드: 일반 흐름에서 margin+radius+shadow 로만 부양감. */
+   (2단계) 떠 있는 둥근 카드: 일반 흐름에서 margin+radius+shadow 로만 부양감.
+   (동선 교정) 전체 폭 카드 + hint flex:1 + margin-left:auto 가 적용 버튼을 화면 우단
+   (1394px)까지 밀어 회전 종료점에서 1,103px 이던 동선을 줄인다 — 카드는 내용 폭
+   (fit-content)으로 캔버스 중앙, 액션은 order 로 사이드 선택 바로 뒤(시각 순서만,
+   DOM 의 리셋→적용 순서 불변), hint 는 flex-basis:100% 로 카드 내부 둘째 줄. */
 .context-host{display:none}
-.context-host:has(> [data-panel]:not([hidden])){display:flex;flex-direction:column;flex-shrink:0;margin:8px 10px;border:1px solid color-mix(in srgb,var(--cyan) 40%,var(--surface));border-radius:12px;background:color-mix(in srgb,var(--cyan) 8%,var(--surface));box-shadow:0 2px 10px rgba(23,55,107,.08);overflow:hidden}
+.context-host:has(> [data-panel]:not([hidden])){display:flex;flex-direction:column;flex-shrink:0;margin:8px 10px;width:fit-content;max-width:calc(100% - 20px);align-self:center;border:1px solid color-mix(in srgb,var(--cyan) 40%,var(--surface));border-radius:12px;background:color-mix(in srgb,var(--cyan) 8%,var(--surface));box-shadow:0 2px 10px rgba(23,55,107,.08);overflow:hidden}
 /* 카드 내부는 가로 흐름(구조·상태는 1단계 그대로, 배치만 가로) */
-.context-host .context-strip:not([hidden]){flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:8px 14px;border-top:0;background:transparent}
+.context-host .context-strip:not([hidden]){flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;border-top:0;background:transparent}
 .context-host .insp-title{display:none}
-.context-host .dart-busy:not([hidden]){flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 14px;flex:1;min-width:0}
+.context-host .dart-busy:not([hidden]){flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px;flex:1;min-width:0}
 .context-host .row{width:auto;justify-content:flex-start;gap:6px}
 .context-host .row label{color:var(--muted);font-size:11px}
 .context-host .btn{width:auto;padding:5px 12px}
-.context-host #dartMoveHint{flex:1 1 160px;min-width:140px}
-.context-host .dart-busy > .row:has(#btnDartApply){margin-left:auto}
+/* 시각 순서: 사이드(0) → 액션(1) → 수치(2) → hint 둘째 줄(3). DOM 순서는 불변. */
+.context-host .dart-busy > .row{order:2}
+.context-host .dart-busy > #dartSideRow{order:0}
+.context-host .dart-busy > .row:has(#btnDartApply){order:1}
+.context-host .dart-busy > #dartMoveHint{order:3;flex:0 0 100%;min-width:0}
 .context-host .insp{border-bottom:0}
 .context-host .insp[data-panel]:not([hidden]){display:flex;align-items:center;flex-wrap:wrap}
 .context-host .insp>summary{flex-shrink:0;padding:8px 14px;color:var(--navy)}
