@@ -1707,9 +1707,8 @@ notch identity 를 실제로 추적하는 설계가 먼저다.
 
 ## 플로팅 컨텍스추얼 캔버스 툴바 채택 (2026-07, 사용자 확정) — 위 CAD workspace 결정 일부 대체
 
-> ⚠️ **채택·구현 예정 단계다. 아직 구현되지 않았다.** 아래는 확정된 방향·계약이며,
-> 코드는 이 문서 커밋 시점에 **전혀 변경되지 않았다**. 구현은 8번의 단계 커밋 계획대로
-> 각 단계 별도 승인 후 진행한다.
+> ✅ **구현 완료 (2026-07).** 이 섹션의 계약은 그대로 유효하며, 실제로 어떻게 코드에
+> 고정됐는지는 아래 "✅ 플로팅 컨텍스추얼 캔버스 툴바 구현 완료" 섹션이 기록한다.
 
 **배경(실사용 피드백)**: 디자인 stage에서 다트이동/곡선편집을 하려면 도구(좌측 rail)와
 그 조작(우측 inspector)이 화면 양 끝에 갈라져 있어 동선이 멀다. 실측 결과 다트이동
@@ -1793,9 +1792,84 @@ notch identity 를 실제로 추적하는 설계가 먼저다.
 - **엔진·render·layer 무변경, 골든 무변경**을 매 단계 확인. UI·시각을 같은 단계에
   섞지 않는다(1=구조/상태, 2=시각 분리).
 
-**남은 것(이 문서 이후)**: 구현 미착수. 다음 세션은 **8번 1단계(구조·상태)부터**
-조사한 그대로 착수하되, 위 계약을 회귀 검증(동선 재측정 2,637px→목표, 계약 3·4의
-tool=null / 액션 순서 / 빈 높이 0, id 42·handler 37 보존, 골든 무변경)으로 잠근다.
+**남은 것(이 문서 이후)**: ~~구현 미착수~~ → **전 단계 구현 완료.** 아래 완료 섹션 참고.
+
+## ✅ 플로팅 컨텍스추얼 캔버스 툴바 구현 완료 (2026-07) — 위 채택 섹션의 완료 기록
+
+위 채택 섹션의 계약이 **전부 구현·검증됐다**. 과정 일지가 아니라 확정된 결정·불변식·
+최종 계약만 남긴다.
+
+| 커밋 | 내용 |
+|---|---|
+| `2394b35` | 채택 (0단계 문서 결정) |
+| `7818e0a` | Apply 계약 교정 (문서 — Apply 는 커밋, Cancel·Reset 만 종료) |
+| `5d2a52a` | Move design tools into contextual canvas bars (1단계 구조·상태) |
+| `79b917d` | Apply iOS-style curvature to contextual canvas controls (2단계 시각) |
+| `9cad52d` | Complete responsive contextual canvas bars (3단계 반응형) |
+
+### 최종 구조
+
+- **좌측 tool rail 제거**, **design 우측 inspector 제거**. draft 치수 inspector 만 유지
+  (design 에서는 `.workspace:has(> .inspector[hidden])` 가 280px column 도 제거).
+- 캔버스 상단 **1행**: `다트이동 · 곡선편집 ‖ 전체 · 몸판 · 소매`.
+- **`화면 초기화`는 header 우측**.
+- **도구 선택 시에만 2행 context 카드** — `.context-host:has(> [data-panel]:not([hidden]))`.
+  tool=null 이면 **높이 0**(빈 자리 없음).
+
+### 상태 계약 (구현 확정)
+
+- design 최초 진입 **tool=null** (`DEFAULT_TOOL.design=null`, 자동 curves 선택 폐지).
+- **Apply 는 현재 다트만 커밋하고 tool=dart·세션을 유지**한다(다중다트 연속 작업).
+  Apply 직후 이전 다트 수치 행 초기화·Apply disabled, 같은 세션에서 앞판/뒤판 재선택
+  → 다음 다트 작업 가능(실측: 2번째 다트 절개→조각→드래그 정상).
+- **Cancel·Reset 만 tool=null**(context 높이 0, aria-pressed 해제).
+- curves 는 하위 편집 종료 후에도 **tool=curves 유지**.
+- **`syncToolFromBusy()` 가 refresh 시작에서 호출되는 유일한 busy→tool 동기화 지점**이다.
+  `updateContextActions`/`updateContextInspector` 는 uiState 를 **변경하지 않는다**(읽기만).
+  이 순서를 어기면 Reset 후 tool 은 null 인데 도구 버튼 aria-pressed 만 옛 값으로 굳는
+  순서 버그가 재발한다(실측으로 확인하고 분리한 구조).
+
+### 시각 계약 (구현 확정)
+
+- iOS 곡률은 **radius/shadow 기반 일반 흐름** — absolute/fixed floating overlay 아님.
+  카드 `margin 8px + radius 12px + shadow`, 세그먼트는 연회색 트랙(9px) 위 알약(7px).
+- **기존 색상 토큰만 재사용**(`color-mix` 파생 포함), 새 토큰 0.
+- dart 카드 순서: `앞판·뒤판 | 가능각 | 회전량 | 전체 다트각 | hint | 리셋 | 적용`.
+  **적용이 최우측**. 데스크톱 dart 카드 높이 **47px**(세로 187px 스택에서 압축).
+- `setBtn`(JS) 이 다트 버튼에 덮는 inline 상태색(빨강/주황)은 계약대로 유지 —
+  `[style*="background"]` 파생으로 그때만 글자·아이콘을 흰색으로 맞춘다.
+- **`grid-m`/`grid-M` 기존 SVG 격자 재사용, render.js 무변경.**
+
+### 반응형 계약 (구현 확정)
+
+- **`@media (max-width:615px)` 하나뿐.** 616px 부터 데스크톱, 844×390 landscape 도
+  데스크톱 유지.
+- 모바일 context 카드는 **wrap**(가로 스크롤 없음), 터치 타깃 **40px**,
+  **320×568 draft SVG 192px**(3행 grid 잔재로 150px 로 눌리던 원인 수정).
+- **`tool-rail` selector·참조 0**(HTML/JS 참조 0 + 8개 UI 상태 런타임 match 0 증명 후
+  규칙·주석까지 삭제).
+- **좁은 데스크톱(616~698px) header 는 `clamp()` 유동 여백으로 압축** — 화면 초기화
+  버튼의 header 이동으로 콘텐츠 최소폭이 699px 가 된 것을 흡수한다. clamp 상한이
+  기존값이라 넓은 데스크톱(1280+) 시각은 **불변**(1440 실측: gap 16px·패딩 10px 그대로).
+- **320px header 는 정직하게 actions 를 2줄로 wrap** 한다 — 텍스트를 숨기거나 글자를
+  더 줄이지 않는다(전체 문자열 유지, brand 겹침 0).
+
+### 유지된 안전 계약
+
+- DOM **id 42개** / inline handler **37개** / MutationObserver 2개 /
+  `getDartMoveUiSnapshot` 11키.
+- **엔진·render 무변경**(1~3단계 전 구간 JS 변경은 `ui.js` 하나, 그 외 0).
+- **shape/perf 골든 무변경.**
+- 저장 검증은 **격리 origin**(`127.0.0.1:8420`)만, storage 0키 시종 유지.
+- 미추적 `AGENTS.md`·`armhole_data_2026-07-16.json` 보존.
+
+### 검증 결과
+
+- **9개 viewport 전수**(1440·1280·616·615·430·390·360·320·844×390):
+  가로 overflow **0** / 6영역(header·bar·카드·SVG·inspector·statusbar) 겹침 **0** /
+  보이는 버튼 텍스트 잘림 **0** / DOROBO 전체 표시 / dart 카드에서 리셋·적용 접근 가능.
+- SVG 좌표 계약 유지(`svgPt` 정확, `c2p`/`p2c_` 왕복 오차 0). 콘솔 오류 0.
+- `runAll.js` 전체 통과.
 
 ## 다음에 확인할 것 (열려있는 이슈)
 
