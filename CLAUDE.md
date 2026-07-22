@@ -1752,7 +1752,12 @@ notch identity 를 실제로 추적하는 설계가 먼저다.
 
 **3. 상태**
 - **design 초기 tool=null**.
-- **dart 취소·적용 후 tool=null**.
+- **dart Apply 는 현재 다트만 커밋하고 세션과 tool=dart 를 유지한다**(다중다트 연속
+  작업 보존 — `applyDartMove` 가 적용 후 `setBtn("취소")`/`setSideRowVisible(true)` 로
+  세션을 열어 두고 "앞판/뒤판을 다시 선택"으로 다음 다트를 유도한다). Apply 직후
+  이전 다트의 수치 행은 초기화되고 Apply 버튼은 다시 유효한 evaluation 이 생길 때까지
+  disabled 다. **Cancel·Reset 만 세션을 종료하고 tool=null 로 돌아간다**(context 카드
+  높이 0). 이 판정은 `busyTool()!=="dart"` 파생만으로 하며 dartMove.js 를 바꾸지 않는다.
 - **curves 는 하위 편집(진동선/네크라인/소매산) 종료 후에도 tool=curves 유지.**
 - **busy 중에는 현재 tool/context 를 유지**(작업 중 카드가 사라지지 않는다).
 - `uiState` 는 **stage + tool 두 값만**. **새 엔진 상태를 만들지 않는다.**
