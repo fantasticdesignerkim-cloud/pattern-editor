@@ -1737,9 +1737,11 @@ notch identity 를 실제로 추적하는 설계가 먼저다.
 ### 확정 계약 (채택, 구현 예정)
 
 **1. 최종 목업 — iOS 곡률 플로팅 상단 바**
-- **플로팅은 시각 표현만**이다. `position:absolute`/`fixed` overlay **금지**.
-- **일반 레이아웃 행** + `border-radius`/`box-shadow` 로 떠 있는 느낌만 낸다
-  (문서 흐름에 실제 높이를 차지한다).
+- ~~**플로팅은 시각 표현만**이다. `position:absolute`/`fixed` overlay **금지**.
+  **일반 레이아웃 행** + `border-radius`/`box-shadow` 로 떠 있는 느낌만 낸다
+  (문서 흐름에 실제 높이를 차지한다).~~
+  → **실사용 검증으로 대체됨** — context 카드는 이제 canvas-wrap 기준 absolute 하단 팝업이다.
+  아래 "캔버스 오버레이 다트 액션 팔레트" 섹션이 최종 계약이다(fixed·modal 은 여전히 금지).
 
 **2. 레이아웃**
 - 좌측 tool rail **제거**.
@@ -1833,8 +1835,10 @@ notch identity 를 실제로 추적하는 설계가 먼저다.
 
 ### 시각 계약 (구현 확정)
 
-- iOS 곡률은 **radius/shadow 기반 일반 흐름** — absolute/fixed floating overlay 아님.
-  카드 `margin 8px + radius 12px + shadow`, 세그먼트는 연회색 트랙(9px) 위 알약(7px).
+- ~~iOS 곡률은 **radius/shadow 기반 일반 흐름** — absolute/fixed floating overlay 아님.
+  카드 `margin 8px + radius 12px + shadow`~~ → **실사용 검증으로 대체됨** — 카드는 아래
+  "캔버스 오버레이 다트 액션 팔레트" 계약(absolute 하단 팝업)을 따른다. 세그먼트는
+  연회색 트랙(9px) 위 알약(7px) 그대로.
 - **기존 색상 토큰만 재사용**(`color-mix` 파생 포함), 새 토큰 0.
 - ~~dart 카드 순서: `앞판·뒤판 | 가능각 | 회전량 | 전체 다트각 | hint | 리셋 | 적용`.
   **적용이 최우측**. 데스크톱 dart 카드 높이 **47px**(세로 187px 스택에서 압축).~~
@@ -1881,12 +1885,16 @@ context 카드가 **전체 폭 1,420px**이라 hint(`flex:1`)+`margin-left:auto`
 화면 우단(1394px)까지 밀어, 회전 종료점→적용이 **1,103px**. "적용 최우측" 계약이
 전체 폭 카드에서는 "화면 우측 끝"이 되어버린 것.
 
-### 최종 배치 계약 (이전 "적용 최우측" 계약을 대체)
+### ~~최종~~ 배치 계약 (이전 "적용 최우측" 계약을 대체 → 이후 재차 대체됨)
 
-- context 카드는 전체 폭이 아니라 **`width:fit-content` compact 카드**, **캔버스 상단
-  중앙 정렬**(`align-self:center`). 일반 레이아웃 흐름 — absolute/fixed overlay 아님.
-- 시각 순서: **`앞판·뒤판 → 리셋·적용 → 가능각·회전량·전체 다트각`**, hint 는 카드
-  내부 **둘째 줄**(`order` + `flex-basis:100%`).
+> 이 섹션의 "상단 중앙·일반 흐름" 배치도 **실사용 검증으로 다시 대체됐다**(회전점이
+> 캔버스 중하단이라 상단 카드 567px 가 부족). 아래 "캔버스 오버레이 다트 액션 팔레트"
+> 섹션이 최종 계약이다. CSS order·DOM 순서 유지·auto 금지·상태 계약은 계승된다.
+
+- ~~context 카드는 전체 폭이 아니라 **`width:fit-content` compact 카드**, **캔버스 상단
+  중앙 정렬**(`align-self:center`). 일반 레이아웃 흐름 — absolute/fixed overlay 아님.~~
+- 시각 순서: ~~**`앞판·뒤판 → 리셋·적용 → 가능각·회전량·전체 다트각`**~~ (액션 내부 순서도
+  이후 적용→리셋으로 재조정), hint 는 카드 내부 **둘째 줄**(`order` + `flex-basis:100%`).
 - **CSS `order` 로 시각 순서만** 바꾼다 — **실제 DOM 의 리셋→적용 순서는 유지**.
 - **"적용 최우측"(카드/화면 우단 정렬) 계약 폐기.** 액션의 `margin-left:auto` 금지.
 - tool=null 이면 context 높이 0, **Apply 후 다중다트 세션 유지** — 기존 상태 계약 불변.
@@ -1902,6 +1910,60 @@ context 카드가 **전체 폭 1,420px**이라 hint(`flex:1`)+`margin-left:auto`
 - CSS 중심 — JS·DOM·uiState 변경 **0** (index.html 은 캐시 버전 1줄).
 - id 42 / handler 37, 엔진·render·골든 무변경.
 - 9개 viewport overflow·겹침 0, **320×568 draft SVG 192px** 유지, runAll 전체 통과.
+
+## 캔버스 오버레이 다트 액션 팔레트 (2026-07, 실사용 검증) — 카드 배치 최종 계약
+
+**배경**: 상단 compact 카드(567px)도 부족했다 — 회전점이 캔버스 중하단(y 590~600)이라
+상·하 비교 실측에서 **하단 중앙 팝업이 평균 동선 절반**(A 상단 524px vs B 하단 300px)로
+확정. 위 "일반 흐름·overlay 금지" 계열 계약 3곳(채택 1·구현 완료 시각·동선 교정)을
+이 섹션이 대체한다.
+
+### 구조 (구현 확정)
+
+- **primary bar 순서: `전체·몸판·소매 → 다트 도구 → 곡선 편집`** (모드가 왼쪽).
+- **다트 idle 은 아이콘만 표시**(가시 텍스트 없음), aria-label/title = "다트 이동 시작".
+- **active 의 실제 `btnDartMove.textContent="취소"` 는 busy 판정용으로 유지**(변경 금지).
+  화면 표시는 `aria-pressed="true"` 일 때만 CSS `::after` 가 **"종료"** 를 그린다.
+  aria-label/title = "다트 이동 종료"(ui.js `syncDartLabel` 문구 1곳).
+  ⚠️ `[style*="background"]` 는 busy 신호로 쓰지 말 것 — `setBtn` 이 idle 에도 주황
+  inline 을 남겨 오탐한다(실측).
+
+### 하단 팝업 (구현 확정)
+
+- context 카드는 **canvas-wrap 기준 `position:absolute`**, `left:50%; bottom:16px;
+  translateX(-50%)`, `width:fit-content` + `max-width:calc(100% - 16px)`.
+- **모든 viewport 에서 같은 하단 중앙 위치** — 844×390 등 뷰포트별 예외·새 breakpoint 를
+  만들지 않는다. **fixed·modal·drag·커서 추적 UI 없음.**
+- host 는 `pointer-events:none`, 실제 카드(`[data-panel]`)만 `auto` — **카드 밖 캔버스
+  이벤트는 SVG 로 그대로 통과**한다(전 뷰포트 elementFromPoint 실측).
+- **카드 표시 전후 SVG rect·높이·좌표 변환(`svgPt`/`c2p`/`p2c_`) 불변** — 팝업이라
+  캔버스를 밀지 않는다.
+
+### 카드 순서 (구현 확정)
+
+- `앞판·뒤판 → 적용 → 리셋 → 가능각·회전량·전체 다트각`, hint 는 둘째 줄.
+- **CSS `order` 만 사용, 실제 DOM id·onclick 유지.** 적용은 주황(action-primary),
+  리셋은 중립.
+
+### 상태 (기존 계약 계승)
+
+- tool=null·Cancel·Reset 이면 카드 `display:none`.
+- **Apply 후 tool=dart·카드·다중다트 세션 유지.**
+- `btnDartMove.textContent="취소"` 계약과 busy 판정 변경 금지.
+
+### 실사용 근거 (실측)
+
+- 최초 전체 폭 카드 front 회전끝→적용 **1,103px** → 상단 compact **567px** →
+  **하단 팝업 front 238px / back 362px** (front 기준 최초 대비 **−78%**).
+- 카드가 일반 흐름에서 빠져 **SVG 높이 82px 회복**(714→796).
+- 하단 카드가 주로 소매 참고 요소를 일부 가리지만 **몸판·회전 핸들은 가리지 않으며**,
+  동선 이득이 더 크다는 결정(상·하 비교 실측 후 사용자 확정).
+
+### 안전 계약 (구현 커밋 `0427a64` 검증)
+
+- 변경 JS 는 **ui.js 의 접근성 문구 1곳뿐**. dartMove.js·render.js·엔진 무변경.
+- id 42 / handler 37 / Observer 2. 9 viewport overflow·겹침·텍스트 잘림 0.
+- **320×568 draft SVG 192px**, runAll 전체 통과, 골든 diff 0.
 
 ## 다음에 확인할 것 (열려있는 이슈)
 
