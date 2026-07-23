@@ -1985,6 +1985,25 @@ context 카드가 **전체 폭 1,420px**이라 hint(`flex:1`)+`margin-left:auto`
 - id 42 / handler 37 / Observer 2. 9 viewport overflow·겹침·텍스트 잘림 0.
 - **320×568 draft SVG 192px**, runAll 전체 통과, 골든 diff 0.
 
+## contextual tool 반복 클릭 토글 (2026-07, 실사용 검증)
+
+**근거**: 같은 버튼으로 연 팝업은 같은 버튼으로 닫혀야 한다 — 별도 닫기 버튼을 추가하지
+않는다(The best part is no part). 구현 커밋 `3d9fc47`.
+
+- **contextual tool 은 idle 상태에서 같은 도구를 다시 선택하면 tool=null**(팝업 닫힘).
+  curves: 첫 클릭 열기 → 두 번째 클릭 닫기 → 세 번째 클릭 다시 열기.
+- **실제 진동선·네크라인·소매산 편집 중(busy)에는 같은 도구를 다시 눌러도 팝업·편집을
+  강제 종료하지 않는다**(편집 함수 호출 없음). 하위 편집 종료 후에는 기존 계약대로
+  tool=curves·팝업 유지 — 그 상태에서 곡선 도구를 다시 클릭하면 닫힌다.
+- busy 중 다른 stage/tool 전환 잠금 계약 유지. dart 는 기존 inline `toggleDartMove` 가
+  엔진 세션을 먼저 처리하며, **Apply 후 다중다트 세션 유지 계약 불변**.
+- 구현은 **`setActiveTool` 한 지점**: `같은 tool && !busy → null, 그 외 → tool`.
+  새 상태·Observer·편집 함수 호출 없음. `syncToolFromBusy` 는 여전히 refresh 시작의
+  유일한 busy→tool 동기화 지점이고, `updateContextActions`/`updateContextInspector` 는
+  uiState 를 변경하지 않는다.
+- 안전: 변경 JS 는 ui.js 대입 1줄. 엔진·handles·dartMove·render 무변경,
+  id 42 / handler 37 / Observer 2, 9 viewport 정상, runAll 전체 통과, 골든 diff 0.
+
 ## 다음에 확인할 것 (열려있는 이슈)
 
 - **✅ (완료, 2026-07-08) `normalizeBakedSegments`** — 위 "normalizeBakedSegments 구현"
