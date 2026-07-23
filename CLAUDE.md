@@ -2004,6 +2004,49 @@ context 카드가 **전체 폭 1,420px**이라 hint(`flex:1`)+`margin-left:auto`
 - 안전: 변경 JS 는 ui.js 대입 1줄. 엔진·handles·dartMove·render 무변경,
   id 42 / handler 37 / Observer 2, 9 viewport 정상, runAll 전체 통과, 골든 diff 0.
 
+## 임시 local curve fixture (테스트 전용)
+
+**목적**: 빈 localStorage 테스트 환경에서도 검증된 곡선으로 UI·다트 기능을 확인하기
+위한 장치다. **서비스용 제품 기본 데이터가 아니다.** 구현 커밋 `c9c6b9c`.
+
+**데이터 공개 계약**
+- 실제 `armhole_data_2026-07-16.json` 은 **미추적·비공개 유지** — 원격 저장소에 곡선
+  좌표를 커밋하지 않는다.
+- 새 clone 에는 fixture 가 없으며 **공식 기본값으로 fallback** 한다(콘솔 오류 0).
+  테스트 장치마다 JSON 을 프로젝트 루트에 **수동 복사**해야 한다.
+
+**우선순위**
+1. 사용자 localStorage exact 저장값
+2. optional local fixture 의 exact B-W-BL **마지막** 항목
+3. 기존 initHandles/sleeve 공식 기본값
+- **유사 치수 적용 금지**(좌표는 도안 절대좌표라 exact key 에만 유효).
+- body exact 와 별도로 sleeve 는 기존 **SL·capFormula exact 계약** 유지 — 불일치면
+  sleeve 를 억지 적용하지 않는다.
+
+**쓰기 금지**
+- fixture 적용은 **state 메모리에만**. localStorage·IndexedDB 쓰기 0,
+  saveCount·dirty 불변, save/import/autoSave 호출 금지.
+- 단, 사용자가 실제 곡선을 편집하면 기존 autoSave 가 작동하며 **그 순간부터
+  사용자 데이터가 된다**(의도된 경계).
+
+**실패 계약**
+- 파일 없음(404)·malformed·미등록 치수·flag=false → **콘솔 오류 없이** 기존 공식
+  기본값. 로딩 UI·canvas 숨김 없음.
+- 사용자 저장값은 fixture 보다 **항상** 우선 — fetch 완료 직전에도 사용자 저장값을
+  재확인한다.
+
+**구조 (제거 경계)**
+- `js/testSeed.js` **한 파일에 격리** — storage.js 등 기존 원본 파일 무변경.
+- `ENABLE_TEST_CURVE_DEFAULTS` 단일 플래그.
+- 기존 `loadSavedCurveForCurrentMeasurements` wrapper 는 원본 참조 1회·중복 설치
+  방지·**자동 복원 경로에서만** 개입(명시 호출 alert 경로 불개입).
+- **서비스 전 제거**: ① `js/testSeed.js` 삭제 ② index.html 의 script 태그와 안내
+  주석 삭제 — 이것만으로 기존 동작 완전 복귀.
+
+**검증**: A~G 시나리오(적용/사용자 우선/치수 전환/미등록/404·malformed/flag off/
+사용자 데이터화 경계) 전부 격리 origin 통과, storage 최종 0키, runAll 전체 통과,
+골든 diff 0, 원본 JSON·`AGENTS.md` 미추적 보존.
+
 ## 다음에 확인할 것 (열려있는 이슈)
 
 - **✅ (완료, 2026-07-08) `normalizeBakedSegments`** — 위 "normalizeBakedSegments 구현"
