@@ -66,11 +66,12 @@
   }
 
   // ── 필수 함수 2: 도구 선택 (busy 중에는 그 도구만 허용) ──
+  // idle 에서 동일 도구 재선택 = 닫힘(tool=null). busy 중 동일 도구는 유지(강제 종료 없음).
   function setActiveTool(tool) {
     const busy = busyTool();
     if (busy && tool !== busy) return;
     if (!STAGE_TOOLS[uiState.stage].includes(tool)) return;
-    uiState.tool = tool;
+    uiState.tool = (tool === uiState.tool && !busy) ? null : tool;
     refresh();
   }
 
