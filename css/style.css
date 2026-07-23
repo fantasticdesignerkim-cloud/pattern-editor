@@ -106,14 +106,12 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .canvas-toolbar .tool{width:auto;min-width:30px;height:26px;padding:0 12px;border:0;border-radius:7px;gap:6px}
 .canvas-toolbar .tool:not(:disabled):hover{border:0;background:color-mix(in srgb,var(--navy) 10%,var(--surface))}
 .canvas-toolbar .tool[aria-pressed="true"]:not(:disabled){background:var(--navy);border:0;color:#fff}
-/* idle 은 아이콘만(가시 텍스트 숨김). busy(aria-pressed=true)일 때만 ::after 가 "종료" 를
-   표시한다 — 실제 textContent="취소" 는 ui.js busy 판정 계약이라 바꾸지 않는다.
-   ([style*="background"] 는 setBtn 이 idle 에도 주황 inline 을 남겨 busy 신호로 부적합 — 실측) */
-.canvas-toolbar .tool-dart{font-size:0;white-space:nowrap}
-.canvas-toolbar .tool-dart[aria-pressed="true"]::after{content:"종료";font-size:12px;font-weight:500}
+/* idle·active 모두 아이콘만(가시 텍스트 없음) — active 상태는 setBtn(JS) 의 빨간 inline
+   배경으로만 표현한다. 실제 textContent="취소" 는 ui.js busy 판정 계약이라 바꾸지 않고
+   font-size:0 으로 숨긴다. 상태 문구는 aria-label/title(다트 이동 시작/종료)이 담당. */
+.canvas-toolbar .tool-dart{font-size:0}
 .canvas-toolbar .tool-dart[aria-pressed="true"]::before,
 .canvas-toolbar .tool-dart[style*="background"]::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 3 6 21M12 3l6 18'/%3E%3Cpath d='M8.2 15a6 6 0 0 0 7.6 0'/%3E%3C/svg%3E")}
-.canvas-toolbar .tool-dart[style*="background"]{color:#fff}
 
 /* 2행 context host: 선택 도구가 있을 때만 표시. 안에 표시된 [data-panel] 이 없으면
    display:none 이라 높이 0(빈 자리 없음). overlay 아님 — svg 앞선 일반 형제 행.
