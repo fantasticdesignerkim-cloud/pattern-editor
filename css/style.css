@@ -106,7 +106,11 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .canvas-toolbar .tool{width:auto;min-width:30px;height:26px;padding:0 12px;border:0;border-radius:7px;gap:6px}
 .canvas-toolbar .tool:not(:disabled):hover{border:0;background:color-mix(in srgb,var(--navy) 10%,var(--surface))}
 .canvas-toolbar .tool[aria-pressed="true"]:not(:disabled){background:var(--navy);border:0;color:#fff}
-.canvas-toolbar .tool-dart{font-size:12px;font-weight:500;white-space:nowrap}
+/* idle 은 아이콘만(가시 텍스트 숨김). busy(aria-pressed=true)일 때만 ::after 가 "종료" 를
+   표시한다 — 실제 textContent="취소" 는 ui.js busy 판정 계약이라 바꾸지 않는다.
+   ([style*="background"] 는 setBtn 이 idle 에도 주황 inline 을 남겨 busy 신호로 부적합 — 실측) */
+.canvas-toolbar .tool-dart{font-size:0;white-space:nowrap}
+.canvas-toolbar .tool-dart[aria-pressed="true"]::after{content:"종료";font-size:12px;font-weight:500}
 .canvas-toolbar .tool-dart[aria-pressed="true"]::before,
 .canvas-toolbar .tool-dart[style*="background"]::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 3 6 21M12 3l6 18'/%3E%3Cpath d='M8.2 15a6 6 0 0 0 7.6 0'/%3E%3C/svg%3E")}
 .canvas-toolbar .tool-dart[style*="background"]{color:#fff}
@@ -114,12 +118,16 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 2행 context host: 선택 도구가 있을 때만 표시. 안에 표시된 [data-panel] 이 없으면
    display:none 이라 높이 0(빈 자리 없음). overlay 아님 — svg 앞선 일반 형제 행.
    (2단계) 떠 있는 둥근 카드: 일반 흐름에서 margin+radius+shadow 로만 부양감.
-   (동선 교정) 전체 폭 카드 + hint flex:1 + margin-left:auto 가 적용 버튼을 화면 우단
-   (1394px)까지 밀어 회전 종료점에서 1,103px 이던 동선을 줄인다 — 카드는 내용 폭
-   (fit-content)으로 캔버스 중앙, 액션은 order 로 사이드 선택 바로 뒤(시각 순서만,
-   DOM 의 리셋→적용 순서 불변), hint 는 flex-basis:100% 로 카드 내부 둘째 줄. */
+   (동선 교정 2차, B안) 카드는 canvas-wrap 기준 absolute 로 SVG 체크무늬 위 하단 중앙에
+   떠 있는 팝업이다 — 회전점(캔버스 중하단)과 가까워 회전끝→적용 동선이 상단 배치의
+   절반 이하(실측 300px 평균). host 는 pointer-events:none 이라 카드 밖 캔버스 이벤트가
+   그대로 통과하고, 실제 카드([data-panel])만 auto 로 받는다. modal·drag·커서 추적 없음.
+   z-index 는 popover(30)·toolbar 보다 낮고 SVG(static)보다 높은 10. 팝업이라 카드 표시
+   전후 SVG rect·높이가 불변이다(캔버스를 밀지 않음). 위치 규칙은 전 뷰포트 하나
+   (bottom:16px 중앙) — 뷰포트별 예외를 만들지 않는다. */
 .context-host{display:none}
-.context-host:has(> [data-panel]:not([hidden])){display:flex;flex-direction:column;flex-shrink:0;margin:8px 10px;width:fit-content;max-width:calc(100% - 20px);align-self:center;border:1px solid color-mix(in srgb,var(--cyan) 40%,var(--surface));border-radius:12px;background:color-mix(in srgb,var(--cyan) 8%,var(--surface));box-shadow:0 2px 10px rgba(23,55,107,.08);overflow:hidden}
+.context-host:has(> [data-panel]:not([hidden])){display:flex;flex-direction:column;position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:10;pointer-events:none;width:fit-content;max-width:calc(100% - 16px);border:1px solid color-mix(in srgb,var(--cyan) 40%,var(--surface));border-radius:12px;background:color-mix(in srgb,var(--cyan) 8%,var(--surface));box-shadow:0 2px 10px rgba(23,55,107,.08);overflow:hidden}
+.context-host [data-panel]{pointer-events:auto}
 /* 카드 내부는 가로 흐름(구조·상태는 1단계 그대로, 배치만 가로) */
 .context-host .context-strip:not([hidden]){flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;border-top:0;background:transparent}
 .context-host .insp-title{display:none}
@@ -127,10 +135,12 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .context-host .row{width:auto;justify-content:flex-start;gap:6px}
 .context-host .row label{color:var(--muted);font-size:11px}
 .context-host .btn{width:auto;padding:5px 12px}
-/* 시각 순서: 사이드(0) → 액션(1) → 수치(2) → hint 둘째 줄(3). DOM 순서는 불변. */
+/* 시각 순서: 사이드(0) → 액션(1) → 수치(2) → hint 둘째 줄(3). 액션 행 내부는 적용→리셋
+   (적용=주황 action-primary, 리셋=중립). 전부 CSS order — DOM id·onclick 순서는 불변. */
 .context-host .dart-busy > .row{order:2}
 .context-host .dart-busy > #dartSideRow{order:0}
 .context-host .dart-busy > .row:has(#btnDartApply){order:1}
+.context-host .dart-busy > .row:has(#btnDartApply) #btnDartApply{order:-1}
 .context-host .dart-busy > #dartMoveHint{order:3;flex:0 0 100%;min-width:0}
 .context-host .insp{border-bottom:0}
 .context-host .insp[data-panel]:not([hidden]){display:flex;align-items:center;flex-wrap:wrap}
@@ -219,7 +229,6 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
   /* 데스크톱 압축용 clamp 가 모바일 summary 까지 좁혀 actions 줄바꿈 지점이 바뀌던 것 복원 */
   .pop>summary{padding:6px 12px}
   .context-host .btn{min-height:40px}
-  .context-host{margin:6px 8px}
   .context-host .context-strip:not([hidden]){padding:6px 10px;gap:4px 10px}
   .context-host .insp>summary{padding:6px 10px}
   .context-host .insp-body{padding:6px 10px 6px 0;gap:4px 8px}

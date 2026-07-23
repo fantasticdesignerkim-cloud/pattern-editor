@@ -203,7 +203,7 @@
   function syncDartLabel() {
     const b = document.getElementById("btnDartMove");
     if (!b) return;
-    const label = b.textContent.trim() === "취소" ? "다트 이동 취소" : "다트 이동 시작";
+    const label = b.textContent.trim() === "취소" ? "다트 이동 종료" : "다트 이동 시작";
     b.setAttribute("aria-label", label);
     b.setAttribute("title", label);
   }
