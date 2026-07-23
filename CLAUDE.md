@@ -1923,10 +1923,30 @@ context 카드가 **전체 폭 1,420px**이라 hint(`flex:1`)+`margin-left:auto`
 - **primary bar 순서: `전체·몸판·소매 → 다트 도구 → 곡선 편집`** (모드가 왼쪽).
 - **다트 idle 은 아이콘만 표시**(가시 텍스트 없음), aria-label/title = "다트 이동 시작".
 - **active 의 실제 `btnDartMove.textContent="취소"` 는 busy 판정용으로 유지**(변경 금지).
-  화면 표시는 `aria-pressed="true"` 일 때만 CSS `::after` 가 **"종료"** 를 그린다.
-  aria-label/title = "다트 이동 종료"(ui.js `syncDartLabel` 문구 1곳).
+  ~~화면 표시는 `aria-pressed="true"` 일 때만 CSS `::after` 가 **"종료"** 를 그린다.~~
+  → **실사용 검증으로 대체됨** — 아래 "다트 도구 icon-only 표시" 섹션이 최종 계약이다
+  ("종료" 텍스트는 중복 정보였다). aria-label/title = "다트 이동 종료"(ui.js
+  `syncDartLabel` 문구 1곳)는 그대로 유효하다.
   ⚠️ `[style*="background"]` 는 busy 신호로 쓰지 말 것 — `setBtn` 이 idle 에도 주황
   inline 을 남겨 오탐한다(실측).
+
+### 다트 도구 icon-only 표시 (2026-07, 실사용 검증) — 위 "종료" 표시 계약 대체
+
+**근거**: "종료" 텍스트는 중복 정보였다 — 다트 아이콘 + 주황/빨강 상태색 + tooltip 이
+이미 역할을 표현한다. The best part is no part. 구현 커밋 `efb9bc3`.
+
+- **idle·active 모두 화면에는 다트 아이콘만** 표시한다. 가시 "다트이동 시작"·"종료"
+  텍스트 없음(`font-size:0`, **`::after content:"종료"` 금지**).
+- **버튼 폭은 두 상태 모두 48px 고정** — 상태 전환 시 버튼 폭·primary bar 위치 불변
+  (9 viewport 실측 48→48).
+- 상태색은 기존 `setBtn`(JS) inline 그대로: **idle 주황 / active 빨강 + 흰 아이콘**.
+- 상태 문구는 **tooltip·aria-label/title 만**: idle = "다트 이동 시작" /
+  active = "다트 이동 종료".
+- 실제 `textContent="취소"` 는 busy 판정용으로 유지.
+- `aria-pressed` 는 상태·스타일 신호(흰 아이콘 전환 등)로 유지하되 **가시 텍스트
+  생성에는 쓰지 않는다**.
+- 안전: CSS 중심(JS 변경 0), id 42 / handler 37 / Observer 2, 다중다트 계약 유지,
+  9 viewport overflow·겹침 0, runAll 전체 통과, 골든 diff 0.
 
 ### 하단 팝업 (구현 확정)
 
