@@ -30,6 +30,8 @@ const suites = [
   // 잠긴 sign-selection.json 골든을 현재 C4 API로 재현·검증(legacy 삭제 후 최소 검증기).
   { file: "signSelectionFixture.js",  golden: true },
   { file: "perfBaseline.js",          golden: true },
+  // 블록마스터(원형) 데이터 캡처: 실제 js/blockMaster.js 를 vm 으로 실행해 검증(골든 없음).
+  { file: "blockMasterCheck.js",      golden: false },
 ];
 
 let anyFail = false;
