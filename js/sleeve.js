@@ -771,7 +771,7 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
         const [x2,y2] = pxy(actualAnchors[i+1]);
         d += ` C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`;
       }
-      g.appendChild(E("path",{d,class:"sleeve-pattern-line"}));
+      g.appendChild(_tagGeom(E("path",{d,class:"sleeve-pattern-line"}), "sleeve", "outline"));
 
       // ── 이세량 실시간 계산: 몸판 암홀 길이 vs 소매 패턴선 길이 ──
       const segLen = (i) => {
@@ -922,11 +922,11 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
     const frontHemPt = { x: sx_C + frontHemHalf,   y: sy_HEM };
 
     // 뒤/앞 옆선: 둘레점에서 조절된 소매단으로 연결
-    g.appendChild(Ln(sleevePatPts.backCircPt,  backHemPt,  "sleeve-pattern-line"));
-    g.appendChild(Ln(sleevePatPts.frontCircPt, frontHemPt, "sleeve-pattern-line"));
+    g.appendChild(_tagGeom(Ln(sleevePatPts.backCircPt,  backHemPt,  "sleeve-pattern-line"), "sleeve", "outline"));
+    g.appendChild(_tagGeom(Ln(sleevePatPts.frontCircPt, frontHemPt, "sleeve-pattern-line"), "sleeve", "outline"));
 
     // 조절된 소매단선
-    g.appendChild(Ln(backHemPt, frontHemPt, "sleeve-pattern-line"));
+    g.appendChild(_tagGeom(Ln(backHemPt, frontHemPt, "sleeve-pattern-line"), "sleeve", "outline"));
 
     // 소매단 중심선 보조선: 소매산점(SP)에서 소매단까지 수직으로 내려오는 중심선
     const hemCenterTop = { x: sx_C, y: sy_SP };

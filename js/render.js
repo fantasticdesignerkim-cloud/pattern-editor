@@ -1,4 +1,28 @@
 // ── 렌더 ──────────────────────────────────────
+// 봉제 형상 소유권 표식: 생성 지점이 의미를 알 때만 부여한다(좌표/DOM 순서 추측 금지).
+// piece ∈ {front, back, shared, sleeve}, role ∈ {outline, construction}.
+function _tagGeom(el, piece, role){
+  if (el && el.setAttribute){
+    el.setAttribute("data-piece", piece);
+    el.setAttribute("data-geometry-role", role);
+  }
+  return el;
+}
+
+// 허리다트는 draft.js drawDart 가 다트다리(dart-waist) 2개를 만든다. draft.js 를
+// 건드리지 않고, 이 호출이 방금 g 에 추가한 dart-waist 요소에만 표식을 부여한다
+// (좌표/전역 순서 추측이 아니라 "이 호출이 생성한 것"을 특정 — 소유권은 호출부가 안다).
+function _tagDart(g, dart, piece){
+  const start = g.childNodes.length;
+  drawDart(g, dart, "dart-waist");
+  for (let i = start; i < g.childNodes.length; i++){
+    const el = g.childNodes[i];
+    if (el && el.getAttribute && (el.getAttribute("class") || "").split(/\s+/).indexOf("dart-waist") !== -1){
+      _tagGeom(el, piece, "construction");
+    }
+  }
+}
+
 function render(){
   const W_=svg.clientWidth||900, H_=svg.clientHeight||700;
   svg.innerHTML="";
@@ -290,6 +314,7 @@ function drawAppliedSegments(g, segs, cls, color, side) {
     el.setAttribute("d", d);
     el.setAttribute("fill", "none");
     if (color) el.setAttribute("style", `stroke:${color};`);
+    _tagGeom(el, side, "outline");
     g.appendChild(el);
   };
 
@@ -317,7 +342,7 @@ function drawAppliedSegments(g, segs, cls, color, side) {
       flushSmoothPath(curvePts);
       curvePts = [];
       curveType = null;
-      g.appendChild(LnC(seg.from, seg.to, cls, color));
+      g.appendChild(_tagGeom(LnC(seg.from, seg.to, cls, color), side, "outline"));
     }
   }
   flushSmoothPath(curvePts);
@@ -420,6 +445,7 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
           class:"pattern"
         });
         if(DEBUG_COLORS) _fnp.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
+        _tagGeom(_fnp, "front", "outline");
         gPat.appendChild(_fnp);
       }
 
@@ -444,14 +470,14 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
     }
 
     // ─ 앞어깨선 ──────────────────────────────────
-    gPat.appendChild(LnC(nTL, FSP, "pattern", _DC_F));
+    gPat.appendChild(_tagGeom(LnC(nTL, FSP, "pattern", _DC_F), "front", "outline"));
     if(showDim) gPat.appendChild(dimLine(nTL, FSP, 12));
     gPat.appendChild(dot(FSP, "pt-main", 3));
     gPat.appendChild(lbl(FSP, "FSP", "txt-dark", 6, 10));
 
     // ─ G점 → BP 직선 + 다트선 ──────────────────
-    gPat.appendChild(Ln(p.G,  p.BP, "dart dart-struct")); // 가슴다트 하부
-    gPat.appendChild(Ln(p.BP, GG,  "dart dart-struct")); // 가슴다트 상부
+    gPat.appendChild(_tagGeom(Ln(p.G,  p.BP, "dart dart-struct"), "front", "construction")); // 가슴다트 하부
+    gPat.appendChild(_tagGeom(Ln(p.BP, GG,  "dart dart-struct"), "front", "construction")); // 가슴다트 상부
     gPat.appendChild(dot(GG, "pt-main", 3));
     gPat.appendChild(lbl(GG, "GG", "txt-dark", 6, -6));
 }
@@ -482,6 +508,7 @@ function drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
           class:"pattern"
         });
         if(DEBUG_COLORS) _p.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
+        _tagGeom(_p, "front", "outline");
         gPat.appendChild(_p);
       }
 
@@ -544,6 +571,7 @@ function drawBackNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
           class:"pattern"
         });
         if(DEBUG_COLORS) _bnp.setAttribute("style", `stroke:${DBG_BACK};`); // DEBUG
+        _tagGeom(_bnp, "back", "outline");
         gPat.appendChild(_bnp);
       }
 
@@ -585,8 +613,8 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
 
 
 
-    gPat.appendChild(LnC(bND, dartCenter, "pattern", _DC_B));
-    gPat.appendChild(LnC(dartEnd_, bSP, "pattern", _DC_B));
+    gPat.appendChild(_tagGeom(LnC(bND, dartCenter, "pattern", _DC_B), "back", "outline"));
+    gPat.appendChild(_tagGeom(LnC(dartEnd_, bSP, "pattern", _DC_B), "back", "outline"));
     gPat.appendChild(dot(bSP, "pt-main", 3));
     gPat.appendChild(lbl(bSP, "BSP", "txt-dark", 4, 10));
     gPat.appendChild(Ln(p.E, eOnSh, "dep"));
@@ -595,8 +623,8 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
     gPat.appendChild(lbl(dartCenter, "다트시작", "txt-dark", 4, -6));
     gPat.appendChild(dot(dartEnd_, "pt-main", 4));
     gPat.appendChild(lbl(dartEnd_, "다트끝", "txt-dark", 4, -6));
-    gPat.appendChild(LnC(dartCenter, p.E,    "dart dart-struct", _DC_B)); // 뒤어깨다트
-    gPat.appendChild(LnC(p.E,        dartEnd_, "dart dart-struct", _DC_B)); // 뒤어깨다트
+    gPat.appendChild(_tagGeom(LnC(dartCenter, p.E,    "dart dart-struct", _DC_B), "back", "construction")); // 뒤어깨다트
+    gPat.appendChild(_tagGeom(LnC(p.E,        dartEnd_, "dart dart-struct", _DC_B), "back", "construction")); // 뒤어깨다트
     if(showDim) gPat.appendChild(dimLine(bND, bSP, 12));
 
     gPat.appendChild(Ln(p.F, fAux, "dep"));
@@ -650,6 +678,7 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
                      ` C${hx1b},${hy1b} ${hx2a},${hy2a} ${bx2},${by2}`;
         const _bp = E("path",{ d:_bpd, class:"pattern" });
         if(DEBUG_COLORS) _bp.setAttribute("style", `stroke:${DBG_BACK};`); // DEBUG
+        _tagGeom(_bp, "back", "outline");
         gPat.appendChild(_bp);
       }
 
@@ -659,6 +688,7 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
                      ` C${hx3b},${hy3b} ${hx4},${hy4} ${bx4},${by4}`;
         const _fp = E("path",{ d:_fpd, class:"pattern" });
         if(DEBUG_COLORS) _fp.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
+        _tagGeom(_fp, "front", "outline");
         gPat.appendChild(_fp);
       }
 
@@ -729,23 +759,23 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
 
     // 앞판 옆선: 앞판 적용 시 drawDartMoveApplied 담당
     if(!isFrontApplied){
-      gPat.appendChild(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_F));
+      gPat.appendChild(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_F), "front", "outline"));
     }
     // 뒤판 옆선: 뒤판 적용 시 drawDartMoveApplied 담당
     if(!isBackApplied){
-      gPat.appendChild(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_B));
+      gPat.appendChild(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_B), "back", "outline"));
     }
 
     const FND = { x: f.sw(), y: f.yB() + f.fnd() };
     // 앞판 허리선
     if(!isFrontApplied){
-      gPat.appendChild(LnC(FND,        p.FRONT_WL, "pattern", _DC_F));
-      gPat.appendChild(LnC(p.FRONT_WL, p.SIDE_BTM, "pattern", _DC_F));
+      gPat.appendChild(_tagGeom(LnC(FND,        p.FRONT_WL, "pattern", _DC_F), "front", "outline"));
+      gPat.appendChild(_tagGeom(LnC(p.FRONT_WL, p.SIDE_BTM, "pattern", _DC_F), "front", "outline"));
     }
     // 뒤판 허리선 + 뒤중심선
     if(!isBackApplied){
-      gPat.appendChild(LnC(p.SIDE_BTM, p.BACK_WL,  "pattern", _DC_B));
-      gPat.appendChild(LnC(p.BACK_WL,  p.A,         "pattern", _DC_B));
+      gPat.appendChild(_tagGeom(LnC(p.SIDE_BTM, p.BACK_WL,  "pattern", _DC_B), "back", "outline"));
+      gPat.appendChild(_tagGeom(LnC(p.BACK_WL,  p.A,         "pattern", _DC_B), "back", "outline"));
     }
 
     // ── FRONT_ARM → BP (절개선) ─ 앞판 적용 시 skip ──
@@ -958,13 +988,13 @@ function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatter
   // ── 다트 a~f ─────────────────────────────────
   const gDart=E("g");
   gDart.setAttribute("id","layer-dart");
-  drawDart(gDart, darts_.a, "dart-waist");
-  drawDart(gDart, darts_.b, "dart-waist");
-  drawDart(gDart, darts_.c, "dart-waist");
-  drawDart(gDart, darts_.d, "dart-waist");
-  drawDart(gDart, darts_.e, "dart-waist");
+  _tagDart(gDart, darts_.a, "front");   // BP 아래 (앞판)
+  _tagDart(gDart, darts_.b, "front");   // F점 앞 (앞판)
+  _tagDart(gDart, darts_.c, "shared");  // 옆선 (앞뒤 공용)
+  _tagDart(gDart, darts_.d, "back");    // 뒤품~옆선 (뒤판)
+  _tagDart(gDart, darts_.e, "back");    // E점 (뒤판)
   // f 다트: 뒤중심선이라 오른쪽만
-  gDart.appendChild(Ln(darts_.f.right, darts_.f.apex, "dart-waist"));
+  gDart.appendChild(_tagGeom(Ln(darts_.f.right, darts_.f.apex, "dart-waist"), "back", "construction"));
   gDart.appendChild(dot(darts_.f.apex, "pt-main", 4));
   if(showDart)svg.appendChild(gDart);
 }
