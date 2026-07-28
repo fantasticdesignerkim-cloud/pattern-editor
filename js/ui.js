@@ -168,6 +168,69 @@
     updateContextActions();
     updateContextInspector();
     updateDartInspector();
+    updateCompletionUI();
+  }
+
+  // ── 원형 완료 최소 UI ─────────────────────────
+  // 읽기 전용: blockWorkflow.latest()·hasCompleted() 와 dirty(isMeasureDirty)·busy(busyTool)
+  // 만 읽어 버튼/문구를 갱신한다. isCurrentDraftChanged() 는 호출하지 않는다(자동 hash
+  // 비교·canvas observer 금지). uiState 에 완료 상태를 복제하지 않는다.
+  function measurementsDirty() {
+    return (typeof isMeasureDirty !== "undefined") && !!isMeasureDirty;
+  }
+
+  function updateCompletionUI() {
+    const btn  = document.getElementById("btnCompleteDraft");
+    const note = document.getElementById("blockStatusNote");
+    if (!btn && !note) return;
+    const wf = window.blockWorkflow;
+    const dirty = measurementsDirty();
+    const busy = !!busyTool();
+    const completed = !!(wf && wf.hasCompleted());
+    const latestV = completed ? wf.latest().version : 0;
+
+    if (btn) {
+      btn.textContent = completed ? "다시 완료" : "원형 완료";
+      const blocked = dirty || busy;
+      btn.disabled = blocked;
+      if (blocked) {
+        btn.setAttribute("aria-disabled", "true");
+        btn.setAttribute("title", dirty
+          ? "패턴을 다시 생성한 뒤 완료할 수 있습니다"
+          : "현재 작업을 종료한 뒤 완료할 수 있습니다");
+      } else {
+        btn.removeAttribute("aria-disabled");
+        btn.setAttribute("title", "현재 원형을 세션 완료본으로 기록합니다");
+      }
+    }
+    if (note) {
+      // 정직한 표현: 완료 후 draft 를 수정했어도 자동 비교 전에는 "완료본 v_ 보관 중".
+      note.textContent = dirty ? "패턴을 다시 생성한 뒤 완료하세요"
+        : busy ? "현재 작업을 종료한 뒤 완료하세요"
+        : completed ? "완료본 v" + latestV + " 보관 중 · 세션 전용"
+        : "원형 미완료 · 세션 전용";
+    }
+  }
+
+  // 완료 버튼 클릭: dirty/busy 재검사 → blockWorkflow.complete() → 성공 refresh /
+  // 실패 시 성공 상태를 바꾸지 않고 reason 별로 문구만 정직하게 안내(콘솔로 흘리지 않음).
+  // stage 를 활성화하거나 자동 전환하지 않는다.
+  function onCompleteDraft() {
+    const wf = window.blockWorkflow;
+    if (!wf) return;
+    if (measurementsDirty() || busyTool()) { refresh(); return; }  // 방어 재검사
+    let ok = true, reason = null;
+    try { wf.complete(); }
+    catch (e) { ok = false; reason = e && e.reason; }
+    if (ok) { refresh(); return; }
+    const note = document.getElementById("blockStatusNote");
+    if (note) {
+      note.textContent =
+        reason === "measure-dirty" ? "패턴을 다시 생성한 뒤 완료하세요"
+        : (reason === "dart-busy" || reason === "edit-busy") ? "현재 작업을 종료한 뒤 완료하세요"
+        : "완료할 수 없습니다 · 원형을 다시 생성해 주세요";
+    }
+    // refresh 를 부르지 않아 성공 상태·문구를 오염시키지 않고 실패 안내를 유지한다.
   }
 
   // ── 다트 inspector 표시 ───────────────────────
@@ -236,6 +299,18 @@
       const el = document.getElementById(id);
       if (el) el.addEventListener("click", () => queueMicrotask(refresh));
     });
+    // 원형 완료 버튼(inline onclick 없음 — addEventListener 로만 연결, inline handler 37 유지).
+    const complete = document.getElementById("btnCompleteDraft");
+    if (complete) complete.addEventListener("click", () => { if (!complete.disabled) onCompleteDraft(); });
+    // 패턴 생성 후: inline generatePattern() 이 끝난 뒤(dirty=false) 버튼/문구를 갱신.
+    const gen = document.getElementById("btnGenerate");
+    if (gen) gen.addEventListener("click", () => queueMicrotask(refresh));
+    // 치수 입력 변경 후: inline markDirty/render 가 끝난 뒤 버튼/문구를 갱신(새 Observer 없음).
+    document.querySelectorAll('.inspector [data-panel="measurements"] input, .inspector [data-panel="measurements"] select')
+      .forEach(el => {
+        el.addEventListener("input",  () => queueMicrotask(refresh));
+        el.addEventListener("change", () => queueMicrotask(refresh));
+      });
     // 파일 메뉴 잠금: busy 면 열리지 않게 기본동작만 막는다(상태 저장·엔진 호출 없음).
     const file = fileMenu();
     if (file) {

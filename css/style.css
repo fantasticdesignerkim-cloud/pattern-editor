@@ -164,6 +164,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .insp-body .row label~.btn{width:auto;padding:5px 10px;white-space:nowrap}
 .insp-title{font-size:11px;font-weight:500;color:var(--navy);letter-spacing:.04em}
 .note{font-size:11px;color:var(--muted)}
+/* 원형 완료(세션 전용): 패턴 생성과 시각적으로 구분되는 조용한 navy 실행 블록. orange 아님. */
+.completion-note{margin-top:6px;padding-top:8px;border-top:1px solid var(--border)}
+#btnCompleteDraft:not(:disabled){border-color:var(--navy)}
 .row select{width:96px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--navy)}
 
 .statusbar{display:flex;align-items:center;gap:12px;height:22px;padding:0 10px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}

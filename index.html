@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026072304">
+<link rel="stylesheet" href="css/style.css?v=2026072805">
 </head>
 <body>
 
@@ -150,6 +150,10 @@
         <div class="row"><label>다트 총량 (cm)</label><input type="number" id="inpDart" value="12.5" step="0.5" oninput="render()"></div>
         <div class="row note" id="dirtyState">패턴 생성 버튼을 누르세요</div>
         <div class="row"><button class="btn action-primary" id="btnGenerate" onclick="generatePattern()">패턴 생성 / 다시 계산</button></div>
+        <!-- 원형 완료(세션 전용). design 은 계속 disabled — 완료본이 있어도 활성화하지 않는다.
+             버튼은 addEventListener 로만 연결(inline handler 없음). 문구는 aria-live. -->
+        <div class="row note completion-note" id="blockStatusNote" aria-live="polite">원형 미완료 · 세션 전용</div>
+        <div class="row completion-row"><button class="btn" id="btnCompleteDraft" title="현재 원형을 세션 완료본으로 기록합니다">원형 완료</button></div>
       </div>
     </details>
   </aside>
@@ -178,7 +182,7 @@
 <script src="js/blockWorkflow.js?v=2026072804"></script>
 <script src="js/init.js?v=2026070731"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026072802"></script>
+<script src="js/ui.js?v=2026072805"></script>
 
 </body>
 </html>
