@@ -15,11 +15,13 @@
 (function () {
   "use strict";
 
-  // stage 별 도구. draft 는 도구 없이 치수 패널만 쓴다.
-  // design 진입 시 도구를 자동 선택하지 않는다(tool=null). 도구·context 는 사용자가
-  // 캔버스 상단 바에서 직접 고를 때만 나타난다.
-  const STAGE_TOOLS  = { draft: [], design: ["dart", "curves"] };
-  const DEFAULT_TOOL = { draft: null, design: null };
+  // stage 별 도구. 다트·곡선 성형은 "원형(draft)" 을 만드는 작업이므로 draft stage 의
+  // 도구다. design stage 는 실제 designProject·reference renderer 가 구현되기 전까지
+  // 가용 stage 목록에 없다(STAGE_TOOLS 에 키 없음 = 미가용 → 정직하게 disabled).
+  // 진입 시 도구를 자동 선택하지 않는다(tool=null). 도구·context 는 사용자가 캔버스
+  // 상단 바에서 직접 고를 때만 나타난다.
+  const STAGE_TOOLS  = { draft: ["dart", "curves"] };
+  const DEFAULT_TOOL = { draft: null };
 
   // ── UI 상태: 이 두 값이 전부 ──────────────────
   const uiState = { stage: "draft", tool: null };
@@ -48,12 +50,13 @@
     return null;
   }
 
-  // 지금 보여야 할 패널: busy > design의 tool > draft의 치수
-  function activePanel() {
+  // context-host 에 띄울 "도구 패널"만 파생한다(measurements 는 별개로 stage 파생).
+  // busy 가 tool 보다 우선. measurements 와 상호배타로 묶지 않는다 —
+  // 원형 stage 에서는 우측 치수 inspector 와 도구 popup 이 동시에 보여야 한다.
+  function contextTool() {
     const busy = busyTool();
-    if (busy) return busy;
-    if (uiState.stage === "draft") return "measurements";
-    return uiState.tool;
+    if (busy) return busy;      // "dart" | "curves"
+    return uiState.tool;        // "dart" | "curves" | null
   }
 
   // ── 필수 함수 1: stage 전환 (수동만, busy 중에는 잠금) ──
@@ -92,12 +95,19 @@
 
   // ── 필수 함수 3: 현재 컨텍스트의 inspector만 노출 ──
   function updateContextInspector() {
-    const active = activePanel();
-    panelEls().forEach(p => { p.hidden = p.dataset.panel !== active; });
+    // 두 표시를 독립 파생한다(상호배타로 묶지 않는다):
+    //  · measurements(우측 치수 inspector 패널) = stage 로만. 도구 선택과 무관하게
+    //    원형 stage 에서는 항상 표시한다.
+    //  · dart/curves(context-host popup) = 선택/busy 도구.
+    const ctx = contextTool();
+    panelEls().forEach(p => {
+      const name = p.dataset.panel;
+      if (name === "measurements") p.hidden = uiState.stage !== "draft";
+      else p.hidden = name !== ctx;
+    });
 
     // 원형 stage 만 우측 치수 inspector 를 쓴다. design stage 는 inspector 자체를 숨기고
-    // (CSS :has 가 280px column 도 함께 제거), 도구 조작은 상단 context host 가 담당한다.
-    // 새 상태 저장 없이 stage 로만 파생한다.
+    // (CSS :has 가 280px column 도 함께 제거). 현재 design 은 미가용이라 원형에서만 표시.
     const inspector = document.querySelector(".inspector");
     if (inspector) inspector.hidden = uiState.stage !== "draft";
 
@@ -114,9 +124,13 @@
     const busy = busyTool();
 
     stageEls().forEach(btn => {
-      const isCurrent = btn.dataset.stage === uiState.stage;
+      const stage = btn.dataset.stage;
+      // STAGE_TOOLS 에 키가 없는 stage(현재 design)는 미가용 → 항상 disabled.
+      // design 은 designProject·reference renderer 구현 전까지 정직하게 막는다.
+      const available = Object.prototype.hasOwnProperty.call(STAGE_TOOLS, stage);
+      const isCurrent = stage === uiState.stage;
       btn.setAttribute("aria-selected", String(isCurrent));
-      const blocked = !!busy && !isCurrent;
+      const blocked = !available || (!!busy && !isCurrent);
       btn.disabled = blocked;
       if (blocked) btn.setAttribute("aria-disabled", "true");
       else         btn.removeAttribute("aria-disabled");
