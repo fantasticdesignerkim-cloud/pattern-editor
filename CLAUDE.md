@@ -1752,7 +1752,9 @@ notch identity 를 실제로 추적하는 설계가 먼저다.
 - **context 카드 미표시 시 빈 높이 0**(빈 자리·빈 바를 남기지 않는다).
 
 **3. 상태**
-- **design 초기 tool=null**.
+- ~~**design 초기 tool=null**~~ → **폐기(S1)**: 다트·곡선은 이제 draft(원형) stage 도구다.
+  design stage 는 `STAGE_TOOLS` 에 키가 없어 항상 disabled(designProject/reference 구현
+  전까지). 아래 "✅ 원형 완료 기반 S1~S3 구현 완료" 섹션 참고.
 - **dart Apply 는 현재 다트만 커밋하고 세션과 tool=dart 를 유지한다**(다중다트 연속
   작업 보존 — `applyDartMove` 가 적용 후 `setBtn("취소")`/`setSideRowVisible(true)` 로
   세션을 열어 두고 "앞판/뒤판을 다시 선택"으로 다음 다트를 유도한다). Apply 직후
@@ -1822,7 +1824,9 @@ notch identity 를 실제로 추적하는 설계가 먼저다.
 
 ### 상태 계약 (구현 확정)
 
-- design 최초 진입 **tool=null** (`DEFAULT_TOOL.design=null`, 자동 curves 선택 폐지).
+- ~~design 최초 진입 **tool=null** (`DEFAULT_TOOL.design=null`, 자동 curves 선택 폐지)~~
+  → **폐기(S1)**: `STAGE_TOOLS={draft:["dart","curves"]}`, `DEFAULT_TOOL={draft:null}`.
+  design 은 미가용 stage 라 항상 disabled. 아래 "✅ 원형 완료 기반 S1~S3 구현 완료" 참고.
 - **Apply 는 현재 다트만 커밋하고 tool=dart·세션을 유지**한다(다중다트 연속 작업).
   Apply 직후 이전 다트 수치 행 초기화·Apply disabled, 같은 세션에서 앞판/뒤판 재선택
   → 다음 다트 작업 가능(실측: 2번째 다트 절개→조각→드래그 정상).
@@ -2114,6 +2118,149 @@ context 카드가 **전체 폭 1,420px**이라 hint(`flex:1`)+`margin-left:auto`
 ③ 소매·④ 칼라가 정확해진다. **첫 블라우스 몸판 사양은 별도로 정한 뒤 착수**하며,
 그 전까지 코드·shape 골든·다트 엔진·새 UI stage 를 건드리지 않는다.
 
+## ✅ 원형 완료 기반 S1~S3 구현 완료 (2026-07) — `원형 완료 → 디자인 복사` 1단계
+
+로컬 5커밋(`bb05836`→`aff2baf`→`82ece4a`→`884c4ca`→`634acab`)으로 "현재 원형을 세션
+완료본(blockMaster)으로 기록"하는 기반이 구현됐다. **designProject·reference renderer·
+디자인 시작·design stage 활성화는 아직 없다**(범위 밖). 과정 일지가 아니라 확정된
+결정·불변식·경계다. 캐시 버전: render/sleeve `?v=2026072701`, blockMaster `?v=2026072801`,
+blockWorkflow `?v=2026072804`, ui `?v=2026072805`, css `?v=2026072805`.
+
+### 1. 현재 단계 책임 (S1, `82ece4a`)
+- **치수·패턴 생성·다트이동·진동선·네크라인·소매산 편집은 전부 `draft(원형)` stage 책임.**
+- `STAGE_TOOLS = { draft: ["dart","curves"] }`, `DEFAULT_TOOL = { draft: null }` (js/ui.js).
+- **measurements inspector(`[data-panel="measurements"]`)는 draft 에서 상시 표시** — stage
+  로만 파생하고 tool 과 독립. `activePanel()`(measurements·tool 상호배타) 폐기 →
+  **`contextTool()`(busy > uiState.tool)** 신설. `updateContextInspector`가 measurements 는
+  stage 로, dart/curves 는 contextTool 로 **각각** hidden 판정(둘이 동시에 보인다).
+- **design stage 는 disabled**(`STAGE_TOOLS` 에 design 키 없음 → `updateContextActions` 의
+  `available = hasOwnProperty(STAGE_TOOLS, stage)` 게이트가 항상 disabled+aria-disabled).
+  `setWorkspaceStage("design")`도 `if(!STAGE_TOOLS[stage]) return`으로 진입 불가.
+  index.html 의 design 버튼은 `disabled aria-disabled="true" title="원형 완료 후 디자인
+  시작 준비"`. **주의: 이 title 은 향후 문구일 뿐 — 완료본이 있어도 design 은 활성화되지
+  않는다**(designProject/reference 구현 전까지). 빈 디자인 화면·placeholder 금지.
+- 재단·출력 stage 기존 disabled 유지. **완료 성공 후 자동 stage 전환 없음.**
+- `uiState = { stage, tool }` 두 값 유지 — blockMaster/version/completion 상태를 넣지 않는다.
+- > 기존 "다트·곡선=design stage" 기록(위 "플로팅…" 섹션들)은 역사로 보존하되 해당 줄에
+  >  취소선 정정을 달았다(design 초기 tool=null 두 곳).
+
+### 2. SVG geometry 의미 표식 (`bb05836`, render.js/sleeve.js)
+- 봉제 형상 SVG 요소에 **`data-piece="front|back|shared|sleeve"` +
+  `data-geometry-role="outline|construction"`** 부여(`_tagGeom`/`_tagDart` 헬퍼, 생성 지점에서만).
+- **소유권은 생성 지점이 아는 의미로만**: `_DC_F`/`_DC_B` 인자, 함수 경계, `app.side`.
+  좌표·DOM 순서 휴리스틱 금지. draft.js `drawDart` 무변경(render.js 호출부에서 태깅).
+- 분류(확정): 앞옆선=front/outline, **뒤옆선=back/outline(좌표가 같아도 별개 봉제선)**,
+  허리다트 a·b=front/construction, **c의 두 다리=shared/construction**, d·e·f=back/construction.
+  가슴다트=front/construction, 뒤어깨다트=back/construction. **shared/outline 은 현재 0**
+  (실제 공통 외곽선이 생기기 전까지 빈 상태 — 옛 "공통 옆선=shared/outline" 가정 폐기).
+- **중복 identity = `piece + role + normalized primitive`** (좌표만 아님). 같은 좌표의
+  front/back 옆선은 허용되는 별개 primitive.
+- **data 속성은 의미 분류용** — geometry/element count/class/event/style 불변(HEAD 대비
+  geometry hash·개수·class multiset 동일, data-* 2개만 추가 실측).
+- **적용된 다트 형상**(drawAppliedSegments)은 side/outline. `dart-leg*` 는 DOM class 가
+  아니라 baked segment **type**(현재 열린 다트=현재 외곽선, 지배 모델).
+- **기본 gen-0 분포**(workMode=all): front **7/6**, back **7/7**, shared **0/2**,
+  sleeve **4/0** (outline/construction). body 모드=몸판만, sleeve 모드=소매만 — 캡처는
+  항상 all 강제.
+
+### 3. block snapshot 캡처 (`aff2baf`, js/blockMaster.js) — 순수 캡처 API
+공개: **`window.captureBlockSnapshot()`**. 저장·렌더·UI 없음. 실패 시 부분 snapshot
+반환 없이 `Error`(with `.reason`) throw.
+```js
+{ schemaVersion: 1,
+  source: {
+    measurements: { B, W, BL, SL, Hem, capAdj, capFormula, dartTotal },   // n()/selCapFormula
+    handles: { armH, fArmH, bNeckH, fNeckH, sleeveH },                    // deep clone
+    appliedDarts: { front, back } },                                      // deep clone(적용 bakedSegments)
+  geometry: { front:{outline,construction}, back:{…}, shared:{…}, sleeve:{…} } }
+```
+- **id/version/completedAt/hash 는 snapshot 에 없다**(래퍼 몫). 좌표는 화면px→도안좌표
+  (`p2c_`) 원본 정밀도. **primitive**: line `{kind:"line", from, to}` / path
+  `{kind:"path", commands:[{type:"M"|"C", points:[{x,y}…]}]}`. className/style/data-* 미저장.
+- **precondition(throw reason)**: `dart-busy` / `edit-busy`(arm·neck·sleeve) /
+  `missing-measurements` / `missing-handles` / `no-svg` / `bad-piece` / `bad-role` /
+  **`non-mc-path-command`(M/C 외)** / **`empty-required-outline`(front·back·sleeve 필수,
+  shared.outline 은 비어도 됨)** / `duplicate-primitive`.
+- **workMode 트랜잭션**: 이전 mode 저장 → all 강제 render → 수집 → **finally 에서 복원**.
+  전 과정 **동기**라 중간 all 화면 플래시 없음. state/dartMoveState/inputs 전후 canonical
+  hash 동일, localStorage 불변.
+- **알려진 위험**: drawAppliedSegments 는 곡선 run 이 정확히 2점이면 `L` path 를 만들 수
+  있어(실제 파이프라인 ~0.5cm 샘플링에선 곡선당 ≥3점이라 실측 L=0), 그 퇴화 케이스는
+  `non-mc-path-command` 로 **정직하게 실패**한다.
+
+### 4. 완료 수명주기 (S2, `884c4ca`+dirty 게이트, js/blockWorkflow.js) — 세션 메모리 전용
+공개 namespace 하나: **`window.blockWorkflow = Object.freeze({ complete, latest, versions,
+hasCompleted, isCurrentDraftChanged })`**. localStorage/IndexedDB/파일/autoSave 미연결.
+- **CompletedBlock 래퍼** `{ id:"block-1", version, completedAt, canonicalHash, snapshot }`.
+  `id`=세션 block 계열(현재 `block-1` 하나), `version`=완료 이력, `completedAt`=표시
+  metadata(identity 아님). 내부 `_records`(append-only)에 `{block, canonicalString}` 보관.
+- **canonical identity = snapshot 전체**(schemaVersion+source.measurements+source.handles+
+  source.appliedDarts+geometry) 를 `canonicalize`(재귀 key 정렬 + 숫자 **1e-4** 정규화,
+  NaN/Infinity→`non-finite-number` throw)한 **canonicalString 완전 일치**로 판정.
+  **32bit `canonicalHash`(8hex)는 표시·빠른 비교용일 뿐 판정 기준 아님. canonicalString 은
+  외부 미노출**(`_records` 내부에만).
+- **`complete()` 순서(불변)**: ①`measure-dirty` 게이트(`isMeasureDirty` bare 접근,
+  **capture·busy·missing-handles 보다 최우선**) → ②`captureBlockSnapshot()` →
+  ③`canonicalize` → ④최신 canonicalString 비교 → ⑤`deepFreeze`(재귀) → ⑥`_records.push`
+  (**유일한 커밋 지점**). 어느 단계 실패든 records/latest 무변화.
+- **버전 규칙**: 첫 완료 v1 / 최신과 다르면 v+1 / **과거 형상으로 되돌아와도 최신과
+  다르면 새 version**(이력 되감기·재사용 없음, 최신하고만 비교). 최신과 같으면 **기존
+  최신본 그대로 반환(idempotent, 새 version 없음)**.
+- **`isCurrentDraftChanged()`**: 완료본 없음→true / **dirty→capture 호출 없이 true** /
+  dirty=false→현재 snapshot canonical 비교 / busy·edit capture 오류는 throw.
+- 완료본은 재귀 `deepFreeze` 로 불변. `versions()`는 매번 새 배열(원소 frozen).
+
+### 5. 원형 완료 최소 UI (S3, `634acab`, ui.js/index.html/css)
+- draft measurements inspector 의 `패턴 생성` **아래에만** 2요소: **`#blockStatusNote`
+  (`aria-live="polite"`)** + **`#btnCompleteDraft`**. 상단 bar·canvas toolbar 무변경.
+- **버튼**: label `원형 완료`(미완료)/`다시 완료`(완료본 있음). `dirty||busy`면
+  disabled+aria-disabled. title: dirty `패턴을 다시 생성한 뒤 완료할 수 있습니다` /
+  busy `현재 작업을 종료한 뒤 완료할 수 있습니다` / 정상 `현재 원형을 세션 완료본으로
+  기록합니다`. **orange primary 아님 — 중립 `.btn` + navy 아웃라인**(`#btnCompleteDraft:
+  not(:disabled) border navy`). 확인 modal 없음.
+- **문구(5)**: `원형 미완료 · 세션 전용` / `패턴을 다시 생성한 뒤 완료하세요` /
+  `현재 작업을 종료한 뒤 완료하세요` / `완료본 v{n} 보관 중 · 세션 전용`.
+  **정직 원칙: 완료 후 곡선·다트를 수정해도 자동 hash 비교 전에는 "완료본 v_ 보관 중"**
+  이라고만 쓴다("현재 원형 완료 v_" 금지 — working draft 와 완료본이 다를 수 있음).
+- **`updateCompletionUI()`는 refresh()에서 읽기 전용** — `blockWorkflow.latest()`·
+  `hasCompleted()` + dirty(`isMeasureDirty`)·busy(`busyTool()`)만 사용.
+  **`isCurrentDraftChanged()` 를 refresh 에서 호출하지 않는다**(자동 hash 비교·canvas
+  observer·엔진 dirty hook 금지). **새 uiState 필드 0.**
+- **`onCompleteDraft()`**(addEventListener, inline onclick 아님): dirty/busy 재검사 →
+  `complete()` → 성공 refresh / **실패 시 reason 별 문구만**(refresh 안 함→성공 상태 오염
+  0, 콘솔로 안 흘림). **stage 활성화·자동 전환 없음.**
+- **refresh 트리거**(전부 `queueMicrotask(refresh)`, 새 Observer 0): 치수 input `input/
+  change`, `btnGenerate` click, **기존** 곡선버튼 click·**기존** btnDartMove MutationObserver
+  재사용.
+- **DOM 계약**: id **42 → 44**(`btnCompleteDraft`, `blockStatusNote` 두 개만), inline
+  handler **37 유지**, MutationObserver **2 유지**. **완료본 localStorage 저장 0** —
+  reload 시 메모리 초기화(미완료 복귀).
+
+### 6. 회귀 테스트 (헤드리스, `test/harness/`)
+- **`blockMasterCheck.js`(48 PASS)**: 실제 `blockMaster.js` 를 vm 으로 실행 — schema/분포,
+  line·M/C 정규화, JSON 왕복, 참조 분리, 불변성, workMode 복원, 실패 계약(busy/bad
+  piece·role/L·Q/필수 outline/중복), DOM·id·hash 미노출, storage 0.
+- **`blockWorkflowCheck.js`(47 PASS)**: 실제 `blockMaster.js`+`blockWorkflow.js` 를 같은
+  vm(window===global 브릿지)로 실행 — v1/idempotent/v2·형상복귀 v3, deepFreeze, 실패
+  무변화, canonicalString 미노출, NaN, key 순서 무관, 1e-4, **measure-dirty 게이트
+  (capture 호출 0·missing-handles·busy 보다 우선)**, namespace frozen, storage 0.
+- 둘 다 `runAll.js` 에 연결(golden 없음). **shape/perf 골든 무변경.**
+
+### 7. 유지된 안전 계약
+- **엔진 무변경**: dartMove 계산·split·bake·normalize·검증, render/sleeve 좌표·이벤트,
+  SVG 좌표 변환(`c2p`/`p2c_` 왕복 오차 0). UI·workflow 변경과 엔진 변경을 같은 커밋에
+  안 섞음.
+- **shape/perf 골든 diff 0** 전 커밋. 저장 검증은 격리 origin(`127.0.0.1:8420`) 또는
+  Node VM 만, storage 0키. 미추적 `AGENTS.md`·`armhole_data_2026-07-16.json` 보존.
+- 9 viewport overflow·겹침 0, 320×568 draft SVG 192px, 콘솔 오류 0.
+
+### 8. 다음 단계 (미착수)
+- **designProject 데이터 모델 + reference renderer + 디자인 시작 동작** → 이게 있어야
+  design stage 를 정직하게 활성화한다(현재 disabled 유지). 빈 디자인 화면·placeholder 금지.
+- "완료본 이후 변경됨" **실시간 표시**(현재는 명시적 `isCurrentDraftChanged()` 호출로만
+  판정 — refresh 자동 호출·canvas observer 금지 유지).
+- 다중 block 계열/project 관리(현재 `block-1` 하나).
+
 ## 다음에 확인할 것 (열려있는 이슈)
 
 - **✅ (완료, 2026-07-08) `normalizeBakedSegments`** — 위 "normalizeBakedSegments 구현"
@@ -2168,10 +2315,18 @@ context 카드가 **전체 폭 1,420px**이라 hint(`flex:1`)+`margin-left:auto`
 - **(다음 단계) UI 기능 추가가 아니라 실제 사용 검증** — 엔진은 C0~C7 완료, UI는 캔버스
   중심 개편 완료 상태다. 다음은 김이 실제로 써 보고 **반복되는 불편만** 후속 수정한다.
   새 UI 부품·기능을 선제적으로 추가하지 않는다.
-- **(다음 기능 방향) ② 디자인 몸판 제도** — 위 "패턴 제작 7단계 책임 경계" 섹션 참고.
-  칼라·소매보다 먼저 **블라우스 여유량 / 완성 길이 / 옆선 실루엣 / 네크라인 / 앞중심
-  여밈** 다섯을 확정한다. **첫 블라우스 몸판 사양 확정 + 별도 승인 후 착수** — 그 전까지
-  코드·shape 골든·다트 엔진·새 UI stage 무변경.
+- **✅ (완료, 2026-07) 원형 완료 기반 S1~S3** — 위 "✅ 원형 완료 기반 S1~S3 구현 완료"
+  섹션 참고. geometry 의미 표식(`bb05836`)·`captureBlockSnapshot`(`aff2baf`)·도구를 draft
+  로 이동(`82ece4a`)·`window.blockWorkflow` 세션 완료본(`884c4ca`)·`원형 완료` 최소
+  UI(`634acab`). **design stage 는 계속 disabled**, blockMasterCheck 48 / blockWorkflowCheck
+  47 / runAll 통과 / 골든 diff 0.
+- **(다음 단계) designProject + reference renderer + 디자인 시작** — 이게 있어야 design
+  stage 를 정직하게 활성화한다(현재 disabled 유지). 빈 디자인 화면·placeholder 금지.
+  designProject 는 완료본(blockMaster) version 을 참조로 잠그고 자동 갱신하지 않는다.
+- **(그다음 기능 방향) ② 디자인 몸판 제도** — 위 "패턴 제작 7단계 책임 경계" 섹션 참고.
+  design stage 활성화(위 항목) 이후 단계다. 칼라·소매보다 먼저 **블라우스 여유량 / 완성
+  길이 / 옆선 실루엣 / 네크라인 / 앞중심 여밈** 다섯을 확정한다. **첫 블라우스 몸판 사양
+  확정 + 별도 승인 후 착수** — 그 전까지 코드·shape 골든·다트 엔진·새 UI stage 무변경.
 - ~~**(그다음 기능 후보) 뒤어깨선 정리 + 앞/뒤 어깨 길이 맞춤**~~ — **2026-07 조사 중단
   확정**: 원형·디자인 단계의 책임이 아니라 **"패턴선 확정"(디자인 → 재단 경계) 단계**에서
   다룬다. 위 "어깨 길이 보정의 단계 책임 경계" 섹션 참고.
