@@ -34,6 +34,8 @@ const suites = [
   { file: "blockMasterCheck.js",      golden: false },
   // 원형 완료 수명주기: 실제 blockMaster.js + blockWorkflow.js 를 vm 으로 실행해 검증.
   { file: "blockWorkflowCheck.js",    golden: false },
+  // 디자인 프로젝트(D1 세션 데이터): 실제 blockMaster+blockWorkflow+designProject vm 실행.
+  { file: "designProjectCheck.js",    golden: false },
 ];
 
 let anyFail = false;
