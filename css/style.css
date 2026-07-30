@@ -167,6 +167,13 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 원형 완료(세션 전용): 패턴 생성과 시각적으로 구분되는 조용한 navy 실행 블록. orange 아님. */
 .completion-note{margin-top:6px;padding-top:8px;border-top:1px solid var(--border)}
 #btnCompleteDraft:not(:disabled){border-color:var(--navy)}
+/* 디자인 레이어(D2 designRenderer builder 산출물). 현재 자동 생성 요소가 없어 기존
+   화면 영향 0. reference=회색 view-only, working=navy view-only. 새 색 토큰 없음. */
+.block-ref{pointer-events:none}
+.block-ref line,.block-ref path{stroke:var(--muted);opacity:.45;fill:none}
+.design-working{pointer-events:none}
+.design-working line,.design-working path{stroke:var(--navy);fill:none}
+.design-working [data-geometry-role="construction"]{opacity:.55;stroke-dasharray:4 3}
 .row select{width:96px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--navy)}
 
 .statusbar{display:flex;align-items:center;gap:12px;height:22px;padding:0 10px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
