@@ -20,8 +20,12 @@
   // 가용 stage 목록에 없다(STAGE_TOOLS 에 키 없음 = 미가용 → 정직하게 disabled).
   // 진입 시 도구를 자동 선택하지 않는다(tool=null). 도구·context 는 사용자가 캔버스
   // 상단 바에서 직접 고를 때만 나타난다.
-  const STAGE_TOOLS  = { draft: ["dart", "curves"] };
-  const DEFAULT_TOOL = { draft: null };
+  // design 은 stage 로 존재하지만 원형용 도구를 노출하지 않는다(빈 배열) — 원형 다트·곡선
+  // 도구는 draft 책임. design 탭의 실제 활성 조건은 STAGE_TOOLS 키 유무가 아니라
+  // designWorkflow.hasProject()다(stageAvailable 참고). project 생성 권한은 D3b 의
+  // "디자인 시작" 버튼만 가진다(탭 클릭은 기존 project 탐색만).
+  const STAGE_TOOLS  = { draft: ["dart", "curves"], design: [] };
+  const DEFAULT_TOOL = { draft: null, design: null };
 
   // ── UI 상태: 이 두 값이 전부 ──────────────────
   const uiState = { stage: "draft", tool: null };
@@ -59,13 +63,29 @@
     return uiState.tool;        // "dart" | "curves" | null
   }
 
+  // render.js(및 외부)가 읽는 읽기 전용 신호. design 화면 여부.
+  function isDesignStageActive() { return uiState.stage === "design"; }
+
+  // stage 진입 가용성. design 은 project 가 있어야만 진입 가능(계약 교정 1) — 완료본만
+  // 있고 project 가 없으면 탭을 눌러도 빈 design 에 들어가지 않는다. project 생성은
+  // "디자인 시작"(D3b) 전용.
+  function stageAvailable(stage) {
+    if (stage === "design") return !!(window.designWorkflow && window.designWorkflow.hasProject());
+    return Object.prototype.hasOwnProperty.call(STAGE_TOOLS, stage);
+  }
+
   // ── 필수 함수 1: stage 전환 (수동만, busy 중에는 잠금) ──
   function setWorkspaceStage(stage) {
     if (!STAGE_TOOLS[stage]) return;
+    if (!stageAvailable(stage)) return;   // design: project 없으면 진입 불가
     if (busyTool()) return;
+    const changed = uiState.stage !== stage;
     uiState.stage = stage;
     if (!STAGE_TOOLS[stage].includes(uiState.tool)) uiState.tool = DEFAULT_TOOL[stage];
     refresh();
+    // stage 전환 시 캔버스를 다시 그린다(setWorkspaceStage 는 원래 render 를 호출하지
+    // 않았다). draft↔design 전환에서 라이브 원형 ↔ design 레이어가 즉시 바뀌게 한다.
+    if (changed && typeof render === "function") render();
   }
 
   // ── 필수 함수 2: 도구 선택 (busy 중에는 그 도구만 허용) ──
@@ -125,9 +145,9 @@
 
     stageEls().forEach(btn => {
       const stage = btn.dataset.stage;
-      // STAGE_TOOLS 에 키가 없는 stage(현재 design)는 미가용 → 항상 disabled.
-      // design 은 designProject·reference renderer 구현 전까지 정직하게 막는다.
-      const available = Object.prototype.hasOwnProperty.call(STAGE_TOOLS, stage);
+      // design 탭 활성 = designWorkflow.hasProject()(계약 교정 1). project 가 없으면
+      // 완료본이 있어도 disabled — 탭만으로 빈 design 진입 금지. draft 는 상시 가용.
+      const available = stageAvailable(stage);
       const isCurrent = stage === uiState.stage;
       btn.setAttribute("aria-selected", String(isCurrent));
       const blocked = !available || (!!busy && !isCurrent);
@@ -351,4 +371,5 @@
   window.setActiveTool          = setActiveTool;
   window.updateContextInspector = updateContextInspector;
   window.updateContextActions   = updateContextActions;
+  window.isDesignStageActive    = isDesignStageActive;   // render.js 등이 읽는 읽기 전용 신호
 })();

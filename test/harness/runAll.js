@@ -38,6 +38,8 @@ const suites = [
   { file: "designProjectCheck.js",    golden: false },
   // 디자인 geometry renderer(D2 builder): 실제 designRenderer.js 를 vm 으로 실행.
   { file: "designRendererCheck.js",   golden: false },
+  // design stage 렌더 분기(D3a): 실제 render.js 를 vm 으로 실행해 분기 계약을 고정.
+  { file: "designRenderBranchCheck.js", golden: false },
 ];
 
 let anyFail = false;

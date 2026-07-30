@@ -36,6 +36,26 @@ function render(){
   for(let y=0;y<H_;y+=step*5)gg.appendChild(line(0,y,W_,y,"grid-M"));
   svg.appendChild(gg);
 
+  // ── design stage 분기 (D3a) ──────────────────
+  // grid 직후, 라이브 원형 재계산(createDraft) 전에 갈라진다. design 화면은 실시간
+  // 원형을 다시 그리지 않고 designProject 의 고정 reference + mutable working 만
+  // grid 위에 올린다(z-order: grid → reference → working). view-only(pointer-events:none).
+  // ⚠️ 초기 render()는 ui.js(getter) 로드 전에 실행될 수 있으므로 안전하게 검사한다.
+  const designActive = typeof window.isDesignStageActive === "function" && window.isDesignStageActive();
+  if (designActive) {
+    // design 신호인데 project 가 없으면 **조용히 draft 로 fallback 하지 않고** 명시적 실패한다
+    // (빈 design 캔버스를 정직하지 않게 보여주지 않는다). 정상 흐름에선 setWorkspaceStage 가
+    // hasProject 로 게이트하므로 도달하지 않는다.
+    const dp = window.designWorkflow && window.designWorkflow.current();
+    if (!dp) { const e = new Error("render: design-project-missing"); e.reason = "design-project-missing"; throw e; }
+    // builder 가 실패하면(invalid geometry 등) 그 예외를 전파한다 — 원형 경로로 fallback 없음.
+    svg.appendChild(window.designRenderer.createReferenceGroup(dp.referenceGeometry));
+    svg.appendChild(window.designRenderer.createWorkingGroup(dp.working.geometry));
+    const sb = document.getElementById("sb");
+    if (sb) sb.textContent = "디자인 · 원형 " + dp.sourceBlock.id + " v" + dp.sourceBlock.version + " 참조 · 세션 전용";
+    return; // 라이브 원형 draw(gRef/pattern/sleeve/overlay/layerVisibility/statusBar) 전부 skip
+  }
+
   const B=n("inpB"), W=n("inpW"), BL=n("inpBL");
   if(!B||!W||!BL){
     const capAdjVal = document.getElementById("capAdjVal");
