@@ -154,6 +154,10 @@
              버튼은 addEventListener 로만 연결(inline handler 없음). 문구는 aria-live. -->
         <div class="row note completion-note" id="blockStatusNote" aria-live="polite">원형 미완료 · 세션 전용</div>
         <div class="row completion-row"><button class="btn" id="btnCompleteDraft" title="현재 원형을 세션 완료본으로 기록합니다">원형 완료</button></div>
+        <!-- 디자인 시작/계속(D3b-1). 완료본을 명시적으로 복사해 designProject 로 진입한다.
+             enabled = hasCompleted() && !busyTool(). inline handler 없이 bind()에서 연결.
+             현재 draft(dirty)가 아니라 blockWorkflow.latest() 완료본을 쓴다(재캡처·자동 complete 없음). -->
+        <div class="row completion-row"><button class="btn" id="btnStartDesign" disabled aria-disabled="true" title="원형을 완료한 뒤 디자인을 시작할 수 있습니다">디자인 시작</button></div>
       </div>
     </details>
   </aside>
@@ -186,7 +190,7 @@
 <script src="js/designRenderer.js?v=2026072903"></script>
 <script src="js/init.js?v=2026070731"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026072904"></script>
+<script src="js/ui.js?v=2026072905"></script>
 
 </body>
 </html>

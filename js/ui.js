@@ -230,6 +230,30 @@
         : completed ? "완료본 v" + latestV + " 보관 중 · 세션 전용"
         : "원형 미완료 · 세션 전용";
     }
+
+    // ── 디자인 시작/계속 버튼(D3b-1) ──
+    // enabled = hasCompleted() && !busy. dirty 는 허용(기존 완료본으로 시작하므로).
+    // project 가 있으면 그 고정 version 을 title 로 노출(디자인 계속), 없으면 완료본 version.
+    // 별도 note 를 만들지 않는다(#blockStatusNote 가 "완료본 v_ 보관 중" 을 이미 표시).
+    const startBtn = document.getElementById("btnStartDesign");
+    if (startBtn) {
+      const dw = window.designWorkflow;
+      const hasProject = !!(dw && dw.hasProject());
+      const startEnabled = completed && !busy;   // dirty 무관
+      startBtn.textContent = hasProject ? "디자인 계속" : "디자인 시작";
+      startBtn.disabled = !startEnabled;
+      if (!startEnabled) {
+        startBtn.setAttribute("aria-disabled", "true");
+        startBtn.setAttribute("title", !completed
+          ? "원형을 완료한 뒤 디자인을 시작할 수 있습니다"
+          : "현재 작업을 종료한 뒤 디자인을 시작할 수 있습니다");
+      } else {
+        startBtn.removeAttribute("aria-disabled");
+        startBtn.setAttribute("title", hasProject
+          ? "원형 v" + dw.current().sourceBlock.version + " 디자인 계속"
+          : "완료본 v" + latestV + "으로 디자인 시작");
+      }
+    }
   }
 
   // 완료 버튼 클릭: dirty/busy 재검사 → blockWorkflow.complete() → 성공 refresh /
@@ -251,6 +275,27 @@
         : "완료할 수 없습니다 · 원형을 다시 생성해 주세요";
     }
     // refresh 를 부르지 않아 성공 상태·문구를 오염시키지 않고 실패 안내를 유지한다.
+  }
+
+  // 디자인 시작/계속 클릭: hasCompleted && !busy 재검사(UI disabled 만 믿지 않음) →
+  // project 없으면 startFromBlock(latest()) / 있으면 current() → 성공한 뒤에만
+  // setWorkspaceStage("design"). 실패 시 draft 유지·오염 0·정직한 문구.
+  // 자동 complete·재캡처·latest 자동 교체·busy 강제 종료 없음.
+  function onStartDesign() {
+    const bw = window.blockWorkflow, dw = window.designWorkflow;
+    if (!bw || !dw) return;
+    // ★ 재검사: 완료본 없음/busy 중이면 진입 금지(dirty 는 허용).
+    if (!bw.hasCompleted() || busyTool()) { refresh(); return; }
+    let project = null, reason = null;
+    try {
+      project = dw.hasProject() ? dw.current() : dw.startFromBlock(bw.latest());
+    } catch (e) { reason = (e && e.reason) || "start-failed"; }
+    if (!project) {
+      const note = document.getElementById("blockStatusNote");
+      if (note) note.textContent = "디자인을 시작할 수 없습니다 · 다시 시도하세요";
+      return; // draft 유지, project/version 오염 0
+    }
+    setWorkspaceStage("design"); // 성공 후에만(내부에서 hasProject·busy 게이트 재확인)
   }
 
   // ── 다트 inspector 표시 ───────────────────────
@@ -322,6 +367,9 @@
     // 원형 완료 버튼(inline onclick 없음 — addEventListener 로만 연결, inline handler 37 유지).
     const complete = document.getElementById("btnCompleteDraft");
     if (complete) complete.addEventListener("click", () => { if (!complete.disabled) onCompleteDraft(); });
+    // 디자인 시작/계속 버튼(inline onclick 없음 — addEventListener 로만 연결).
+    const startDesign = document.getElementById("btnStartDesign");
+    if (startDesign) startDesign.addEventListener("click", () => { if (!startDesign.disabled) onStartDesign(); });
     // 패턴 생성 후: inline generatePattern() 이 끝난 뒤(dirty=false) 버튼/문구를 갱신.
     const gen = document.getElementById("btnGenerate");
     if (gen) gen.addEventListener("click", () => queueMicrotask(refresh));
