@@ -1753,8 +1753,10 @@ notch identity 를 실제로 추적하는 설계가 먼저다.
 
 **3. 상태**
 - ~~**design 초기 tool=null**~~ → **폐기(S1)**: 다트·곡선은 이제 draft(원형) stage 도구다.
-  design stage 는 `STAGE_TOOLS` 에 키가 없어 항상 disabled(designProject/reference 구현
-  전까지). 아래 "✅ 원형 완료 기반 S1~S3 구현 완료" 섹션 참고.
+  ~~design stage 는 `STAGE_TOOLS` 에 키가 없어 항상 disabled(designProject/reference 구현
+  전까지)~~ → **재정정(D3a~D3b)**: `STAGE_TOOLS.design=[]`, design 탭 활성은
+  `designWorkflow.hasProject()` 게이트. 아래 "✅ 원형 완료 → 디자인 복사 (D1~D3b) 구현
+  완료" 섹션 참고.
 - **dart Apply 는 현재 다트만 커밋하고 세션과 tool=dart 를 유지한다**(다중다트 연속
   작업 보존 — `applyDartMove` 가 적용 후 `setBtn("취소")`/`setSideRowVisible(true)` 로
   세션을 열어 두고 "앞판/뒤판을 다시 선택"으로 다음 다트를 유도한다). Apply 직후
@@ -1826,7 +1828,9 @@ notch identity 를 실제로 추적하는 설계가 먼저다.
 
 - ~~design 최초 진입 **tool=null** (`DEFAULT_TOOL.design=null`, 자동 curves 선택 폐지)~~
   → **폐기(S1)**: `STAGE_TOOLS={draft:["dart","curves"]}`, `DEFAULT_TOOL={draft:null}`.
-  design 은 미가용 stage 라 항상 disabled. 아래 "✅ 원형 완료 기반 S1~S3 구현 완료" 참고.
+  ~~design 은 미가용 stage 라 항상 disabled~~ → **재정정(D3a~D3b)**: `STAGE_TOOLS.design=[]`,
+  design 탭 활성 = `designWorkflow.hasProject()`. 아래 "✅ 원형 완료 → 디자인 복사 (D1~D3b)
+  구현 완료" 섹션 참고.
 - **Apply 는 현재 다트만 커밋하고 tool=dart·세션을 유지**한다(다중다트 연속 작업).
   Apply 직후 이전 다트 수치 행 초기화·Apply disabled, 같은 세션에서 앞판/뒤판 재선택
   → 다음 다트 작업 가능(실측: 2번째 다트 절개→조각→드래그 정상).
@@ -2121,10 +2125,14 @@ context 카드가 **전체 폭 1,420px**이라 hint(`flex:1`)+`margin-left:auto`
 ## ✅ 원형 완료 기반 S1~S3 구현 완료 (2026-07) — `원형 완료 → 디자인 복사` 1단계
 
 로컬 5커밋(`bb05836`→`aff2baf`→`82ece4a`→`884c4ca`→`634acab`)으로 "현재 원형을 세션
-완료본(blockMaster)으로 기록"하는 기반이 구현됐다. **designProject·reference renderer·
-디자인 시작·design stage 활성화는 아직 없다**(범위 밖). 과정 일지가 아니라 확정된
+완료본(blockMaster)으로 기록"하는 기반이 구현됐다. ~~**designProject·reference renderer·
+디자인 시작·design stage 활성화는 아직 없다**(범위 밖)~~ → **폐기(D1~D3b, 2026-07)**:
+designProject·detached reference/working renderer·디자인 시작/계속 버튼·design stage
+활성화(hasProject 게이트)가 **전부 구현됐다.** 아래 "✅ 원형 완료 → 디자인 복사 (D1~D3b)
+구현 완료" 섹션이 최종 계약이다. 과정 일지가 아니라 확정된
 결정·불변식·경계다. 캐시 버전: render/sleeve `?v=2026072701`, blockMaster `?v=2026072801`,
-blockWorkflow `?v=2026072804`, ui `?v=2026072805`, css `?v=2026072805`.
+blockWorkflow `?v=2026072804`, ui `?v=2026072905`, css `?v=2026072906`, designProject
+`?v=2026072902`, designRenderer `?v=2026072903`.
 
 ### 1. 현재 단계 책임 (S1, `82ece4a`)
 - **치수·패턴 생성·다트이동·진동선·네크라인·소매산 편집은 전부 `draft(원형)` stage 책임.**
@@ -2133,12 +2141,11 @@ blockWorkflow `?v=2026072804`, ui `?v=2026072805`, css `?v=2026072805`.
   로만 파생하고 tool 과 독립. `activePanel()`(measurements·tool 상호배타) 폐기 →
   **`contextTool()`(busy > uiState.tool)** 신설. `updateContextInspector`가 measurements 는
   stage 로, dart/curves 는 contextTool 로 **각각** hidden 판정(둘이 동시에 보인다).
-- **design stage 는 disabled**(`STAGE_TOOLS` 에 design 키 없음 → `updateContextActions` 의
-  `available = hasOwnProperty(STAGE_TOOLS, stage)` 게이트가 항상 disabled+aria-disabled).
-  `setWorkspaceStage("design")`도 `if(!STAGE_TOOLS[stage]) return`으로 진입 불가.
-  index.html 의 design 버튼은 `disabled aria-disabled="true" title="원형 완료 후 디자인
-  시작 준비"`. **주의: 이 title 은 향후 문구일 뿐 — 완료본이 있어도 design 은 활성화되지
-  않는다**(designProject/reference 구현 전까지). 빈 디자인 화면·placeholder 금지.
+- ~~**design stage 는 disabled**(`STAGE_TOOLS` 에 design 키 없음 → …항상 disabled).
+  …완료본이 있어도 design 은 활성화되지 않는다(designProject/reference 구현 전까지)~~
+  → **정정(D3a~D3b)**: 이제 `STAGE_TOOLS.design=[]`(도구 없음)이고 design 탭 활성 조건은
+  **`designWorkflow.hasProject()`**다(아래 완료 섹션). project 는 `디자인 시작` 클릭으로만
+  생성된다. (S1 시점 기록은 역사로 보존.)
 - 재단·출력 stage 기존 disabled 유지. **완료 성공 후 자동 stage 전환 없음.**
 - `uiState = { stage, tool }` 두 값 유지 — blockMaster/version/completion 상태를 넣지 않는다.
 - > 기존 "다트·곡선=design stage" 기록(위 "플로팅…" 섹션들)은 역사로 보존하되 해당 줄에
@@ -2255,11 +2262,88 @@ hasCompleted, isCurrentDraftChanged })`**. localStorage/IndexedDB/파일/autoSav
 - 9 viewport overflow·겹침 0, 320×568 draft SVG 192px, 콘솔 오류 0.
 
 ### 8. 다음 단계 (미착수)
-- **designProject 데이터 모델 + reference renderer + 디자인 시작 동작** → 이게 있어야
-  design stage 를 정직하게 활성화한다(현재 disabled 유지). 빈 디자인 화면·placeholder 금지.
+- ~~**designProject 데이터 모델 + reference renderer + 디자인 시작 동작** → 이게 있어야
+  design stage 를 정직하게 활성화한다(현재 disabled 유지)~~ → **완료(D1~D3b, 2026-07)**:
+  아래 "✅ 원형 완료 → 디자인 복사 (D1~D3b) 구현 완료" 섹션 참고. design 은 이제
+  hasProject 게이트로 활성화된다.
 - "완료본 이후 변경됨" **실시간 표시**(현재는 명시적 `isCurrentDraftChanged()` 호출로만
-  판정 — refresh 자동 호출·canvas observer 금지 유지).
-- 다중 block 계열/project 관리(현재 `block-1` 하나).
+  판정 — refresh 자동 호출·canvas observer 금지 유지) — **여전히 미착수**.
+- 다중 block 계열/project 관리(현재 `block-1`·`design-1` 하나씩) — **여전히 미착수**.
+
+## ✅ 원형 완료 → 디자인 복사 (D1~D3b) 구현 완료 (2026-07) — 독립 design 레이어
+
+위 "원형 완료 기반 S1~S3"(blockMaster 캡처·완료본·원형 완료 UI) 위에, **완료본을 명시적으로
+복사해 designProject 를 만들고, 원형을 잠금 reference 로 깔고, 그 위 working geometry 를
+독립 렌더러로 그리는 design 화면**을 구현했다. 로컬 5커밋. 과정 일지가 아니라 확정된
+결정·불변식·경계다. 캐시: designProject `?v=2026072902`, designRenderer `?v=2026072903`,
+render `?v=2026072904`, ui `?v=2026072906`, css `?v=2026072906`.
+
+| 커밋 | 내용 |
+|---|---|
+| `ee417f5` | 독립 세션 **designProject**(`js/designProject.js`, `window.designWorkflow`) |
+| `854b3b5` | detached **reference/working builders**(`js/designRenderer.js`, `window.designRenderer`) |
+| `b6d0a2e` | **render pipeline 의 design 분기**(`render.js`) + `isDesignStageActive()`(`ui.js`) |
+| `7c7f027` | **완료본 기반 디자인 시작/계속**(`#btnStartDesign` + `onStartDesign`, `ui.js`) |
+| `ae5c255` | **design chrome 숨김**(`data-workspace-stage` + CSS, `.edit-history`) |
+
+### 잠근 최종 계약 (위반 금지)
+- **designProject 는 원형 완료본의 복사본**이다 — 전역 원형 state/dartMoveState/inputs 를
+  **교체하지 않는다**(draft swap 없음). `startFromBlock(completedBlock)` 이 deep clone 한다.
+- **`baseSource`·`referenceGeometry` 는 deepFrozen(불변)**, **`working.geometry`·
+  `working.parameters` 만 향후 편집 대상**(mutable). 최상위 project 와 `sourceBlock` frozen.
+- **sourceBlock version pinning**: `{id,version,canonicalHash}` 값 고정. **최신 원형으로
+  자동 교체 금지** — 같은 완료본 재시작은 idempotent(같은 참조), 다른 version 시작은
+  `design-project-exists`. 현재 `design-1` 하나(`_project` 싱글턴).
+- **Design 탭 활성 = `designWorkflow.hasProject()`**(hasCompleted 아님). project 생성 권한은
+  **`디자인 시작` 명시적 클릭만**(`ui.js` `onStartDesign`): `hasProject()?current():
+  startFromBlock(blockWorkflow.latest())` → 성공한 뒤에만 `setWorkspaceStage("design")`.
+- **`디자인 시작` 활성 = `hasCompleted() && !busyTool()`.** dirty draft 여도 **기존 완료본
+  (latest())으로 시작 가능**(재캡처·자동 complete 없음), **busy(다트·arm/neck/sleeve 편집)
+  중 진입 금지**(UI disabled + 핸들러 재검사, 엔진 강제 종료·Cancel 호출 없음). label
+  `디자인 시작`/`디자인 계속`, title 에 고정 source version.
+- **design 렌더는 `grid → reference → working`**(z-order), `createDraft` 등 **live 원형
+  재계산 없음**. `render()` 는 grid 직후 `isDesignStageActive()`(ui.js getter, **초기 render
+  는 getter 부재라 안전 검사**) 에서 갈라져 designProject 의 reference/working 만 append 후
+  early-return(gRef/pattern/sleeve/overlay/applyLayerVisibility/updateStatusBar skip).
+- **reference/working 은 view-only·`pointer-events:none`**(둘 다). 디자인 도구·hit-test 없음
+  → svg-level 다트 클릭이 working 을 잘못 잡지 않는다.
+- **design 에서 원형용 chrome 숨김**: `.canvas-toolbar`(전체/몸판/소매·다트·곡선)·
+  `[data-menu=view]`·`[data-menu=file]`·undo/redo(`.edit-history`)·치수 inspector·원형 완료 UI.
+  **`화면 초기화` 유지**(줌·팬 복구). `data-workspace-stage`(html 속성, ui.js refresh)는
+  **표시 전용** — 기존 `inspector.hidden` 로직과 책임 분리(이중 책임 없음).
+- **세션 전용 구조**: `blockWorkflow._records`·`designProject._project` 는 세션 메모리 →
+  **reload 시 완료본·project 모두 소멸**, `디자인 시작`·design 탭 disabled 로 복귀. localStorage
+  /autoSave/testSeed 미연결.
+- **`design-project-missing` 명시적 실패**: design 신호인데 project 가 없으면 render 가
+  조용히 draft 로 fallback 하지 않고 throw(빈 design 캔버스 금지). builder 실패도 전파.
+
+### D3c 결과 불변식 (실측 확정)
+1. **design 왕복이 dirty draft 를 변경하지 않는다** — dirty·inpB·handles·shape 전부 보존
+   (design 은 draft state 를 안 건드림; render 는 state 의 순수 함수). *주의: `markDirty` 는
+   재렌더하지 않으므로 "진짜 dirty 형상" 비교엔 render() 강제 후 측정해야 한다(stale 캡처
+   회피). dirty 상태에서 소매는 `!isMeasureDirty` 게이트로 미표시(기존 동작).*
+2. **design 화면 초기화가 project 를 변경하지 않는다** — reference/working 만 새 그룹으로
+   재생성(live 원형 0), `referenceGeometry`·`working.geometry`·`sourceBlock` 객체 무변형,
+   frozen 유지, 같은 project 참조.
+3. **latest v2 가 생겨도 status·title·project 가 고정 v1 로 일관** — design status
+   `디자인 · 원형 block-1 v1 참조`, 버튼 title `원형 v1 디자인 계속`, `sourceBlock.version=1`.
+
+### 테스트·계약 수치
+- 신규 헤드리스: **designProjectCheck 29 / designRendererCheck 35 / designRenderBranchCheck 15**.
+  기존 **blockWorkflowCheck 47 / blockMasterCheck 48** 유지. **runAll 전체 통과 · 골든 diff 0.**
+- **id 45**(`btnStartDesign` 추가) / **inline handler 37** / **MutationObserver 2** 유지.
+- 엔진(dartMove/split/bake/normalize)·render 라이브 원형 경로·shape/perf 골든 **무변경**.
+  9 viewport(draft·design) overflow·겹침 0, 320×568 design SVG 회복(192→469), storage 0, 콘솔 0.
+
+### 미구현 경계 (기능이 없는 것이지 버그 아님)
+- **디자인 몸판 편집 도구 없음**(design 은 현재 view-only).
+- **working hit-test·핸들 없음**(pointer-events:none 유지).
+- **`working.parameters` 컨테이너는 존재하지만 현재 빈 객체(`{}`)이며, 이를 변경하는
+  파라미터(여유량·완성길이·옆선 실루엣·네크라인·앞여밈 등) UI·계산 로직은 미구현.**
+- **허리다트 a–f 재배분 없음.**
+- **저장·복원 없음**(세션 메모리 전용, reload 소멸).
+- **다중 designProject 없음**(`design-1` 하나).
+- 이 항목들은 자동 착수 금지 — 별도 사양 확정 + 승인 후 진행.
 
 ## 다음에 확인할 것 (열려있는 이슈)
 
@@ -2318,13 +2402,16 @@ hasCompleted, isCurrentDraftChanged })`**. localStorage/IndexedDB/파일/autoSav
 - **✅ (완료, 2026-07) 원형 완료 기반 S1~S3** — 위 "✅ 원형 완료 기반 S1~S3 구현 완료"
   섹션 참고. geometry 의미 표식(`bb05836`)·`captureBlockSnapshot`(`aff2baf`)·도구를 draft
   로 이동(`82ece4a`)·`window.blockWorkflow` 세션 완료본(`884c4ca`)·`원형 완료` 최소
-  UI(`634acab`). **design stage 는 계속 disabled**, blockMasterCheck 48 / blockWorkflowCheck
-  47 / runAll 통과 / 골든 diff 0.
-- **(다음 단계) designProject + reference renderer + 디자인 시작** — 이게 있어야 design
-  stage 를 정직하게 활성화한다(현재 disabled 유지). 빈 디자인 화면·placeholder 금지.
-  designProject 는 완료본(blockMaster) version 을 참조로 잠그고 자동 갱신하지 않는다.
+  UI(`634acab`). blockMasterCheck 48 / blockWorkflowCheck 47 / runAll 통과 / 골든 diff 0.
+  (S1 시점 "design stage 는 계속 disabled"는 D1~D3b 에서 정정 — 아래 항목.)
+- ~~**(다음 단계) designProject + reference renderer + 디자인 시작** → design stage 를
+  정직하게 활성화(현재 disabled 유지)~~ → **✅ (완료, D1~D3b, 2026-07)**: 아래 "✅ 원형
+  완료 → 디자인 복사 (D1~D3b) 구현 완료" 섹션 참고. 로컬 5커밋(`ee417f5`→`854b3b5`→
+  `b6d0a2e`→`7c7f027`→`ae5c255`). design 은 hasProject 게이트로 활성화, `디자인 시작`
+  버튼으로만 project 생성, 완료본 version pinning.
 - **(그다음 기능 방향) ② 디자인 몸판 제도** — 위 "패턴 제작 7단계 책임 경계" 섹션 참고.
-  design stage 활성화(위 항목) 이후 단계다. 칼라·소매보다 먼저 **블라우스 여유량 / 완성
+  design stage 활성화(✅ 완료)는 됐고, 이제 design 안의 **편집 도구가 없는 상태**다(현재
+  view-only). 칼라·소매보다 먼저 **블라우스 여유량 / 완성
   길이 / 옆선 실루엣 / 네크라인 / 앞중심 여밈** 다섯을 확정한다. **첫 블라우스 몸판 사양
   확정 + 별도 승인 후 착수** — 그 전까지 코드·shape 골든·다트 엔진·새 UI stage 무변경.
 - ~~**(그다음 기능 후보) 뒤어깨선 정리 + 앞/뒤 어깨 길이 맞춤**~~ — **2026-07 조사 중단
