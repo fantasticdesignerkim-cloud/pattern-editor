@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026072903">
+<link rel="stylesheet" href="css/style.css?v=2026072906">
 </head>
 <body>
 
@@ -22,9 +22,10 @@
   </nav>
 
   <div class="header-actions">
-    <!-- undo/redo 의 실제 범위는 곡선 핸들 편집이다(pushUndoSnapshot 이 편집모드에서만 호출됨). -->
-    <button class="btn" onclick="undoEdit()" aria-label="곡선 편집 실행취소" title="곡선 편집 실행취소">실행취소</button>
-    <button class="btn" onclick="redoEdit()" aria-label="곡선 편집 다시실행" title="곡선 편집 다시실행">다시실행</button>
+    <!-- undo/redo 의 실제 범위는 곡선 핸들 편집이다(pushUndoSnapshot 이 편집모드에서만 호출됨).
+         .edit-history 클래스는 design stage 에서 그룹 숨김용 선택자다(기능·onclick 무변경). -->
+    <button class="btn edit-history" onclick="undoEdit()" aria-label="곡선 편집 실행취소" title="곡선 편집 실행취소">실행취소</button>
+    <button class="btn edit-history" onclick="redoEdit()" aria-label="곡선 편집 다시실행" title="곡선 편집 다시실행">다시실행</button>
     <!-- 화면 초기화(뷰 리셋)를 좌측 rail·캔버스 툴바가 아니라 header 우측으로 이동(복제 아님, resetView onclick 보존) -->
     <button class="btn" onclick="resetView()" title="화면 초기화">화면 초기화</button>
 
@@ -190,7 +191,7 @@
 <script src="js/designRenderer.js?v=2026072903"></script>
 <script src="js/init.js?v=2026070731"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026072905"></script>
+<script src="js/ui.js?v=2026072906"></script>
 
 </body>
 </html>

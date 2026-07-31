@@ -185,6 +185,9 @@
 
   function refresh() {
     syncToolFromBusy();
+    // chrome 표시 전용 stage 신호(CSS 가 design 에서 toolbar·메뉴·undo/redo 를 숨긴다).
+    // 기존 inspector.hidden(updateContextInspector) 로직은 그대로 두어 이중 책임을 막는다.
+    document.documentElement.dataset.workspaceStage = uiState.stage;
     updateContextActions();
     updateContextInspector();
     updateDartInspector();

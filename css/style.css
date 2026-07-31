@@ -174,6 +174,14 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-working{pointer-events:none}
 .design-working line,.design-working path{stroke:var(--navy);fill:none}
 .design-working [data-geometry-role="construction"]{opacity:.55;stroke-dasharray:4 3}
+/* design stage chrome 숨김(D3b-2). data-workspace-stage 는 표시 전용 신호(ui.js refresh).
+   design 은 view-only 라 원형 도구·보기/파일·편집 undo/redo 를 숨기고, 캔버스를 바로 붙인다.
+   display:none 이라 .canvas-toolbar 높이가 0 이 되어 flex:1 인 svg#cv 가 그만큼 커진다.
+   화면 초기화(resetView)는 유지(줌·팬 복구에 유효). inspector 는 기존 hidden 로직 담당. */
+[data-workspace-stage="design"] .canvas-toolbar,
+[data-workspace-stage="design"] [data-menu="view"],
+[data-workspace-stage="design"] [data-menu="file"],
+[data-workspace-stage="design"] .edit-history{display:none}
 .row select{width:96px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--navy)}
 
 .statusbar{display:flex;align-items:center;gap:12px;height:22px;padding:0 10px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
