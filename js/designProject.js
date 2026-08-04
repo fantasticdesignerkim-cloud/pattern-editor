@@ -21,6 +21,7 @@
 //  - `working.geometry`·`working.parameters` 는 디자인의 **실제 편집 대상**(mutable) —
 //    캐시가 아니다. 향후 편집은 이 둘만 바꾼다.
 //  - completed 와 **참조 공유 0**(deep clone). localStorage/autoSave/testSeed 미연결.
+//  - (SV2) snapshot.schemaVersion 이 2 가 아니면 `unsupported-schema-version` 으로 거부.
 //  - **design 하나만**(design-1). 기존 design 이 있으면 **다른 원형 version 으로 자동 교체
 //    금지**: 같은 완료본(id+version+canonicalHash) 재시작 → 기존 project 반환(idempotent),
 //    다른 version → `Error("design-project-exists")`.
@@ -65,6 +66,9 @@
 
   function startFromBlock(completed) {
     if (!validCompleted(completed)) fail("invalid-completed-block");
+    // SV2: 디자인은 의미 모서리(edge)를 실은 schemaVersion 2 완료본만 소비한다.
+    // 구형 v1(모서리 없음) snapshot 은 명시적으로 거부한다(조용히 edge 없는 디자인 생성 금지).
+    if (completed.snapshot.schemaVersion !== 2) fail("unsupported-schema-version", completed.snapshot.schemaVersion);
     if (_project) {
       const sb = _project.sourceBlock;
       const same = sb.id === completed.id

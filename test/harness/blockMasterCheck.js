@@ -50,11 +50,26 @@ const SIDE = { x1: 240, y1: 100, x2: 240, y2: 300 };
 
 function elFactory() {
   const el = (tag, attrs) => ({ tagName: tag, getAttribute(k) { return (k in attrs) ? String(attrs[k]) : null; } });
-  const lineEl = (piece, role, c) => el("line", { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 });
+  // edge(선택): 있을 때만 data-edge 속성을 넣는다(없으면 getAttribute 가 null → 실제 DOM 동일).
+  const lineEl = (piece, role, c, edge) => {
+    const a = { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 };
+    if (edge) a["data-edge"] = edge;
+    return el("line", a);
+  };
   const pathEl = (piece, role, d) => el("path", { "data-piece": piece, "data-geometry-role": role, d });
   return { el, lineEl, pathEl };
 }
 const { el, lineEl, pathEl } = elFactory();
+
+// SV2 의미 모서리 좌표(junction 이 유일하도록 설계).
+//  front: side(240,100→240,300) ∩ waist(240,300→140,300) = (240,300);
+//         center(140,300→140,100) ∩ waist = (140,300).
+//  back:  side(SIDE 동일) ∩ waist(240,300→60,300) = (240,300);
+//         center(60,300→60,100) ∩ waist = (60,300).
+const F_WAIST = { x1: 240, y1: 300, x2: 140, y2: 300 };
+const F_CENTER = { x1: 140, y1: 300, x2: 140, y2: 100 };
+const B_WAIST = { x1: 240, y1: 300, x2: 60, y2: 300 };
+const B_CENTER = { x1: 60, y1: 300, x2: 60, y2: 100 };
 
 // 기본 scene: workMode 에 따라 파트를 포함/제외(프로덕션 body→소매 없음, sleeve→몸판 없음).
 function defaultScene(mode) {
@@ -62,12 +77,16 @@ function defaultScene(mode) {
   const body = mode !== "sleeve";
   const sleeve = mode !== "body";
   if (body) {
-    out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160"));
-    out.push(lineEl("front", "outline", SIDE));                                  // 앞 옆선
+    out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160")); // [0] 진동곡선(edge 없음)
+    out.push(lineEl("front", "outline", SIDE, "side-seam"));                    // 앞 옆선
+    out.push(lineEl("front", "outline", F_WAIST, "waist"));                     // 앞 허리
+    out.push(lineEl("front", "outline", F_CENTER, "center"));                   // 앞 중심
     out.push(lineEl("front", "construction", { x1: 100, y1: 60, x2: 120, y2: 80 }));
     out.push(lineEl("front", "construction", { x1: 130, y1: 60, x2: 150, y2: 80 }));
     out.push(pathEl("back", "outline", "M60,100 C80,120 100,140 120,160"));
-    out.push(lineEl("back", "outline", SIDE));                                   // 뒤 옆선(앞과 동일 좌표)
+    out.push(lineEl("back", "outline", SIDE, "side-seam"));                     // 뒤 옆선(앞과 동일 좌표)
+    out.push(lineEl("back", "outline", B_WAIST, "waist"));
+    out.push(lineEl("back", "outline", B_CENTER, "center"));
     out.push(lineEl("back", "construction", { x1: 300, y1: 60, x2: 320, y2: 80 }));
     out.push(lineEl("back", "construction", { x1: 330, y1: 60, x2: 350, y2: 80 }));
     out.push(lineEl("shared", "construction", { x1: 200, y1: 60, x2: 200, y2: 80 }));
@@ -142,12 +161,12 @@ function makeHarness(cfg) {
 {
   const h = makeHarness();
   const s = h.capture();
-  ok(s.schemaVersion === 1, "1: schemaVersion=1");
+  ok(s.schemaVersion === 2, "1: schemaVersion=2");
   ok(deepEqual(Object.keys(s).sort(), ["geometry", "schemaVersion", "source"]), "1: 최상위 키");
   const dist = {};
   ["front", "back", "shared", "sleeve"].forEach(pc => ["outline", "construction"].forEach(rl => { dist[pc + "/" + rl] = s.geometry[pc][rl].length; }));
-  ok(dist["front/outline"] === 2 && dist["front/construction"] === 2, "1: front 분포");
-  ok(dist["back/outline"] === 2 && dist["back/construction"] === 2, "1: back 분포");
+  ok(dist["front/outline"] === 4 && dist["front/construction"] === 2, "1: front 분포");
+  ok(dist["back/outline"] === 4 && dist["back/construction"] === 2, "1: back 분포");
   ok(dist["shared/outline"] === 0 && dist["shared/construction"] === 2, "1: shared 분포");
   ok(dist["sleeve/outline"] === 2 && dist["sleeve/construction"] === 0, "1: sleeve 분포");
   ok(deepEqual(s.source.measurements, { B: 83, W: 64, BL: 38, SL: 52, Hem: 30, capAdj: 3, capFormula: "culture", dartTotal: 12.5 }), "1: measurements");
@@ -215,7 +234,7 @@ function makeHarness(cfg) {
     const s = h.capture();
     ok(h.state.workMode === mode, "7: workMode 복원(" + mode + ")");
     // 캡처는 내부적으로 all 로 수집하므로 분포는 항상 전 파트
-    ok(s.geometry.sleeve.outline.length === 2 && s.geometry.front.outline.length === 2, "7: all 강제 수집(" + mode + ")");
+    ok(s.geometry.sleeve.outline.length === 2 && s.geometry.front.outline.length === 4, "7: all 강제 수집(" + mode + ")");
   });
 }
 
@@ -332,6 +351,91 @@ function makeHarness(cfg) {
   h.capture(); h.capture();
   ok(h.localStorage.length === 0, "18: localStorage 0키");
   ok(h.calls.setItem === 0, "18: setItem 호출 0");
+}
+
+// 테스트 19: SV2 edge 가 snapshot 에 보존(앞·뒤 outline 각각 center/waist/side-seam)
+{
+  const h = makeHarness();
+  const s = h.capture();
+  const edgesOf = (arr) => arr.filter(p => Object.prototype.hasOwnProperty.call(p, "edge")).map(p => p.edge).sort();
+  ok(deepEqual(edgesOf(s.geometry.front.outline), ["center", "side-seam", "waist"]), "19: front edge 집합");
+  ok(deepEqual(edgesOf(s.geometry.back.outline), ["center", "side-seam", "waist"]), "19: back edge 집합");
+}
+
+// 테스트 20: edge 없는 primitive 는 own-property "edge" 자체가 없다
+{
+  const h = makeHarness();
+  const s = h.capture();
+  const noEdge = (p) => Object.prototype.hasOwnProperty.call(p, "edge") === false;
+  ok(s.geometry.front.construction.every(noEdge), "20: front construction edge 없음");
+  ok(s.geometry.sleeve.outline.every(noEdge), "20: sleeve outline edge 없음");
+  ok(noEdge(s.geometry.front.outline[0]), "20: 진동곡선 path edge 없음");
+  // undefined 값을 가진 own-property 도 없어야 한다
+  const hasUndefEdge = s.geometry.front.construction.some(p => "edge" in p && p.edge === undefined);
+  ok(!hasUndefEdge, "20: edge:undefined own-property 없음");
+}
+
+// 테스트 21: JSON 왕복 후에도 edge own-property 유무가 동일
+{
+  const h = makeHarness();
+  const s = h.capture();
+  const rt = JSON.parse(JSON.stringify(s));
+  const key = (arr) => arr.map(p => Object.prototype.hasOwnProperty.call(p, "edge") ? p.edge : "∅").join(",");
+  ok(key(s.geometry.front.outline) === key(rt.geometry.front.outline), "21: 왕복 후 edge 유무 동일");
+}
+
+// 테스트 22: bad-edge (화이트리스트 밖 값)
+{
+  const badEdge = (mode) => defaultScene(mode).map(e =>
+    (e.getAttribute("data-piece") === "front" && e.getAttribute("data-edge") === "center")
+      ? lineEl("front", "outline", F_CENTER, "bogus") : e);
+  throws(() => makeHarness({ sceneBuilder: badEdge }).capture(), "bad-edge", "22: bad-edge");
+}
+
+// 테스트 23: edge-placement (front construction / sleeve outline / shared 에 edge)
+{
+  const onConstr = (mode) => { const b = defaultScene(mode); b.push(lineEl("front", "construction", { x1: 5, y1: 5, x2: 6, y2: 6 }, "center")); return b; };
+  const onSleeve = (mode) => { const b = defaultScene(mode); if (mode !== "body") b.push(lineEl("sleeve", "outline", { x1: 5, y1: 5, x2: 6, y2: 6 }, "waist")); return b; };
+  const onShared = (mode) => { const b = defaultScene(mode); b.push(lineEl("shared", "outline", { x1: 5, y1: 5, x2: 6, y2: 6 }, "center")); return b; };
+  throws(() => makeHarness({ sceneBuilder: onConstr }).capture(), "edge-placement", "23: front construction edge 불허");
+  throws(() => makeHarness({ sceneBuilder: onSleeve }).capture(), "edge-placement", "23: sleeve outline edge 불허");
+  throws(() => makeHarness({ sceneBuilder: onShared }).capture(), "edge-placement", "23: shared outline edge 불허");
+}
+
+// 테스트 24: missing-required-edge (앞 center 제거)
+{
+  const noCenter = (mode) => defaultScene(mode).filter(e => !(e.getAttribute("data-piece") === "front" && e.getAttribute("data-edge") === "center"));
+  throws(() => makeHarness({ sceneBuilder: noCenter }).capture(), "missing-required-edge", "24: 앞 center 누락");
+}
+
+// 테스트 25: missing-topology-junction (center 가 waist 와 끝점을 공유하지 않음)
+{
+  const disc = (mode) => defaultScene(mode).map(e =>
+    (e.getAttribute("data-piece") === "front" && e.getAttribute("data-edge") === "center")
+      ? lineEl("front", "outline", { x1: 500, y1: 300, x2: 500, y2: 100 }, "center") : e);
+  throws(() => makeHarness({ sceneBuilder: disc }).capture(), "missing-topology-junction", "25: center∩waist 없음");
+}
+
+// 테스트 26: ambiguous-topology-junction (center 가 waist 집합과 끝점 2개 공유)
+{
+  const amb = (mode) => { const b = defaultScene(mode); if (mode !== "sleeve") b.push(lineEl("front", "outline", { x1: 140, y1: 100, x2: 300, y2: 100 }, "waist")); return b; };
+  throws(() => makeHarness({ sceneBuilder: amb }).capture(), "ambiguous-topology-junction", "26: center∩waist 2개");
+}
+
+// 테스트 27: 중복 판정은 edge 를 제외 — 같은 좌표·다른 edge 는 duplicate-primitive
+{
+  const dupDiffEdge = (mode) => { const b = defaultScene(mode); if (mode !== "sleeve") b.push(lineEl("front", "outline", F_CENTER, "waist")); return b; };
+  throws(() => makeHarness({ sceneBuilder: dupDiffEdge }).capture(), "duplicate-primitive", "27: 같은 좌표 다른 edge 중복");
+}
+
+// 테스트 28: v1형 scene(모서리 전무) → missing-required-edge 로 거부(SV2 요구)
+{
+  const v1Scene = (mode) => defaultScene(mode).map(e =>
+    (e.getAttribute("data-edge") !== null)
+      ? lineEl(e.getAttribute("data-piece"), e.getAttribute("data-geometry-role"),
+          { x1: +e.getAttribute("x1"), y1: +e.getAttribute("y1"), x2: +e.getAttribute("x2"), y2: +e.getAttribute("y2") })
+      : e);
+  throws(() => makeHarness({ sceneBuilder: v1Scene }).capture(), "missing-required-edge", "28: 모서리 없는 v1형 거부");
 }
 
 // ── 결과 ──

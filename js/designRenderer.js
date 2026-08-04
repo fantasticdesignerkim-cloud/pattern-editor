@@ -15,6 +15,8 @@
 //     · createWorkingGroup(geometry)   → <g class="design-working" data-design-layer="working">
 //   둘 다 view-only: 그룹에 CSS pointer-events:none(자식 상속). 이벤트 리스너 0.
 //   입력 geometry 변형 0, DOM append 0, 실패 시 부분 group 반환 0.
+//   (SV2) primitive.edge(center/waist/side-seam)는 front/back outline 에서만 검증 후
+//   data-edge 로 재발행한다. edge 없는 primitive 엔 data-edge 를 붙이지 않는다.
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
@@ -22,6 +24,8 @@
   const NS = "http://www.w3.org/2000/svg";
   const PIECES = ["front", "back", "shared", "sleeve"];
   const ROLES = ["outline", "construction"];
+  // SV2 의미 모서리: front/back outline 에서만 허용(hem/construction edge 는 아직 불허).
+  const ALLOWED_EDGE = { center: 1, waist: 1, "side-seam": 1 };
   // 고정 순회 순서(deterministic).
   const ORDER = [
     ["front", "outline"], ["front", "construction"],
@@ -79,6 +83,16 @@
     fail("invalid-primitive", prim.kind);
   }
 
+  // SV2: edge 검증 — 없으면 null, 있으면 값(center/waist/side-seam)·위치(front/back
+  // outline)를 확인하고 그 값을 반환한다. 비문자열·미지값·잘못된 위치는 명시적 실패.
+  function validateEdge(prim, pc, rl) {
+    if (!Object.prototype.hasOwnProperty.call(prim, "edge")) return null;
+    const edge = prim.edge;
+    if (typeof edge !== "string" || !ALLOWED_EDGE[edge]) fail("bad-edge", edge);
+    if (!((pc === "front" || pc === "back") && rl === "outline")) fail("edge-placement", pc + "/" + rl);
+    return edge;
+  }
+
   function validGeometry(geometry) {
     if (!geometry || typeof geometry !== "object") return false;
     for (const pc of PIECES) {
@@ -97,10 +111,12 @@
     for (const [pc, rl] of ORDER) {
       const arr = geometry[pc][rl];
       for (let i = 0; i < arr.length; i++) {
+        const edge = validateEdge(arr[i], pc, rl); // 실패 시 group 미생성(부분 반환 0)
         const el = makePrimitive(arr[i]);
         el.setAttribute("data-piece", pc);
         el.setAttribute("data-geometry-role", rl);
         el.setAttribute("data-design-layer", layer);
+        if (edge) el.setAttribute("data-edge", edge); // edge 없는 primitive 엔 미부여
         kids.push(el);
       }
     }

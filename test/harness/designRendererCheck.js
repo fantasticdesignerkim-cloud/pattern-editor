@@ -301,7 +301,7 @@ function childSeq(g) { return g.childNodes.map(c => c.getAttribute("data-piece")
 {
   const h = makeHarness();
   const g = h.dr.createReferenceGroup(freshGeometry());
-  const allowed = new Set(["x1", "y1", "x2", "y2", "d", "fill", "data-piece", "data-geometry-role", "data-design-layer"]);
+  const allowed = new Set(["x1", "y1", "x2", "y2", "d", "fill", "data-piece", "data-geometry-role", "data-design-layer", "data-edge"]);
   const bad = g.childNodes.some(c => c.getAttributeNames().some(k => !allowed.has(k)));
   ok(!bad, "28: child 속성 화이트리스트 준수(class/style/camera 유입 0)");
 }
@@ -310,6 +310,54 @@ function childSeq(g) { return g.childNodes.map(c => c.getAttribute("data-piece")
   const h = makeHarness();
   h.dr.createReferenceGroup(freshGeometry()); h.dr.createWorkingGroup(freshGeometry());
   ok(h.calls.setItem === 0, "29: storage 호출 0");
+}
+
+// ══════════════════════════════════════════════
+// SV2: edge 검증 + 재발행
+// ══════════════════════════════════════════════
+
+// 30. edge 재발행 — 있는 primitive 만 data-edge, 없는 것엔 미부여
+{
+  const h = makeHarness();
+  const geo = freshGeometry();
+  geo.front.outline[1].edge = "side-seam"; // SIDE line
+  geo.back.outline[1].edge = "side-seam";
+  const g = h.dr.createReferenceGroup(geo);
+  const sides = g.childNodes.filter(c => c.getAttribute("data-edge") === "side-seam");
+  ok(sides.length === 2, "30: side-seam 두 개 재발행");
+  const path = g.childNodes.find(c => c.tagName === "path" && c.getAttribute("data-piece") === "front");
+  ok(path.getAttribute("data-edge") === null, "30: edge 없는 path 엔 data-edge 미부여");
+  const constr = g.childNodes.find(c => c.getAttribute("data-geometry-role") === "construction");
+  ok(constr.getAttribute("data-edge") === null, "30: construction 엔 data-edge 미부여");
+}
+
+// 31. bad-edge (미지 값 / 비문자열)
+{
+  const h = makeHarness();
+  const gb = freshGeometry(); gb.front.outline[1].edge = "bogus";
+  throws(() => h.dr.createReferenceGroup(gb), "bad-edge", "31: 미지 edge 값");
+  const gn = freshGeometry(); gn.front.outline[1].edge = 5;
+  throws(() => h.dr.createReferenceGroup(gn), "bad-edge", "31: 비문자열 edge");
+}
+
+// 32. edge-placement (construction / sleeve outline / shared outline 에 edge)
+{
+  const h = makeHarness();
+  const gc = freshGeometry(); gc.front.construction[0].edge = "center";
+  throws(() => h.dr.createReferenceGroup(gc), "edge-placement", "32: front construction edge");
+  const gs = freshGeometry(); gs.sleeve.outline[1].edge = "waist";
+  throws(() => h.dr.createReferenceGroup(gs), "edge-placement", "32: sleeve outline edge");
+  const gsh = freshGeometry(); gsh.shared.outline.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edge: "center" });
+  throws(() => h.dr.createReferenceGroup(gsh), "edge-placement", "32: shared outline edge");
+}
+
+// 33. 실패(bad-edge) 시 group 미조립
+{
+  const h = makeHarness();
+  const gb = freshGeometry(); gb.front.outline[1].edge = "bogus";
+  try { h.dr.createReferenceGroup(gb); } catch (e) {}
+  const groupsWithKids = h.created.filter(el => el.tagName === "g" && el.childNodes.length > 0);
+  ok(groupsWithKids.length === 0, "33: bad-edge 시 group 미조립");
 }
 
 console.log("══════════════════════════════════════════════");

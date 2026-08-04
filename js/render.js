@@ -1,10 +1,12 @@
 // ── 렌더 ──────────────────────────────────────
 // 봉제 형상 소유권 표식: 생성 지점이 의미를 알 때만 부여한다(좌표/DOM 순서 추측 금지).
 // piece ∈ {front, back, shared, sleeve}, role ∈ {outline, construction}.
-function _tagGeom(el, piece, role){
+// edge(선택): 의미 모서리(center/waist/side-seam). front/back outline 에만 부여한다.
+function _tagGeom(el, piece, role, edge){
   if (el && el.setAttribute){
     el.setAttribute("data-piece", piece);
     el.setAttribute("data-geometry-role", role);
+    if (edge) el.setAttribute("data-edge", edge);
   }
   return el;
 }
@@ -309,6 +311,15 @@ function drawAppliedSegments(g, segs, cls, color, side) {
     "back-neckline", "front-neckline",
   ]);
 
+  // SV2 의미 모서리 화이트리스트: baked seg.type → data-edge.
+  // 화이트리스트에 없는 타입(dart-leg-*, old-dart 등)은 edge 없음. 곡선(CURVE_TYPES)은
+  // 진동/네크라인뿐이라 이 표에 해당하는 타입이 오지 않는다(직선 분기에서만 부여).
+  const SEG_EDGE = {
+    "front-center": "center", "back-center": "center",
+    "front-waist": "waist", "back-waist": "waist",
+    "side-seam": "side-seam",
+  };
+
   const flushSmoothPath = (pts) => {
     if (pts.length < 2) return;
     const sc = pts.map(pt => { const [x,y] = c2p(pt.x, pt.y); return {x, y}; });
@@ -362,7 +373,7 @@ function drawAppliedSegments(g, segs, cls, color, side) {
       flushSmoothPath(curvePts);
       curvePts = [];
       curveType = null;
-      g.appendChild(_tagGeom(LnC(seg.from, seg.to, cls, color), side, "outline"));
+      g.appendChild(_tagGeom(LnC(seg.from, seg.to, cls, color), side, "outline", SEG_EDGE[seg.type]));
     }
   }
   flushSmoothPath(curvePts);
@@ -779,23 +790,23 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
 
     // 앞판 옆선: 앞판 적용 시 drawDartMoveApplied 담당
     if(!isFrontApplied){
-      gPat.appendChild(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_F), "front", "outline"));
+      gPat.appendChild(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "side-seam"));
     }
     // 뒤판 옆선: 뒤판 적용 시 drawDartMoveApplied 담당
     if(!isBackApplied){
-      gPat.appendChild(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_B), "back", "outline"));
+      gPat.appendChild(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_B), "back", "outline", "side-seam"));
     }
 
     const FND = { x: f.sw(), y: f.yB() + f.fnd() };
-    // 앞판 허리선
+    // 앞판 허리선 + 앞중심선
     if(!isFrontApplied){
-      gPat.appendChild(_tagGeom(LnC(FND,        p.FRONT_WL, "pattern", _DC_F), "front", "outline"));
-      gPat.appendChild(_tagGeom(LnC(p.FRONT_WL, p.SIDE_BTM, "pattern", _DC_F), "front", "outline"));
+      gPat.appendChild(_tagGeom(LnC(FND,        p.FRONT_WL, "pattern", _DC_F), "front", "outline", "center"));
+      gPat.appendChild(_tagGeom(LnC(p.FRONT_WL, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "waist"));
     }
     // 뒤판 허리선 + 뒤중심선
     if(!isBackApplied){
-      gPat.appendChild(_tagGeom(LnC(p.SIDE_BTM, p.BACK_WL,  "pattern", _DC_B), "back", "outline"));
-      gPat.appendChild(_tagGeom(LnC(p.BACK_WL,  p.A,         "pattern", _DC_B), "back", "outline"));
+      gPat.appendChild(_tagGeom(LnC(p.SIDE_BTM, p.BACK_WL,  "pattern", _DC_B), "back", "outline", "waist"));
+      gPat.appendChild(_tagGeom(LnC(p.BACK_WL,  p.A,         "pattern", _DC_B), "back", "outline", "center"));
     }
 
     // ── FRONT_ARM → BP (절개선) ─ 앞판 적용 시 skip ──

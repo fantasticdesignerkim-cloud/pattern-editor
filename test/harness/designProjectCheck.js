@@ -43,16 +43,29 @@ const MX = 40, MY = 20, SC = 4;
 const p2c_ref = (x, y) => [(x - MX) / SC, (y - MY) / SC];
 const SIDE = { x1: 240, y1: 100, x2: 240, y2: 300 };
 const el = (tag, attrs) => ({ tagName: tag, getAttribute(k) { return (k in attrs) ? String(attrs[k]) : null; } });
-const lineEl = (piece, role, c) => el("line", { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 });
+const lineEl = (piece, role, c, edge) => {
+  const a = { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 };
+  if (edge) a["data-edge"] = edge;
+  return el("line", a);
+};
 const pathEl = (piece, role, d) => el("path", { "data-piece": piece, "data-geometry-role": role, d });
+// SV2 의미 모서리(junction 유일).
+const F_WAIST = { x1: 240, y1: 300, x2: 140, y2: 300 };
+const F_CENTER = { x1: 140, y1: 300, x2: 140, y2: 100 };
+const B_WAIST = { x1: 240, y1: 300, x2: 60, y2: 300 };
+const B_CENTER = { x1: 60, y1: 300, x2: 60, y2: 100 };
 function defaultScene(mode) {
   const out = []; const body = mode !== "sleeve", sleeve = mode !== "body";
   if (body) {
     out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160"));
-    out.push(lineEl("front", "outline", SIDE));
+    out.push(lineEl("front", "outline", SIDE, "side-seam"));
+    out.push(lineEl("front", "outline", F_WAIST, "waist"));
+    out.push(lineEl("front", "outline", F_CENTER, "center"));
     out.push(lineEl("front", "construction", { x1: 100, y1: 60, x2: 120, y2: 80 }));
     out.push(pathEl("back", "outline", "M60,100 C80,120 100,140 120,160"));
-    out.push(lineEl("back", "outline", SIDE));
+    out.push(lineEl("back", "outline", SIDE, "side-seam"));
+    out.push(lineEl("back", "outline", B_WAIST, "waist"));
+    out.push(lineEl("back", "outline", B_CENTER, "center"));
     out.push(lineEl("back", "construction", { x1: 300, y1: 60, x2: 320, y2: 80 }));
     out.push(lineEl("shared", "construction", { x1: 200, y1: 60, x2: 200, y2: 80 }));
   }
@@ -190,6 +203,18 @@ function makeHarness() {
   throws(() => h.dw.startFromBlock({ id: "x", version: 1, canonicalHash: "h", snapshot: { source: {} } }), "invalid-completed-block", "8: geometry 없음");
 }
 
+// 8b. SV2: schemaVersion 1(구형, edge 없음) 완료본 → unsupported-schema-version, current 불변
+{
+  const h = makeHarness();
+  const v2 = h.bw.complete();                                  // 실제 v2 완료본
+  const v1like = { id: v2.id, version: v2.version, canonicalHash: v2.canonicalHash,
+    snapshot: { schemaVersion: 1, source: v2.snapshot.source, geometry: v2.snapshot.geometry } };
+  throws(() => h.dw.startFromBlock(v1like), "unsupported-schema-version", "8b: v1 snapshot 거부");
+  ok(h.dw.hasProject() === false && h.dw.current() === null, "8b: 거부 후 project 없음");
+  // v2 는 정상 시작
+  ok(h.dw.startFromBlock(v2).id === "design-1", "8b: v2 는 정상 시작");
+}
+
 // 9. deepFrozen 변형 무효 (referenceGeometry)
 {
   const h = makeHarness();
@@ -214,6 +239,20 @@ function makeHarness() {
   const dp = h.dw.startFromBlock(h.bw.complete());
   dp.working.parameters.x = 1;
   ok(h.localStorage.length === 0 && h.calls.setItem === 0, "11: localStorage 미접근");
+}
+
+// 12. SV2: edge 가 referenceGeometry / working.geometry 로 deep-clone(참조 공유 0)
+{
+  const h = makeHarness();
+  const v1 = h.bw.complete();
+  const dp = h.dw.startFromBlock(v1);
+  const edgesOf = (arr) => arr.filter(p => Object.prototype.hasOwnProperty.call(p, "edge")).map(p => p.edge).sort();
+  ok(JSON.stringify(edgesOf(dp.referenceGeometry.front.outline)) === JSON.stringify(["center", "side-seam", "waist"]), "12: reference front edge");
+  ok(JSON.stringify(edgesOf(dp.working.geometry.back.outline)) === JSON.stringify(["center", "side-seam", "waist"]), "12: working back edge");
+  // 완료본 snapshot.geometry 와 reference/working 는 참조 공유 0(deep clone)
+  ok(sharesRef(v1.snapshot.geometry, dp.referenceGeometry) === false, "12: reference clone 참조 0");
+  ok(sharesRef(v1.snapshot.geometry, dp.working.geometry) === false, "12: working clone 참조 0");
+  ok(sharesRef(dp.referenceGeometry, dp.working.geometry) === false, "12: reference·working 참조 0");
 }
 
 // ── 결과 ──

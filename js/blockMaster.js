@@ -13,6 +13,9 @@
 //   - snapshot 은 deep clone + 참조 분리(반환 객체를 변형해도 state/DOM 불변).
 //   - 반환 객체에 DOM 요소·함수·CSS class·style·카메라(view) 상태를 넣지 않는다.
 //   - data-piece / data-geometry-role 은 분류에만 쓰고 snapshot 에 저장하지 않는다.
+//   - (SV2, schemaVersion 2) data-edge 는 의미 모서리(center/waist/side-seam)로,
+//     front/back outline 에만 허용하며 primitive.edge 로 snapshot 에 저장한다.
+//     중복 판정에서는 제외하고 canonical hash/identity 에는 포함된다.
 //   - 좌표는 원본 정밀도를 보존하고, 정규화는 hash/중복 판정(canonical)에서만 한다.
 //   - workMode 만 제한된 transaction 으로 all 로 바꿔 수집하고 finally 에서 원복한다.
 //     전역 state 에 snapshot source 를 임시 주입하지 않는다.
@@ -24,6 +27,11 @@
   var ALLOWED_ROLE = { outline: 1, construction: 1 };
   // shared.outline 은 A안대로 비어 있을 수 있으므로 필수에서 제외한다.
   var REQUIRED_OUTLINE = ["front", "back", "sleeve"];
+  // SV2 의미 모서리(semantic edge). front/back outline 에만 허용한다.
+  var ALLOWED_EDGE = { center: 1, waist: 1, "side-seam": 1 };
+  // 앞·뒤 각 조각 outline 이 반드시 가져야 하는 의미 모서리(topology junction 근거).
+  var REQUIRED_EDGE_PIECES = ["front", "back"];
+  var REQUIRED_EDGES = ["center", "waist", "side-seam"];
 
   function fail(reason, detail) {
     var e = new Error("captureBlockSnapshot 실패: " + reason);
@@ -74,17 +82,22 @@
 
   function primitiveOf(el) {
     var tag = el.tagName.toLowerCase();
+    var prim;
     if (tag === "line") {
-      return {
+      prim = {
         kind: "line",
         from: toDraft(+el.getAttribute("x1"), +el.getAttribute("y1")),
         to: toDraft(+el.getAttribute("x2"), +el.getAttribute("y2"))
       };
+    } else if (tag === "path") {
+      prim = { kind: "path", commands: parsePathCommands(el.getAttribute("d") || "") };
+    } else {
+      fail("unsupported-primitive-tag", tag);
     }
-    if (tag === "path") {
-      return { kind: "path", commands: parsePathCommands(el.getAttribute("d") || "") };
-    }
-    fail("unsupported-primitive-tag", tag);
+    // SV2: data-edge 가 있을 때만 조건부로 담는다(없으면 own-property 자체가 없다).
+    var edge = el.getAttribute("data-edge");
+    if (edge) prim.edge = edge;
+    return prim;
   }
 
   // hash / 중복 판정용 canonicalization. 저장 primitive 는 원본 정밀도를 유지한다.
@@ -103,6 +116,43 @@
     return { front: bucket(), back: bucket(), shared: bucket(), sleeve: bucket() };
   }
 
+  // primitive 끝점 두 개를 1e-4 정규화 키로 반환한다(line: from/to, path: 첫 M·마지막 점).
+  function edgeEndpointKeys(prim) {
+    var r = function (v) { return Math.round(v * 1e4) / 1e4; };
+    var k = function (p) { return r(p.x) + "," + r(p.y); };
+    if (prim.kind === "line") return [k(prim.from), k(prim.to)];
+    var cmds = prim.commands;
+    var first = cmds[0].points[0];
+    var lastPts = cmds[cmds.length - 1].points;
+    var last = lastPts[lastPts.length - 1];
+    return [k(first), k(last)];
+  }
+
+  // 두 의미 모서리 집합의 공유 끝점(공통점) 개수를 센다. 정확히 1개여야 junction 이 유일하다.
+  function commonEndpoints(outline, edgeA, edgeB) {
+    var setA = {}, setB = {};
+    for (var i = 0; i < outline.length; i++) {
+      var p = outline[i];
+      if (p.edge === edgeA) edgeEndpointKeys(p).forEach(function (key) { setA[key] = 1; });
+      if (p.edge === edgeB) edgeEndpointKeys(p).forEach(function (key) { setB[key] = 1; });
+    }
+    var common = [];
+    Object.keys(setA).forEach(function (key) { if (setB[key]) common.push(key); });
+    return common;
+  }
+
+  // 앞·뒤 각 조각에서 center∩waist, side-seam∩waist junction 이 유일한지 검증한다.
+  function validateJunctions(outline, piece) {
+    var pairs = [["center", "waist"], ["side-seam", "waist"]];
+    for (var i = 0; i < pairs.length; i++) {
+      var a = pairs[i][0], b = pairs[i][1];
+      var common = commonEndpoints(outline, a, b);
+      var label = piece + " " + a + "∩" + b;
+      if (common.length === 0) fail("missing-topology-junction", label);
+      if (common.length > 1) fail("ambiguous-topology-junction", label);
+    }
+  }
+
   // all 상태 DOM 에서 봉제 형상 표식 요소를 수집·검증한다. 실패 시 throw(부분 반환 없음).
   function collectGeometry() {
     var svg = document.getElementById("cv");
@@ -115,7 +165,15 @@
       var role = el.getAttribute("data-geometry-role");
       if (!ALLOWED_PIECE[piece]) fail("bad-piece", piece);
       if (!ALLOWED_ROLE[role]) fail("bad-role", role);
+      // SV2: data-edge 검증 — 값은 화이트리스트, 위치는 front/back outline 에만.
+      var edgeAttr = el.getAttribute("data-edge");
+      if (edgeAttr !== null) {
+        if (!ALLOWED_EDGE[edgeAttr]) fail("bad-edge", edgeAttr);
+        var frontOrBack = (piece === "front" || piece === "back");
+        if (!(frontOrBack && role === "outline")) fail("edge-placement", piece + "/" + role);
+      }
       var prim = primitiveOf(el);
+      // 중복 판정 키는 edge 를 제외한다(같은 형상·다른 edge 는 중복으로 잡는다).
       var id = piece + "|" + role + "|" + canonical(prim);
       if (seen[id]) fail("duplicate-primitive", id);
       seen[id] = 1;
@@ -124,6 +182,19 @@
     for (var j = 0; j < REQUIRED_OUTLINE.length; j++) {
       var p = REQUIRED_OUTLINE[j];
       if (geometry[p].outline.length === 0) fail("empty-required-outline", p);
+    }
+    // SV2: 앞·뒤 각 조각 outline 이 center/waist/side-seam 을 모두 가지는지(coverage).
+    for (var pi = 0; pi < REQUIRED_EDGE_PIECES.length; pi++) {
+      var pc = REQUIRED_EDGE_PIECES[pi];
+      var have = {};
+      geometry[pc].outline.forEach(function (prm) { if (prm.edge) have[prm.edge] = 1; });
+      for (var ei = 0; ei < REQUIRED_EDGES.length; ei++) {
+        if (!have[REQUIRED_EDGES[ei]]) fail("missing-required-edge", pc + "/" + REQUIRED_EDGES[ei]);
+      }
+    }
+    // SV2: 앞·뒤 각 조각의 center∩waist / side-seam∩waist junction 유일성.
+    for (var pj = 0; pj < REQUIRED_EDGE_PIECES.length; pj++) {
+      validateJunctions(geometry[REQUIRED_EDGE_PIECES[pj]].outline, REQUIRED_EDGE_PIECES[pj]);
     }
     return geometry;
   }
@@ -184,7 +255,7 @@
       else render();
     }
 
-    return { schemaVersion: 1, source: source, geometry: geometry };
+    return { schemaVersion: 2, source: source, geometry: geometry };
   }
 
   window.captureBlockSnapshot = captureBlockSnapshot;

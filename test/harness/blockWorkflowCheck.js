@@ -33,18 +33,32 @@ const MX = 40, MY = 20, SC = 4;
 const p2c_ref = (x, y) => [(x - MX) / SC, (y - MY) / SC];
 const SIDE = { x1: 240, y1: 100, x2: 240, y2: 300 };
 const el = (tag, attrs) => ({ tagName: tag, getAttribute(k) { return (k in attrs) ? String(attrs[k]) : null; } });
-const lineEl = (piece, role, c) => el("line", { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 });
+const lineEl = (piece, role, c, edge) => {
+  const a = { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 };
+  if (edge) a["data-edge"] = edge;
+  return el("line", a);
+};
 const pathEl = (piece, role, d) => el("path", { "data-piece": piece, "data-geometry-role": role, d });
+
+// SV2 의미 모서리(junction 유일). front/back center·waist·side-seam.
+const F_WAIST = { x1: 240, y1: 300, x2: 140, y2: 300 };
+const F_CENTER = { x1: 140, y1: 300, x2: 140, y2: 100 };
+const B_WAIST = { x1: 240, y1: 300, x2: 60, y2: 300 };
+const B_CENTER = { x1: 60, y1: 300, x2: 60, y2: 100 };
 
 function defaultScene(mode) {
   const out = [];
   const body = mode !== "sleeve", sleeve = mode !== "body";
   if (body) {
     out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160"));
-    out.push(lineEl("front", "outline", SIDE));
+    out.push(lineEl("front", "outline", SIDE, "side-seam"));
+    out.push(lineEl("front", "outline", F_WAIST, "waist"));
+    out.push(lineEl("front", "outline", F_CENTER, "center"));
     out.push(lineEl("front", "construction", { x1: 100, y1: 60, x2: 120, y2: 80 }));
     out.push(pathEl("back", "outline", "M60,100 C80,120 100,140 120,160"));
-    out.push(lineEl("back", "outline", SIDE));
+    out.push(lineEl("back", "outline", SIDE, "side-seam"));
+    out.push(lineEl("back", "outline", B_WAIST, "waist"));
+    out.push(lineEl("back", "outline", B_CENTER, "center"));
     out.push(lineEl("back", "construction", { x1: 300, y1: 60, x2: 320, y2: 80 }));
     out.push(lineEl("shared", "construction", { x1: 200, y1: 60, x2: 200, y2: 80 }));
   }
@@ -121,7 +135,7 @@ function makeHarness(cfg) {
   ok(b.version === 1, "1: v1");
   ok(typeof b.completedAt === "string" && b.completedAt.length > 0, "1: completedAt metadata");
   ok(typeof b.canonicalHash === "string" && /^[0-9a-f]{8}$/.test(b.canonicalHash), "1: canonicalHash 8hex");
-  ok(b.snapshot && b.snapshot.schemaVersion === 1 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
+  ok(b.snapshot && b.snapshot.schemaVersion === 2 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
   ok(h.wf.versions().length === 1 && h.wf.hasCompleted(), "1: 이력 1건");
 }
 
@@ -326,6 +340,31 @@ function makeHarness(cfg) {
 {
   const h = makeHarness({ dirty: true, dartMoveState: { active: true } });
   throws(() => h.wf.complete(), "measure-dirty", "D7: busy 보다 measure-dirty 우선");
+}
+
+// ══════════════════════════════════════════════
+// SV2: edge 가 완료본 identity/clone/freeze 를 통과
+// ══════════════════════════════════════════════
+
+// W1. 완료본 snapshot 에 edge 보존 + edge 프리미티브 deepFreeze
+{
+  const h = makeHarness();
+  const b = h.wf.complete();
+  const edgesOf = (arr) => arr.filter(p => Object.prototype.hasOwnProperty.call(p, "edge")).map(p => p.edge).sort();
+  ok(JSON.stringify(edgesOf(b.snapshot.geometry.front.outline)) === JSON.stringify(["center", "side-seam", "waist"]), "W1: front edge 보존");
+  ok(JSON.stringify(edgesOf(b.snapshot.geometry.back.outline)) === JSON.stringify(["center", "side-seam", "waist"]), "W1: back edge 보존");
+  const centerPrim = b.snapshot.geometry.front.outline.find(p => p.edge === "center");
+  ok(Object.isFrozen(centerPrim), "W1: edge 프리미티브 frozen");
+  try { centerPrim.edge = "waist"; } catch (e) {}
+  ok(centerPrim.edge === "center", "W1: edge 변형 무효");
+}
+
+// W2. 동일 draft 재완료(edge 포함) → 같은 canonicalHash(idempotent)
+{
+  const h = makeHarness();
+  const b1 = h.wf.complete();
+  const b2 = h.wf.complete();
+  ok(b1 === b2 && b1.canonicalHash === b2.canonicalHash, "W2: edge 포함 재완료 idempotent");
 }
 
 // ── 결과 ──
