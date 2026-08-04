@@ -2164,6 +2164,11 @@ blockWorkflow `?v=2026072804`, ui `?v=2026072905`, css `?v=2026072906`, designPr
   front/back 옆선은 허용되는 별개 primitive.
 - **data 속성은 의미 분류용** — geometry/element count/class/event/style 불변(HEAD 대비
   geometry hash·개수·class multiset 동일, data-* 2개만 추가 실측).
+- **(SV2, `a278865`) 세 번째 의미 속성 `data-edge`** 를 front/back **outline** 의
+  center/waist/side-seam 에만 추가했다(gen-0 은 `_tagGeom` 4번째 인자, 적용 다트는
+  `drawAppliedSegments` 의 `SEG_EDGE` 화이트리스트). geometry 좌표·개수·piece/role 분포는
+  여전히 불변(5개 다트 상태에서 pre-SV2 fingerprint 와 완전 동일 실측). 아래 "SV2 semantic
+  edge" 섹션 참고.
 - **적용된 다트 형상**(drawAppliedSegments)은 side/outline. `dart-leg*` 는 DOM class 가
   아니라 baked segment **type**(현재 열린 다트=현재 외곽선, 지배 모델).
 - **기본 gen-0 분포**(workMode=all): front **7/6**, back **7/7**, shared **0/2**,
@@ -2174,7 +2179,7 @@ blockWorkflow `?v=2026072804`, ui `?v=2026072905`, css `?v=2026072906`, designPr
 공개: **`window.captureBlockSnapshot()`**. 저장·렌더·UI 없음. 실패 시 부분 snapshot
 반환 없이 `Error`(with `.reason`) throw.
 ```js
-{ schemaVersion: 1,
+{ schemaVersion: 2,   // ← SV2(2026-08, `a278865`). v1 은 edge 필드 없음(구형).
   source: {
     measurements: { B, W, BL, SL, Hem, capAdj, capFormula, dartTotal },   // n()/selCapFormula
     handles: { armH, fArmH, bNeckH, fNeckH, sleeveH },                    // deep clone
@@ -2184,6 +2189,8 @@ blockWorkflow `?v=2026072804`, ui `?v=2026072905`, css `?v=2026072906`, designPr
 - **id/version/completedAt/hash 는 snapshot 에 없다**(래퍼 몫). 좌표는 화면px→도안좌표
   (`p2c_`) 원본 정밀도. **primitive**: line `{kind:"line", from, to}` / path
   `{kind:"path", commands:[{type:"M"|"C", points:[{x,y}…]}]}`. className/style/data-* 미저장.
+  **(SV2) front/back outline 의 center/waist/side-seam 프리미티브에는 `edge` 필드가
+  조건부로 붙는다**(없으면 own-property 자체가 없음). 아래 "SV2 semantic edge" 섹션 참고.
 - **precondition(throw reason)**: `dart-busy` / `edit-busy`(arm·neck·sleeve) /
   `missing-measurements` / `missing-handles` / `no-svg` / `bad-piece` / `bad-role` /
   **`non-mc-path-command`(M/C 외)** / **`empty-required-outline`(front·back·sleeve 필수,
@@ -2244,10 +2251,12 @@ hasCompleted, isCurrentDraftChanged })`**. localStorage/IndexedDB/파일/autoSav
   reload 시 메모리 초기화(미완료 복귀).
 
 ### 6. 회귀 테스트 (헤드리스, `test/harness/`)
-- **`blockMasterCheck.js`(48 PASS)**: 실제 `blockMaster.js` 를 vm 으로 실행 — schema/분포,
+- **`blockMasterCheck.js`(64 PASS)**: 실제 `blockMaster.js` 를 vm 으로 실행 — schema/분포,
   line·M/C 정규화, JSON 왕복, 참조 분리, 불변성, workMode 복원, 실패 계약(busy/bad
-  piece·role/L·Q/필수 outline/중복), DOM·id·hash 미노출, storage 0.
-- **`blockWorkflowCheck.js`(47 PASS)**: 실제 `blockMaster.js`+`blockWorkflow.js` 를 같은
+  piece·role/L·Q/필수 outline/중복), DOM·id·hash 미노출, storage 0. **(SV2 추가)** edge
+  보존·edge-less own-property 없음·bad-edge·edge-placement·missing-required-edge·
+  junction(missing/ambiguous)·edge 제외 중복·v1형 거부.
+- **`blockWorkflowCheck.js`(52 PASS)**: 실제 `blockMaster.js`+`blockWorkflow.js` 를 같은
   vm(window===global 브릿지)로 실행 — v1/idempotent/v2·형상복귀 v3, deepFreeze, 실패
   무변화, canonicalString 미노출, NaN, key 순서 무관, 1e-4, **measure-dirty 게이트
   (capture 호출 0·missing-handles·busy 보다 우선)**, namespace frozen, storage 0.
@@ -2329,8 +2338,9 @@ render `?v=2026072904`, ui `?v=2026072906`, css `?v=2026072906`.
    `디자인 · 원형 block-1 v1 참조`, 버튼 title `원형 v1 디자인 계속`, `sourceBlock.version=1`.
 
 ### 테스트·계약 수치
-- 신규 헤드리스: **designProjectCheck 29 / designRendererCheck 35 / designRenderBranchCheck 15**.
-  기존 **blockWorkflowCheck 47 / blockMasterCheck 48** 유지. **runAll 전체 통과 · 골든 diff 0.**
+- 신규 헤드리스: **designProjectCheck 37 / designRendererCheck 44 / designRenderBranchCheck 15**.
+  **blockWorkflowCheck 52 / blockMasterCheck 64**. **runAll 전체 통과 · 골든 diff 0.**
+  (테스트 수는 SV2, `a278865` 기준 — designProject/designRenderer 에 edge 검증 추가.)
 - **id 45**(`btnStartDesign` 추가) / **inline handler 37** / **MutationObserver 2** 유지.
 - 엔진(dartMove/split/bake/normalize)·render 라이브 원형 경로·shape/perf 골든 **무변경**.
   9 viewport(draft·design) overflow·겹침 0, 320×568 design SVG 회복(192→469), storage 0, 콘솔 0.
@@ -2344,6 +2354,54 @@ render `?v=2026072904`, ui `?v=2026072906`, css `?v=2026072906`.
 - **저장·복원 없음**(세션 메모리 전용, reload 소멸).
 - **다중 designProject 없음**(`design-1` 하나).
 - 이 항목들은 자동 착수 금지 — 별도 사양 확정 + 승인 후 진행.
+
+## ✅ SV2 semantic edge — block snapshot 에 의미 모서리 topology 보존 (2026-08, `a278865`)
+
+**배경**: 향후 디자인 몸판 편집(허리 아래 길이 연장 등)이 조각의 **의미 모서리**
+(center/waist/side-seam)를 좌표·DOM 순서 추측 없이 안정적으로 찾으려면, geometry
+primitive 에 의미 라벨이 실려야 한다. schemaVersion 을 2 로 올리고 `data-edge` →
+`snapshot.edge` 경로를 추가했다. **DB1(`y+hemExt` 변환)·working.parameters·UI·piece-local
+연장축은 이 단계에 없다**(별도 승인 후).
+
+**계약 (잠금)**
+- **의미 모서리 = `center | waist | side-seam`**, **front/back outline 에만** 허용.
+  화이트리스트 밖 값·다른 piece/role 에 붙으면 실패. dart-leg-new/old·old-dart·곡선
+  (armhole/neckline)·shoulder 계열은 edge **없음**.
+- **조건부 필드**: `if (edge) primitive.edge = edge` — 없으면 `Object.hasOwn(p,"edge")===false`
+  (JSON 왕복 후에도 동일). `edge: undefined` 를 만들지 않는다.
+- **중복 판정은 edge 제외**(`piece+role+kind+정규화 좌표`), **canonicalString/hash 는 edge
+  포함**. 같은 좌표·다른 edge 는 `duplicate-primitive`.
+- **hybrid topology junction**: 각 조각에서 center∩waist, side-seam∩waist 공유 끝점
+  (1e-4 정규화)이 **정확히 1개**여야 한다(0=`missing-topology-junction`,
+  >1=`ambiguous-topology-junction`).
+- **SV2 가 잠그는 실패 계약 5개**: `bad-edge` / `edge-placement` / `missing-required-edge`
+  (front·back 각각 center·waist·side-seam ≥1) / `missing-topology-junction` /
+  `ambiguous-topology-junction`. **`disconnected-semantic-edge` 는 보류** — 적용 후
+  center 가 2~3조각으로 나뉘었을 때 edge graph 연결성 정의를 별도 조사한 뒤 추가한다
+  (증명 안 된 검증으로 유효한 적용 다트를 막지 않는다).
+
+**변경 파일 (9)**: `js/blockMaster.js`(schemaVersion 2·조건부 edge·검증·junction) /
+`js/render.js`(`_tagGeom` 4번째 인자·gen-0 outline 6곳·`drawAppliedSegments` `SEG_EDGE`
+화이트리스트) / `js/designProject.js`(**`unsupported-schema-version` 게이트** — 디자인은
+v2 완료본만 소비, edge 없는 v1 유입 차단) / `js/designRenderer.js`(edge 값·위치 검증 +
+`data-edge` 재발행, hem/construction edge 불허) / 하네스 4개 / `index.html`(캐시
+`?v=2026080301`, render·blockMaster·designProject·designRenderer). **엔진(dartMove)·
+shape/perf 골든·CLAUDE.md 외 문서 무변경.**
+
+**테스트**: blockMaster 64 / blockWorkflow 52 / designProject 37 / designRenderer 44 /
+designRenderBranch 15. runAll 전체 통과, 골든 diff 0.
+
+**5개 다트 상태 전수 검증(실브라우저, 하네스 드라이버 이식)**: 미적용/앞판만/뒤판만/
+앞뒤동시/앞판다중 각각 — capture 성공·schemaVersion 2·front·back coverage(center·waist·
+side-seam)·junction 각 1개·dart-leg/old-dart/곡선 edge 0·snapshot→designRenderer edge
+분포 동일·storage 0·콘솔 0. **좌표·개수·piece/role 분포 불변 증명**: `git stash` 로
+render·blockMaster 를 pre-SV2 로 되돌려(dartMove 무변경이라 동일 형상 재현) 같은 5개
+상태의 edge-무관 fingerprint 를 비교 → **5개 전부 완전 일치**(SV2 는 edge 라벨 외 아무것도
+바꾸지 않음). canonicalHash 는 v1 대비 달라지고, 같은 v2 재캡처는 동일.
+
+**남은 것(보류)**: `disconnected-semantic-edge` 실패 계약 / DB1 `y+hemExt` 변환 /
+`working.parameters`(여유량·완성길이·옆선·네크라인·앞여밈) / 디자인 편집 UI /
+piece-local 연장축 조사 — 전부 별도 사양·승인 후.
 
 ## 다음에 확인할 것 (열려있는 이슈)
 
@@ -2402,7 +2460,8 @@ render `?v=2026072904`, ui `?v=2026072906`, css `?v=2026072906`.
 - **✅ (완료, 2026-07) 원형 완료 기반 S1~S3** — 위 "✅ 원형 완료 기반 S1~S3 구현 완료"
   섹션 참고. geometry 의미 표식(`bb05836`)·`captureBlockSnapshot`(`aff2baf`)·도구를 draft
   로 이동(`82ece4a`)·`window.blockWorkflow` 세션 완료본(`884c4ca`)·`원형 완료` 최소
-  UI(`634acab`). blockMasterCheck 48 / blockWorkflowCheck 47 / runAll 통과 / 골든 diff 0.
+  UI(`634acab`). blockMasterCheck 64 / blockWorkflowCheck 52 / runAll 통과 / 골든 diff 0.
+  (테스트 수 SV2 `a278865` 반영.)
   (S1 시점 "design stage 는 계속 disabled"는 D1~D3b 에서 정정 — 아래 항목.)
 - ~~**(다음 단계) designProject + reference renderer + 디자인 시작** → design stage 를
   정직하게 활성화(현재 disabled 유지)~~ → **✅ (완료, D1~D3b, 2026-07)**: 아래 "✅ 원형
