@@ -15,8 +15,9 @@
 //     · createWorkingGroup(geometry)   → <g class="design-working" data-design-layer="working">
 //   둘 다 view-only: 그룹에 CSS pointer-events:none(자식 상속). 이벤트 리스너 0.
 //   입력 geometry 변형 0, DOM append 0, 실패 시 부분 group 반환 0.
-//   (SV2) primitive.edge(center/waist/side-seam)는 front/back outline 에서만 검증 후
-//   data-edge 로 재발행한다. edge 없는 primitive 엔 data-edge 를 붙이지 않는다.
+//   primitive.edge 를 EDGE_PLACEMENT 규칙으로 검증 후 data-edge 로 재발행한다.
+//   center/side-seam/hem=front·back outline, waist=front·back outline 또는 construction
+//   (DB1a 연장 시 waist 가 construction 으로 이동). edge 없는 primitive 엔 미부여.
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
@@ -24,8 +25,17 @@
   const NS = "http://www.w3.org/2000/svg";
   const PIECES = ["front", "back", "shared", "sleeve"];
   const ROLES = ["outline", "construction"];
-  // SV2 의미 모서리: front/back outline 에서만 허용(hem/construction edge 는 아직 불허).
-  const ALLOWED_EDGE = { center: 1, waist: 1, "side-seam": 1 };
+  // 의미 모서리 배치 규칙(placement). SV2 는 center/waist/side-seam 을 front/back
+  // outline 에서만 허용했다. DB1a 가 두 경우를 추가로 허용한다:
+  //   · waist  : front/back outline 또는 construction (연장 시 waist 가 construction 으로 이동)
+  //   · hem    : front/back outline (신규 hem 모서리)
+  // center/side-seam 은 계속 outline 에서만(construction 금지).
+  const EDGE_PLACEMENT = {
+    center: { outline: 1 },
+    "side-seam": { outline: 1 },
+    hem: { outline: 1 },
+    waist: { outline: 1, construction: 1 }
+  };
   // 고정 순회 순서(deterministic).
   const ORDER = [
     ["front", "outline"], ["front", "construction"],
@@ -83,13 +93,14 @@
     fail("invalid-primitive", prim.kind);
   }
 
-  // SV2: edge 검증 — 없으면 null, 있으면 값(center/waist/side-seam)·위치(front/back
-  // outline)를 확인하고 그 값을 반환한다. 비문자열·미지값·잘못된 위치는 명시적 실패.
+  // edge 검증 — 없으면 null, 있으면 값·위치(EDGE_PLACEMENT)를 확인하고 그 값을 반환한다.
+  // 비문자열·미지값·잘못된 위치는 명시적 실패. front/back 이외 piece 는 edge 불가.
   function validateEdge(prim, pc, rl) {
     if (!Object.prototype.hasOwnProperty.call(prim, "edge")) return null;
     const edge = prim.edge;
-    if (typeof edge !== "string" || !ALLOWED_EDGE[edge]) fail("bad-edge", edge);
-    if (!((pc === "front" || pc === "back") && rl === "outline")) fail("edge-placement", pc + "/" + rl);
+    const placement = EDGE_PLACEMENT[edge];
+    if (typeof edge !== "string" || !placement) fail("bad-edge", edge);
+    if (!((pc === "front" || pc === "back") && placement[rl])) fail("edge-placement", pc + "/" + rl);
     return edge;
   }
 

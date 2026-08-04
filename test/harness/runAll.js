@@ -40,6 +40,8 @@ const suites = [
   { file: "designRendererCheck.js",   golden: false },
   // design stage 렌더 분기(D3a): 실제 render.js 를 vm 으로 실행해 분기 계약을 고정.
   { file: "designRenderBranchCheck.js", golden: false },
+  // DB1a: 몸판 grain-기준 길이 연장 순수 변환. 실제 designBodice.js(+designRenderer 왕복) vm 실행.
+  { file: "designBodiceCheck.js",       golden: false },
 ];
 
 let anyFail = false;

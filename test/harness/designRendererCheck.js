@@ -360,6 +360,51 @@ function childSeq(g) { return g.childNodes.map(c => c.getAttribute("data-piece")
   ok(groupsWithKids.length === 0, "33: bad-edge 시 group 미조립");
 }
 
+// ══════════════════════════════════════════════
+// DB1a: waist=construction·outline, hem=outline 허용 (center/side-seam 은 construction 금지)
+// ══════════════════════════════════════════════
+
+// 34. waist 를 front/back construction 에 두면 허용·재발행
+{
+  const h = makeHarness();
+  const g = freshGeometry();
+  g.front.construction.push({ kind: "line", from: { x: 40, y: 30 }, to: { x: 30, y: 30 }, edge: "waist" });
+  g.back.construction.push({ kind: "line", from: { x: -40, y: 30 }, to: { x: -30, y: 30 }, edge: "waist" });
+  const grp = h.dr.createReferenceGroup(g);
+  const w = grp.childNodes.filter(c => c.getAttribute("data-edge") === "waist" && c.getAttribute("data-geometry-role") === "construction");
+  ok(w.length === 2 && w.every(c => c.getAttribute("data-piece") === "front" || c.getAttribute("data-piece") === "back"), "34: waist construction 재발행");
+}
+
+// 35. hem 을 front/back outline 에 두면 허용·재발행
+{
+  const h = makeHarness();
+  const g = freshGeometry();
+  g.front.outline.push({ kind: "line", from: { x: 47.5, y: 48 }, to: { x: 18, y: 48 }, edge: "hem" });
+  const grp = h.dr.createReferenceGroup(g);
+  const hem = grp.childNodes.filter(c => c.getAttribute("data-edge") === "hem");
+  ok(hem.length === 1 && hem[0].getAttribute("data-geometry-role") === "outline", "35: hem outline 재발행");
+}
+
+// 36. center/side-seam 은 construction 에서 계속 금지
+{
+  const h = makeHarness();
+  const gc = freshGeometry(); gc.front.construction[0].edge = "center";
+  throws(() => h.dr.createReferenceGroup(gc), "edge-placement", "36: center construction 금지");
+  const gs = freshGeometry(); gs.front.construction[0].edge = "side-seam";
+  throws(() => h.dr.createReferenceGroup(gs), "edge-placement", "36: side-seam construction 금지");
+}
+
+// 37. hem 은 construction 금지 / waist·hem 도 front·back 이외 piece 금지
+{
+  const h = makeHarness();
+  const gh = freshGeometry(); gh.front.construction.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edge: "hem" });
+  throws(() => h.dr.createReferenceGroup(gh), "edge-placement", "37: hem construction 금지");
+  const gw = freshGeometry(); gw.sleeve.outline[1].edge = "waist";
+  throws(() => h.dr.createReferenceGroup(gw), "edge-placement", "37: sleeve waist 금지");
+  const gsh = freshGeometry(); gsh.shared.outline.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edge: "hem" });
+  throws(() => h.dr.createReferenceGroup(gsh), "edge-placement", "37: shared hem 금지");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

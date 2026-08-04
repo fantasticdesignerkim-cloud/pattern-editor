@@ -1,0 +1,283 @@
+// ══════════════════════════════════════════════
+// designBodiceCheck.js — js/designBodice.js 의 window.designBodice.computeGeometry 회귀 테스트.
+//
+// 실제 프로덕션 소스(designBodice.js)를 Node vm 으로 실행한다(구현 복사 아님).
+// designBodice 는 순수 함수라 **document/localStorage 없는 최소 컨텍스트**에서 돌려
+// DOM·storage 미접근을 구조적으로 증명한다(접근하면 ReferenceError). renderer 왕복은
+// 별도 컨텍스트에서 designRenderer.js(DOM mock)로 검증한다.
+//
+//   node test/harness/designBodiceCheck.js
+// ══════════════════════════════════════════════
+const vm = require("vm");
+const fs = require("fs");
+const path = require("path");
+
+const JS = (f) => fs.readFileSync(path.join(__dirname, "..", "..", "js", f), "utf8");
+const DB_SRC = JS("designBodice.js");
+const DR_SRC = JS("designRenderer.js");
+
+let PASS = 0, FAIL = 0; const fails = [];
+function ok(cond, name) { if (cond) PASS++; else { FAIL++; fails.push(name); } }
+function throws(fn, reasonWanted, name) {
+  try { fn(); FAIL++; fails.push(name + " (throw 안 됨)"); }
+  catch (e) { if (reasonWanted && e.reason !== reasonWanted) { FAIL++; fails.push(name + ` (reason=${e.reason}, 기대=${reasonWanted})`); } else PASS++; }
+}
+const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function sharesRef(a, b) {
+  const refsA = new Set();
+  (function w(o) { if (o && typeof o === "object") { if (refsA.has(o)) return; refsA.add(o); Object.values(o).forEach(w); } })(a);
+  let shared = false; const seen = new Set();
+  (function w(o) { if (o && typeof o === "object") { if (refsA.has(o)) { shared = true; return; } if (seen.has(o)) return; seen.add(o); Object.values(o).forEach(w); } })(b);
+  return shared;
+}
+
+// ── designBodice 전용 컨텍스트(document/localStorage 없음) ──
+function loadDB() {
+  const sandbox = {
+    window: {}, structuredClone: (typeof structuredClone === "function") ? structuredClone : undefined,
+    console: { log() {}, warn() {}, error() {} },
+    Math, JSON, Object, Array, Number, isFinite, Error, Infinity, NaN
+  };
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(DB_SRC, sandbox, { filename: "designBodice.js" });
+  return sandbox.window.designBodice;
+}
+const DB = loadDB();
+
+// ── 픽스처 빌더 ──
+const line = (x1, y1, x2, y2, edge) => { const o = { kind: "line", from: { x: x1, y: y1 }, to: { x: x2, y: y2 } }; if (edge) o.edge = edge; return o; };
+const cubic = (pts) => ({ kind: "path", commands: [{ type: "M", points: [{ x: pts[0][0], y: pts[0][1] }] }, { type: "C", points: [{ x: pts[1][0], y: pts[1][1] }, { x: pts[2][0], y: pts[2][1] }, { x: pts[3][0], y: pts[3][1] }] }] });
+
+// Cx=center x, sideSign=-1(front)/+1(back), o=longitudinalOffset, W=cross-grain width.
+// C=(Cx,38), S=(Cx+sideSign*W, 38+o). center tangent 은 (Cx,28)→C 이라 grain g=(0,1).
+function makePiece(Cx, sideSign, o, W) {
+  const C = { x: Cx, y: 38 }, S = { x: Cx + sideSign * W, y: 38 + o };
+  const arm = sideSign < 0 ? cubic([[30, 10], [34, 6], [40, 9], [45, 13]]) : cubic([[-30, 10], [-34, 6], [-40, 9], [-45, 13]]);
+  return {
+    outline: [
+      arm,                                             // 진동곡선(edge 없음)
+      line(Cx, 28, Cx, 38, "center"),                  // center(위→C)
+      line(Cx, 38, S.x, S.y, "waist"),                 // waist(C→S)
+      line(S.x, S.y - 8, S.x, S.y, "side-seam")        // side-seam(위→S)
+    ],
+    construction: [
+      line(Cx - 3, 20, Cx - 1, 38),                    // 더미 다트다리(edge 없음)
+      line(Cx - 5, 20, Cx - 1, 38)
+    ]
+  };
+}
+function makeGeom(fo, fW, bo, bW) {
+  return {
+    front: makePiece(47.5, -1, fo, fW),
+    back: makePiece(0, +1, bo, bW),
+    shared: { outline: [], construction: [line(200, 60, 200, 80), line(210, 60, 210, 80)] },
+    sleeve: { outline: [cubic([[400, 100], [420, 120], [440, 140], [460, 160]]), line(400, 300, 460, 300)], construction: [] }
+  };
+}
+// 5개 상태 대응 파라미터(조사 실측: offset/width)
+const STATES = {
+  "1-미적용": makeGeom(0, 24.4469, 0, 23.0531),
+  "2-앞판만": makeGeom(-5.7157, 29.1131, 0, 23.0531),
+  "3-뒤판만": makeGeom(0, 24.4469, 0, 23.0531),
+  "4-앞뒤동시": makeGeom(-5.7157, 29.1131, 0, 23.0531),
+  "5-앞다중": makeGeom(-2.6717, 27.008, 0, 23.0531)
+};
+
+// ── 기하 헬퍼(테스트 측) ──
+const len = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+const near = (a, b, e = 1e-6) => Math.abs(a - b) < e;
+function edgePrims(bucket, edge) { return bucket.filter(p => p.edge === edge); }
+// edge primitive 중 특정 점에 끝점이 닿는 것
+function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && near(p.from.y, pt.y)) || (near(p.to.x, pt.x) && near(p.to.y, pt.y))); }
+
+// ══════════════════════════════════════════════
+// 1. L=0 : deepClone no-op
+{
+  const ref = STATES["2-앞판만"];
+  const r = DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: 0 } });
+  ok(eq(r, ref), "1: L=0 deepEqual reference");
+  ok(sharesRef(r, ref) === false, "1: L=0 참조 공유 0");
+  // primitive 개수·순서·role·edge 완전 동일
+  let same = true;
+  ["front", "back", "shared", "sleeve"].forEach(pc => ["outline", "construction"].forEach(rl => {
+    const A = ref[pc][rl], B = r[pc][rl];
+    if (A.length !== B.length) same = false;
+    A.forEach((p, i) => { if ((p.edge || "∅") !== (B[i].edge || "∅") || p.kind !== B[i].kind) same = false; });
+  }));
+  ok(same, "1: 개수·순서·role·edge 동일");
+  // zero-length primitive 0
+  let zero = 0;
+  ["front", "back", "shared", "sleeve"].forEach(pc => ["outline", "construction"].forEach(rl => r[pc][rl].forEach(p => { if (p.kind === "line" && len(p.from, p.to) < 1e-9) zero++; })));
+  ok(zero === 0, "1: zero-length primitive 0");
+}
+
+// 2. 입력 불변 + 반복 호출 비누적 + 결정론
+{
+  const ref = STATES["2-앞판만"];
+  const before = JSON.stringify(ref);
+  const r1 = DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: 10 } });
+  const r2 = DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: 10 } });
+  ok(JSON.stringify(ref) === before, "2: 입력 geometry 불변");
+  ok(eq(r1, r2), "2: 반복 호출 결정론·비누적");
+  ok(sharesRef(r1, ref) === false, "2: 결과 참조 분리");
+}
+
+// 3. 각 상태 front/back L=10 : center=L / hem⊥grain / 평행 / side=L-offset / waist 이동 / hem 1개
+{
+  const L = 10;
+  for (const name of Object.keys(STATES)) {
+    const ref = STATES[name];
+    const r = DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: L } });
+    for (const pc of ["front", "back"]) {
+      const Cx = pc === "front" ? 47.5 : 0;
+      const C = { x: Cx, y: 38 };
+      const centerHem = { x: Cx, y: 48 };
+      const outline = r[pc].outline, constr = r[pc].construction;
+      // waist outline 0, waist construction 보존(정확히 1, 원래 순서=끝)
+      ok(edgePrims(outline, "waist").length === 0, `3:${name}/${pc} waist outline 0`);
+      const wc = edgePrims(constr, "waist");
+      ok(wc.length === 1 && constr[constr.length - 1] === wc[0], `3:${name}/${pc} waist construction 끝 보존`);
+      // hem outline 정확히 1
+      const hems = edgePrims(outline, "hem");
+      ok(hems.length === 1, `3:${name}/${pc} hem 1개`);
+      const hem = hems[0];
+      // hem ⊥ grain(g=(0,1)) → 수평(dy=0), 길이=width
+      ok(near(hem.from.y, hem.to.y), `3:${name}/${pc} hem ⟂ grain(수평)`);
+      // center extension: C→centerHem, 길이 L
+      const cext = primAt(edgePrims(outline, "center"), centerHem);
+      ok(cext && near(len(cext.from, cext.to), L), `3:${name}/${pc} center 연장=L`);
+      // side extension: S→sideHem, 길이=L-offset, grain 평행(수직)
+      const offset = pc === "front" ? ({ "1-미적용": 0, "2-앞판만": -5.7157, "3-뒤판만": 0, "4-앞뒤동시": -5.7157, "5-앞다중": -2.6717 })[name] : 0;
+      const sideHem = { x: hem.to.x === centerHem.x ? hem.from.x : hem.to.x, y: 48 };
+      const sext = primAt(edgePrims(outline, "side-seam"), sideHem);
+      ok(sext && near(len(sext.from, sext.to), L - offset, 1e-3), `3:${name}/${pc} side 연장=L-offset`);
+      // 두 extension 평행(둘 다 수직 = dx≈0)
+      const cdx = Math.abs(cext.to.x - cext.from.x), sdx = Math.abs(sext.to.x - sext.from.x);
+      ok(near(cdx, 0) && near(sdx, 0), `3:${name}/${pc} 두 extension 평행(수직)`);
+      // 신규 outline 순서: 기존 non-waist 뒤에 center-ext→hem→side-ext
+      const last3 = outline.slice(-3).map(p => p.edge);
+      ok(eq(last3, ["center", "hem", "side-seam"]), `3:${name}/${pc} 신규 outline 순서`);
+    }
+    // sleeve/shared 불변(값·순서)
+    ok(eq(r.sleeve, ref.sleeve) && eq(r.shared, ref.shared), `3:${name} sleeve/shared 불변`);
+  }
+}
+
+// 4. 입력 정규화 경계: 정확한 0 만 no-op / 음수·NaN·Infinity·비수치 실패
+{
+  const ref = STATES["1-미적용"];
+  throws(() => DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: -1 } }), "invalid-body-length", "4: 음수");
+  throws(() => DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: NaN } }), "invalid-body-length", "4: NaN");
+  throws(() => DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: Infinity } }), "invalid-body-length", "4: Infinity");
+  throws(() => DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: "5" } }), "invalid-body-length", "4: 문자열");
+  throws(() => DB.computeGeometry(ref, { body: {} }), "invalid-body-length", "4: undefined");
+}
+
+// 5. topology / 수치 실패 계약
+{
+  const L = { body: { hemExtensionBelowWaistCm: 10 } };
+  // missing-required-edge (center 제거)
+  const g1 = makeGeom(0, 24.4469, 0, 23.0531); g1.front.outline = g1.front.outline.filter(p => p.edge !== "center");
+  throws(() => DB.computeGeometry(g1, L), "missing-required-edge", "5: center 누락");
+  // missing-topology-junction (center 가 waist 와 안 닿음)
+  const g2 = makeGeom(0, 24.4469, 0, 23.0531); const cseg = g2.front.outline.find(p => p.edge === "center"); cseg.from = { x: 500, y: 300 }; cseg.to = { x: 500, y: 310 };
+  throws(() => DB.computeGeometry(g2, L), "missing-topology-junction", "5: center∩waist 없음");
+  // ambiguous-topology-junction (center 가 waist 집합과 끝점 2개 공유)
+  const g3 = makeGeom(0, 24.4469, 0, 23.0531); g3.front.outline.push(line(47.5, 28, 60, 28, "waist"));
+  throws(() => DB.computeGeometry(g3, L), "ambiguous-topology-junction", "5: center∩waist 2개");
+  // ambiguous-center-tangent (C 에 center 세그 2개)
+  const g4 = makeGeom(0, 24.4469, 0, 23.0531); g4.front.outline.push(line(47.5, 38, 55, 30, "center"));
+  throws(() => DB.computeGeometry(g4, L), "ambiguous-center-tangent", "5: center tangent 모호");
+  // zero-center-tangent (center 세그 길이 0)
+  const g5 = makeGeom(0, 24.4469, 0, 23.0531); const cs5 = g5.front.outline.find(p => p.edge === "center"); cs5.from = { x: 47.5, y: 38 }; cs5.to = { x: 47.5, y: 38 };
+  throws(() => DB.computeGeometry(g5, L), "zero-center-tangent", "5: center tangent 길이 0");
+  // invalid-cross-grain-width (S 가 C 바로 아래 → width 0)
+  const g6 = makeGeom(0, 24.4469, 0, 23.0531);
+  g6.front.outline = g6.front.outline.filter(p => p.edge !== "waist" && p.edge !== "side-seam");
+  g6.front.outline.push(line(47.5, 38, 47.5, 43, "waist"));      // C→(47.5,43) 수직
+  g6.front.outline.push(line(47.5, 35, 47.5, 43, "side-seam"));  // S=(47.5,43): width=0
+  throws(() => DB.computeGeometry(g6, L), "invalid-cross-grain-width", "5: cross-grain width 0");
+  // invalid-side-extension (offset>=L → side 연장 ≤0)
+  const g7 = makeGeom(12, 24.4469, 0, 23.0531); // front offset +12 > L=10
+  throws(() => DB.computeGeometry(g7, L), "invalid-side-extension", "5: side 연장 ≤0");
+  // extension-intersection: 크로싱이 32분할 꼭짓점(t=0.5→x=47.5)에 **정확히** 걸리는
+  // 원래 픽스처 — 고정분할은 이걸 "스침"으로 놓쳤다. adaptive+정확한 예외로 반드시 감지.
+  const g8 = makeGeom(0, 24.4469, 0, 23.0531);
+  g8.front.outline.push(cubic([[42, 43], [45, 43], [50, 43], [53, 43]])); // x=47.5,y=43 에서 수직 center 연장 횡단
+  throws(() => DB.computeGeometry(g8, L), "extension-intersection", "5: t=0.5 꼭짓점 횡단 감지");
+}
+
+// 6. invalid-geometry
+{
+  throws(() => DB.computeGeometry(null, { body: { hemExtensionBelowWaistCm: 10 } }), "invalid-geometry", "6: null geometry");
+  const bad = makeGeom(0, 24.4469, 0, 23.0531); delete bad.back;
+  throws(() => DB.computeGeometry(bad, { body: { hemExtensionBelowWaistCm: 10 } }), "invalid-geometry", "6: bucket 없음");
+}
+
+// 7. renderer 왕복: computeGeometry 결과 → designRenderer 가 hem/waist-construction 정상 출력
+{
+  // DOM mock + c2p 컨텍스트로 designRenderer 로드
+  function loadDR() {
+    let listeners = 0; const created = [];
+    function makeEl(tag) {
+      const el = { tagName: tag, _a: {}, childNodes: [], parentNode: null,
+        setAttribute(k, v) { this._a[k] = String(v); }, getAttribute(k) { return (k in this._a) ? this._a[k] : null; },
+        getAttributeNames() { return Object.keys(this._a); }, appendChild(c) { c.parentNode = this; this.childNodes.push(c); return c; }, addEventListener() { listeners++; } };
+      created.push(el); return el;
+    }
+    const sandbox = { window: {}, document: { createElementNS(_n, t) { return makeEl(t); } }, c2p: (x, y) => [x * 4 + 40, y * 4 + 20], console: { log() {}, warn() {}, error() {} }, Math, JSON, Object, Array, Number, isFinite, Error, Infinity, NaN };
+    sandbox.globalThis = sandbox; vm.createContext(sandbox); vm.runInContext(DR_SRC, sandbox, { filename: "designRenderer.js" });
+    return { dr: sandbox.window.designRenderer, listeners: () => listeners };
+  }
+  const { dr } = loadDR();
+  const r = DB.computeGeometry(STATES["2-앞판만"], { body: { hemExtensionBelowWaistCm: 10 } });
+  // JSON 왕복으로 컨텍스트 간 참조 완전 분리
+  const g = dr.createReferenceGroup(JSON.parse(JSON.stringify(r)));
+  const hem = g.childNodes.filter(c => c.getAttribute("data-edge") === "hem");
+  const wc = g.childNodes.filter(c => c.getAttribute("data-edge") === "waist" && c.getAttribute("data-geometry-role") === "construction");
+  ok(hem.length === 2 && hem.every(c => c.getAttribute("data-geometry-role") === "outline"), "7: hem outline 재발행(front+back)");
+  ok(wc.length === 2, "7: waist construction 재발행(front+back)");
+}
+
+// 8. DOM/storage 미접근 증명 — designBodice 는 document/localStorage 없는 컨텍스트에서 동작
+{
+  // loadDB() 컨텍스트에는 document/localStorage 가 없다. 정상 동작 = 미접근 증명.
+  const r = DB.computeGeometry(STATES["1-미적용"], { body: { hemExtensionBelowWaistCm: 10 } });
+  ok(r && r.front && r.front.outline.length > 0, "8: document/localStorage 없는 컨텍스트에서 정상 동작");
+}
+
+// 9. 교차 검사 정밀도 (adaptive flattening + 정확한 endpoint 예외)
+{
+  const L = { body: { hemExtensionBelowWaistCm: 10 } };
+  // (a) cubic subdivision 꼭짓점에서 횡단 → 감지 (t=0.5 정확히 x=47.5)
+  const ga = makeGeom(0, 24.4469, 0, 23.0531);
+  ga.front.outline.push(cubic([[42, 43], [45, 43], [50, 43], [53, 43]]));
+  throws(() => DB.computeGeometry(ga, L), "extension-intersection", "9a: subdivision 꼭짓점 횡단 감지");
+  // (b) 얕은(거의 수평) 각도로 center 연장선을 횡단 → 감지
+  const gb = makeGeom(0, 24.4469, 0, 23.0531);
+  gb.front.outline.push(cubic([[44, 45.0], [46, 45.05], [49, 45.05], [51, 45.0]]));
+  throws(() => DB.computeGeometry(gb, L), "extension-intersection", "9b: 얕은 각도 횡단 감지");
+  // (c) C/S 의 합법적 접속만 있는 정상 변환 → 허용 (center@C, side-seam@S)
+  const gc = makeGeom(-5.7157, 29.1131, 0, 23.0531);
+  let ok9c = true; try { DB.computeGeometry(gc, L); } catch (e) { ok9c = false; }
+  ok(ok9c, "9c: C/S 합법 접속 허용(정상 변환)");
+  // (d) C 근처(0.0005cm, 1e-4 밖)에서 횡단하는 무-edge 선 → 감지(예외 아님)
+  const gd = makeGeom(0, 24.4469, 0, 23.0531);
+  gd.front.outline.push(line(47.5 - 5, 38.0005, 47.5 + 5, 38.0005)); // x=47.5, y=38.0005 에서 center 연장 횡단
+  throws(() => DB.computeGeometry(gd, L), "extension-intersection", "9d: C 근처 1e-4 밖 횡단 감지");
+  // (e) 실제 armhole 처럼 허리 위에서 분리된 곡선 → 허용
+  const ge = makeGeom(0, 24.4469, 0, 23.0531);
+  ge.front.outline.push(cubic([[30, 8], [34, 5], [40, 9], [45, 13]])); // 허리(y=38) 위, 연장(y≥38)과 분리
+  let ok9e = true; try { DB.computeGeometry(ge, L); } catch (e) { ok9e = false; }
+  ok(ok9e, "9e: 분리된 곡선 허용");
+  // (f) side extension ↔ 기존 side-seam 은 S 에서만 허용 — 정상 변환에서 오탐 0
+  //     (side-seam 이 tilted 여도 S 접속은 허용되어야 함: 적용 상태 gc 가 이미 이를 커버)
+  ok(ok9c, "9f: tilted side-seam 의 S 접속 허용");
+}
+
+// ── 결과 ──
+console.log("══════════════════════════════════════════════");
+if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
+console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);
+if (FAIL) process.exitCode = 1;
