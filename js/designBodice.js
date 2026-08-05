@@ -189,10 +189,14 @@
     // 6. hem 점
     var centerHem = add(C, mul(g, L));
     var sideHem = add(centerHem, mul(p, width));
-    // 9(우선). 교차: 신규 3선 vs 기존 outline(cubic 포함). endpoint 예외는 실제 topology
-    // 접점만 — center 연장↔기존 center 는 C 에서만, side 연장↔기존 side-seam 은 S 에서만.
-    // waist 는 연장 대상(operand): C/S 를 공유하므로 검사에서 제외. cubic subdivision
-    // 꼭짓점은 실제 primitive endpoint 가 아니므로 절대 예외 처리하지 않는다.
+    // 9(우선). 교차: 신규 3선 vs 기존 outline **전체**(cubic·waist 포함). endpoint 예외는
+    // 실제 topology 접점만 —
+    //   center 연장 ↔ (기존 center | waist) : C 에서만 허용
+    //   side  연장 ↔ (기존 side-seam | waist) : S 에서만 허용
+    //   hem   ↔ waist(및 그 외) : 허용 접점 없음
+    //   그 외 접촉·겹침·횡단 : extension-intersection
+    // waist 를 통째로 빼지 않는다 — 굽은/분할된 waist 내부를 연장선·hem 이 재횡단하는
+    // 경우를 놓칠 수 있다. cubic subdivision 꼭짓점은 실제 endpoint 가 아니므로 예외 금지.
     var TOUCH = 1e-4;
     var newSegs = [
       { a: C, b: centerHem, edge: "center" },      // center extension
@@ -202,12 +206,11 @@
     function nearPt(q, w) { return w && Math.hypot(q.x - w.x, q.y - w.y) < TOUCH; }
     for (var oi = 0; oi < outline.length; oi++) {
       var EP = outline[oi];
-      if (EP.edge === "waist") continue;
       var eSegs = flattenPrim(EP);
       for (var k = 0; k < newSegs.length; k++) {
         var NS = newSegs[k];
-        var allow = (NS.edge === "center" && EP.edge === "center") ? C
-          : (NS.edge === "side-seam" && EP.edge === "side-seam") ? S : null;
+        var allow = (NS.edge === "center" && (EP.edge === "center" || EP.edge === "waist")) ? C
+          : (NS.edge === "side-seam" && (EP.edge === "side-seam" || EP.edge === "waist")) ? S : null;
         for (var m = 0; m < eSegs.length; m++) {
           var res = intersectSegs(NS.a, NS.b, eSegs[m][0], eSegs[m][1]);
           if (res.type === "none") continue;

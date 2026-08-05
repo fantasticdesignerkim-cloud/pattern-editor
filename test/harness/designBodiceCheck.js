@@ -276,6 +276,31 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
   ok(ok9c, "9f: tilted side-seam 의 S 접속 허용");
 }
 
+// 10. waist topology 검사 (waist 도 대상, C/S 접점만 허용)
+{
+  const L = { body: { hemExtensionBelowWaistCm: 10 } };
+  const S = { x: 23.0531, y: 38 };
+  const swapFrontWaist = (g, segs) => { g.front.outline = g.front.outline.filter(p => p.edge !== "waist").concat(segs); return g; };
+  // (1)(2) center–waist@C, side–waist@S 합법 접속 — 정상 변환 허용(오탐 0)
+  let ok1 = true; try { DB.computeGeometry(STATES["2-앞판만"], L); } catch (e) { ok1 = false; }
+  ok(ok1, "10-1·2: waist@C·@S 합법 접속 허용(정상 변환)");
+  // (3) center 연장(x=47.5)이 굽은 waist 내부를 횡단 → 실패
+  const g3 = swapFrontWaist(makeGeom(0, 24.4469, 0, 23.0531), [
+    line(47.5, 38, 50, 44, "waist"), line(50, 44, 45, 44, "waist"), line(45, 44, S.x, S.y, "waist")
+  ]); // A→B (y=44, x50→45) 가 center 연장 x=47.5 를 (47.5,44) 에서 횡단
+  throws(() => DB.computeGeometry(g3, L), "extension-intersection", "10-3: 연장선이 waist 내부 횡단 → 실패");
+  // (4) hem(y=48)이 아래로 굽은 waist 내부를 횡단 → 실패
+  const g4 = swapFrontWaist(makeGeom(0, 24.4469, 0, 23.0531), [
+    line(47.5, 38, 35, 52, "waist"), line(35, 52, S.x, S.y, "waist")
+  ]); // waist 가 y=52 로 내려가 hem(y=48) 을 가로지름
+  throws(() => DB.computeGeometry(g4, L), "extension-intersection", "10-4: hem 이 waist 내부 횡단 → 실패");
+  // (5) 분할된 waist 의 한 조각이 side 연장(x=23.05)과 S 밖에서 겹침 → 실패
+  const g5 = swapFrontWaist(makeGeom(0, 24.4469, 0, 23.0531), [
+    line(47.5, 38, 23.0531, 43, "waist"), line(23.0531, 43, S.x, S.y, "waist")
+  ]); // seg2 (23.05,43)→(23.05,38) 가 side 연장(x=23.05,y38~48)과 [38,43] 겹침(S 밖)
+  throws(() => DB.computeGeometry(g5, L), "extension-intersection", "10-5: 분할 waist C/S 밖 접촉 → 실패");
+}
+
 // ── 결과 ──
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
