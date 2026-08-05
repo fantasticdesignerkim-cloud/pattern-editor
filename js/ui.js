@@ -9,6 +9,8 @@
 //    저장하지 않고 매번 실제 DOM에서 파생한다.
 //  - 기능 함수(generatePattern / toggleDartMove / toggleArmEdit ...)를 호출하지 않는다.
 //    기존 inline onclick이 기능을 담당하고, 여기서는 stage/tool 선택과 노출만 본다.
+//    예외: DB1b 몸판 디자인 적용(onApplyBodyLength)만은 designBodice.computeGeometry 로
+//    재계산해 project.working 에 원자적으로 커밋하고 render() 한다(design stage 전용 기능).
 //  - DOM은 최초부터 전부 존재한다. innerHTML 없이
 //    hidden / disabled / aria-* 만 갱신한다.
 // ══════════════════════════════════════════════
@@ -122,14 +124,17 @@
     const ctx = contextTool();
     panelEls().forEach(p => {
       const name = p.dataset.panel;
+      // 우측 inspector 패널은 stage 로 상호배타 표시(동시 노출 금지):
+      //  · measurements = draft 에서만 · design-body = design 에서만.
       if (name === "measurements") p.hidden = uiState.stage !== "draft";
-      else p.hidden = name !== ctx;
+      else if (name === "design-body") p.hidden = uiState.stage !== "design";
+      else p.hidden = name !== ctx;   // dart/curves context-host popup
     });
 
-    // 원형 stage 만 우측 치수 inspector 를 쓴다. design stage 는 inspector 자체를 숨기고
-    // (CSS :has 가 280px column 도 함께 제거). 현재 design 은 미가용이라 원형에서만 표시.
+    // 우측 inspector 는 draft(치수) 와 design(몸판 디자인) 에서 쓴다. 그 외에는 숨겨
+    // (CSS :has 가 280px column 도 함께 제거). 두 stage 만 진입 가능하므로 사실상 상시.
     const inspector = document.querySelector(".inspector");
-    if (inspector) inspector.hidden = uiState.stage !== "draft";
+    if (inspector) inspector.hidden = !(uiState.stage === "draft" || uiState.stage === "design");
 
     // 다트 패널: idle 안내 / busy 컨텍스트 전환 (가짜 수치 없음)
     const dartBusy = isDartBusy();
@@ -192,6 +197,7 @@
     updateContextInspector();
     updateDartInspector();
     updateCompletionUI();
+    updateDesignBodyPanel();
   }
 
   // ── 원형 완료 최소 UI ─────────────────────────
@@ -301,6 +307,89 @@
     setWorkspaceStage("design"); // 성공 후에만(내부에서 hasProject·busy 게이트 재확인)
   }
 
+  // ── DB1b: 몸판 디자인(허리 아래 길이) 컨트롤러 ──────────────────
+  // ui.js 는 원칙적으로 기능 함수를 호출하지 않지만, design-body 적용만은 예외다 —
+  // designBodice.computeGeometry 로 재계산해 project.working 에 원자적으로 커밋하고
+  // render() 한다. 계산 기준은 **항상 referenceGeometry**(현재 working 을 입력으로
+  // 재사용하지 않는다). 실패 시 parameters·geometry·화면 변화 0.
+  function fmtL(v) { return String(Math.round(v * 10) / 10); }
+  function designProjectNow() {
+    const dw = window.designWorkflow;
+    const project = dw && dw.current();
+    return (uiState.stage === "design" && project) ? project : null;
+  }
+  function committedBodyL(project) {
+    const b = project && project.working && project.working.parameters && project.working.parameters.body;
+    return (b && typeof b.hemExtensionBelowWaistCm === "number") ? b.hemExtensionBelowWaistCm : 0;
+  }
+  function setBodyNote(txt) { const n = document.getElementById("designBodyNote"); if (n) n.textContent = txt; }
+  function bodyStatusNote(L) {
+    return L > 0 ? "허리 아래 " + fmtL(L) + "cm 적용 중 · 세션 전용"
+      : "중심선 기준 길이 · 옆선 실루엣은 다음 단계";
+  }
+  function noteForReason(reason) {
+    if (reason === "extension-intersection") return "연장선이 기존 패턴과 겹칩니다 · 길이를 조정하세요";
+    if (reason === "invalid-side-extension") return "이 길이로는 옆선을 연장할 수 없습니다";
+    if (reason === "invalid-body-length") return "0–100 사이의 숫자를 입력하세요";
+    return "적용할 수 없습니다 · 값을 조정하세요";
+  }
+  // 입력 유효성(0–100 유한 숫자)만 판정 — commit 은 하지 않는다.
+  function readBodyInput() {
+    const input = document.getElementById("inpBodyHemExtension");
+    const raw = input ? String(input.value).trim() : "";
+    const L = Number(raw);
+    const valid = raw !== "" && isFinite(L) && L >= 0 && L <= 100;
+    return { input: input, raw: raw, L: L, valid: valid };
+  }
+  // apply/reset 버튼 활성 상태만 갱신(값·note 미변경 — 성공/오류 문구 보존).
+  function syncBodyButtons() {
+    const project = designProjectNow();
+    const apply = document.getElementById("btnApplyBodyLength");
+    const reset = document.getElementById("btnResetBodyLength");
+    const st = readBodyInput();
+    if (apply) apply.disabled = !(project && st.valid);
+    if (reset) reset.disabled = !project;
+  }
+  // refresh 훅: design 진입/재진입 시 committed L 을 표시(포커스 중이면 덮지 않음) +
+  // 버튼 상태 + committed 기준 note. 성공/오류 문구는 onApply/onReset 이 직접 관리하며
+  // refresh 를 부르지 않아 여기서 덮이지 않는다.
+  function updateDesignBodyPanel() {
+    const project = designProjectNow();
+    const input = document.getElementById("inpBodyHemExtension");
+    if (input && project && document.activeElement !== input) {
+      input.value = fmtL(committedBodyL(project));
+    }
+    if (project) setBodyNote(bodyStatusNote(committedBodyL(project)));
+    syncBodyButtons();
+  }
+  // 원자적 적용: 검증 → referenceGeometry 에서 재계산 → 성공 후에만 parameters·geometry
+  // 동시 갱신 → render(). 실패 시 커밋·화면 변화 0, note 에만 사유 표시.
+  function onApplyBodyLength() {
+    const project = designProjectNow();
+    if (!project || !window.designBodice) return;
+    const st = readBodyInput();
+    if (!st.valid) { setBodyNote("0–100 사이의 숫자를 입력하세요"); syncBodyButtons(); return; }
+    const L = st.L;
+    const nextParameters = structuredClone(project.working.parameters);
+    nextParameters.body = Object.assign({}, nextParameters.body || {}, { hemExtensionBelowWaistCm: L });
+    let nextGeometry = null, reason = null;
+    try { nextGeometry = window.designBodice.computeGeometry(project.referenceGeometry, nextParameters); }
+    catch (e) { reason = (e && e.reason) || "compute-failed"; }
+    if (reason) { setBodyNote(noteForReason(reason)); syncBodyButtons(); return; }  // 불변
+    // ── 유일한 commit 지점 ──
+    project.working.parameters = nextParameters;
+    project.working.geometry = nextGeometry;
+    if (typeof render === "function") render();
+    if (st.input && document.activeElement !== st.input) st.input.value = fmtL(L);
+    setBodyNote(L === 0 ? "원형 길이로 복원됨 · 세션 전용" : "허리 아래 " + fmtL(L) + "cm 적용 중 · 세션 전용");
+    syncBodyButtons();
+  }
+  function onResetBodyLength() {
+    const input = document.getElementById("inpBodyHemExtension");
+    if (input) input.value = "0";
+    onApplyBodyLength();   // L=0 적용(원형 길이 복원)
+  }
+
   // ── 다트 inspector 표시 ───────────────────────
   // 엔진 스냅샷을 **그 순간 읽기만** 한다. uiState 에 저장하지 않는다.
   const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
@@ -373,6 +462,17 @@
     // 디자인 시작/계속 버튼(inline onclick 없음 — addEventListener 로만 연결).
     const startDesign = document.getElementById("btnStartDesign");
     if (startDesign) startDesign.addEventListener("click", () => { if (!startDesign.disabled) onStartDesign(); });
+    // DB1b 몸판 디자인(inline handler 없음 — addEventListener 로만 연결).
+    const applyBody = document.getElementById("btnApplyBodyLength");
+    if (applyBody) applyBody.addEventListener("click", () => { if (!applyBody.disabled) onApplyBodyLength(); });
+    const resetBody = document.getElementById("btnResetBodyLength");
+    if (resetBody) resetBody.addEventListener("click", () => { if (!resetBody.disabled) onResetBodyLength(); });
+    const bodyInput = document.getElementById("inpBodyHemExtension");
+    if (bodyInput) {
+      // 입력 중에는 apply 버튼 활성만 갱신(값·note 미변경). Enter 로 적용.
+      bodyInput.addEventListener("input", syncBodyButtons);
+      bodyInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyBodyLength(); } });
+    }
     // 패턴 생성 후: inline generatePattern() 이 끝난 뒤(dirty=false) 버튼/문구를 갱신.
     const gen = document.getElementById("btnGenerate");
     if (gen) gen.addEventListener("click", () => queueMicrotask(refresh));
