@@ -324,8 +324,8 @@
   }
   function setBodyNote(txt) { const n = document.getElementById("designBodyNote"); if (n) n.textContent = txt; }
   function bodyStatusNote(L) {
-    return L > 0 ? "허리 아래 " + fmtL(L) + "cm 적용 중 · 세션 전용"
-      : "중심선 기준 길이 · 옆선 실루엣은 다음 단계";
+    return L > 0 ? "엉덩이 길이 " + fmtL(L) + "cm 적용 중 · 세션 전용"
+      : "허리선에서 엉덩이선까지 · 중심선 기준";
   }
   function noteForReason(reason) {
     if (reason === "extension-intersection") return "연장선이 기존 패턴과 겹칩니다 · 길이를 조정하세요";
@@ -381,7 +381,7 @@
     project.working.geometry = nextGeometry;
     if (typeof render === "function") render();
     if (st.input && document.activeElement !== st.input) st.input.value = fmtL(L);
-    setBodyNote(L === 0 ? "원형 길이로 복원됨 · 세션 전용" : "허리 아래 " + fmtL(L) + "cm 적용 중 · 세션 전용");
+    setBodyNote(L === 0 ? "원형 길이로 복원됨 · 세션 전용" : "엉덩이 길이 " + fmtL(L) + "cm 적용 중 · 세션 전용");
     syncBodyButtons();
   }
   function onResetBodyLength() {
