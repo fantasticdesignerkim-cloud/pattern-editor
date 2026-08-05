@@ -2346,10 +2346,13 @@ render `?v=2026072904`, ui `?v=2026072906`, css `?v=2026072906`.
   9 viewport(draft·design) overflow·겹침 0, 320×568 design SVG 회복(192→469), storage 0, 콘솔 0.
 
 ### 미구현 경계 (기능이 없는 것이지 버그 아님)
-- **디자인 몸판 편집 도구 없음**(design 은 현재 view-only).
-- **working hit-test·핸들 없음**(pointer-events:none 유지).
-- **`working.parameters` 컨테이너는 존재하지만 현재 빈 객체(`{}`)이며, 이를 변경하는
-  파라미터(여유량·완성길이·옆선 실루엣·네크라인·앞여밈 등) UI·계산 로직은 미구현.**
+- ~~**디자인 몸판 편집 도구 없음**(design 은 현재 view-only).~~ → **정정(DB1a·DB1b)**:
+  "허리 아래 길이(hem 연장)" 편집 도구가 생겼다(아래 "DB1a·DB1b" 섹션). 그 외 편집은 여전히 없음.
+- **working hit-test·핸들 없음**(pointer-events:none 유지 — DB1b 는 캔버스 조작이 아니라
+  inspector 수치 입력이다).
+- ~~**`working.parameters` 컨테이너는 존재하지만 현재 빈 객체(`{}`)이며 …미구현.**~~ →
+  **정정(DB1b)**: `working.parameters.body.hemExtensionBelowWaistCm` 는 이제 DB1b 적용이
+  기록한다. 나머지 파라미터(여유량·완성길이·옆선 실루엣·네크라인·앞여밈)는 여전히 미구현.
 - **허리다트 a–f 재배분 없음.**
 - **저장·복원 없음**(세션 메모리 전용, reload 소멸).
 - **다중 designProject 없음**(`design-1` 하나).
@@ -2399,9 +2402,91 @@ render·blockMaster 를 pre-SV2 로 되돌려(dartMove 무변경이라 동일 �
 상태의 edge-무관 fingerprint 를 비교 → **5개 전부 완전 일치**(SV2 는 edge 라벨 외 아무것도
 바꾸지 않음). canonicalHash 는 v1 대비 달라지고, 같은 v2 재캡처는 동일.
 
-**남은 것(보류)**: `disconnected-semantic-edge` 실패 계약 / DB1 `y+hemExt` 변환 /
-`working.parameters`(여유량·완성길이·옆선·네크라인·앞여밈) / 디자인 편집 UI /
-piece-local 연장축 조사 — 전부 별도 사양·승인 후.
+**남은 것(보류)**: `disconnected-semantic-edge` 실패 계약 / `working.parameters` 나머지
+(여유량·완성길이·옆선 실루엣·네크라인·앞여밈) / 옆선 실루엣 디자인(hem kink 연결) —
+전부 별도 사양·승인 후. (DB1 hem 길이 연장 변환·디자인 입력 UI 는 아래 "DB1a·DB1b"
+섹션에서 구현 완료 — piece-local 연장축은 grain 기준 C-frame 으로 확정됐다.)
+
+## ✅ DB1a·DB1b — 몸판 grain-기준 hem 길이 연장 (2026-08)
+
+원형 완료본을 복사한 designProject 의 working geometry 에, **"허리 아래 길이(cm)"** 만큼
+grain(중심선) 방향으로 몸판을 직선 연장한다. 순수 변환(DB1a)과 design UI 연결(DB1b)을
+분리해 구현했다. 커밋: DB1a `6152107`(모듈)+`7ffe1b8`(waist topology), DB1b `be0b397`.
+캐시: designRenderer `?v=2026080401`, designBodice `?v=2026080403`, ui `?v=2026080403`.
+
+**연장축 조사 결론(읽기 전용, 5상태 실측)**: center 접선(=중심선 grain)은 다트 적용
+상태와 무관하게 **항상 +Y 로 안정**(cAngY=0°)인 반면, **side 국소 접선은 다트각만큼
+0~18.25° 변해 상태-독립 길이축으로 쓸 수 없다**(회전이 "레이아웃 오염"인지 실제
+외곽 변형인지는 단정하지 않음 — bakedSegments 는 최종 outline이므로 실제 변화일 수도
+있다. 확정 결론은 "side 접선은 상태-독립 축 부적격"까지). → 공통 연장축은 center
+접선에서 파생.
+
+### DB1a — `js/designBodice.js` 순수 변환 (`window.designBodice.computeGeometry`)
+`computeGeometry(referenceGeometry, { body: { hemExtensionBelowWaistCm: L } })` → 새 geometry.
+- **local-frame(조각별)**: `C`=centerWaistEndpoint, `S`=sideWaistEndpoint, `g`=center edge
+  파생 아래쪽 grain, `p`=g⊥·center→side. `longitudinalOffset=dot(S-C,g)`,
+  `width=dot(S-C,p)`. `centerHem=C+L·g`, `sideHem=C+L·g+width·p (=S+(L-offset)·g)`.
+  ⇒ **center 연장=정확히 L / hem⟂grain / 두 연장 평행 / side 연장=L-offset**(같을 필요
+  없음). **L 의미 = center waist→hem grain 길이.** (동일벡터 가산은 hem 을 기울여
+  직사각형이 안 됨 — cross-grain width 로 보정한 것이 핵심.)
+- **원자성·불변**: 항상 referenceGeometry 에서 재계산(현재 working 재입력 금지, 반복
+  비누적). 입력·params 변형 0, 반환은 참조 전부 분리. sleeve/shared 값·순서 유지.
+- **L===0 정확히만 no-op**(deep clone). 음수·NaN·Infinity·비수치=`invalid-body-length`
+  (epsilon 으로 0 을 뭉개지 않음 — UI 소수 정규화는 DB1b 책임). ★ **적용 상태(offset≠0)
+  에서는 L=0 이 공식상 side 를 옮기므로**(sideHem(0)=C+width·p≠S) DB1b 가 아니라 DB1a
+  가 exact-0 no-op 로 잠근다.
+- **outline 재구성 순서(고정)**: 기존 non-waist(원순서) + [center-extension, hem,
+  side-extension]. waist outline → construction 끝(원순서). waist role: outline 0 /
+  construction 로 이동.
+- **교차 검사 = adaptive de Casteljau flattening**(flatness `1e-4`, max depth 16) + 정확한
+  endpoint 예외. 고정 N분할 금지(크로싱이 샘플/꼭짓점에 걸리면 놓침 — 원래 t=0.5
+  픽스처가 이를 증명, 회귀 테스트로 고정). **예외는 실제 topology 접점만**: center 연장↔
+  (center|**waist**)=C 에서만, side 연장↔(side-seam|**waist**)=S 에서만. hem↔waist=예외
+  없음. 그 외 접촉·겹침·횡단(및 cubic subdivision 꼭짓점 접촉)=`extension-intersection`.
+  **waist 를 통째로 빼지 않는다**(굽은/분할 waist 내부 재횡단을 놓치므로).
+- **실패 계약(throw, 부분 반환·입력 변형 0)**: `invalid-geometry` / `invalid-body-length` /
+  `missing-required-edge` / `missing-topology-junction` / `ambiguous-topology-junction` /
+  `ambiguous-center-tangent` / `zero-center-tangent` / `invalid-cross-grain-width` /
+  `invalid-side-extension` / `extension-intersection`.
+- **designRenderer 계약 확장**(`EDGE_PLACEMENT`): waist=front/back **outline·construction**,
+  hem=front/back **outline**. center/side-seam 은 계속 construction 금지.
+
+### DB1b — design UI 연결 (`js/ui.js` + `index.html`)
+- 우측 `aside.inspector` 재사용, `data-panel="design-body"` 추가. **draft=measurements 만 /
+  design=design-body 만**(동시 노출 금지, stage 파생). inspector 는 draft·design 둘 다 표시
+  (기존 "design=inspector 숨김"을 이 조건만 조정). 모바일(≤615)은 기존 하단 배치 재사용.
+- 요소: `#inpBodyHemExtension`(number 0–100 step .1) / `#btnApplyBodyLength` /
+  `#btnResetBodyLength`(=L 0 적용) / `#designBodyNote`(aria-live). 버튼은 inline handler
+  없이 bind() 연결(inline handler 37 유지). Enter=적용.
+- **적용 원자성**(`onApplyBodyLength`): 입력 검증(0–100) → `structuredClone(working.parameters)`
+  에 body.hemExtensionBelowWaistCm 세팅 → `computeGeometry(referenceGeometry, next)` →
+  **성공 후에만** `working.parameters`·`working.geometry` 동시 커밋 → `render()`. 실패 시
+  parameters·geometry·화면 변화 0, note 에만 사유. sourceBlock/baseSource/referenceGeometry
+  불변.
+- **표시 규칙**: 적용 가능 = design·유효 0–100 일 때만 버튼 활성. **refresh 중 input 포커스
+  시 사용자 입력값 덮어쓰지 않음.** stage 재진입 시 committed L 표시. 성공 문구 L=0
+  `원형 길이로 복원됨 · 세션 전용` / L>0 `허리 아래 Lcm 적용 중 · 세션 전용`. ui.js 는
+  이 한 기능만 예외적으로 computeGeometry·render 를 호출한다(헤더 주석에 명시).
+- render.js 무변경 — design 분기가 매 렌더 `working.geometry` 를 읽으므로 커밋 후 render()
+  로 working 레이어만 갱신된다(reference 고정).
+
+### 검증
+- 하네스(엔진·순수 변환, ui/index 미로드): **designBodiceCheck 120 / designRendererCheck 51**,
+  runAll 전체 통과, shape/perf 골든 diff 0. DB1b 는 UI 라 하네스 추가 없음.
+- 실브라우저 기능 15항목: 시작 시 입력 0·reference/working 겹침, L=10 시 reference 고정·
+  working 연장·front/back hem 각 1·waist=working construction, 같은 10 비누적, 10→20→10=첫
+  10, 10→0=reference deepEqual, invalid(150)·intersection 시 커밋·화면 불변, draft 복귀 시
+  원형 shape·dirty 불변(draft SVG hem 0), design 재진입 committed L 복원, reload 시
+  project·parameter 소멸(design 탭 비활성 복귀), reference/working/sourceBlock 참조 불변,
+  storage 0·console 0. **9 viewport(1440·1280·616·615·430·390·360·320·844×390)** 가로
+  overflow·버튼/inspector 겹침·입력 접근성 전부 정상, 320×568 design SVG 287px.
+- DOM: **id 45→49**(inpBodyHemExtension·btnApplyBodyLength·btnResetBodyLength·designBodyNote),
+  inline handler 37 유지, MutationObserver 2 유지.
+
+### 미구현(경계 준수)
+side kink 보정(옆선 실루엣 디자인 단계 책임) / 여유량·완성길이·옆선·네크라인·앞여밈 /
+허리다트 재배분 / working hit-test·핸들 / 저장·복원 / 다중 designProject —
+전부 별도 사양·승인 후.
 
 ## 다음에 확인할 것 (열려있는 이슈)
 
