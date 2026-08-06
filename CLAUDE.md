@@ -2501,6 +2501,14 @@ side kink 보정(옆선 실루엣 디자인 단계 책임) / 여유량·완성�
 - **몸판 "화면 중앙"**: geometry 를 옮기지 않고 **카메라(viewX/viewY)** 를 몸판 bbox 중심으로.
   이래야 "화면 중앙"과 "패턴 좌표 불변"을 동시에 지킨다.
 
+**초기 배치 = body-anchored fit(`fitBodyAnchored`)**: 몸판 bbox 중심을 viewport 중심에
+고정하면서(**union 중심이 아님**), 몸판+소매 **union bbox** 가 화면에 들어오도록 zoom 을
+자동 계산한다(반경 = 몸판 중심에서 union 양끝까지 최대, 안전 여백 24px). `fitZ =
+min((W/2−24)/(hR·SC), (H/2−24)/(vR·SC), 1)`, **design 자동 fit 하한 0.2**(휠·핀치 최소값과
+동일 → 다음 조작에서 튀지 않음). 실행 시점: **design 최초 진입 · `배치 초기화` · `소매
+오른쪽` · `화면 초기화`(design) · 엉덩이 길이 적용 후(auto 일 때만)**. `몸판 중앙` 버튼은
+**현재 zoom 유지**하고 카메라만 몸판 중심으로. 사용자 드래그 후에는 자동 fit 안 함.
+
 **데이터(세션 전용, cm)**: `project.working.layout = { body:{dx,dy}, sleeve:{dx,dy},
 sleevePlacement:"auto"|"manual" }`. 소매를 사용자가 드래그하면 `"manual"` → 이후 자동
 이동 안 함. 엉덩이 길이 적용 시 `sleevePlacement==="auto"` 면 몸판 높이 변화에 맞춰
@@ -2519,16 +2527,20 @@ reference·working 에 **같은 offset** 을 적용해 함께 이동한다.
 **Space+drag 는 기존 pan 우선**(designLayout 이 자체 spaceHeld 추적), pointer capture 는
 svg 에(재렌더로 rect 가 바뀌어도 유지). geometry·reference 불변, 저장 쓰기 0.
 
-**버튼(design inspector)**: `몸판 중앙`(카메라만) / `소매 오른쪽`(현재 body 기준 오른쪽
-+5cm, auto 복귀) / `배치 초기화`(body {0,0} → 소매 재배치 → 기본 zoom → 몸판 재중앙).
-`화면 초기화`(resetView)는 design 에서 **기본 zoom + 몸판 재중앙**(배치 offset 유지) —
-init.js resetView 가 `isDesignStageActive()` 로 분기.
+**버튼(design inspector)**: `몸판 중앙`(현재 zoom 유지·카메라만) / `소매 오른쪽`(body 기준
+오른쪽+5cm auto 복귀 후 다시 fit) / `배치 초기화`(body {0,0} → 소매 재배치 → 기준 SC →
+**fit**, 결정론적). `화면 초기화`(resetView)는 design 에서 **기준 SC + body-anchored fit**
+(배치 offset 유지) — init.js resetView 가 `isDesignStageActive()` 로 분기.
+`엉덩이 길이 적용`(ui.js `afterBodyLength`): auto 면 소매 재배치+fit, manual 이면 카메라·
+offset 유지(자동 이동/재fit 안 함).
 
 **파일(11)**: `js/designLayout.js`(신규: bbox·auto 배치·카메라·드래그, 순수 함수는
 DOM 미접근) / `js/designProject.js`(working.layout 기본값) / `js/render.js`(design 분기
 z-order·piece transform·hit rect) / `js/ui.js`(enterDesign 훅·배치 버튼·엉덩이 적용 후
 auto 소매 갱신) / `js/init.js`(resetView design 분기) / `index.html`(배치 UI·스크립트·캐시
-`?v=2026080501`) / `css/style.css`(hit rect) / 하네스 4개.
+render·designLayout·ui `?v=2026080502`) / `css/style.css`(hit rect) / 하네스 4개.
+(fit 보완 후속 커밋 `e9cdf71`: designLayout `fitBodyAnchored`/`afterBodyLength`,
+render hit-rect pad 6→3px, ui `afterBodyLength` 호출.)
 
 **계약(유지)**: sourceBlock·baseSource·referenceGeometry·working.geometry(좌표) 불변 /
 reference·working 동일 offset / 전역 z-order / draft 화면 무변경 / reload 시 layout 소멸 /
@@ -2541,15 +2553,16 @@ design 진입 시 z-order(ref→work→hit)·ref·work 동일 transform·소매 
 hit rect 2개, 드래그(body +10cm, 소매 drag→manual)·버튼(몸판중앙/소매오른쪽/배치초기화)
 전부 형상 불변, 엉덩이 L=10 후 auto 소매 갱신, draft 왕복 시 dirty·원형 shape 불변,
 design 재진입 배치 유지, reload 시 project·layout 소멸(design 탭 비활성), storage 0·콘솔 0.
-**9 viewport**(1440·1280·616·615·430·390·360·320·844×390) overflow·겹침 0, 배치 3버튼
-뷰포트 내·가시. DOM id **49→52**(btnLayoutCenterBody/SleeveRight/Reset), inline handler 37
-유지(배치 버튼은 addEventListener).
+**9 viewport 각각 design 진입 fit**(1440·1280·616·615·430·390·360·320·844×390): 몸판 bbox
+중심 vs viewport 중심 오차 ≤1px(실측 0~0.25px), overlap 0, ref·work transform 동일,
+fit 중 geometry·layout 불변, 배치 초기화 결정론(2회 동일), drag 후 자동 fit 없음, 엉덩이
+길이 auto→재배치+fit·manual→카메라·offset 유지. **7개 viewport(1440~360)는 몸판+소매가
+화면에 완전히 담김**(zoom 0.209~0.405). DOM id **49→52**, inline handler 37 유지.
 
-**알려진 동작(버그 아님, 사용자 확인 필요)**: 넓은 화면에서 소매 auto offset(+5cm 오른쪽)
-+ 몸판-중앙 카메라 + 기본 zoom(SC=11) 조합상 **소매가 기본 화면 밖으로 나갈 수 있다**
-(몸판 폭이 크기 때문). 배치는 정상 적용됐고 **줌아웃하면 보인다**(줌·배치 독립). 이는
-"몸판 중앙 + 소매 오른쪽" 스펙의 결과이며, 화면에 둘 다 담는 fit-to-both 줌은 요구사항이
-아니었다 — 실사용 후 필요하면 별도 조정.
+**알려진 동작(버그 아님 — fit 하한 0.2)**: **320×568·844×390 두 극단 viewport**는 union 이
+커서 fit 이 하한 0.2 에 걸려 **소매가 화면 밖으로 일부 넘친다**(몸판은 중앙·화면 내·겹침 0
+유지). 이는 사용자가 정한 **design 자동 fit 최소 zoom 0.2** 의 정의된 한계다("0.2 까지
+허용"). 더 낮추면 담기지만 조작이 너무 작아진다 — 실사용 후 필요하면 별도 조정.
 
 **미구현(경계 준수)**: 옆선 실루엣(허리 접점 큰 꺾임 연결) / 배치 저장·복원 / 몸판 offset
 자동 활용 / 다중 designProject — 별도 사양·승인 후.
