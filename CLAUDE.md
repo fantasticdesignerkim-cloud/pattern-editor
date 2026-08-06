@@ -2487,6 +2487,72 @@ grain(중심선) 방향으로 몸판을 직선 연장한다. 순수 변환(DB1a)
 side kink 보정(옆선 실루엣 디자인 단계 책임) / 여유량·완성길이·옆선·네크라인·앞여밈 /
 허리다트 재배분 / working hit-test·핸들 / 저장·복원 / 다중 designProject —
 전부 별도 사양·승인 후.
+(참고: 이 항목의 "working hit-test·핸들 없음"은 아래 Design piece layout 에서 **배치
+드래그 한정으로** 도입됐다 — 형상 편집 핸들은 여전히 없음.)
+
+## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
+
+**배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
+몸판↔소매 겹침은 **배치 문제**(수정). 엉덩이 길이 연장으로 몸판이 아래로 늘어 소매와
+겹칠 수 있어, **형상은 안 움직이고 작업 화면 배치만** 이동하게 만들었다.
+
+**핵심 분리 — 배치(offset) ≠ 카메라(화면 중심)**
+- **소매 offset**: 몸판과 안 겹치게 재배치(넓은 화면=몸판 오른쪽+5cm / 좁은 화면=아래+5cm).
+- **몸판 "화면 중앙"**: geometry 를 옮기지 않고 **카메라(viewX/viewY)** 를 몸판 bbox 중심으로.
+  이래야 "화면 중앙"과 "패턴 좌표 불변"을 동시에 지킨다.
+
+**데이터(세션 전용, cm)**: `project.working.layout = { body:{dx,dy}, sleeve:{dx,dy},
+sleevePlacement:"auto"|"manual" }`. 소매를 사용자가 드래그하면 `"manual"` → 이후 자동
+이동 안 함. 엉덩이 길이 적용 시 `sleevePlacement==="auto"` 면 몸판 높이 변화에 맞춰
+소매 재배치, `"manual"` 이면 유지. reload 시 working 과 함께 소멸 → 기본 배치 복귀.
+
+**전역 z-order(필수)**: `grid → reference root(body,sleeve) → working root(body,sleeve)
+→ hit layer(body,sleeve)`. **모든 reference 가 모든 working 보다 아래**여야 조각이 다시
+겹쳐도 회색이 남색을 안 가린다(bodyG 안에 ref+work 를 넣는 구조는 금지 — 소매 ref 가
+몸판 work 위에 올라올 수 있다). render.js 는 geometry 를 piece 서브셋으로 나눠 각 root 에
+담고, piece 별 **SVG `transform="translate(dx·SC·viewZ, dy·SC·viewZ)"`** 만 건다(좌표 불변).
+reference·working 에 **같은 offset** 을 적용해 함께 이동한다.
+
+**드래그**: 투명 hit rect(`.design-layout-hit[data-layout-piece]`, `pointer-events:all`)를
+최상단 hit layer 에 두고, reference/working 은 `pointer-events:none` 유지. pointer delta
+(SVG px)를 `SC·viewZ` 로 나눠 cm 로 환산해 `working.layout[piece]` 만 갱신 후 render.
+**Space+drag 는 기존 pan 우선**(designLayout 이 자체 spaceHeld 추적), pointer capture 는
+svg 에(재렌더로 rect 가 바뀌어도 유지). geometry·reference 불변, 저장 쓰기 0.
+
+**버튼(design inspector)**: `몸판 중앙`(카메라만) / `소매 오른쪽`(현재 body 기준 오른쪽
++5cm, auto 복귀) / `배치 초기화`(body {0,0} → 소매 재배치 → 기본 zoom → 몸판 재중앙).
+`화면 초기화`(resetView)는 design 에서 **기본 zoom + 몸판 재중앙**(배치 offset 유지) —
+init.js resetView 가 `isDesignStageActive()` 로 분기.
+
+**파일(11)**: `js/designLayout.js`(신규: bbox·auto 배치·카메라·드래그, 순수 함수는
+DOM 미접근) / `js/designProject.js`(working.layout 기본값) / `js/render.js`(design 분기
+z-order·piece transform·hit rect) / `js/ui.js`(enterDesign 훅·배치 버튼·엉덩이 적용 후
+auto 소매 갱신) / `js/init.js`(resetView design 분기) / `index.html`(배치 UI·스크립트·캐시
+`?v=2026080501`) / `css/style.css`(hit rect) / 하네스 4개.
+
+**계약(유지)**: sourceBlock·baseSource·referenceGeometry·working.geometry(좌표) 불변 /
+reference·working 동일 offset / 전역 z-order / draft 화면 무변경 / reload 시 layout 소멸 /
+엉덩이 길이 계산 불변 / 저장·autosave 0 / 줌·팬과 배치 독립.
+
+**검증**: 하네스 — designLayoutCheck **12**(bbox·auto wide/narrow·ensureLayout),
+designProjectCheck **42**(layout 기본값·mutable·불변), designRenderBranchCheck **20**
+(z-order 4-root·piece 서브셋·재생성), runAll 전체 통과·golden diff 0. 실브라우저 —
+design 진입 시 z-order(ref→work→hit)·ref·work 동일 transform·소매 auto 오른쪽(46.97cm)·
+hit rect 2개, 드래그(body +10cm, 소매 drag→manual)·버튼(몸판중앙/소매오른쪽/배치초기화)
+전부 형상 불변, 엉덩이 L=10 후 auto 소매 갱신, draft 왕복 시 dirty·원형 shape 불변,
+design 재진입 배치 유지, reload 시 project·layout 소멸(design 탭 비활성), storage 0·콘솔 0.
+**9 viewport**(1440·1280·616·615·430·390·360·320·844×390) overflow·겹침 0, 배치 3버튼
+뷰포트 내·가시. DOM id **49→52**(btnLayoutCenterBody/SleeveRight/Reset), inline handler 37
+유지(배치 버튼은 addEventListener).
+
+**알려진 동작(버그 아님, 사용자 확인 필요)**: 넓은 화면에서 소매 auto offset(+5cm 오른쪽)
++ 몸판-중앙 카메라 + 기본 zoom(SC=11) 조합상 **소매가 기본 화면 밖으로 나갈 수 있다**
+(몸판 폭이 크기 때문). 배치는 정상 적용됐고 **줌아웃하면 보인다**(줌·배치 독립). 이는
+"몸판 중앙 + 소매 오른쪽" 스펙의 결과이며, 화면에 둘 다 담는 fit-to-both 줌은 요구사항이
+아니었다 — 실사용 후 필요하면 별도 조정.
+
+**미구현(경계 준수)**: 옆선 실루엣(허리 접점 큰 꺾임 연결) / 배치 저장·복원 / 몸판 offset
+자동 활용 / 다중 designProject — 별도 사양·승인 후.
 
 ## 다음에 확인할 것 (열려있는 이슈)
 
