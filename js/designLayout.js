@@ -136,17 +136,20 @@
 
   // ── 공개 액션(각자 render 로 마무리) ──
   function enterDesign() {            // design 최초/재진입: 소매 auto + body-anchored fit
+    _userArranged = false;
     refreshAutoSleeve();
     fitBodyAnchored();
     if (typeof render === "function") render();
   }
   function centerBody() {            // "몸판 중앙": 현재 zoom 유지, 카메라만 몸판 중심으로
+    _userArranged = false;
     centerCameraOnBody();
     if (typeof render === "function") render();
   }
   function placeSleeveRight() {      // "소매 오른쪽": 현재 body 기준 재배치(auto 복귀) + 다시 fit
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
+    _userArranged = false;
     L.sleevePlacement = "auto";
     L.sleeve = autoSleeveOffset(p.working.geometry, isNarrow());
     fitBodyAnchored();
@@ -155,6 +158,7 @@
   function resetLayout() {           // "배치 초기화": body 0,0 → 소매 재배치 → 기본 SC → fit(결정론)
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
+    _userArranged = false;
     L.body = { dx: 0, dy: 0 };
     L.sleevePlacement = "auto";
     L.sleeve = autoSleeveOffset(p.working.geometry, isNarrow());
@@ -164,6 +168,7 @@
     if (typeof render === "function") render();
   }
   function resetViewForDesign() {    // 화면 초기화(design): 기준 축척 + body-anchored fit(배치 offset 유지)
+    _userArranged = false;
     Object.assign(view, { SC: 11, MX: 80, MY: 100 });
     syncViewVars();
     fitBodyAnchored();
@@ -180,8 +185,22 @@
   }
 
   // ── 드래그: 투명 hit rect(pointer-events:all)만 잡는다. Space+drag 는 pan 우선 ──
-  let drag = null, spaceHeld = false;
+  // _userArranged: 사용자가 조각을 드래그하면 true → 이후 리사이즈에서 자동 재중앙 금지.
+  // 자동/버튼 배치(enterDesign·centerBody·placeSleeveRight·resetLayout·resetViewForDesign)는
+  // false 로 되돌려 창 크기 변경 시 다시 fit 되게 한다.
+  let drag = null, spaceHeld = false, _userArranged = false, _resizeRaf = null;
   function initDrag() {
+    // 창 크기·리플로우(가시 캔버스 폭 변화, 데스크톱↔모바일 inspector 이동 포함) 시 카메라만
+    // 다시 fit 한다 — 형상·layout 좌표는 안 건드린다. 사용자가 드래그로 배치한 뒤엔 금지.
+    window.addEventListener("resize", () => {
+      if (_resizeRaf) return;
+      _resizeRaf = requestAnimationFrame(() => {
+        _resizeRaf = null;
+        if (!inDesign() || _userArranged) return;
+        fitBodyAnchored();
+        if (typeof render === "function") render();
+      });
+    });
     document.addEventListener("keydown", e => { if (e.code === "Space") spaceHeld = true; });
     document.addEventListener("keyup", e => { if (e.code === "Space") spaceHeld = false; });
     svg.addEventListener("pointerdown", e => {
@@ -203,6 +222,7 @@
       L[drag.piece].dx = drag.dx0 + (e.clientX - drag.x) / scale;   // px → cm
       L[drag.piece].dy = drag.dy0 + (e.clientY - drag.y) / scale;
       if (drag.piece === "sleeve") L.sleevePlacement = "manual";    // 이후 auto 이동 금지
+      _userArranged = true;                                         // 리사이즈 자동 재중앙 금지
       if (typeof render === "function") render();
     });
     const end = () => { drag = null; };
