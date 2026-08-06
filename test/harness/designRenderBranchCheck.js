@@ -83,8 +83,8 @@ function makeHarness(cfg) {
 const PROJECT = () => ({
   id: "design-1",
   sourceBlock: { id: "block-1", version: 1 },
-  referenceGeometry: { REF: true },
-  working: { geometry: { WORK: true }, parameters: {} }
+  referenceGeometry: { front: { F: 1 }, back: { B: 1 }, shared: { S: 1 }, sleeve: { SL: 1 } },
+  working: { geometry: { front: { wF: 1 }, back: { wB: 1 }, shared: { wS: 1 }, sleeve: { wSL: 1 } }, parameters: {}, layout: { body: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 }, sleevePlacement: "auto" } }
 });
 
 // 1. isDesignStageActive 부재 시 초기 render()가 오류 없이 draft 경로(조기반환)로 진행
@@ -100,13 +100,20 @@ const PROJECT = () => ({
   h.render();
   ok(h.refArgs.length === 0 && h.workArgs.length === 0, "2: design=false designRenderer 0");
 }
-// 3. design=true + project → append 순서 grid → reference → working
+// 3. design=true + project → 전역 z-order: grid → reference root → working root → hit layer
+//    (모든 reference 가 모든 working 보다 아래: 회색이 남색을 가리지 않음)
 {
   const h = makeHarness({ designGetter: () => true, project: PROJECT(), nValue: 83 });
   h.render();
-  const cls = h.svg._appended.map(g => g._attrs && g._attrs["class"]);
-  ok(h.svg._appended.length === 3, "3: 그룹 3개(grid+ref+work)");
-  ok(cls[1] === "block-ref" && cls[2] === "design-working", "3: 순서 grid→reference→working");
+  const roots = h.svg._appended;
+  ok(roots.length === 4, "3: 그룹 4개(grid+ref root+work root+hit layer)");
+  ok(roots[1]._attrs["data-design-root"] === "reference" && roots[2]._attrs["data-design-root"] === "working" && roots[3]._attrs["data-design-root"] === "hit", "3: z-order grid→reference→working→hit");
+  const refKids = roots[1].childNodes.map(c => c._attrs["class"]);
+  const workKids = roots[2].childNodes.map(c => c._attrs["class"]);
+  ok(refKids.length === 2 && refKids.every(c => c === "block-ref"), "3: reference root=body+sleeve(block-ref)");
+  ok(workKids.length === 2 && workKids.every(c => c === "design-working"), "3: working root=body+sleeve(design-working)");
+  const pcs = roots[1].childNodes.map(c => c._attrs["data-layout-piece"]);
+  ok(pcs[0] === "body" && pcs[1] === "sleeve", "3: piece 순서 body→sleeve");
 }
 // 4. design 분기에서 createDraft·sleeve·overlay·applyLayerVisibility·updateStatusBar 호출 0
 {
@@ -115,13 +122,18 @@ const PROJECT = () => ({
   const s = h.spies;
   ok(s.createDraft.calls === 0 && s.drawSleeve.calls === 0 && s.drawDartMoveOverlay.calls === 0 && s.applyLayerVisibility.calls === 0 && s.updateStatusBar.calls === 0, "4: 원형 draw 경로 호출 0");
 }
-// 5. reference←referenceGeometry, working←working.geometry 전달
+// 5. 각 root 는 piece 서브셋으로 builder 호출: body=front/back/shared(+빈 sleeve),
+//    sleeve=sleeve(+빈 몸판). 원본 geometry 좌표는 공유(참조), 형상 불변.
 {
   const p = PROJECT();
   const h = makeHarness({ designGetter: () => true, project: p, nValue: 83 });
   h.render();
-  ok(h.refArgs[0] === p.referenceGeometry, "5: reference 인자=referenceGeometry");
-  ok(h.workArgs[0] === p.working.geometry, "5: working 인자=working.geometry");
+  const rb = h.refArgs[0], rs = h.refArgs[1];
+  ok(rb.front === p.referenceGeometry.front && rb.back === p.referenceGeometry.back && rb.shared === p.referenceGeometry.shared, "5: ref body subset=referenceGeometry 몸판");
+  ok(Array.isArray(rb.sleeve.outline) && rb.sleeve.outline.length === 0, "5: ref body subset 은 sleeve 비움");
+  ok(rs.sleeve === p.referenceGeometry.sleeve && rs.front.outline.length === 0, "5: ref sleeve subset=referenceGeometry 소매");
+  const wb = h.workArgs[0], ws = h.workArgs[1];
+  ok(wb.front === p.working.geometry.front && ws.sleeve === p.working.geometry.sleeve, "5: working subset=working.geometry");
 }
 // 6. status 문구가 sourceBlock id/version 사용
 {
@@ -142,7 +154,7 @@ const PROJECT = () => ({
   const firstRef = h.svg._appended[1];
   h.render();
   ok(h.svg._clearCount === 2, "8: svg.innerHTML='' 두 번(매 render clear)");
-  ok(h.svg._appended.length === 3 && h.svg._appended[1] !== firstRef, "8: 그룹 새 인스턴스 재생성");
+  ok(h.svg._appended.length === 4 && h.svg._appended[1] !== firstRef, "8: 그룹 새 인스턴스 재생성");
 }
 // 9. design=true인데 project 없음 → design-project-missing 명시적 실패
 {

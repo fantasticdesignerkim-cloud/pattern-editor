@@ -90,7 +90,11 @@
       referenceGeometry: deepFrozenClone(completed.snapshot.geometry), // 불변 reference
       working: {
         geometry: deepClone(completed.snapshot.geometry),             // 실제 편집 대상(mutable)
-        parameters: {}
+        parameters: {},
+        // 작업 화면 배치(세션 전용, cm). 형상 좌표가 아니라 표시 offset 이다 — reference 와
+        // working 에 동일 offset 을 적용해 함께 움직인다. sleevePlacement="auto" 는 소매를
+        // 자동 배치(넓은 화면=몸판 오른쪽/좁은 화면=아래), 사용자가 드래그하면 "manual".
+        layout: { body: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 }, sleevePlacement: "auto" }
       }
     };
     // top-level 동결: id/sourceBlock/baseSource/referenceGeometry/working **참조**는 불변,

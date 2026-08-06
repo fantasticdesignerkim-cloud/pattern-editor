@@ -255,6 +255,21 @@ function makeHarness() {
   ok(sharesRef(dp.referenceGeometry, dp.working.geometry) === false, "12: reference·working 참조 0");
 }
 
+// 13. working.layout 기본값(세션 배치) — 형상과 분리된 mutable offset
+{
+  const h = makeHarness();
+  const dp = h.dw.startFromBlock(h.bw.complete());
+  const L = dp.working.layout;
+  ok(L && JSON.stringify(L.body) === '{"dx":0,"dy":0}' && JSON.stringify(L.sleeve) === '{"dx":0,"dy":0}', "13: layout 기본 offset 0");
+  ok(L.sleevePlacement === "auto", "13: sleevePlacement=auto");
+  // mutable(편집 대상) + parameters 계약 유지
+  L.sleeve.dx = 12; L.sleevePlacement = "manual";
+  ok(h.dw.current().working.layout.sleeve.dx === 12 && h.dw.current().working.layout.sleevePlacement === "manual", "13: layout mutable");
+  ok(JSON.stringify(dp.working.parameters) === "{}", "13: parameters 계약 유지");
+  // referenceGeometry·sourceBlock 은 layout 편집과 무관하게 불변
+  ok(Object.isFrozen(dp.referenceGeometry) && Object.isFrozen(dp.sourceBlock), "13: reference/sourceBlock 불변");
+}
+
 // ── 결과 ──
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }

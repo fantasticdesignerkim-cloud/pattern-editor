@@ -87,7 +87,11 @@
     refresh();
     // stage 전환 시 캔버스를 다시 그린다(setWorkspaceStage 는 원래 render 를 호출하지
     // 않았다). draft↔design 전환에서 라이브 원형 ↔ design 레이어가 즉시 바뀌게 한다.
-    if (changed && typeof render === "function") render();
+    // design 진입은 designLayout.enterDesign()(소매 auto 배치 + 몸판 카메라 중앙 + render).
+    if (changed) {
+      if (uiState.stage === "design" && window.designLayout) window.designLayout.enterDesign();
+      else if (typeof render === "function") render();
+    }
   }
 
   // ── 필수 함수 2: 도구 선택 (busy 중에는 그 도구만 허용) ──
@@ -379,6 +383,8 @@
     // ── 유일한 commit 지점 ──
     project.working.parameters = nextParameters;
     project.working.geometry = nextGeometry;
+    // 소매가 기본 배치(auto)면 몸판 높이 변화에 맞춰 재배치(사용자가 드래그했으면 유지).
+    if (window.designLayout) window.designLayout.refreshAutoSleeve();
     if (typeof render === "function") render();
     if (st.input && document.activeElement !== st.input) st.input.value = fmtL(L);
     setBodyNote(L === 0 ? "원형 길이로 복원됨 · 세션 전용" : "엉덩이 길이 " + fmtL(L) + "cm 적용 중 · 세션 전용");
@@ -473,6 +479,11 @@
       bodyInput.addEventListener("input", syncBodyButtons);
       bodyInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyBodyLength(); } });
     }
+    // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
+    const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
+    layoutBtn("btnLayoutCenterBody", "centerBody");
+    layoutBtn("btnLayoutSleeveRight", "placeSleeveRight");
+    layoutBtn("btnLayoutReset", "resetLayout");
     // 패턴 생성 후: inline generatePattern() 이 끝난 뒤(dirty=false) 버튼/문구를 갱신.
     const gen = document.getElementById("btnGenerate");
     if (gen) gen.addEventListener("click", () => queueMicrotask(refresh));

@@ -61,6 +61,11 @@ svg.addEventListener("touchmove",e=>{
 svg.addEventListener("touchend",e=>{if(e.touches.length<2)pD0=null;},{passive:true});
 
 function resetView(){
+  // design 화면에서는 배치(layout)를 건드리지 않고 기본 zoom 복원 + 몸판 재중앙만.
+  if (window.designLayout && typeof window.isDesignStageActive === "function" && window.isDesignStageActive()){
+    window.designLayout.resetViewForDesign();
+    return;
+  }
   Object.assign(view, {SC:11,MX:80,MY:100,x:0,y:0,z:1});
   syncViewVars();
   render();

@@ -42,6 +42,8 @@ const suites = [
   { file: "designRenderBranchCheck.js", golden: false },
   // DB1a: 몸판 grain-기준 길이 연장 순수 변환. 실제 designBodice.js(+designRenderer 왕복) vm 실행.
   { file: "designBodiceCheck.js",       golden: false },
+  // Design 배치(piece layout): designLayout.js 의 순수 기하(bbox/auto 배치) 검증.
+  { file: "designLayoutCheck.js",       golden: false },
 ];
 
 let anyFail = false;

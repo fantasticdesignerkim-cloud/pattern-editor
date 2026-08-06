@@ -174,6 +174,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-working{pointer-events:none}
 .design-working line,.design-working path{stroke:var(--navy);fill:none}
 .design-working [data-geometry-role="construction"]{opacity:.55;stroke-dasharray:4 3}
+/* 배치 드래그용 투명 hit rect(최상단 hit layer). reference/working 은 pointer-events:none
+   이라 이 rect 만 포인터를 받는다. 형상은 안 움직이고 layout offset 만 갱신한다. */
+.design-layout-hit{pointer-events:all;cursor:move;fill:transparent}
 /* design stage chrome 숨김(D3b-2). data-workspace-stage 는 표시 전용 신호(ui.js refresh).
    design 은 view-only 라 원형 도구·보기/파일·편집 undo/redo 를 숨기고, 캔버스를 바로 붙인다.
    display:none 이라 .canvas-toolbar 높이가 0 이 되어 flex:1 인 svg#cv 가 그만큼 커진다.

@@ -25,6 +25,23 @@ function _tagDart(g, dart, piece){
   }
 }
 
+// design 배치 드래그용 투명 hit rect. piece bbox(도안 cm)를 화면 좌표로 변환해
+// piece offset transform 그룹에 넣는다. bbox 없으면(빈 piece) 생략.
+function _appendDesignHitRect(root, geometry, pieceName, off, scale){
+  if (!window.designLayout) return;
+  const bb = window.designLayout.bboxOf(geometry, pieceName);
+  if (!bb) return;
+  const [x1,y1]=c2p(bb.minX,bb.minY), [x2,y2]=c2p(bb.maxX,bb.maxY);
+  const pad=6;
+  const r=E("rect",{
+    x:Math.min(x1,x2)-pad, y:Math.min(y1,y2)-pad,
+    width:Math.abs(x2-x1)+2*pad, height:Math.abs(y2-y1)+2*pad,
+    fill:"transparent", class:"design-layout-hit", "data-layout-piece":pieceName,
+    transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")"
+  });
+  root.appendChild(r);
+}
+
 function render(){
   const W_=svg.clientWidth||900, H_=svg.clientHeight||700;
   svg.innerHTML="";
@@ -50,9 +67,38 @@ function render(){
     // hasProject 로 게이트하므로 도달하지 않는다.
     const dp = window.designWorkflow && window.designWorkflow.current();
     if (!dp) { const e = new Error("render: design-project-missing"); e.reason = "design-project-missing"; throw e; }
-    // builder 가 실패하면(invalid geometry 등) 그 예외를 전파한다 — 원형 경로로 fallback 없음.
-    svg.appendChild(window.designRenderer.createReferenceGroup(dp.referenceGeometry));
-    svg.appendChild(window.designRenderer.createWorkingGroup(dp.working.geometry));
+    // ── 배치 offset(cm) — 형상은 안 움직이고 SVG transform 으로만 이동 ──
+    // 전역 z-order 필수: 모든 reference 가 모든 working 보다 아래(회색이 남색을 안 가림).
+    //   grid → reference root(body,sleeve) → working root(body,sleeve) → hit layer(body,sleeve)
+    // reference·working 에 **같은 offset** 을 적용해 함께 움직인다. geometry 좌표 불변.
+    const L = window.designLayout ? window.designLayout.ensureLayout(dp) : { body:{dx:0,dy:0}, sleeve:{dx:0,dy:0} };
+    const scale = SC * viewZ;
+    const tf = (o) => "translate(" + (o.dx * scale) + "," + (o.dy * scale) + ")";
+    const EMPTY = { outline: [], construction: [] };
+    const bodySub   = (g) => ({ front: g.front, back: g.back, shared: g.shared, sleeve: EMPTY });
+    const sleeveSub = (g) => ({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: g.sleeve });
+    const piece = (buildFn, sub, off, pc) => {
+      const grp = buildFn(sub); grp.setAttribute("transform", tf(off)); grp.setAttribute("data-layout-piece", pc); return grp;
+    };
+    const mkRef  = (sub) => window.designRenderer.createReferenceGroup(sub);
+    const mkWork = (sub) => window.designRenderer.createWorkingGroup(sub);
+
+    const refRoot = E("g"); refRoot.setAttribute("data-design-root", "reference");
+    refRoot.appendChild(piece(mkRef,  bodySub(dp.referenceGeometry),   L.body,   "body"));
+    refRoot.appendChild(piece(mkRef,  sleeveSub(dp.referenceGeometry), L.sleeve, "sleeve"));
+    svg.appendChild(refRoot);
+
+    const workRoot = E("g"); workRoot.setAttribute("data-design-root", "working");
+    workRoot.appendChild(piece(mkWork, bodySub(dp.working.geometry),   L.body,   "body"));
+    workRoot.appendChild(piece(mkWork, sleeveSub(dp.working.geometry), L.sleeve, "sleeve"));
+    svg.appendChild(workRoot);
+
+    // 투명 hit layer(최상단): reference/working 은 pointer-events:none, hit rect 만 잡는다.
+    const hitRoot = E("g"); hitRoot.setAttribute("data-design-root", "hit");
+    _appendDesignHitRect(hitRoot, dp.working.geometry, "body",   L.body,   scale);
+    _appendDesignHitRect(hitRoot, dp.working.geometry, "sleeve", L.sleeve, scale);
+    svg.appendChild(hitRoot);
+
     const sb = document.getElementById("sb");
     if (sb) sb.textContent = "디자인 · 원형 " + dp.sourceBlock.id + " v" + dp.sourceBlock.version + " 참조 · 세션 전용";
     return; // 라이브 원형 draw(gRef/pattern/sleeve/overlay/layerVisibility/statusBar) 전부 skip
