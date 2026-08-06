@@ -2512,6 +2512,15 @@ viewport 에서도 union 이 24px 여백 안에 담기게). 실행 시점: **des
 - **수동 줌 하한도 stage 별로 다르다(init.js `_minZoom`)**: **design 0.1 / draft 0.2**.
   auto-fit 이 viewZ<0.2 로 내려가도 첫 휠·핀치가 0.2 로 튀지 않고(확대는 연속 증가,
   축소는 0.1 까지) 조작된다. **draft 줌 계약(0.2)은 무변경**, 최대 10 유지.
+- **리사이즈/리플로우 recompute(`54b4c71`, 기준영역 버그 수정)**: fit·중앙은 **가시 캔버스
+  = `#cv` 요소**(오른쪽 inspector 제외, 데스크톱은 grid column 으로 분리·모바일은
+  inspector 가 아래로 내려가 svg 가 전폭) 기준이다. 이 계산이 **진입/버튼에서만** 돌아
+  창 크기·데스크톱↔모바일 전환 뒤 몸판이 가시 중앙에서 벗어나던 버그가 있었다. →
+  `window resize` 에 rAF 디바운스로 **design 일 때 카메라만 다시 fit**(형상·layout 좌표
+  불변). **사용자가 조각을 드래그하면 `_userArranged=true` → 리사이즈 자동 재중앙 금지**
+  (버튼/진입이 false 로 해제). **draft 는 무영향**(`inDesign()` 게이트). 실측: 1600→1280→
+  400(모바일)→500 리사이즈에서 몸판 중심오차 0px·둘 다 24px 내·겹침 0, 드래그 뒤 리사이즈
+  는 배치 유지(재중앙 안 함), draft 카메라 불변.
 
 **데이터(세션 전용, cm)**: `project.working.layout = { body:{dx,dy}, sleeve:{dx,dy},
 sleevePlacement:"auto"|"manual" }`. 소매를 사용자가 드래그하면 `"manual"` → 이후 자동
