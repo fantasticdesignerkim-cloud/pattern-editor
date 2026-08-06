@@ -383,8 +383,8 @@
     // ── 유일한 commit 지점 ──
     project.working.parameters = nextParameters;
     project.working.geometry = nextGeometry;
-    // 소매가 기본 배치(auto)면 몸판 높이 변화에 맞춰 재배치(사용자가 드래그했으면 유지).
-    if (window.designLayout) window.designLayout.refreshAutoSleeve();
+    // 엉덩이 길이 변경: auto 면 소매 재배치+fit, manual 이면 카메라·offset 유지(자동 이동 안 함).
+    if (window.designLayout) window.designLayout.afterBodyLength();
     if (typeof render === "function") render();
     if (st.input && document.activeElement !== st.input) st.input.value = fmtL(L);
     setBodyNote(L === 0 ? "원형 길이로 복원됨 · 세션 전용" : "엉덩이 길이 " + fmtL(L) + "cm 적용 중 · 세션 전용");

@@ -32,7 +32,9 @@ function _appendDesignHitRect(root, geometry, pieceName, off, scale){
   const bb = window.designLayout.bboxOf(geometry, pieceName);
   if (!bb) return;
   const [x1,y1]=c2p(bb.minX,bb.minY), [x2,y2]=c2p(bb.maxX,bb.maxY);
-  const pad=6;
+  // 패딩은 auto 배치 최소 간격(5cm)이 fit 하한 zoom(0.2)에서 만드는 픽셀 간격(≈11px)의
+  // 절반 미만이어야 좁은 화면에서 body/sleeve hit rect 가 겹치지 않는다.
+  const pad=3;
   const r=E("rect",{
     x:Math.min(x1,x2)-pad, y:Math.min(y1,y2)-pad,
     width:Math.abs(x2-x1)+2*pad, height:Math.abs(y2-y1)+2*pad,
