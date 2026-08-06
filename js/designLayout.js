@@ -22,7 +22,9 @@
   const SLEEVE_GAP = 5;        // 몸판과 소매 간격(cm)
   const BODY_PIECES = ["front", "back", "shared"];
   const FIT_MARGIN = 24;       // fit 안전 여백(px)
-  const DESIGN_MIN_Z = 0.2;    // design 자동 fit 최소 zoom(휠·핀치 최소값과 동일 → 튐 없음)
+  const DESIGN_MIN_Z = 0.1;    // design 자동 fit 최소 zoom. design 전용 휠·핀치 하한과 동일
+                               // (init.js: design 0.1 / draft 0.2) → auto-fit 저zoom 에서
+                               // 첫 수동 조작이 0.2 로 튀지 않고 연속 확대/0.1 까지 축소된다.
 
   function defaultLayout() {
     return { body: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 }, sleevePlacement: "auto" };
