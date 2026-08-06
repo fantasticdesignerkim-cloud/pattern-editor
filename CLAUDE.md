@@ -2504,10 +2504,14 @@ side kink 보정(옆선 실루엣 디자인 단계 책임) / 여유량·완성�
 **초기 배치 = body-anchored fit(`fitBodyAnchored`)**: 몸판 bbox 중심을 viewport 중심에
 고정하면서(**union 중심이 아님**), 몸판+소매 **union bbox** 가 화면에 들어오도록 zoom 을
 자동 계산한다(반경 = 몸판 중심에서 union 양끝까지 최대, 안전 여백 24px). `fitZ =
-min((W/2−24)/(hR·SC), (H/2−24)/(vR·SC), 1)`, **design 자동 fit 하한 0.2**(휠·핀치 최소값과
-동일 → 다음 조작에서 튀지 않음). 실행 시점: **design 최초 진입 · `배치 초기화` · `소매
-오른쪽` · `화면 초기화`(design) · 엉덩이 길이 적용 후(auto 일 때만)**. `몸판 중앙` 버튼은
-**현재 zoom 유지**하고 카메라만 몸판 중심으로. 사용자 드래그 후에는 자동 fit 안 함.
+min((W/2−24)/(hR·SC), (H/2−24)/(vR·SC), 1)`, **design 자동 fit 하한 0.1**(가장 작은
+viewport 에서도 union 이 24px 여백 안에 담기게). 실행 시점: **design 최초 진입 · `배치
+초기화` · `소매 오른쪽` · `화면 초기화`(design) · 엉덩이 길이 적용 후(auto 일 때만)**.
+`몸판 중앙` 버튼은 **현재 zoom 유지**하고 카메라만 몸판 중심으로. 사용자 드래그 후에는
+자동 fit 안 함.
+- **수동 줌 하한도 stage 별로 다르다(init.js `_minZoom`)**: **design 0.1 / draft 0.2**.
+  auto-fit 이 viewZ<0.2 로 내려가도 첫 휠·핀치가 0.2 로 튀지 않고(확대는 연속 증가,
+  축소는 0.1 까지) 조작된다. **draft 줌 계약(0.2)은 무변경**, 최대 10 유지.
 
 **데이터(세션 전용, cm)**: `project.working.layout = { body:{dx,dy}, sleeve:{dx,dy},
 sleevePlacement:"auto"|"manual" }`. 소매를 사용자가 드래그하면 `"manual"` → 이후 자동
@@ -2538,7 +2542,7 @@ offset 유지(자동 이동/재fit 안 함).
 DOM 미접근) / `js/designProject.js`(working.layout 기본값) / `js/render.js`(design 분기
 z-order·piece transform·hit rect) / `js/ui.js`(enterDesign 훅·배치 버튼·엉덩이 적용 후
 auto 소매 갱신) / `js/init.js`(resetView design 분기) / `index.html`(배치 UI·스크립트·캐시
-render·designLayout·ui `?v=2026080502`) / `css/style.css`(hit rect) / 하네스 4개.
+render·designLayout·init·ui `?v=2026080503`) / `css/style.css`(hit rect) / 하네스 4개.
 (fit 보완 후속 커밋 `e9cdf71`: designLayout `fitBodyAnchored`/`afterBodyLength`,
 render hit-rect pad 6→3px, ui `afterBodyLength` 호출.)
 
@@ -2553,16 +2557,15 @@ design 진입 시 z-order(ref→work→hit)·ref·work 동일 transform·소매 
 hit rect 2개, 드래그(body +10cm, 소매 drag→manual)·버튼(몸판중앙/소매오른쪽/배치초기화)
 전부 형상 불변, 엉덩이 L=10 후 auto 소매 갱신, draft 왕복 시 dirty·원형 shape 불변,
 design 재진입 배치 유지, reload 시 project·layout 소멸(design 탭 비활성), storage 0·콘솔 0.
-**9 viewport 각각 design 진입 fit**(1440·1280·616·615·430·390·360·320·844×390): 몸판 bbox
-중심 vs viewport 중심 오차 ≤1px(실측 0~0.25px), overlap 0, ref·work transform 동일,
-fit 중 geometry·layout 불변, 배치 초기화 결정론(2회 동일), drag 후 자동 fit 없음, 엉덩이
-길이 auto→재배치+fit·manual→카메라·offset 유지. **7개 viewport(1440~360)는 몸판+소매가
-화면에 완전히 담김**(zoom 0.209~0.405). DOM id **49→52**, inline handler 37 유지.
-
-**알려진 동작(버그 아님 — fit 하한 0.2)**: **320×568·844×390 두 극단 viewport**는 union 이
-커서 fit 이 하한 0.2 에 걸려 **소매가 화면 밖으로 일부 넘친다**(몸판은 중앙·화면 내·겹침 0
-유지). 이는 사용자가 정한 **design 자동 fit 최소 zoom 0.2** 의 정의된 한계다("0.2 까지
-허용"). 더 낮추면 담기지만 조작이 너무 작아진다 — 실사용 후 필요하면 별도 조정.
+**9 viewport 각각 design 진입 fit**(1440·1280·616·615·430·390·360·320·844×390): **몸판·소매
+geometry bbox 모두 24px 여백 안에 완전히 담김**(9/9), 몸판 bbox 중심 vs viewport 중심 오차
+≤0.25px(≤1px), overlap 0, ref·work transform 동일, fit 중 geometry·layout 불변, 배치
+초기화 결정론(2회 동일), drag 후 자동 fit 없음, 엉덩이 길이 auto→재배치+fit·manual→카메라·
+offset 유지. zoom 범위 **0.139~0.405**(가장 작은 320×568=0.139, 844×390=0.142 — 모두 하한
+0.1 위라 소매까지 담김). no-jump 실측: auto-fit 0.142 → 확대 연속(×1.12)·축소 0.1 하한,
+draft 축소는 0.2 하한 유지. DOM id **49→52**, inline handler 37 유지.
+(참고: hit rect 는 bbox+3px 라 24px 여백 검사는 실제 geometry bbox 로 측정 — hit rect 는
+SVG 내부라 드래그 접근은 항상 가능.)
 
 **미구현(경계 준수)**: 옆선 실루엣(허리 접점 큰 꺾임 연결) / 배치 저장·복원 / 몸판 offset
 자동 활용 / 다중 designProject — 별도 사양·승인 후.
