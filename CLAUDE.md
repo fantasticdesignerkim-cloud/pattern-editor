@@ -2587,6 +2587,66 @@ SVG 내부라 드래그 접근은 항상 가능.)
 **미구현(경계 준수)**: 옆선 실루엣(허리 접점 큰 꺾임 연결) / 배치 저장·복원 / 몸판 offset
 자동 활용 / 다중 designProject — 별도 사양·승인 후.
 
+## ✅ 원형(draft) 화면 소매 오른쪽 배치 + union 중앙 fit (2026-08) — `js/draftLayout.js`
+
+**배경(사용자 지시)**: design 화면에만 있던 "소매를 몸판 오른쪽 10cm 로 두고 몸판+소매를
+한 묶음으로 중앙 fit" 을 **홈페이지 최초 화면(draft)** 부터 적용한다. 형상·저장은 불변,
+표시(카메라·소매 offset)만 바꾼다.
+
+**핵심 결정 (잠금)**
+- **소매만 이동**: 몸판·다트·몸판곡선은 offset 0(제자리)이라 그쪽 좌표계·hit-test 는 전혀
+  영향 없다. draft 는 단일 좌표계(`c2p`/`p2c_`)이므로 소매만 **표시 전용 SVG transform**
+  으로 오른쪽으로 민다(geometry 좌표 불변).
+- **오프셋은 실측 봉제선 outline 기준**(★ 사용자 완료 조건): `sx_B`(구성 사각형 좌단)로
+  잡으면 실제 봉제선 간격이 **14.4cm 로 어긋난다**(실측). `data-geometry-role="outline"`
+  요소만 측정해 `dx = bodyOutlineMaxX + 10 − sleeveOutlineMinX` → **봉제선 간격 정확히
+  10cm**. `js/draftLayout.js` 가 계산해 `window.draftSleeveLayout={dx,dy}` 에 넣고,
+  `sleeve.js` 는 그 값을 transform 으로만 적용 + 핸들 드래그(`evtToSleeve`)가 드래그
+  시점에 live 로 되돌린다(캡처 아님). offset 계산은 `render.js` 의 draft 렌더 끝
+  `afterDraftRender()`→`syncSleeveOffset()` 가 **재렌더 없이 소매 그룹 transform 만
+  in-place 보정**한다(몸판·소매 outline 중 하나라도 없으면 캐시 유지 → 몸판/소매 모드에서
+  안전).
+- **union 중심 오차 ≤1px (실측 0px)**: fit 도 **outline-only**(라벨·보조선·핸들·격자 제외)로
+  측정한다. `computeFitCamera` 는 `c2p(중심)=viewport중심` 이 대수적으로 성립(부동소수
+  한계 내). 표시 박스 크기는 `getBoundingClientRect` 우선(이 SVG 는 viewBox 없어
+  `clientWidth` 가 0 일 수 있음).
+- **자동 fit 은 최초 진입 + 실제 캔버스 resize 에서만**: `ResizeObserver(#cv)` 가 소유한다
+  (rAF 비의존 → hidden→visible/레이아웃 확정 시 반드시 전달·보정). ~~init.js 의 rAF fit~~
+  은 제거. **`afterDraftRender()`/`syncSleeveOffset()` 는 카메라(view.x/y/z)를 절대 안
+  건드린다** — 일반 render·휠 줌·Space 팬·곡선 편집·모드 전환 중 카메라 강제 초기화 없음
+  (fit 은 `#cv` 크기 변화에만 발화, 줌·팬·편집·모드전환은 크기 불변).
+
+**hit-test 전수 (offset 반영 누락 0, grep 증명)**: `eventToPatternPoint`/`svgPt` 전
+사용처 — 소매 **3곳**(control handle·anchor start·anchor move, 전부 `evtToSleeve`) /
+다트(dartMove 4)·몸판곡선(render 7)·팬줌(init 1) = 전부 **offset 0** 대상. 소매 상호작용
+바인딩(sleeve.js 899·900·914)도 그 3함수로 귀속.
+
+**변경 파일**: `js/sleeve.js`(offset 을 전역에서 read, `evtToSleeve` live, `data-sleeve-root`
+표식) / `js/draftLayout.js`(신규 재작성: 순수 헬퍼 + outline-only 측정 + `syncSleeveOffset`
++ `ResizeObserver(#cv)` + 정확 중앙 카메라) / `js/render.js`(draft 렌더 끝 `afterDraftRender()`
+훅) / `js/init.js`(rAF fit 제거). **엔진(dartMove/split/bake/normalize)·design 경로·
+shape/perf 골든 무변경.** 캐시 `?v=2026080610`.
+
+**회귀 테스트**: `test/harness/draftLayoutCheck.js`(17 PASS, runAll 연결) — 순수 헬퍼
+계약 + mock DOM 으로 `fitDraftView`/`syncSleeveOffset`/ResizeObserver 경로까지 고정:
+gap 정확히 10cm / union 중심 ≤1px(실측 0) / geometry 입력 비변형 / **ResizeObserver
+콜백 후 재중앙**(두 크기) / 핸들 offset 왕복 / **격자·라벨·핸들·보조선 bbox 미개입**.
+runAll 14스위트 전부 통과, 골든 diff 0.
+
+**검증(격리 origin `127.0.0.1:8420`, localStorage 0키, 저장함수 호출 0)**:
+- 첫 진입: 봉제선 gap **10.0000cm**, union 중심 오차 **dx 0 / dy 0 px**.
+- 휠 줌(0.556→0.622) 후 일반 render → **zoom 보존**(fit 복귀 없음). Space+팬(x +60) 후
+  render → **pan 보존**.
+- `resize_window`(820→960) → 직접 fit 호출 없이 paint 시점 RO 발화 → **중심 오차 0px
+  자동 복원**(hidden→visible 보정 확인).
+- 모드 전환 전체/몸판/소매 — **콘솔 오류 0**, 부분 outline(body14/0·0/4·14/4) 정상,
+  카메라 보존.
+- 치수 변경(B 83→90, SL 52→58) + `generatePattern()` → 새 봉제선 gap **여전히 10cm**.
+
+**미구현/경계**: 소매 세로(dy) 정렬은 자연 위치 유지(design 과 동일). draft `화면 초기화`
+(resetView)는 기존 고정 리셋 유지(union-fit 아님, 문서화된 draft 계약 존중). Pages 실사용
+확인은 push 이후.
+
 ## 다음에 확인할 것 (열려있는 이슈)
 
 - **✅ (완료, 2026-07-08) `normalizeBakedSegments`** — 위 "normalizeBakedSegments 구현"
