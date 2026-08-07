@@ -179,6 +179,8 @@ function render(){
   if(typeof drawDartMoveOverlay === 'function') drawDartMoveOverlay(svg, p);
   applyLayerVisibility();
   updateStatusBar(f,p,dr,B,W,BL);
+  // 소매 offset 을 실측 봉제선 outline 기준으로 맞춘다(재렌더 없이 그룹 transform 만 보정).
+  if(window.draftLayout) window.draftLayout.afterDraftRender();
 }
 
 // ══ DEBUG: 앞판/뒤판 색상 구분 (확인 후 제거) ══════════════

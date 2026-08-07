@@ -76,3 +76,6 @@ function resetView(){
 
 generatePattern();
 initDartMoveClickHandler();
+// 홈페이지 최초 화면의 union 중앙 fit 은 draftLayout 의 ResizeObserver(#cv) 가 소유한다.
+// (observe 시 초기 콜백 + 레이아웃 확정/hidden→visible 시 콜백이 전달되어 자동 fit)
+// generatePattern 의 render 끝 훅(afterDraftRender)이 그 전에 소매 offset 을 맞춰 둔다.

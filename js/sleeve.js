@@ -263,6 +263,25 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
   const sx_F = sx_C + sf.fSW();
 
   const g = E("g");
+  // ── 작업 화면 배치: 소매를 몸판 봉제선 오른쪽 끝 + 10cm 로 이동(표시 전용) ──
+  // 형상(geometry) 좌표는 절대 안 움직인다 — SVG transform 으로만 오른쪽으로 민다.
+  // 몸판/다트/몸판곡선은 offset 0(제자리)이라 그쪽 hit-test 는 전혀 영향 없다.
+  // ★ offset 값은 이 파일이 정하지 않는다 — draftLayout 이 **실측 봉제선 outline**
+  //   (라벨·보조선·핸들 제외)에서 계산해 window.draftSleeveLayout 에 넣는다. 그래야
+  //   실제 봉제선 간격이 정확히 10cm 가 된다(구성 사각형 sx_B 기준이면 14cm 로 어긋남).
+  //   여기선 그 값을 읽어 transform 만 적용하고, 핸들 드래그는 evtToSleeve 가
+  //   드래그 시점에 같은 전역값을 live 로 되돌린다(캡처 아님 → offset 갱신 즉시 반영).
+  const _slOff = (window.draftSleeveLayout && typeof window.draftSleeveLayout.dx === "number")
+    ? window.draftSleeveLayout : { dx: 0, dy: 0 };
+  g.setAttribute("transform", `translate(${_slOff.dx * SC * viewZ},${_slOff.dy * SC * viewZ})`);
+  g.setAttribute("data-sleeve-root", "1");     // draftLayout 이 소매 그룹을 찾는 표식
+  // 이벤트 → 소매 패턴좌표: 표시 offset 을 되돌려 원래(offset 0) 좌표계로 변환
+  const evtToSleeve = mv => {
+    const off = (window.draftSleeveLayout && typeof window.draftSleeveLayout.dx === "number")
+      ? window.draftSleeveLayout : { dx: 0, dy: 0 };
+    const [x, y] = eventToPatternPoint(mv);
+    return [x - off.dx, y - off.dy];
+  };
   const sy_EL   = sy_SP + sf.EL(); // EL = 소매산점에서 아래로 소매길이/2 + 2.5
   const sy_HEM  = sy_SP + sf.SL(); // 소매길이선 = 소매산점에서 아래로 소매길이
 
@@ -819,7 +838,7 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
       const moveSleeveHandle = (segIndex, which, ev) => {
         ev.stopPropagation();
         const onMove = mv => {
-          const [nx,ny] = eventToPatternPoint(mv);
+          const [nx,ny] = evtToSleeve(mv);
           state.sleeveH.segments[segIndex][which].x = nx;
           state.sleeveH.segments[segIndex][which].y = ny;
           render();
@@ -837,10 +856,10 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
         ev.stopPropagation();
         const origPt = anchors[anchorIdx]; // 공식 기준점
         const origOffset = SH.anchorOffsets[anchorIdx];
-        const startPt = eventToPatternPoint(ev);
+        const startPt = evtToSleeve(ev);
         const startX = startPt[0], startY = startPt[1];
         const onMove = mv => {
-          const [nx,ny] = eventToPatternPoint(mv);
+          const [nx,ny] = evtToSleeve(mv);
           const dx = nx - startX, dy = ny - startY;
           // 오프셋 누적
           SH.anchorOffsets[anchorIdx] = {
