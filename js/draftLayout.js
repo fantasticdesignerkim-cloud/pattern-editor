@@ -32,6 +32,12 @@
     return (bodyMaxX + gap) - sleeveLocalMinX;
   }
 
+  // 소매 dy: 몸판과 세로 중심을 맞춘다(대각선 아래가 아니라 "옆으로 나란히").
+  // 표시 후 소매 outline 세로 중심 === 몸판 outline 세로 중심.
+  function computeSleeveDy(bodyBB, sleeveLocalBB) {
+    return ((bodyBB.minY + bodyBB.maxY) / 2) - ((sleeveLocalBB.minY + sleeveLocalBB.maxY) / 2);
+  }
+
   // union bbox(cm)와 viewport(px)·view 로 카메라 {z,x,y} 계산.
   // c2p(중심) === (W/2,H/2) 가 정확히 성립한다(중심오차 0, 부동소수 한계 내).
   function computeFitCamera(bb, W, H, view, minZ, margin) {
@@ -112,7 +118,7 @@
     const m = measureOutlineCm();
     if (!m.body || !m.sleeveLocal) return false;
     const dx = computeSleeveDx(m.body.maxX, m.sleeveLocal.minX, GAP);
-    const dy = 0;
+    const dy = computeSleeveDy(m.body, m.sleeveLocal);   // 몸판과 세로 중심 정렬(옆으로 나란히)
     const cur = currentOff();
     if (Math.abs(cur.dx - dx) <= 1e-6 && Math.abs(cur.dy - dy) <= 1e-6) return false;
     window.draftSleeveLayout = { dx, dy };
@@ -163,7 +169,7 @@
 
   window.draftLayout = Object.freeze({
     // 순수(harness)
-    computeSleeveDx, computeFitCamera, unionOutlineBBox, sleeveStoreFromEvt, sleeveDisplayFromStore,
+    computeSleeveDx, computeSleeveDy, computeFitCamera, unionOutlineBBox, sleeveStoreFromEvt, sleeveDisplayFromStore,
     // DOM 연동
     fitDraftView, afterDraftRender, syncSleeveOffset, measureOutlineCm, outlineUnionCm,
     GAP

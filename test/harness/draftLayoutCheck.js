@@ -88,7 +88,7 @@ const DL = S0.window.draftLayout;
 
 // ── 0. 공개 API ──
 {
-  const puresOk = ["computeSleeveDx", "computeFitCamera", "unionOutlineBBox", "sleeveStoreFromEvt", "sleeveDisplayFromStore"].every(k => typeof DL[k] === "function");
+  const puresOk = ["computeSleeveDx", "computeSleeveDy", "computeFitCamera", "unionOutlineBBox", "sleeveStoreFromEvt", "sleeveDisplayFromStore"].every(k => typeof DL[k] === "function");
   const domOk = ["fitDraftView", "afterDraftRender", "syncSleeveOffset", "measureOutlineCm", "outlineUnionCm"].every(k => typeof DL[k] === "function");
   ok(puresOk && domOk && Object.isFrozen(DL) && DL.GAP === 10, "0: API·GAP·frozen");
 }
@@ -98,21 +98,26 @@ const DL = S0.window.draftLayout;
   // 순수: (sleeveLocalMinX + dx) - bodyMaxX === gap
   const dx = DL.computeSleeveDx(47.5, 5.5, 10);
   ok(near((5.5 + dx) - 47.5, 10), "1: computeSleeveDx gap=10 (순수)");
-  // 실측: syncSleeveOffset 이 window.draftSleeveLayout 에 정확한 gap 을 만든다
+  // 순수 dy: 몸판 세로중심(17) − 소매 세로중심(79) = -62 → 표시 후 세로중심 일치
+  const dy = DL.computeSleeveDy({ minY: -4, maxY: 38 }, { minY: 53, maxY: 105 });
+  ok(near(dy, -62) && near((-4 + 38) / 2, (53 + dy + 105 + dy) / 2), "1: computeSleeveDy 세로중심 정렬(순수)");
+  // 실측: syncSleeveOffset 이 window.draftSleeveLayout 에 정확한 gap + 세로중심 정렬을 만든다
   DL.syncSleeveOffset();
   const off = S0.window.draftSleeveLayout;
-  ok(off && near((5.5 + off.dx) - 47.5, 10) && off.dy === 0, "1: syncSleeveOffset 실측 gap=10");
+  ok(off && near((5.5 + off.dx) - 47.5, 10) && near(off.dy, -62), "1: syncSleeveOffset 실측 gap=10·dy=-62");
   // 소매 그룹 transform 이 그 offset 으로 in-place 보정됨(재렌더 없이)
-  ok(S0.__sleeveGroup._tf === "translate(" + (off.dx * S0.SC * S0.viewZ) + ",0)", "1: 소매 그룹 transform 보정");
+  ok(S0.__sleeveGroup._tf === "translate(" + (off.dx * S0.SC * S0.viewZ) + "," + (off.dy * S0.SC * S0.viewZ) + ")", "1: 소매 그룹 transform 보정");
 }
 
 // ── 6. 격자·라벨·핸들·보조선이 bbox 에 개입하지 않음 (outline 만) ──
 {
   // 노이즈 요소는 200~300 좌표. outline 만 잡으면 union maxX 는 소매 표시 maxX(≈91.3)여야 함.
   const u = DL.outlineUnionCm();
-  const off = S0.window.draftSleeveLayout;
-  const expSleeveMaxX = 39.3 + off.dx;            // 5.5+33.8=39.3 (+off)
-  ok(u && near(u.minX, 0) && near(u.maxX, expSleeveMaxX) && near(u.minY, -4) && near(u.maxY, 105), "6: outline 만 union (노이즈 제외)");
+  const off = S0.window.draftSleeveLayout;                      // dx≈52, dy=-62
+  const expSleeveMaxX = 39.3 + off.dx;                          // 5.5+33.8=39.3 (+dx)
+  // 소매 표시 세로 = 53+dy(-9) .. 105+dy(43). 소매가 몸판(-4..38)보다 세로로 넓어
+  // union 세로는 소매가 지배: minY 53+dy(-9), maxY 105+dy(43).
+  ok(u && near(u.minX, 0) && near(u.maxX, expSleeveMaxX) && near(u.minY, 53 + off.dy) && near(u.maxY, 105 + off.dy), "6: outline 만 union (노이즈 제외, 세로중심 정렬)");
   // unionOutlineBBox 순수: role!=="outline" 무시
   const metas = [
     { role: "outline", piece: "body", minX: 0, maxX: 47.5, minY: -4, maxY: 38 },
