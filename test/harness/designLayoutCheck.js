@@ -68,19 +68,22 @@ function geom() {
   ok(DL.bboxOf(g, "sleeve") === null, "5: 빈 sleeve bbox null");
 }
 
-// 6. autoSleeveOffset = 항상 몸판 오른쪽 끝 + 10cm (dy 0)
+// 6. autoSleeveOffset = 가로는 몸판 오른쪽 끝 + 10cm, 세로는 몸판·소매 세로중심 일치
 {
   const o = DL.autoSleeveOffset(geom());
-  // dx = (bodyMaxX 20 + 10) - sleeveMinX 30 = 0, dy = 0
-  ok(near(o.dx, 0) && near(o.dy, 0), "6: 항상 오른쪽+10");
+  // dx = (bodyMaxX 20 + 10) - sleeveMinX 30 = 0
+  // 몸판 bbox y 0..10 (centerY 5), 소매 y 3..15 (centerY 9) → dy = 5 - 9 = -4
+  ok(near(o.dx, 0) && near(o.dy, -4), "6: 가로 오른쪽+10 · 세로중심 정렬");
+  // 표시 후 세로중심 일치: sleeveCenterY + dy === bodyCenterY
+  ok(near(9 + o.dy, 5), "6: 소매 세로중심 + dy === 몸판 세로중심");
 }
 // 7. 화면 폭 인자와 무관하게 결과 동일(넓/좁 분기 없음) — 다른 fixture 로 재확인
 {
-  const g = geom(); g.sleeve = { outline: [line(50, 3, 60, 3), line(55, 3, 55, 15)], construction: [] }; // sleeveMinX 50
+  const g = geom(); g.sleeve = { outline: [line(50, 3, 60, 3), line(55, 3, 55, 15)], construction: [] }; // sleeveMinX 50, y 3..15
   const o1 = DL.autoSleeveOffset(g);            // 인자 1개
   const o2 = DL.autoSleeveOffset(g, true);      // 옛 narrow 인자 — 무시돼야 함
-  // dx = (bodyMaxX 20 + 10) - 50 = -20, dy = 0
-  ok(near(o1.dx, -20) && near(o1.dy, 0), "7: 오른쪽+10 (다른 위치)");
+  // dx = (bodyMaxX 20 + 10) - 50 = -20, dy = bodyCenterY 5 - sleeveCenterY 9 = -4
+  ok(near(o1.dx, -20) && near(o1.dy, -4), "7: 오른쪽+10 · 세로중심 (다른 위치)");
   ok(near(o2.dx, o1.dx) && near(o2.dy, o1.dy), "7: 폭 인자 무시(항상 오른쪽)");
 }
 // 8. body 또는 sleeve 없으면 offset 0(안전)

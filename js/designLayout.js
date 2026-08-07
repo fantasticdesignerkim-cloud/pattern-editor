@@ -63,11 +63,16 @@
     return { minX, minY, maxX, maxY };
   }
 
-  // ── 순수: 소매 auto offset(cm). 화면 폭과 무관하게 항상 몸판 오른쪽 끝 + GAP ──
+  // ── 순수: 소매 auto offset(cm). 가로는 항상 몸판 오른쪽 끝 + GAP, 세로는 몸판과
+  //    세로 중심을 맞춘다(원형 화면과 동일 기준 — 대각선 아래가 아니라 옆으로 나란히) ──
   function autoSleeveOffset(geometry) {
     const b = bboxOf(geometry, "body"), s = bboxOf(geometry, "sleeve");
     if (!b || !s) return { dx: 0, dy: 0 };
-    return { dx: (b.maxX + SLEEVE_GAP) - s.minX, dy: 0 };  // 몸판 오른쪽 끝 + GAP
+    const bodyCenterY = (b.minY + b.maxY) / 2, sleeveCenterY = (s.minY + s.maxY) / 2;
+    return {
+      dx: (b.maxX + SLEEVE_GAP) - s.minX,   // 몸판 오른쪽 끝 + GAP
+      dy: bodyCenterY - sleeveCenterY        // 몸판과 소매 세로 중심 일치
+    };
   }
 
   // ── DOM/view 연동 ──
