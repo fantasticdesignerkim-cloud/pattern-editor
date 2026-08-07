@@ -2643,7 +2643,12 @@ runAll 14스위트 전부 통과, 골든 diff 0.
   카메라 보존.
 - 치수 변경(B 83→90, SL 52→58) + `generatePattern()` → 새 봉제선 gap **여전히 10cm**.
 
-**미구현/경계**: 소매 세로(dy) 정렬은 자연 위치 유지(design 과 동일). draft `화면 초기화`
+**소매 세로 정렬(dy)**: 소매를 가로로만 밀면 대각선 아래로 보여(자연 y 가 낮음),
+`computeSleeveDy` 로 **몸판과 세로 중심을 맞춰 옆으로 나란히** 둔다(표시 후 소매 outline
+세로중심 === 몸판 outline 세로중심). geometry 불변·표시 전용, `evtToSleeve` 가 dy 도 함께
+되돌려 hit-test 정확. (design 은 여전히 dy=0 — draft 만 세로중심 정렬.)
+
+**미구현/경계**: draft `화면 초기화`
 (resetView)는 기존 고정 리셋 유지(union-fit 아님, 문서화된 draft 계약 존중). Pages 실사용
 확인은 push 이후.
 
