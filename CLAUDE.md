@@ -2498,7 +2498,13 @@ side kink 보정(옆선 실루엣 디자인 단계 책임) / 여유량·완성�
 
 **핵심 분리 — 배치(offset) ≠ 카메라(화면 중심)** (2026-08 사용자 재확정: union 중심)
 - **소매 offset**: **화면 폭과 무관하게 항상 몸판 오른쪽 끝 + 10cm**(도안 cm). 넓/좁 분기
-  없음(모바일도 오른쪽). `autoSleeveOffset(geometry)` = `dx=(bodyMaxX+10)−sleeveMinX, dy=0`.
+  없음(모바일도 오른쪽). ~~`dy=0`~~ → **2026-08 원형과 동일 기준으로 통일**:
+  `autoSleeveOffset(geometry)` = `dx=(bodyMaxX+10)−sleeveMinX, dy=bodyCenterY−sleeveCenterY`
+  (몸판·소매 bbox 세로 중심 일치 — 대각선 아래가 아니라 옆으로 나란히). reference·working 에
+  같은 dx/dy 적용. manual(사용자가 소매 드래그)이면 `refreshAutoSleeve`/`afterBodyLength` 가
+  early-return 해 세로 위치 강제 안 함. `enterDesign`·`배치 초기화`·`소매 오른쪽` 은 auto 로
+  재정렬. **검증(desktop·615·390): 세로중심 오차 0, gap 10cm, union 중심 ≤1px, manual 유지,
+  reference=working transform 동일, 저장 0.**
 - **진입/리사이즈/초기화 = union 중심 fit(`fitUnion`)**: 몸판+소매를 **한 묶음**으로 보고,
   **union bbox 중심**(몸판 중심 아님)을 viewport 중심에 두고 union 전체가 24px 여백 안에
   담기도록 zoom 자동 계산(`fitZ=min((W/2−24)/(halfW·SC),(H/2−24)/(halfH·SC),1)`, 하한 0.1).
@@ -2646,7 +2652,8 @@ runAll 14스위트 전부 통과, 골든 diff 0.
 **소매 세로 정렬(dy)**: 소매를 가로로만 밀면 대각선 아래로 보여(자연 y 가 낮음),
 `computeSleeveDy` 로 **몸판과 세로 중심을 맞춰 옆으로 나란히** 둔다(표시 후 소매 outline
 세로중심 === 몸판 outline 세로중심). geometry 불변·표시 전용, `evtToSleeve` 가 dy 도 함께
-되돌려 hit-test 정확. (design 은 여전히 dy=0 — draft 만 세로중심 정렬.)
+되돌려 hit-test 정확. (2026-08: design 화면도 `autoSleeveOffset` 에 같은 세로중심 정렬을
+적용해 원형·디자인 배치 기준을 통일 — 위 "Design piece layout" 섹션 참고.)
 
 **미구현/경계**: draft `화면 초기화`
 (resetView)는 기존 고정 리셋 유지(union-fit 아님, 문서화된 draft 계약 존중). Pages 실사용
