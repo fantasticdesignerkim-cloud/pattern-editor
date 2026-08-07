@@ -2496,19 +2496,22 @@ side kink 보정(옆선 실루엣 디자인 단계 책임) / 여유량·완성�
 몸판↔소매 겹침은 **배치 문제**(수정). 엉덩이 길이 연장으로 몸판이 아래로 늘어 소매와
 겹칠 수 있어, **형상은 안 움직이고 작업 화면 배치만** 이동하게 만들었다.
 
-**핵심 분리 — 배치(offset) ≠ 카메라(화면 중심)**
-- **소매 offset**: 몸판과 안 겹치게 재배치(넓은 화면=몸판 오른쪽+5cm / 좁은 화면=아래+5cm).
-- **몸판 "화면 중앙"**: geometry 를 옮기지 않고 **카메라(viewX/viewY)** 를 몸판 bbox 중심으로.
-  이래야 "화면 중앙"과 "패턴 좌표 불변"을 동시에 지킨다.
+**핵심 분리 — 배치(offset) ≠ 카메라(화면 중심)** (2026-08 사용자 재확정: union 중심)
+- **소매 offset**: **화면 폭과 무관하게 항상 몸판 오른쪽 끝 + 10cm**(도안 cm). 넓/좁 분기
+  없음(모바일도 오른쪽). `autoSleeveOffset(geometry)` = `dx=(bodyMaxX+10)−sleeveMinX, dy=0`.
+- **진입/리사이즈/초기화 = union 중심 fit(`fitUnion`)**: 몸판+소매를 **한 묶음**으로 보고,
+  **union bbox 중심**(몸판 중심 아님)을 viewport 중심에 두고 union 전체가 24px 여백 안에
+  담기도록 zoom 자동 계산(`fitZ=min((W/2−24)/(halfW·SC),(H/2−24)/(halfH·SC),1)`, 하한 0.1).
+  소매가 오른쪽에 있어 **몸판은 화면 중앙에서 왼쪽으로 치우친다**(정상). geometry·layout
+  좌표 불변, 카메라만. 실행: **design 최초 진입 · `배치 초기화` · `소매 오른쪽` · `화면
+  초기화`(design) · 엉덩이 길이 적용 후(auto) · 창 리사이즈**.
+- **`몸판 중앙` 버튼만 예외**: **현재 zoom 유지**하고 카메라만 **몸판 bbox 중심**으로
+  (`centerCameraOnBody`). union 이 아니라 몸판을 화면 중앙에 두는 "몸판 집중" 동작이다.
+- 사용자가 조각을 드래그하면 이후 리사이즈에서 **자동 재중앙 안 함**(`_userArranged`).
 
-**초기 배치 = body-anchored fit(`fitBodyAnchored`)**: 몸판 bbox 중심을 viewport 중심에
-고정하면서(**union 중심이 아님**), 몸판+소매 **union bbox** 가 화면에 들어오도록 zoom 을
-자동 계산한다(반경 = 몸판 중심에서 union 양끝까지 최대, 안전 여백 24px). `fitZ =
-min((W/2−24)/(hR·SC), (H/2−24)/(vR·SC), 1)`, **design 자동 fit 하한 0.1**(가장 작은
-viewport 에서도 union 이 24px 여백 안에 담기게). 실행 시점: **design 최초 진입 · `배치
-초기화` · `소매 오른쪽` · `화면 초기화`(design) · 엉덩이 길이 적용 후(auto 일 때만)**.
-`몸판 중앙` 버튼은 **현재 zoom 유지**하고 카메라만 몸판 중심으로. 사용자 드래그 후에는
-자동 fit 안 함.
+> ⚠️ 이전 기록(위쪽 fit 섹션들)의 "몸판 중심을 viewport 중심에 고정(union 중심 아님)",
+>   "소매 넓으면 오른쪽+5cm/좁으면 아래", `fitBodyAnchored` 는 **이 union-중심·항상-오른쪽
+>   10cm 결정으로 대체**됐다(코드에서 `fitBodyAnchored`→`fitUnion`, narrow 분기 제거).
 - **수동 줌 하한도 stage 별로 다르다(init.js `_minZoom`)**: **design 0.1 / draft 0.2**.
   auto-fit 이 viewZ<0.2 로 내려가도 첫 휠·핀치가 0.2 로 튀지 않고(확대는 연속 증가,
   축소는 0.1 까지) 조작된다. **draft 줌 계약(0.2)은 무변경**, 최대 10 유지.
@@ -2540,10 +2543,10 @@ reference·working 에 **같은 offset** 을 적용해 함께 이동한다.
 **Space+drag 는 기존 pan 우선**(designLayout 이 자체 spaceHeld 추적), pointer capture 는
 svg 에(재렌더로 rect 가 바뀌어도 유지). geometry·reference 불변, 저장 쓰기 0.
 
-**버튼(design inspector)**: `몸판 중앙`(현재 zoom 유지·카메라만) / `소매 오른쪽`(body 기준
-오른쪽+5cm auto 복귀 후 다시 fit) / `배치 초기화`(body {0,0} → 소매 재배치 → 기준 SC →
-**fit**, 결정론적). `화면 초기화`(resetView)는 design 에서 **기준 SC + body-anchored fit**
-(배치 offset 유지) — init.js resetView 가 `isDesignStageActive()` 로 분기.
+**버튼(design inspector)**: `몸판 중앙`(현재 zoom 유지·카메라만·**몸판 중심**) / `소매 오른쪽`
+(body 기준 오른쪽+10cm auto 복귀 후 **union fit**) / `배치 초기화`(body {0,0} → 소매 재배치
+→ 기준 SC → **union fit**, 결정론적). `화면 초기화`(resetView)는 design 에서 **기준 SC +
+union fit**(배치 offset 유지) — init.js resetView 가 `isDesignStageActive()` 로 분기.
 `엉덩이 길이 적용`(ui.js `afterBodyLength`): auto 면 소매 재배치+fit, manual 이면 카메라·
 offset 유지(자동 이동/재fit 안 함).
 
@@ -2562,8 +2565,8 @@ reference·working 동일 offset / 전역 z-order / draft 화면 무변경 / rel
 **검증**: 하네스 — designLayoutCheck **12**(bbox·auto wide/narrow·ensureLayout),
 designProjectCheck **42**(layout 기본값·mutable·불변), designRenderBranchCheck **20**
 (z-order 4-root·piece 서브셋·재생성), runAll 전체 통과·golden diff 0. 실브라우저 —
-design 진입 시 z-order(ref→work→hit)·ref·work 동일 transform·소매 auto 오른쪽(46.97cm)·
-hit rect 2개, 드래그(body +10cm, 소매 drag→manual)·버튼(몸판중앙/소매오른쪽/배치초기화)
+design 진입 시 z-order(ref→work→hit)·ref·work 동일 transform·소매 auto 오른쪽 10cm(dx 51.97cm)·
+hit rect 2개, 드래그(body +8cm, 소매 drag→manual)·버튼(몸판중앙=몸판중심/소매오른쪽/배치초기화)
 전부 형상 불변, 엉덩이 L=10 후 auto 소매 갱신, draft 왕복 시 dirty·원형 shape 불변,
 design 재진입 배치 유지, reload 시 project·layout 소멸(design 탭 비활성), storage 0·콘솔 0.
 **9 viewport 각각 design 진입 fit**(1440·1280·616·615·430·390·360·320·844×390): **몸판·소매
@@ -2575,6 +2578,11 @@ offset 유지. zoom 범위 **0.139~0.405**(가장 작은 320×568=0.139, 844×39
 draft 축소는 0.2 하한 유지. DOM id **49→52**, inline handler 37 유지.
 (참고: hit rect 는 bbox+3px 라 24px 여백 검사는 실제 geometry bbox 로 측정 — hit rect 는
 SVG 내부라 드래그 접근은 항상 가능.)
+(⚠️ 위 9-viewport 수치는 옛 body-anchored 기준. **union-중심 재검증**(`43fae6c`): 1280·1600·
+390 에서 **union bbox 중심 vs viewport 중심 오차 0px**, 몸판·소매 24px 여백 내, overlap 0,
+소매 항상 오른쪽(dx 51.97·dy 0, 모바일 포함), 리사이즈 시 union 재중앙(오차 0), `몸판 중앙`
+버튼은 몸판 중심(오차 0·zoom 유지)·union 은 오른쪽으로 벗어남, 드래그 후 리사이즈는 배치
+유지, 콘솔 0.)
 
 **미구현(경계 준수)**: 옆선 실루엣(허리 접점 큰 꺾임 연결) / 배치 저장·복원 / 몸판 offset
 자동 활용 / 다중 designProject — 별도 사양·승인 후.
