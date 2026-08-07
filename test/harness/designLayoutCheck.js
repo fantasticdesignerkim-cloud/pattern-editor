@@ -68,22 +68,25 @@ function geom() {
   ok(DL.bboxOf(g, "sleeve") === null, "5: 빈 sleeve bbox null");
 }
 
-// 6. autoSleeveOffset 넓은 화면 = 몸판 오른쪽 + 5
+// 6. autoSleeveOffset = 항상 몸판 오른쪽 끝 + 10cm (dy 0)
 {
-  const o = DL.autoSleeveOffset(geom(), false);
-  // dx = (bodyMaxX 20 + 5) - sleeveMinX 30 = -5, dy = 0
-  ok(near(o.dx, -5) && near(o.dy, 0), "6: wide → 오른쪽+5");
+  const o = DL.autoSleeveOffset(geom());
+  // dx = (bodyMaxX 20 + 10) - sleeveMinX 30 = 0, dy = 0
+  ok(near(o.dx, 0) && near(o.dy, 0), "6: 항상 오른쪽+10");
 }
-// 7. autoSleeveOffset 좁은 화면 = 몸판 아래 + 5
+// 7. 화면 폭 인자와 무관하게 결과 동일(넓/좁 분기 없음) — 다른 fixture 로 재확인
 {
-  const o = DL.autoSleeveOffset(geom(), true);
-  // dy = (bodyMaxY 10 + 5) - sleeveMinY 3 = 12, dx = 0
-  ok(near(o.dx, 0) && near(o.dy, 12), "7: narrow → 아래+5");
+  const g = geom(); g.sleeve = { outline: [line(50, 3, 60, 3), line(55, 3, 55, 15)], construction: [] }; // sleeveMinX 50
+  const o1 = DL.autoSleeveOffset(g);            // 인자 1개
+  const o2 = DL.autoSleeveOffset(g, true);      // 옛 narrow 인자 — 무시돼야 함
+  // dx = (bodyMaxX 20 + 10) - 50 = -20, dy = 0
+  ok(near(o1.dx, -20) && near(o1.dy, 0), "7: 오른쪽+10 (다른 위치)");
+  ok(near(o2.dx, o1.dx) && near(o2.dy, o1.dy), "7: 폭 인자 무시(항상 오른쪽)");
 }
 // 8. body 또는 sleeve 없으면 offset 0(안전)
 {
   const g = geom(); g.sleeve = { outline: [], construction: [] };
-  const o = DL.autoSleeveOffset(g, false);
+  const o = DL.autoSleeveOffset(g);
   ok(near(o.dx, 0) && near(o.dy, 0), "8: sleeve 없음 → 0");
 }
 

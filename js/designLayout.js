@@ -6,8 +6,9 @@
 // reference 와 working 에 같은 offset 을 적용해 회색/남색 원형이 항상 함께 이동한다.
 //
 // 배치 ≠ 카메라:
-//  · 소매 offset  = 몸판과 겹치지 않게 재배치(넓은 화면=몸판 오른쪽+5cm / 좁은=아래+5cm)
-//  · 몸판 "화면 중앙" = geometry 를 옮기지 않고 **카메라(viewX/viewY)** 를 몸판 중심으로.
+//  · 소매 offset  = 화면 폭과 무관하게 항상 몸판 오른쪽 끝 + 10cm(도안 cm)
+//  · 진입/리사이즈/초기화 = 몸판+소매를 한 묶음으로 보고 **union bbox 중심**을 viewport
+//    중심에 두는 union fit(카메라만). "몸판 중앙" 버튼만 몸판 중심으로(현재 zoom 유지).
 //
 // 계약:
 //  - sourceBlock/baseSource/referenceGeometry/working.geometry(좌표) 불변.
@@ -18,8 +19,7 @@
 (function () {
   "use strict";
 
-  const NARROW_MAX = 615;      // css 모바일 브레이크포인트와 동일
-  const SLEEVE_GAP = 5;        // 몸판과 소매 간격(cm)
+  const SLEEVE_GAP = 10;       // 몸판 오른쪽 끝과 소매 사이 간격(도안 cm)
   const BODY_PIECES = ["front", "back", "shared"];
   const FIT_MARGIN = 24;       // fit 안전 여백(px)
   const DESIGN_MIN_Z = 0.1;    // design 자동 fit 최소 zoom. design 전용 휠·핀치 하한과 동일
@@ -63,19 +63,14 @@
     return { minX, minY, maxX, maxY };
   }
 
-  // ── 순수: 소매 auto offset(cm). 넓으면 몸판 오른쪽, 좁으면 몸판 아래로 +GAP ──
-  function autoSleeveOffset(geometry, narrow) {
+  // ── 순수: 소매 auto offset(cm). 화면 폭과 무관하게 항상 몸판 오른쪽 끝 + GAP ──
+  function autoSleeveOffset(geometry) {
     const b = bboxOf(geometry, "body"), s = bboxOf(geometry, "sleeve");
     if (!b || !s) return { dx: 0, dy: 0 };
-    return narrow
-      ? { dx: 0, dy: (b.maxY + SLEEVE_GAP) - s.minY }   // 몸판 아래 끝 + GAP
-      : { dx: (b.maxX + SLEEVE_GAP) - s.minX, dy: 0 };  // 몸판 오른쪽 끝 + GAP
+    return { dx: (b.maxX + SLEEVE_GAP) - s.minX, dy: 0 };  // 몸판 오른쪽 끝 + GAP
   }
 
   // ── DOM/view 연동 ──
-  function isNarrow() {
-    return (document.documentElement.clientWidth || window.innerWidth || 0) <= NARROW_MAX;
-  }
   function currentProject() {
     return (window.designWorkflow && window.designWorkflow.current()) || null;
   }
@@ -88,7 +83,7 @@
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
     if (L.sleevePlacement !== "auto") return;   // 사용자가 옮긴 뒤엔 자동 이동 안 함
-    L.sleeve = autoSleeveOffset(p.working.geometry, isNarrow());
+    L.sleeve = autoSleeveOffset(p.working.geometry);
   }
 
   // bbox 에 offset 적용(화면상 위치).
@@ -96,28 +91,29 @@
     return bb ? { minX: bb.minX + off.dx, minY: bb.minY + off.dy, maxX: bb.maxX + off.dx, maxY: bb.maxY + off.dy } : null;
   }
 
-  // body-anchored fit(no render): 몸판 중심은 viewport 중심에 고정하면서, 몸판+소매 union
-  // bbox 가 화면 안에 들어오도록 zoom 을 자동 계산한다. **union 중심이 아니라 몸판 중심**을
-  // 화면 중앙에 둔다(반경은 몸판 중심에서 union 양끝까지의 최대). geometry·layout 불변.
-  function fitBodyAnchored() {
+  // union fit(no render): 몸판+소매를 **한 묶음**으로 보고, union bbox 중심을 viewport 중심에
+  // 두면서 union 전체가 24px 여백 안에 들어오도록 zoom 을 자동 계산한다(반경 = union 절반).
+  // geometry·layout 좌표 불변, 카메라(viewX/viewY/viewZ)만 조정.
+  function fitUnion() {
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
     const b = offBBox(bboxOf(p.working.geometry, "body"), L.body); if (!b) return;
     const s = offBBox(bboxOf(p.working.geometry, "sleeve"), L.sleeve);
-    const bodyCx = (b.minX + b.maxX) / 2, bodyCy = (b.minY + b.maxY) / 2;
     let uMinX = b.minX, uMinY = b.minY, uMaxX = b.maxX, uMaxY = b.maxY;
     if (s) { uMinX = Math.min(uMinX, s.minX); uMinY = Math.min(uMinY, s.minY); uMaxX = Math.max(uMaxX, s.maxX); uMaxY = Math.max(uMaxY, s.maxY); }
-    const hR = Math.max(bodyCx - uMinX, uMaxX - bodyCx);   // 몸판 중심에서 union 양끝까지 최대(가로)
-    const vR = Math.max(bodyCy - uMinY, uMaxY - bodyCy);   // 세로
+    const uCx = (uMinX + uMaxX) / 2, uCy = (uMinY + uMaxY) / 2;   // union 중심
+    const halfW = (uMaxX - uMinX) / 2, halfH = (uMaxY - uMinY) / 2;
     const W = svg.clientWidth || 900, H = svg.clientHeight || 700;
-    const hz = (hR * SC > 0) ? (W / 2 - FIT_MARGIN) / (hR * SC) : Infinity;
-    const vz = (vR * SC > 0) ? (H / 2 - FIT_MARGIN) / (vR * SC) : Infinity;
+    const hz = (halfW * SC > 0) ? (W / 2 - FIT_MARGIN) / (halfW * SC) : Infinity;
+    const vz = (halfH * SC > 0) ? (H / 2 - FIT_MARGIN) / (halfH * SC) : Infinity;
     let fitZ = Math.min(hz, vz, 1);                        // 1 이상으로 확대하지 않음
     if (!(fitZ > 0)) fitZ = 1;
-    fitZ = Math.max(fitZ, DESIGN_MIN_Z);                  // design 자동 fit 하한 0.2
+    fitZ = Math.max(fitZ, DESIGN_MIN_Z);                  // design 자동 fit 하한 0.1
     view.z = fitZ;
+    // union 중심 → viewport 중심
+    view.x = W / 2 - MX - uCx * SC * fitZ;
+    view.y = H / 2 - MY - uCy * SC * fitZ;
     syncViewVars();
-    centerCameraOnBody();                                 // 새 zoom 기준으로 몸판 중심 = 화면 중앙
   }
 
   // 카메라를 몸판 bbox 중심으로(형상·layout 불변, viewX/viewY 만 조정). no render.
@@ -135,10 +131,10 @@
   }
 
   // ── 공개 액션(각자 render 로 마무리) ──
-  function enterDesign() {            // design 최초/재진입: 소매 auto + body-anchored fit
+  function enterDesign() {            // design 최초/재진입: 소매 auto(오른쪽 10cm) + union fit
     _userArranged = false;
     refreshAutoSleeve();
-    fitBodyAnchored();
+    fitUnion();
     if (typeof render === "function") render();
   }
   function centerBody() {            // "몸판 중앙": 현재 zoom 유지, 카메라만 몸판 중심으로
@@ -151,8 +147,8 @@
     const L = ensureLayout(p);
     _userArranged = false;
     L.sleevePlacement = "auto";
-    L.sleeve = autoSleeveOffset(p.working.geometry, isNarrow());
-    fitBodyAnchored();
+    L.sleeve = autoSleeveOffset(p.working.geometry);
+    fitUnion();
     if (typeof render === "function") render();
   }
   function resetLayout() {           // "배치 초기화": body 0,0 → 소매 재배치 → 기본 SC → fit(결정론)
@@ -161,17 +157,17 @@
     _userArranged = false;
     L.body = { dx: 0, dy: 0 };
     L.sleevePlacement = "auto";
-    L.sleeve = autoSleeveOffset(p.working.geometry, isNarrow());
+    L.sleeve = autoSleeveOffset(p.working.geometry);
     Object.assign(view, { SC: 11, MX: 80, MY: 100 });   // 기준 축척 복원(z 는 fit 이 정함)
     syncViewVars();
-    fitBodyAnchored();
+    fitUnion();
     if (typeof render === "function") render();
   }
-  function resetViewForDesign() {    // 화면 초기화(design): 기준 축척 + body-anchored fit(배치 offset 유지)
+  function resetViewForDesign() {    // 화면 초기화(design): 기준 축척 + union fit(배치 offset 유지)
     _userArranged = false;
     Object.assign(view, { SC: 11, MX: 80, MY: 100 });
     syncViewVars();
-    fitBodyAnchored();
+    fitUnion();
     if (typeof render === "function") render();
   }
   // 엉덩이 길이 적용 직후(ui.js 호출, render 는 호출부): auto 면 소매 재배치+fit, manual 이면
@@ -181,7 +177,7 @@
     const L = ensureLayout(p);
     if (L.sleevePlacement !== "auto") return;   // manual: 유지
     refreshAutoSleeve();
-    fitBodyAnchored();
+    fitUnion();
   }
 
   // ── 드래그: 투명 hit rect(pointer-events:all)만 잡는다. Space+drag 는 pan 우선 ──
@@ -197,7 +193,7 @@
       _resizeRaf = requestAnimationFrame(() => {
         _resizeRaf = null;
         if (!inDesign() || _userArranged) return;
-        fitBodyAnchored();
+        fitUnion();
         if (typeof render === "function") render();
       });
     });
