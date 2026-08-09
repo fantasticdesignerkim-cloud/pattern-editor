@@ -2593,6 +2593,44 @@ SVG 내부라 드래그 접근은 항상 가능.)
 **미구현(경계 준수)**: 옆선 실루엣(허리 접점 큰 꺾임 연결) / 배치 저장·복원 / 몸판 offset
 자동 활용 / 다중 designProject — 별도 사양·승인 후.
 
+## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
+
+사용자 계약대로 세 가지를 한 사이클로 처리(엔진 무변경, 시각/표시만).
+
+**1. 다트이동 버튼 색 — idle 회색 · active 빨강 · 주황 완전 제거**
+- `setBtn("다트이동 시작", "#e07800")` → `setBtn("다트이동 시작", "")` (inline background 제거).
+  idle 은 inline bg 없음 → `.tool-dart::before` navy 아이콘 = 곡선편집과 동일한 회색.
+- active 는 그대로 `setBtn("취소", "#cc3333")`(빨강) + `[style*="background"]::before` 흰 아이콘.
+- 아이콘-only·폭 고정·aria/title("다트 이동 시작/종료") 계약 유지. 실측: idle bg none·
+  active rgb(204,51,51)·주황(224,120,0) 0.
+
+**2. 소매 글씨 가독성 — `[data-sleeve-root]` 스코프 CSS**
+- `.txt-dark/.txt-dep/.sleeve-guide-label` 을 **소매 그룹 안에서만** 11px 로 키우고 명암↑ +
+  **반투명 흰 외곽선**(`paint-order:stroke; stroke:rgba(255,255,255,.92); stroke-width:2.8px`)
+  → 보조선 위에서도 읽힘. 몸판 라벨은 무변경(스코프 밖). font-size 는 px(뷰박스 없음)라
+  줌과 무관하게 일정 → 지나치게 작아지지 않음.
+
+**3. 이세 정보 카드 — 모달 아님, 소매 안에 떠 있는 카드**
+- 기존 `.ease-info` 텍스트(줌 비례 `11*viewZ` 라 줌아웃 시 작아짐)를 **고정 px 카드**로 교체.
+  흰 배경 rect + `var(--border)` 테두리 + `drop-shadow`, 행 정렬(**뒤 암홀 / 앞 암홀 /
+  소매산 / 총 이세**, 이세 음수면 빨강). `finalCapHeight` 를 소매산 행에 노출.
+- **소매 그룹(`g`)의 마지막 자식으로 append** → 도안선·핸들 위. `pointer-events:none` 로
+  편집 불방해. 소매 그룹 안이라 **소매 이동 시 카드도 함께 이동**. 위치는 소매 몸통 안
+  빈 영역(`c2p(sx_B+1.5, sy_base+2)`)이라 화면 안(오른쪽 밖 아님).
+
+**fit 보정(카드·라벨 대응) — 중심은 outline, zoom 은 full content**
+- 세로중심 정렬로 union 높이가 줄어 zoom 이 상한 1 에 걸리면 소매 치수 라벨(EL/SL 등)이
+  outline 밖으로 나가 잘렸다. → `symmetricFitBBox(centerBB, fullBB)` 신설: **중심은 봉제선
+  outline union(대칭·≤1px)**, **zoom 은 라벨·보조선 포함 `measureFullContentBBoxCm`**(격자·
+  이세카드 제외)를 outline 중심에 대칭으로 감싸 계산. 실측(1440): outline 중심오차 0px,
+  gap 10cm, full content 잘림 0(viewZ 0.884).
+- 회귀: `draftLayoutCheck` 에 `symmetricFitBBox` 순수 테스트 추가(**22 PASS**). 골든 diff 0.
+
+**변경 파일**: `js/dartMove.js`(setBtn idle) / `js/sleeve.js`(이세 카드) / `js/draftLayout.js`
+(symmetricFitBBox·measureFullContentBBoxCm·fit) / `css/style.css`(소매 글씨·카드) /
+`index.html`(캐시 `?v=2026080910~911`). **엔진(split/bake/normalize)·design 경로·shape/perf
+골든 무변경.** 검증은 격리 origin, 저장 0.
+
 ## ✅ 원형(draft) 화면 소매 오른쪽 배치 + union 중앙 fit (2026-08) — `js/draftLayout.js`
 
 **배경(사용자 지시)**: design 화면에만 있던 "소매를 몸판 오른쪽 10cm 로 두고 몸판+소매를
