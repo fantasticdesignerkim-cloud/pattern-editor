@@ -282,6 +282,7 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
     const [x, y] = eventToPatternPoint(mv);
     return [x - off.dx, y - off.dy];
   };
+  let easeCard = null;   // 이세 정보 카드 — 함수 끝에서 마지막에 append(도안선·핸들 위)
   const sy_EL   = sy_SP + sf.EL(); // EL = 소매산점에서 아래로 소매길이/2 + 2.5
   const sy_HEM  = sy_SP + sf.SL(); // 소매길이선 = 소매산점에서 아래로 소매길이
 
@@ -815,23 +816,27 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
         const backEase = sleeveBackLen - bAH;
         const frontEase = sleeveFrontLen - fAH;
         const totalEase = backEase + frontEase;
-        const panelX = sx_F + 7;
-        const panelY = sy_SP + 4;
-        // 이세량 패널: ease-info 클래스로 항상 표시 (편집모드 여부 무관)
-        // font-size는 viewZ에 비례해서 줌 시 글씨도 같이 커짐
-        const easeSign = v => v >= 0 ? "+" : "";
-        const baseFontSize = 11 * viewZ;  // 줌 비례 폰트 크기
-        const lineGap = 1.8;             // 줄 간격 (cm 단위)
-        const rows = [
-          { txt: `뒤암홀 ${bAH.toFixed(1)}   뒤소매 ${sleeveBackLen.toFixed(1)}   뒤이세 ${easeSign(backEase)}${backEase.toFixed(2)}`, color: backEase < 0 ? "#cc3333" : "#111" },
-          { txt: `앞암홀 ${fAH.toFixed(1)}   앞소매 ${sleeveFrontLen.toFixed(1)}   앞이세 ${easeSign(frontEase)}${frontEase.toFixed(2)}`, color: frontEase < 0 ? "#cc3333" : "#111" },
-          { txt: `총이세  ${easeSign(totalEase)}${totalEase.toFixed(2)} cm`, color: totalEase < 0 ? "#cc3333" : "#111" },
+        // ── 이세 정보 카드: 소매 오른쪽 위에 떠 있는 카드(모달 아님). 고정 px 크기라
+        //    줌과 무관하게 읽히고, 함수 끝에서 g 에 마지막으로 append → 도안선·핸들 위.
+        //    pointer-events:none 이라 편집을 막지 않고, 소매 그룹(g) 안이라 소매와 함께 이동. ──
+        const sgn = v => v >= 0 ? "+" : "";
+        const cardRows = [
+          { l: "뒤 암홀", v: `${bAH.toFixed(1)}cm`, e: `이세 ${sgn(backEase)}${backEase.toFixed(2)}`, warn: backEase < 0 },
+          { l: "앞 암홀", v: `${fAH.toFixed(1)}cm`, e: `이세 ${sgn(frontEase)}${frontEase.toFixed(2)}`, warn: frontEase < 0 },
+          { l: "소매산", v: `${finalCapHeight.toFixed(1)}cm`, e: "", warn: false },
+          { l: "총 이세", v: `${sgn(totalEase)}${totalEase.toFixed(2)}cm`, e: "", warn: totalEase < 0 },
         ];
-        rows.forEach(({txt, color}, idx)=>{
-          const [tx,ty] = c2p(panelX, panelY + idx * lineGap);
-          const t = E("text",{x:tx, y:ty, fill:color, "font-size":baseFontSize, "font-weight":"700", "font-family":"monospace", class:"ease-info"});
-          t.textContent = txt;
-          g.appendChild(t);
+        const [ox, oy] = c2p(sx_B + 1.5, sy_base + 2);  // 카드 좌상단(소매 몸통 안 빈 영역, 화면 px)
+        const padX = 11, padTop = 9, rowH = 19, labelW = 50, valW = 62;
+        const cardW = padX * 2 + labelW + valW + 62;
+        const cardH = padTop * 2 + cardRows.length * rowH - 5;
+        easeCard = E("g", { class: "ease-card", "pointer-events": "none" });
+        easeCard.appendChild(E("rect", { x: ox, y: oy, width: cardW, height: cardH, rx: 7, class: "ease-card-bg" }));
+        cardRows.forEach((r, i) => {
+          const ty = oy + padTop + i * rowH + 13;
+          easeCard.appendChild(E("text", { x: ox + padX, y: ty, class: "ease-card-label" }, r.l));
+          easeCard.appendChild(E("text", { x: ox + padX + labelW, y: ty, class: "ease-card-val" + (r.warn ? " warn" : "") }, r.v));
+          if (r.e) easeCard.appendChild(E("text", { x: ox + padX + labelW + valW, y: ty, class: "ease-card-ease" + (r.warn ? " warn" : "") }, r.e));
         });
       }
 
@@ -1056,6 +1061,7 @@ function drawSleeve(svg,f,p,dr,B,W,BL,showBase=true,showDart=true,showDep=true,s
     });
   }
 
+  if (easeCard) g.appendChild(easeCard);  // 도안선·핸들 위(마지막 append)
   svg.appendChild(g);
 }
 

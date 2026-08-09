@@ -54,6 +54,15 @@
     return { z, x, y };
   }
 
+  // 중심은 centerBB(봉제선 outline)에서 잡고, 범위는 fullBB(라벨·보조선 포함)에서 잡아
+  // outline 중심에 **대칭**인 fit 박스를 만든다. → 중심 정확(≤1px) + 라벨까지 안 잘림.
+  function symmetricFitBBox(centerBB, fullBB) {
+    const cx = (centerBB.minX + centerBB.maxX) / 2, cy = (centerBB.minY + centerBB.maxY) / 2;
+    const halfW = Math.max(fullBB.maxX - cx, cx - fullBB.minX);
+    const halfH = Math.max(fullBB.maxY - cy, cy - fullBB.minY);
+    return { minX: cx - halfW, maxX: cx + halfW, minY: cy - halfH, maxY: cy + halfH };
+  }
+
   // outline meta 목록의 union bbox. role!=="outline" 은 무시(라벨·보조선·핸들·격자 제외).
   // piece==="sleeve" 요소에만 off 를 적용한다(몸판은 offset 0). 입력 비변형.
   function unionOutlineBBox(metas, off) {
@@ -133,6 +142,31 @@
     syncSleeveOffset();
   }
 
+  // 전체 표시 콘텐츠(라벨·보조선 포함, 격자·이세카드 제외)의 union bbox(cm). zoom 계산용.
+  // 소매 그룹([data-sleeve-root]) 안 요소는 offset 적용. 없으면 null → 호출부가 outline 로 폴백.
+  function measureFullContentBBoxCm() {
+    if (typeof svg === "undefined" || !svg) return null;
+    const off = currentOff();
+    const els = svg.querySelectorAll('text, line, path, circle, rect');
+    let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity, found = false;
+    els.forEach(el => {
+      const cl = el.classList;
+      if (cl && (cl.contains("grid-m") || cl.contains("grid-M"))) return;   // 격자 제외
+      if (el.closest && el.closest(".ease-card")) return;                    // 이세 카드 제외(고정 px)
+      let b; try { b = el.getBBox(); } catch (_) { return; }
+      if (b.width === 0 && b.height === 0) return;
+      const sleeve = el.closest && el.closest("[data-sleeve-root]");
+      const dx = sleeve ? off.dx : 0, dy = sleeve ? off.dy : 0;
+      const [x0, y0] = p2c_(b.x, b.y), [x1, y1] = p2c_(b.x + b.width, b.y + b.height);
+      found = true;
+      if (x0 + dx < mnX) mnX = x0 + dx;
+      if (x1 + dx > mxX) mxX = x1 + dx;
+      if (y0 + dy < mnY) mnY = y0 + dy;
+      if (y1 + dy > mxY) mxY = y1 + dy;
+    });
+    return found ? { minX: mnX, minY: mnY, maxX: mxX, maxY: mxY } : null;
+  }
+
   // 몸판+소매 봉제선 outline union(표시 위치, cm). 없으면 null.
   function outlineUnionCm() {
     const m = measureOutlineCm();
@@ -148,12 +182,15 @@
     if (!inDraft()) return;
     const bb = outlineUnionCm();
     if (!bb) return;                        // 측정 대상 없음(치수 미입력 등) → 유지
+    // 중심은 봉제선 outline(대칭·정확), zoom 은 라벨 포함 full content 가 다 보이게.
+    const full = measureFullContentBBoxCm() || bb;
+    const fitBB = symmetricFitBBox(bb, full);
     // 실제 표시 박스 크기(px=user unit, viewBox 없음). clientWidth 가 0 일 수 있어
     // getBoundingClientRect 를 우선한다. 둘 다 0 이면 900/700.
     const r = svg.getBoundingClientRect();
     const W = r.width || svg.clientWidth || 900;
     const H = r.height || svg.clientHeight || 700;
-    const cam = computeFitCamera(bb, W, H, { SC, MX, MY }, DRAFT_MIN_Z, FIT_MARGIN);
+    const cam = computeFitCamera(fitBB, W, H, { SC, MX, MY }, DRAFT_MIN_Z, FIT_MARGIN);
     view.z = cam.z; view.x = cam.x; view.y = cam.y;
     syncViewVars();
     if (typeof render === "function") render();
@@ -169,9 +206,9 @@
 
   window.draftLayout = Object.freeze({
     // 순수(harness)
-    computeSleeveDx, computeSleeveDy, computeFitCamera, unionOutlineBBox, sleeveStoreFromEvt, sleeveDisplayFromStore,
+    computeSleeveDx, computeSleeveDy, computeFitCamera, symmetricFitBBox, unionOutlineBBox, sleeveStoreFromEvt, sleeveDisplayFromStore,
     // DOM 연동
-    fitDraftView, afterDraftRender, syncSleeveOffset, measureOutlineCm, outlineUnionCm,
+    fitDraftView, afterDraftRender, syncSleeveOffset, measureOutlineCm, outlineUnionCm, measureFullContentBBoxCm,
     GAP
   });
 })();

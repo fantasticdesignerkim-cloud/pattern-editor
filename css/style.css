@@ -56,6 +56,33 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .txt-dep{font-size:9px;fill:#8a5cf6;font-weight:700}
 .txt-dark{font-size:9px;fill:#333;font-weight:700}
 
+/* 소매 안내 글씨 가독성: 크기↑·명암↑ + 반투명 흰 외곽선(보조선 위에서도 읽힘).
+   소매 그룹([data-sleeve-root]) 안으로만 스코프해 몸판 라벨은 그대로 둔다.
+   font-size 는 px(뷰박스 없음)라 줌과 무관하게 일정 → 지나치게 작아지지 않는다. */
+[data-sleeve-root] .txt-dark,
+[data-sleeve-root] .txt-dep,
+[data-sleeve-root] .sleeve-guide-label{
+  font-size:11px;
+  paint-order:stroke;
+  stroke:rgba(255,255,255,.92);
+  stroke-width:2.8px;
+  stroke-linejoin:round;
+  stroke-linecap:round;
+}
+[data-sleeve-root] .txt-dark{fill:#1e1e1e}
+[data-sleeve-root] .txt-dep{fill:#5a2fc2}
+[data-sleeve-root] .sleeve-guide-label{fill:#37475e;font-size:10.5px}
+
+/* 이세 정보 카드: 모달이 아니라 소매 가까이 떠 있는 카드(흰 배경·테두리·약한 그림자).
+   소매 그룹 안에 마지막으로 append → 도안선·핸들 위. pointer-events:none 은 마크업에서. */
+.ease-card{filter:drop-shadow(0 1px 4px rgba(23,55,107,.20))}
+.ease-card-bg{fill:#fff;stroke:var(--border);stroke-width:1}
+.ease-card text{font-family:-apple-system,sans-serif}
+.ease-card-label{font-size:12px;fill:var(--muted);font-weight:500}
+.ease-card-val{font-size:12px;fill:var(--navy);font-weight:600}
+.ease-card-ease{font-size:11px;fill:var(--muted)}
+.ease-card-val.warn,.ease-card-ease.warn{fill:#cc3333}
+
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */
 .brand{font-weight:600;color:var(--navy);font-size:15px;letter-spacing:.06em;white-space:nowrap;margin-right:8px}
 .spacer{flex:1}

@@ -88,7 +88,7 @@ const DL = S0.window.draftLayout;
 
 // ── 0. 공개 API ──
 {
-  const puresOk = ["computeSleeveDx", "computeSleeveDy", "computeFitCamera", "unionOutlineBBox", "sleeveStoreFromEvt", "sleeveDisplayFromStore"].every(k => typeof DL[k] === "function");
+  const puresOk = ["computeSleeveDx", "computeSleeveDy", "computeFitCamera", "symmetricFitBBox", "unionOutlineBBox", "sleeveStoreFromEvt", "sleeveDisplayFromStore"].every(k => typeof DL[k] === "function");
   const domOk = ["fitDraftView", "afterDraftRender", "syncSleeveOffset", "measureOutlineCm", "outlineUnionCm"].every(k => typeof DL[k] === "function");
   ok(puresOk && domOk && Object.isFrozen(DL) && DL.GAP === 10, "0: API·GAP·frozen");
 }
@@ -144,6 +144,24 @@ const DL = S0.window.draftLayout;
   const ucx = (u.minX + u.maxX) / 2, ucy = (u.minY + u.maxY) / 2;
   const [vpx, vpy] = c2p(S0, ucx, ucy);
   ok(Math.abs(vpx - 500) <= 1 && Math.abs(vpy - 308) <= 1, "2: fitDraftView union 중심 ≤1px");
+}
+
+// ── 2b. symmetricFitBBox: 중심은 outline, 범위는 full(라벨 포함) — outline 중심 대칭 ──
+{
+  const outline = { minX: 0, maxX: 91.3, minY: -9.1, maxY: 42.9 };       // 중심 45.65
+  const full = { minX: -7.1, maxX: 102.2, minY: -19.3, maxY: 53 };       // 중심 47.55(비대칭)
+  const fit = DL.symmetricFitBBox(outline, full);
+  const cx = (outline.minX + outline.maxX) / 2, cy = (outline.minY + outline.maxY) / 2;
+  // fit 중심 === outline 중심(대칭)
+  ok(near((fit.minX + fit.maxX) / 2, cx) && near((fit.minY + fit.maxY) / 2, cy), "2b: fit 중심 = outline 중심(대칭)");
+  // full 이 다 담긴다(양쪽 라벨 포함)
+  ok(fit.minX <= full.minX + 1e-9 && fit.maxX >= full.maxX - 1e-9 && fit.minY <= full.minY + 1e-9 && fit.maxY >= full.maxY - 1e-9, "2b: full content 전부 포함");
+  // halfW = 중심에서 먼 쪽(오른쪽 라벨 102.2)
+  ok(near(fit.maxX - cx, Math.max(full.maxX - cx, cx - full.minX)), "2b: halfW = 먼 쪽 거리");
+  // full 이 이미 대칭이면 그대로
+  const sym = { minX: cx - 30, maxX: cx + 30, minY: cy - 20, maxY: cy + 20 };
+  const fit2 = DL.symmetricFitBBox(outline, sym);
+  ok(near(fit2.minX, sym.minX) && near(fit2.maxX, sym.maxX), "2b: 이미 대칭이면 그대로");
 }
 
 // ── 4. resize 자동 재fit (ResizeObserver 콜백 + 다른 크기에서도 재중앙) ──

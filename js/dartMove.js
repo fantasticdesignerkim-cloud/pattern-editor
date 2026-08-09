@@ -2081,7 +2081,7 @@ function cancelDartMove() {
   dartMoveState.pieceB        = null;
   dartMoveState.rotatePts     = null;
   dartMoveState.fixedPts      = null;
-  setBtn("다트이동 시작", "#e07800");
+  setBtn("다트이동 시작", "");  // idle=회색(inline 제거 → 곡선편집과 동일)
   setApplyEnabled(false);
   setHint("");
   setSideRowVisible(false);
@@ -2112,7 +2112,7 @@ function resetDartMove() {
   dartMoveState._splitIsBaked = null;
   dartMoveState.appliedFront  = null;
   dartMoveState.appliedBack   = null;
-  setBtn("다트이동 시작", "#e07800");
+  setBtn("다트이동 시작", "");  // idle=회색(inline 제거 → 곡선편집과 동일)
   setApplyEnabled(false);
   setHint("다트이동 결과를 초기화했습니다");
   setSideRowVisible(false);
