@@ -2681,6 +2681,39 @@ designProjectCheck·designRenderBranchCheck 갱신. **엔진·draft·shape/perf 
 
 **미구현(다음)**: 곡선/연속선, 선 편집·삭제·선택, snap, `piece:"sleeve"` 도 소유 가능하나
 UI 상 앞/뒤 중심. 선을 outline/봉제선으로 승격하는 단계(패턴선 확정)는 별도.
+(→ 연속선은 아래 "연속선(polyline)" 섹션에서 구현 완료. 곡선·편집·snap 은 여전히 미구현.)
+
+## ✅ Design 패턴선 도구 2차 (2026-08) — 연속선(polyline) 생성
+
+위 직선 도구 위에, **한 patternLine 이 여러 segment 를 갖는 연속선**을 구현했다. 저장 모델
+(`working.patternLines` · `{id,piece,segments}` · 형상 cm · offset 역변환)은 그대로 재사용 —
+2점 polyline = 기존 직선과 동일 구조라 **기존 직선 데이터도 같은 모델로 계속 렌더**.
+
+**동작 계약(잠금)**: 첫 클릭=시작점+piece 확정 / 이후 클릭=같은 피스에 점+segment 추가 /
+다른 피스·빈 영역 클릭=거부(작성 유지) / 더블클릭·Enter=완료(점 2개 미만이면 불가) /
+Backspace=마지막 점 취소 / Esc=미완성 전체 취소 / **작성 중 선은 preview 일 뿐 완료 전
+working.patternLines 에 커밋하지 않음**.
+
+**구현 요점**
+- `draft = {piece, points[]}`(형상 cm, 미커밋). 완료 시 `segmentsFromPoints`(연속 점 → line
+  segment 배열) → `makePatternLine(id,piece,points)` 하나로 커밋. `getDraft()` 가 render.js
+  preview 에 draft 복사본 제공.
+- **더블클릭 중복 점 처리**: 더블클릭의 두 번째 pointerdown 이 만든 중복 점을 dblclick 에서
+  `points.pop()` 후 commit(그래서 "클릭 P1,P2 + 더블클릭 P3" = 3꼭짓점 2segment).
+- **preview**(render.js `_appendPatternLinePreview`): 점선(`.design-line-preview`) + 주황
+  꼭짓점(`.design-line-vertex`), 그 피스 그룹 안이라 offset transform 동승. 커밋 0.
+- keydown(Enter/Backspace/Esc)은 **입력 필드(INPUT/TEXTAREA/SELECT) 포커스 시 무시**(엉덩이
+  길이 입력 방해 금지). designLayout 드래그는 도구 활성 시 가드로 skip.
+
+**검증(격리 origin, storage 0, saves 0, console 0)** — desktop·390px:
+- 3점 클릭 → draft 3점·preview 선2/꼭짓점3·**커밋 0**(preview만), Enter → patternLine 1개
+  (2 segment). 더블클릭 완료도 3꼭짓점 2 segment(중복 제거).
+- 다른 피스(앞→뒤) 클릭 거부·draft(front) 유지, Backspace 마지막 점 −1, 1점에서 Enter
+  완료 불가(커밋 불변), Esc 전체 취소(preview 제거).
+- 도구 OFF 후 앞판 드래그 → 커밋된 연속선 동반 이동·**저장 형상 cm 불변**.
+- `designLineToolCheck` 13(segmentsFromPoints/makePatternLine points 기반 포함).
+
+**미구현(다음)**: 곡선(`kind:"path"` segment), 선택·점 이동·삭제(`id` 지목), snap.
 
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 

@@ -27,7 +27,7 @@ function load() {
 const T = load();
 
 // 0. API
-ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "function" && typeof T.makePatternLine === "function" && typeof T.nextId === "function" && typeof T.toggle === "function" && Object.isFrozen(T), "0: API·frozen");
+ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "function" && typeof T.makePatternLine === "function" && typeof T.segmentsFromPoints === "function" && typeof T.nextId === "function" && typeof T.commit === "function" && typeof T.backspace === "function" && Object.isFrozen(T), "0: API·frozen");
 
 // 1. offset 역변환: 형상 cm = 도안 cm − offset
 {
@@ -52,15 +52,18 @@ ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "f
   // 그러나 화면 표시 위치는 동일(각자 offset 더하면 같은 도안 cm)
   ok(near(T.geometryToDrawCm(front, { dx: 0, dy: 0 }).x, T.geometryToDrawCm(back, { dx: 57.5, dy: 0 }).x), "3: 표시 위치는 동일(클릭 지점)");
 }
-// 4. makePatternLine: { id, piece, segments:[{kind:"line",from,to}] } + 소유권 + 좌표 복사
+// 4. segmentsFromPoints / makePatternLine: 연속 점 → 여러 line segment
 {
-  const from = { x: 1, y: 2 }, to = { x: 3, y: 4 };
-  const pl = T.makePatternLine("line-1", "front", from, to);
-  ok(pl.id === "line-1" && pl.piece === "front" && Array.isArray(pl.segments) && pl.segments.length === 1, "4: patternLine 구조(id/piece/segments)");
-  const sg = pl.segments[0];
-  ok(sg.kind === "line" && near(sg.from.x, 1) && near(sg.to.y, 4), "4: segment 좌표");
-  from.x = 999;
-  ok(near(sg.from.x, 1), "4: from 복사(입력 참조 아님)");
+  // 2점 → 1 segment(기존 직선과 동일 모델)
+  ok(T.segmentsFromPoints([{ x: 1, y: 2 }, { x: 3, y: 4 }]).length === 1, "4: 2점 → 1 segment(직선 호환)");
+  // 4점 → 3 segment, 이어짐
+  const pts = [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 0 }, { x: 3, y: 2 }];
+  const segs = T.segmentsFromPoints(pts);
+  ok(segs.length === 3 && segs[0].kind === "line" && near(segs[0].to.x, 1) && near(segs[1].from.x, 1) && near(segs[2].to.y, 2), "4: 연속 segment(이어짐)");
+  const pl = T.makePatternLine("line-1", "front", pts);
+  ok(pl.id === "line-1" && pl.piece === "front" && pl.segments.length === 3, "4: polyline 하나 = patternLine 하나 + 여러 segment");
+  pts[0].x = 999;
+  ok(near(pl.segments[0].from.x, 0), "4: 좌표 복사(입력 참조 아님)");
 }
 // 5. nextId: 기존 최대 id + 1 (삭제가 생겨도 충돌 없음)
 {

@@ -1,94 +1,110 @@
 // ══════════════════════════════════════════════
-// js/designLineTool.js — Design 패턴선 도구(1차: 직선, 두 점 클릭).
+// js/designLineTool.js — Design 패턴선 도구(연속선 polyline 생성).
 //
-// 핵심 원칙(사용자 계약):
-//  1. 선을 만들 때부터 piece("front"|"back"|"sleeve") 소유권을 기록한다(좌표로 추측 안 함).
-//  2. 현재 피스 배치 offset 을 **역변환**해 도안(형상) cm 로 저장한다:
-//       화면클릭(px) → eventToPatternPoint → 도안 cm(offset 미반영)
-//                    → 그 피스의 layout offset 을 **빼서** 형상 cm 로 저장.
-//     그래야 피스를 다시 옮기거나 배치를 초기화해도 선이 형상에 정확히 붙어 있고,
-//     렌더는 reference/working 과 같은 transform 을 타 자동 정합된다.
+// 동작 계약(사용자 잠금):
+//  · 첫 클릭: 시작점과 piece 확정
+//  · 이후 클릭: 같은 피스에 점 + line segment 추가
+//  · 다른 피스/빈 영역 클릭: 거부하고 작성 상태 유지
+//  · 더블클릭 또는 Enter: 현재 연속선 완료(점 2개 미만이면 완료 불가)
+//  · Backspace: 마지막 점 하나 취소
+//  · Esc: 미완성 연속선 전체 취소
+//  · 완성된 polyline = patternLines 항목 하나 + 여러 segments
+//  · 작성 중 선은 **preview 일 뿐** — 완료 전 working.patternLines 에 커밋하지 않는다.
 //
-// 저장 위치: working.geometry[piece].designLines (신규 배열). 기존 outline/construction·
-// golden 은 건드리지 않는다. reference 에는 없음(사용자 편집=working 전용, 세션 한정).
+// 핵심 원칙(직선 도구에서 이어짐):
+//  1. 점을 찍는 순간 piece 소유권 확정(좌표로 추측 안 함).
+//  2. 클릭(px) → eventToPatternPoint(도안 cm) → 그 피스 offset 을 빼서 형상 cm 로 저장
+//     (pointToGeometryCm). 피스를 옮기거나 몸판을 재계산해도 선이 형상에 붙어 있다.
+//  저장 위치는 working.patternLines(= working.geometry 와 분리, geometry 교체와 무관).
 //
-// 두 점이 서로 다른 피스면 거부(같은 피스 안에서만 한 선). geometry·저장 데이터 불변
-// (working.geometry 편집은 세션 메모리, reload 시 소멸).
+// 이번 단계 제외: 선택·점 이동·삭제·스냅·곡선 핸들.
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
 
-  let active = false, pending = null;   // pending = { piece, from:{x,y}(형상 cm) }
+  let active = false, draft = null;   // draft = { piece, points:[{x,y}] } 형상 cm(미커밋 preview)
 
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
   function inDesign() { return typeof window.isDesignStageActive === "function" && window.isDesignStageActive() && !!project(); }
   function isActive() { return active; }
+  // render.js preview 용: 작성 중 draft 의 복사본(형상 cm). 없으면 null.
+  function getDraft() { return draft ? { piece: draft.piece, points: draft.points.map(p => ({ x: p.x, y: p.y })) } : null; }
 
-  // ── 순수(harness): 도안 cm(offset 미반영) → 형상 cm(그 피스 offset 역변환) ──
+  // ── 순수(harness) ──
   function pointToGeometryCm(drawCmX, drawCmY, off) { return { x: drawCmX - off.dx, y: drawCmY - off.dy }; }
-  // 역: 형상 cm → 도안 cm(렌더 정합 검증용). display = geo + off.
   function geometryToDrawCm(geo, off) { return { x: geo.x + off.dx, y: geo.y + off.dy }; }
-  // 패턴선 1개: { id, piece, segments:[{kind:"line",from,to}] } (좌표는 형상 cm).
-  function makePatternLine(id, piece, from, to) {
-    return { id: id, piece: piece, segments: [{ kind: "line", from: { x: from.x, y: from.y }, to: { x: to.x, y: to.y } }] };
+  function segmentsFromPoints(points) {
+    const segs = [];
+    for (let i = 0; i < points.length - 1; i++) segs.push({ kind: "line", from: { x: points[i].x, y: points[i].y }, to: { x: points[i + 1].x, y: points[i + 1].y } });
+    return segs;
   }
-  // 기존 id 최대치 + 1(삭제가 생겨도 충돌 없음).
-  function nextId(lines) {
-    let max = 0;
-    lines.forEach(l => { const m = /^line-(\d+)$/.exec(l.id); if (m) max = Math.max(max, +m[1]); });
-    return "line-" + (max + 1);
-  }
+  function makePatternLine(id, piece, points) { return { id: id, piece: piece, segments: segmentsFromPoints(points) }; }
+  function nextId(lines) { let m = 0; lines.forEach(l => { const x = /^line-(\d+)$/.exec(l.id); if (x) m = Math.max(m, +x[1]); }); return "line-" + (m + 1); }
 
-  function pieceOffset(piece) {
-    const L = window.designLayout ? window.designLayout.ensureLayout(project()) : null;
-    return (L && L[piece]) ? L[piece] : { dx: 0, dy: 0 };
-  }
-  function pieceAt(target) {
-    const hit = target && target.closest && target.closest(".design-layout-hit");
-    return hit ? hit.getAttribute("data-layout-piece") : null;
-  }
-  // 사용자 패턴선은 geometry 가 아니라 working.patternLines 에 별도 저장(geometry 교체와 분리).
+  // ── DOM 연동 ──
+  function pieceOffset(piece) { const L = window.designLayout ? window.designLayout.ensureLayout(project()) : null; return (L && L[piece]) ? L[piece] : { dx: 0, dy: 0 }; }
+  function pieceAt(target) { const h = target && target.closest && target.closest(".design-layout-hit"); return h ? h.getAttribute("data-layout-piece") : null; }
   function ensurePatternLines(p) { if (!Array.isArray(p.working.patternLines)) p.working.patternLines = []; return p.working.patternLines; }
+  function setNote(m) { const el = document.getElementById("designLineNote"); if (el) el.textContent = m; }
+  function syncButton() { const b = document.getElementById("btnDesignLine"); if (b) { b.textContent = active ? "그리기 종료" : "연속선 그리기"; b.setAttribute("aria-pressed", active ? "true" : "false"); } }
+  function rerender() { if (typeof render === "function") render(); }
 
-  function setNote(msg) { const el = document.getElementById("designLineNote"); if (el) el.textContent = msg; }
-  function syncButton() {
-    const b = document.getElementById("btnDesignLine");
-    if (b) { b.textContent = active ? "그리기 종료" : "직선 그리기"; b.setAttribute("aria-pressed", active ? "true" : "false"); }
+  function toggle() { active = !active; draft = null; setNote(active ? "첫 점을 클릭하세요 · 더블클릭/Enter 완료" : ""); syncButton(); rerender(); }
+  function cancel() { draft = null; setNote(active ? "취소됨 · 첫 점을 다시 클릭하세요" : ""); rerender(); }   // Esc
+
+  // 완료: 점 2개 이상이면 patternLine 하나(여러 segment)로 커밋. 미만이면 불가(작성 유지).
+  function commit() {
+    if (!draft || draft.points.length < 2) { setNote("점 2개 이상 필요"); return false; }
+    const p = project(); const lines = ensurePatternLines(p);
+    lines.push(makePatternLine(nextId(lines), draft.piece, draft.points));
+    draft = null; setNote("연속선 완료 · 새 선은 다시 첫 점부터"); rerender(); return true;
+  }
+  function backspace() {   // 마지막 점 하나 취소
+    if (!draft || draft.points.length === 0) return;
+    draft.points.pop();
+    if (draft.points.length === 0) { draft = null; setNote("첫 점을 클릭하세요"); }
+    else setNote("점 취소됨 · 이어 클릭 또는 더블클릭/Enter");
+    rerender();
   }
 
-  function toggle() {
-    active = !active; pending = null;
-    setNote(active ? "선을 그릴 두 점을 클릭하세요(같은 피스)" : "");
-    syncButton();
-    if (typeof render === "function") render();
-  }
-  function cancel() { pending = null; setNote(active ? "취소됨 · 두 점을 다시 클릭하세요" : ""); }
-
-  // ── 클릭: 두 점(같은 피스) → 직선 1개. offset 역변환해 형상 cm 로 저장 ──
   if (typeof svg !== "undefined" && svg) {
     svg.addEventListener("pointerdown", e => {
       if (!active || e.button !== 0 || !inDesign()) return;
       const piece = pieceAt(e.target);
-      if (!piece) { setNote("피스 위를 클릭하세요"); return; }
-      const p = project();
-      const [dcx, dcy] = eventToPatternPoint(e);                      // 도안 cm(offset 미반영)
-      const geo = pointToGeometryCm(dcx, dcy, pieceOffset(piece));    // ★ offset 역변환 → 형상 cm
-      if (!pending) {
-        pending = { piece: piece, from: geo };
-        setNote("두 번째 점을 클릭하세요");
-      } else if (pending.piece !== piece) {
-        setNote("같은 피스 안에서 두 점을 찍으세요");                  // 다른 피스 거부(pending 유지)
+      if (!draft) {
+        if (!piece) { setNote("피스 위를 클릭하세요"); return; }
+        const [dx, dy] = eventToPatternPoint(e);
+        draft = { piece: piece, points: [pointToGeometryCm(dx, dy, pieceOffset(piece))] };   // 첫 점 + piece 확정
+        setNote("점을 이어 클릭 · 더블클릭/Enter 완료");
+      } else if (piece !== draft.piece) {
+        setNote("같은 피스 안에서 이어 그리세요");   // 다른 피스/빈 영역 거부 → 작성 유지
       } else {
-        const lines = ensurePatternLines(p);
-        lines.push(makePatternLine(nextId(lines), piece, pending.from, geo));
-        pending = null;
-        setNote("선 추가됨 · 계속 그리려면 다시 두 점 클릭");
-        if (typeof render === "function") render();
+        const [dx, dy] = eventToPatternPoint(e);
+        draft.points.push(pointToGeometryCm(dx, dy, pieceOffset(piece)));   // 같은 피스에 점 추가
+        setNote("이어 클릭 · 더블클릭/Enter 완료 · Backspace 취소");
       }
-      e.stopPropagation();   // designLayout 드래그(가드도 있음)와 이중 안전
+      e.stopPropagation();
+      rerender();
     });
-    document.addEventListener("keydown", e => { if (e.key === "Escape" && active) cancel(); });
+    // 더블클릭 완료: 두 번째 down 이 만든 중복 점을 제거한 뒤 커밋.
+    svg.addEventListener("dblclick", e => {
+      if (!active || !draft) return;
+      draft.points.pop();
+      commit();
+      e.preventDefault(); e.stopPropagation();
+    });
+    document.addEventListener("keydown", e => {
+      if (!active || !inDesign()) return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;   // 입력 필드 방해 금지
+      if (e.key === "Escape") cancel();
+      else if (e.key === "Enter" && draft) { e.preventDefault(); commit(); }
+      else if (e.key === "Backspace" && draft) { e.preventDefault(); backspace(); }
+    });
   }
 
-  window.designLineTool = Object.freeze({ toggle, cancel, isActive, pointToGeometryCm, geometryToDrawCm, makePatternLine, nextId });
+  window.designLineTool = Object.freeze({
+    toggle, cancel, commit, backspace, isActive, getDraft,
+    pointToGeometryCm, geometryToDrawCm, segmentsFromPoints, makePatternLine, nextId
+  });
 })();
