@@ -2634,6 +2634,47 @@ designProjectCheck·designRenderBranchCheck 갱신. **엔진·draft·shape/perf 
 **미구현(다음 작업)**: 실제 패턴선 도구(그 선이 어느 piece 소유인지 `piece:"front"|"back"`
 태깅) — 이번 배치 기반 위에 별도로. shared 를 뒤판/양쪽으로 나누는 세분화도 필요 시 별도.
 
+## ✅ Design 패턴선 도구 1차 (2026-08) — 직선, 소유권 + offset 역변환 저장 (`js/designLineTool.js`)
+
+**배경(사용자 계약)**: 위 앞/뒤/소매 독립 배치 기반 위에 패턴선 도구를 시작한다. 1차는
+**직선(두 점 클릭)**, **클릭 위치로 피스 자동 판정**(두 점이 다른 피스면 거부).
+
+**두 핵심 원칙(잠금)**
+1. **선 생성 시점에 `piece("front"|"back"|"sleeve")` 소유권 기록** — 좌표로 추측하지 않는다.
+2. **현재 피스 배치 offset 을 역변환해 형상 cm 로 저장**: 화면클릭(px) →
+   `eventToPatternPoint`(도안 cm, offset 미반영) → 그 피스 `layout[piece]` offset 을 **빼서**
+   형상 cm 로 저장(`pointToGeometryCm`). 그래야 피스를 다시 옮기거나 배치를 초기화해도 선이
+   형상에 정확히 붙어 있고, 렌더는 reference/working 과 같은 transform 을 타 자동 정합된다.
+   (실측: 그린 선이 있는 앞판을 드래그해도 **저장 형상 cm 불변**·화면선은 피스와 동반 이동.)
+
+**저장/렌더**
+- `working.geometry[piece].designLines` **신규 배열**(`{kind:"line",from,to,piece}`, 형상 cm).
+  기존 outline/construction·designRenderer·shape 골든 무변경(designRenderer 는 outline/
+  construction 만 iterate — designLines 는 render.js `_appendDesignLines` 가 working 피스
+  그룹에 별도 append, 그룹 transform 동승). reference 엔 없음(working 전용, 세션 한정).
+- 색: 주황(`--orange`), `.design-working .design-line`(0,1,1 인 `.design-working line` 보다
+  우선하도록 working 스코프). shared 는 앞판 그룹이라 앞판에 그린 선은 front 소유.
+- 두 점이 다른 피스면 **거부**(pending 유지, "같은 피스 안에서 두 점을 찍으세요").
+
+**충돌 회피**: 선 도구 활성 중 designLayout 드래그 pointerdown 은 가드로 건너뛴다
+(`window.designLineTool.isActive()`). ESC = 진행 중 첫 점 취소.
+
+**변경 파일**: `js/designLineTool.js`(신규, `window.designLineTool` — 순수
+`pointToGeometryCm/geometryToDrawCm/makeLine` + 클릭 흐름) / `js/designLayout.js`(드래그
+가드) / `js/render.js`(`_appendDesignLines`) / `index.html`(design inspector `#btnDesignLine`
++ 스크립트 + 캐시) / `css/style.css`(`.design-line`). 하네스 `designLineToolCheck`(8, 순수
+역변환·왕복·소유권). **엔진·draft·shape/perf 골든 무변경.** 캐시 `?v=2026081011~12`.
+
+**검증(격리 origin, storage 0, saves 0, console 0)** — desktop:
+- 앞판 두 점 클릭 → 직선 1개, `piece:"front"`, 저장 형상 cm = 클릭 도안 cm − front offset,
+  **렌더 화면 위치 오차 0px**(클릭 지점 정합). afterFirstClick 0(두 번째 클릭에 생성).
+- 선 있는 앞판 드래그(+50,−30) → 화면선 동일 이동, **저장 형상 cm 불변**(offset 역변환이
+  피스 귀속을 보장). 다른 피스(앞→뒤) 클릭 → 선 안 생김.
+- reference 무변(designLines 없음), 주황 렌더.
+
+**미구현(다음)**: 곡선/연속선, 선 편집·삭제·선택, snap, `piece:"sleeve"` 도 소유 가능하나
+UI 상 앞/뒤 중심. 선을 outline/봉제선으로 승격하는 단계(패턴선 확정)는 별도.
+
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 
 사용자 계약대로 세 가지를 한 사이클로 처리(엔진 무변경, 시각/표시만).
