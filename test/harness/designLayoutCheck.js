@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════
-// designLayoutCheck.js — js/designLayout.js 의 순수 기하(bboxOf/autoSleeveOffset/
-// ensureLayout) 회귀 테스트. DOM/view 연동(카메라·드래그)은 브라우저 검증 몫이라
-// 여기선 다루지 않는다. 실제 소스를 vm 으로 실행한다(구현 복사 아님).
+// designLayoutCheck.js — js/designLayout.js 의 순수 기하(bboxOf/outlineBBoxOf/autoLayout/
+// ensureLayout) 회귀 테스트. DOM/view 연동(카메라·드래그)은 브라우저 검증 몫이라 여기선
+// 다루지 않는다. 실제 소스를 vm 으로 실행한다(구현 복사 아님).
 //
 //   node test/harness/designLayoutCheck.js
 // ══════════════════════════════════════════════
@@ -31,80 +31,103 @@ const DL = load();
 
 const line = (x1, y1, x2, y2) => ({ kind: "line", from: { x: x1, y: y1 }, to: { x: x2, y: y2 } });
 const cubic = (pts) => ({ kind: "path", commands: [{ type: "M", points: [{ x: pts[0][0], y: pts[0][1] }] }, { type: "C", points: [{ x: pts[1][0], y: pts[1][1] }, { x: pts[2][0], y: pts[2][1] }, { x: pts[3][0], y: pts[3][1] }] }] });
+// 앞판/뒤판 outline 은 겹칠 수 있다(슬로퍼 두 반쪽). front·back x[0..20] y[0..30], 소매 x[0..15] y[40..80].
 function geom() {
   return {
-    front: { outline: [line(0, 0, 0, 10), line(0, 10, 20, 10)], construction: [] }, // x0..20 y0..10
-    back: { outline: [line(-5, 2, -5, 8)], construction: [] },                       // minX -5
-    shared: { outline: [], construction: [line(3, 1, 4, 2)] },
-    sleeve: { outline: [line(30, 3, 40, 3), line(35, 3, 35, 15)], construction: [] } // x30..40 y3..15
+    front: { outline: [line(0, 0, 20, 0), line(0, 30, 20, 30), line(0, 0, 0, 30), line(20, 0, 20, 30)], construction: [] },
+    back: { outline: [line(0, 0, 20, 0), line(0, 30, 20, 30), line(0, 0, 0, 30), line(20, 0, 20, 30)], construction: [] },
+    shared: { outline: [], construction: [line(3, 12, 4, 18)] },     // 허리다트 c 다리(앞판 따라감)
+    sleeve: { outline: [line(0, 40, 15, 40), line(0, 80, 15, 80), line(0, 40, 0, 80), line(15, 40, 15, 80)], construction: [] }
   };
 }
 
 // 1. 공개 API
 {
-  ok(typeof DL.bboxOf === "function" && typeof DL.autoSleeveOffset === "function" && typeof DL.ensureLayout === "function", "1: 순수 API 존재");
-  ok(Object.isFrozen(DL), "1: namespace frozen");
+  const puresOk = ["bboxOf", "outlineBBoxOf", "autoLayout", "ensureLayout"].every(k => typeof DL[k] === "function");
+  ok(puresOk && Object.isFrozen(DL), "1: 순수 API 존재·frozen");
+  const domOk = ["enterDesign", "centerBody", "placeSleeveRight", "resetLayout", "afterBodyLength", "resetViewForDesign"].every(k => typeof DL[k] === "function");
+  ok(domOk, "1: DOM 액션 API 존재");
 }
 
-// 2. bboxOf(body) = front∪back∪shared
+// 2. bboxOf(front) = front + shared(construction 포함). 겹치는 back 은 제외.
 {
-  const b = DL.bboxOf(geom(), "body");
-  ok(b && near(b.minX, -5) && near(b.maxX, 20) && near(b.minY, 0) && near(b.maxY, 10), "2: body bbox");
+  const b = DL.bboxOf(geom(), "front");
+  ok(b && near(b.minX, 0) && near(b.maxX, 20) && near(b.minY, 0) && near(b.maxY, 30), "2: front bbox(=front+shared)");
 }
-// 3. bboxOf(sleeve)
+// 3. bboxOf(back)
 {
-  const s = DL.bboxOf(geom(), "sleeve");
-  ok(s && near(s.minX, 30) && near(s.maxX, 40) && near(s.minY, 3) && near(s.maxY, 15), "3: sleeve bbox");
+  const b = DL.bboxOf(geom(), "back");
+  ok(b && near(b.minX, 0) && near(b.maxX, 20) && near(b.minY, 0) && near(b.maxY, 30), "3: back bbox");
 }
-// 4. path(cubic) 점도 bbox 에 포함
+// 4. bboxOf(sleeve) + cubic 점 포함
 {
-  const g = geom(); g.sleeve.outline.push(cubic([[45, 1], [46, 2], [47, 20], [48, 21]]));
+  const g = geom(); g.sleeve.outline.push(cubic([[16, 41], [17, 42], [18, 90], [19, 91]]));
   const s = DL.bboxOf(g, "sleeve");
-  ok(near(s.maxX, 48) && near(s.maxY, 21), "4: cubic 점 포함");
+  ok(s && near(s.minX, 0) && near(s.maxX, 19) && near(s.minY, 40) && near(s.maxY, 91), "4: sleeve bbox + cubic");
 }
 // 5. 빈 piece → null
 {
   const g = geom(); g.sleeve = { outline: [], construction: [] };
   ok(DL.bboxOf(g, "sleeve") === null, "5: 빈 sleeve bbox null");
 }
+// 6. outlineBBoxOf 는 construction 제외 — shared construction 만 있는 front 는 outline 만 반영
+{
+  const g = geom();
+  const full = DL.bboxOf(g, "front");        // outline+construction
+  const out = DL.outlineBBoxOf(g, "front");  // outline 만
+  // 이 fixture 는 shared construction 이 front outline 안(y12..18)이라 bbox 동일
+  ok(near(full.minX, out.minX) && near(full.maxX, out.maxX) && near(full.minY, out.minY) && near(full.maxY, out.maxY), "6: outlineBBoxOf(front)");
+  // construction 이 outline 밖이면 bbox 가 달라진다(분리 확인)
+  const g2 = geom(); g2.shared.construction = [line(-5, -5, -4, -4)];
+  const full2 = DL.bboxOf(g2, "front"), out2 = DL.outlineBBoxOf(g2, "front");
+  ok(near(full2.minX, -5) && near(out2.minX, 0), "6: construction 은 full 에만 반영");
+}
 
-// 6. autoSleeveOffset = 가로는 몸판 오른쪽 끝 + 10cm, 세로는 몸판·소매 세로중심 일치
+// 7. autoLayout: 앞판→뒤판→소매 가로, 실제 봉제선 간격 10, 세로중심 앞판 기준
 {
-  const o = DL.autoSleeveOffset(geom());
-  // dx = (bodyMaxX 20 + 10) - sleeveMinX 30 = 0
-  // 몸판 bbox y 0..10 (centerY 5), 소매 y 3..15 (centerY 9) → dy = 5 - 9 = -4
-  ok(near(o.dx, 0) && near(o.dy, -4), "6: 가로 오른쪽+10 · 세로중심 정렬");
-  // 표시 후 세로중심 일치: sleeveCenterY + dy === bodyCenterY
-  ok(near(9 + o.dy, 5), "6: 소매 세로중심 + dy === 몸판 세로중심");
+  const a = DL.autoLayout(geom());
+  ok(a && near(a.front.dx, 0) && near(a.front.dy, 0), "7: 앞판 앵커(0,0)");
+  // back.dx = (frontMaxX 20 + 10) - backMinX 0 = 30, dy = frontCY 15 - backCY 15 = 0
+  ok(near(a.back.dx, 30) && near(a.back.dy, 0), "7: 뒤판 = 앞판 오른쪽+10, 세로중심");
+  // sleeve.dx = (backDisp maxX 50 + 10) - sleeveMinX 0 = 60, dy = 15 - 60 = -45
+  ok(near(a.sleeve.dx, 60) && near(a.sleeve.dy, -45), "7: 소매 = 뒤판 오른쪽+10, 세로중심");
+  // 실제 봉제선 간격 검증(outline 기준): 뒤판 좌단 - 앞판 우단 = 10
+  ok(near((0 + a.back.dx) - 20, 10), "7: 앞↔뒤 봉제선 간격 10");
+  ok(near((0 + a.sleeve.dx) - (20 + a.back.dx), 10), "7: 뒤↔소매 봉제선 간격 10");
+  // 세로 중심 3피스 일치(표시 후)
+  const fcy = 15, bcy = 15 + a.back.dy, scy = 60 + a.sleeve.dy;
+  ok(near(fcy, bcy) && near(fcy, scy), "7: 세 피스 세로중심 일치");
 }
-// 7. 화면 폭 인자와 무관하게 결과 동일(넓/좁 분기 없음) — 다른 fixture 로 재확인
-{
-  const g = geom(); g.sleeve = { outline: [line(50, 3, 60, 3), line(55, 3, 55, 15)], construction: [] }; // sleeveMinX 50, y 3..15
-  const o1 = DL.autoSleeveOffset(g);            // 인자 1개
-  const o2 = DL.autoSleeveOffset(g, true);      // 옛 narrow 인자 — 무시돼야 함
-  // dx = (bodyMaxX 20 + 10) - 50 = -20, dy = bodyCenterY 5 - sleeveCenterY 9 = -4
-  ok(near(o1.dx, -20) && near(o1.dy, -4), "7: 오른쪽+10 · 세로중심 (다른 위치)");
-  ok(near(o2.dx, o1.dx) && near(o2.dy, o1.dy), "7: 폭 인자 무시(항상 오른쪽)");
-}
-// 8. body 또는 sleeve 없으면 offset 0(안전)
+// 8. autoLayout: 소매 없으면 소매 offset 0, 뒤판만 배치
 {
   const g = geom(); g.sleeve = { outline: [], construction: [] };
-  const o = DL.autoSleeveOffset(g);
-  ok(near(o.dx, 0) && near(o.dy, 0), "8: sleeve 없음 → 0");
+  const a = DL.autoLayout(g);
+  ok(near(a.back.dx, 30) && near(a.sleeve.dx, 0) && near(a.sleeve.dy, 0), "8: 소매 없음 → 0");
+  // 앞판 없으면 null(안전)
+  const g2 = geom(); g2.front = { outline: [], construction: [] };
+  ok(DL.autoLayout(g2) === null, "8: 앞판 없음 → null");
 }
 
-// 9. ensureLayout: 없으면 기본값 부여, 있으면 보존
+// 9. ensureLayout: 신형 기본값 + 결손 보정
 {
   const p1 = { working: {} };
   const L1 = DL.ensureLayout(p1);
-  ok(L1.body.dx === 0 && L1.sleeve.dx === 0 && L1.sleevePlacement === "auto" && p1.working.layout === L1, "9: 기본 layout 부여");
-  const p2 = { working: { layout: { body: { dx: 5, dy: 6 }, sleeve: { dx: 7, dy: 8 }, sleevePlacement: "manual" } } };
+  ok(L1.front.dx === 0 && L1.back.dx === 0 && L1.sleeve.dx === 0 && L1.placement.front === "auto" && L1.placement.back === "auto" && L1.placement.sleeve === "auto" && p1.working.layout === L1, "9: 신형 기본 layout");
+  const p2 = { working: { layout: { front: { dx: 1, dy: 2 }, back: { dx: 3, dy: 4 }, sleeve: { dx: 5, dy: 6 }, placement: { front: "manual", back: "auto", sleeve: "manual" } } } };
   const L2 = DL.ensureLayout(p2);
-  ok(L2.body.dx === 5 && L2.sleeve.dy === 8 && L2.sleevePlacement === "manual", "9: 기존 layout 보존");
-  // 부분 결손 보정
-  const p3 = { working: { layout: { body: { dx: 1, dy: 2 } } } };
+  ok(L2.back.dx === 3 && L2.placement.front === "manual" && L2.placement.sleeve === "manual", "9: 기존 layout 보존");
+  // 결손 필드 보정
+  const p3 = { working: { layout: { front: { dx: 1, dy: 2 } } } };
   const L3 = DL.ensureLayout(p3);
-  ok(L3.sleeve.dx === 0 && L3.sleevePlacement === "auto", "9: 결손 필드 보정");
+  ok(L3.back.dx === 0 && L3.sleeve.dx === 0 && L3.placement.front === "auto", "9: 결손 필드 보정");
+}
+// 10. ensureLayout: 구형 {body,sleeve,sleevePlacement} 마이그레이션
+{
+  const p = { working: { layout: { body: { dx: 7, dy: 8 }, sleeve: { dx: 9, dy: 10 }, sleevePlacement: "manual" } } };
+  const L = DL.ensureLayout(p);
+  ok(L.front.dx === 7 && L.front.dy === 8, "10: 구형 body → 앞판 앵커");
+  ok(L.sleeve.dx === 9 && L.placement.sleeve === "manual", "10: 구형 sleevePlacement → placement.sleeve");
+  ok(L.placement.front === "auto" && L.placement.back === "auto", "10: 앞/뒤 placement auto 기본");
 }
 
 console.log("══════════════════════════════════════════════");

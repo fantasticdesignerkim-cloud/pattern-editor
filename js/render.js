@@ -70,15 +70,21 @@ function render(){
     const dp = window.designWorkflow && window.designWorkflow.current();
     if (!dp) { const e = new Error("render: design-project-missing"); e.reason = "design-project-missing"; throw e; }
     // ── 배치 offset(cm) — 형상은 안 움직이고 SVG transform 으로만 이동 ──
-    // 전역 z-order 필수: 모든 reference 가 모든 working 보다 아래(회색이 남색을 안 가림).
-    //   grid → reference root(body,sleeve) → working root(body,sleeve) → hit layer(body,sleeve)
+    // 앞판/뒤판/소매 **각각** 독립 offset(shared 는 앞판을 따른다). 전역 z-order 필수:
+    // 모든 reference 가 모든 working 보다 아래(회색이 남색을 안 가림).
+    //   grid → reference root(front,back,sleeve) → working root(front,back,sleeve) → hit layer
     // reference·working 에 **같은 offset** 을 적용해 함께 움직인다. geometry 좌표 불변.
-    const L = window.designLayout ? window.designLayout.ensureLayout(dp) : { body:{dx:0,dy:0}, sleeve:{dx:0,dy:0} };
+    const L = window.designLayout
+      ? window.designLayout.ensureLayout(dp)
+      : { front:{dx:0,dy:0}, back:{dx:0,dy:0}, sleeve:{dx:0,dy:0} };
     const scale = SC * viewZ;
     const tf = (o) => "translate(" + (o.dx * scale) + "," + (o.dy * scale) + ")";
     const EMPTY = { outline: [], construction: [] };
-    const bodySub   = (g) => ({ front: g.front, back: g.back, shared: g.shared, sleeve: EMPTY });
+    // shared(허리다트 c 다리)는 앞판 서브셋에 포함 → 앞판 offset 과 함께 이동.
+    const frontSub  = (g) => ({ front: g.front, back: EMPTY, shared: g.shared, sleeve: EMPTY });
+    const backSub   = (g) => ({ front: EMPTY, back: g.back, shared: EMPTY, sleeve: EMPTY });
     const sleeveSub = (g) => ({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: g.sleeve });
+    const SUBS = [["front", frontSub], ["back", backSub], ["sleeve", sleeveSub]];
     const piece = (buildFn, sub, off, pc) => {
       const grp = buildFn(sub); grp.setAttribute("transform", tf(off)); grp.setAttribute("data-layout-piece", pc); return grp;
     };
@@ -86,19 +92,16 @@ function render(){
     const mkWork = (sub) => window.designRenderer.createWorkingGroup(sub);
 
     const refRoot = E("g"); refRoot.setAttribute("data-design-root", "reference");
-    refRoot.appendChild(piece(mkRef,  bodySub(dp.referenceGeometry),   L.body,   "body"));
-    refRoot.appendChild(piece(mkRef,  sleeveSub(dp.referenceGeometry), L.sleeve, "sleeve"));
+    SUBS.forEach(([pc, sub]) => refRoot.appendChild(piece(mkRef, sub(dp.referenceGeometry), L[pc], pc)));
     svg.appendChild(refRoot);
 
     const workRoot = E("g"); workRoot.setAttribute("data-design-root", "working");
-    workRoot.appendChild(piece(mkWork, bodySub(dp.working.geometry),   L.body,   "body"));
-    workRoot.appendChild(piece(mkWork, sleeveSub(dp.working.geometry), L.sleeve, "sleeve"));
+    SUBS.forEach(([pc, sub]) => workRoot.appendChild(piece(mkWork, sub(dp.working.geometry), L[pc], pc)));
     svg.appendChild(workRoot);
 
     // 투명 hit layer(최상단): reference/working 은 pointer-events:none, hit rect 만 잡는다.
     const hitRoot = E("g"); hitRoot.setAttribute("data-design-root", "hit");
-    _appendDesignHitRect(hitRoot, dp.working.geometry, "body",   L.body,   scale);
-    _appendDesignHitRect(hitRoot, dp.working.geometry, "sleeve", L.sleeve, scale);
+    SUBS.forEach(([pc]) => _appendDesignHitRect(hitRoot, dp.working.geometry, pc, L[pc], scale));
     svg.appendChild(hitRoot);
 
     const sb = document.getElementById("sb");

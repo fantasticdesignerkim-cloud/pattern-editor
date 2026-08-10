@@ -260,11 +260,11 @@ function makeHarness() {
   const h = makeHarness();
   const dp = h.dw.startFromBlock(h.bw.complete());
   const L = dp.working.layout;
-  ok(L && JSON.stringify(L.body) === '{"dx":0,"dy":0}' && JSON.stringify(L.sleeve) === '{"dx":0,"dy":0}', "13: layout 기본 offset 0");
-  ok(L.sleevePlacement === "auto", "13: sleevePlacement=auto");
+  ok(L && JSON.stringify(L.front) === '{"dx":0,"dy":0}' && JSON.stringify(L.back) === '{"dx":0,"dy":0}' && JSON.stringify(L.sleeve) === '{"dx":0,"dy":0}', "13: layout 기본 offset 0(front/back/sleeve)");
+  ok(L.placement && L.placement.front === "auto" && L.placement.back === "auto" && L.placement.sleeve === "auto", "13: placement 전부 auto");
   // mutable(편집 대상) + parameters 계약 유지
-  L.sleeve.dx = 12; L.sleevePlacement = "manual";
-  ok(h.dw.current().working.layout.sleeve.dx === 12 && h.dw.current().working.layout.sleevePlacement === "manual", "13: layout mutable");
+  L.back.dx = 12; L.placement.back = "manual";
+  ok(h.dw.current().working.layout.back.dx === 12 && h.dw.current().working.layout.placement.back === "manual", "13: layout mutable");
   ok(JSON.stringify(dp.working.parameters) === "{}", "13: parameters 계약 유지");
   // referenceGeometry·sourceBlock 은 layout 편집과 무관하게 불변
   ok(Object.isFrozen(dp.referenceGeometry) && Object.isFrozen(dp.sourceBlock), "13: reference/sourceBlock 불변");

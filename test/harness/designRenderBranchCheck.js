@@ -84,7 +84,7 @@ const PROJECT = () => ({
   id: "design-1",
   sourceBlock: { id: "block-1", version: 1 },
   referenceGeometry: { front: { F: 1 }, back: { B: 1 }, shared: { S: 1 }, sleeve: { SL: 1 } },
-  working: { geometry: { front: { wF: 1 }, back: { wB: 1 }, shared: { wS: 1 }, sleeve: { wSL: 1 } }, parameters: {}, layout: { body: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 }, sleevePlacement: "auto" } }
+  working: { geometry: { front: { wF: 1 }, back: { wB: 1 }, shared: { wS: 1 }, sleeve: { wSL: 1 } }, parameters: {}, layout: { front: { dx: 0, dy: 0 }, back: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 }, placement: { front: "auto", back: "auto", sleeve: "auto" } } }
 });
 
 // 1. isDesignStageActive 부재 시 초기 render()가 오류 없이 draft 경로(조기반환)로 진행
@@ -110,10 +110,10 @@ const PROJECT = () => ({
   ok(roots[1]._attrs["data-design-root"] === "reference" && roots[2]._attrs["data-design-root"] === "working" && roots[3]._attrs["data-design-root"] === "hit", "3: z-order grid→reference→working→hit");
   const refKids = roots[1].childNodes.map(c => c._attrs["class"]);
   const workKids = roots[2].childNodes.map(c => c._attrs["class"]);
-  ok(refKids.length === 2 && refKids.every(c => c === "block-ref"), "3: reference root=body+sleeve(block-ref)");
-  ok(workKids.length === 2 && workKids.every(c => c === "design-working"), "3: working root=body+sleeve(design-working)");
+  ok(refKids.length === 3 && refKids.every(c => c === "block-ref"), "3: reference root=front+back+sleeve(block-ref)");
+  ok(workKids.length === 3 && workKids.every(c => c === "design-working"), "3: working root=front+back+sleeve(design-working)");
   const pcs = roots[1].childNodes.map(c => c._attrs["data-layout-piece"]);
-  ok(pcs[0] === "body" && pcs[1] === "sleeve", "3: piece 순서 body→sleeve");
+  ok(pcs[0] === "front" && pcs[1] === "back" && pcs[2] === "sleeve", "3: piece 순서 front→back→sleeve");
 }
 // 4. design 분기에서 createDraft·sleeve·overlay·applyLayerVisibility·updateStatusBar 호출 0
 {
@@ -122,18 +122,23 @@ const PROJECT = () => ({
   const s = h.spies;
   ok(s.createDraft.calls === 0 && s.drawSleeve.calls === 0 && s.drawDartMoveOverlay.calls === 0 && s.applyLayerVisibility.calls === 0 && s.updateStatusBar.calls === 0, "4: 원형 draw 경로 호출 0");
 }
-// 5. 각 root 는 piece 서브셋으로 builder 호출: body=front/back/shared(+빈 sleeve),
-//    sleeve=sleeve(+빈 몸판). 원본 geometry 좌표는 공유(참조), 형상 불변.
+// 5. 각 root 는 piece 서브셋으로 builder 호출: front=front/shared(+빈 back/sleeve),
+//    back=back(+빈 나머지), sleeve=sleeve(+빈 몸판). shared 는 앞판을 따른다.
+//    원본 geometry 좌표는 공유(참조), 형상 불변.
 {
   const p = PROJECT();
   const h = makeHarness({ designGetter: () => true, project: p, nValue: 83 });
   h.render();
-  const rb = h.refArgs[0], rs = h.refArgs[1];
-  ok(rb.front === p.referenceGeometry.front && rb.back === p.referenceGeometry.back && rb.shared === p.referenceGeometry.shared, "5: ref body subset=referenceGeometry 몸판");
-  ok(Array.isArray(rb.sleeve.outline) && rb.sleeve.outline.length === 0, "5: ref body subset 은 sleeve 비움");
-  ok(rs.sleeve === p.referenceGeometry.sleeve && rs.front.outline.length === 0, "5: ref sleeve subset=referenceGeometry 소매");
-  const wb = h.workArgs[0], ws = h.workArgs[1];
-  ok(wb.front === p.working.geometry.front && ws.sleeve === p.working.geometry.sleeve, "5: working subset=working.geometry");
+  const rf = h.refArgs[0], rbk = h.refArgs[1], rs = h.refArgs[2];
+  // 앞판 서브셋: front·shared 참조 공유, back/sleeve 는 비움
+  ok(rf.front === p.referenceGeometry.front && rf.shared === p.referenceGeometry.shared, "5: 앞판 subset=front+shared(shared 는 앞판)");
+  ok(rf.back.outline.length === 0 && rf.sleeve.outline.length === 0, "5: 앞판 subset back/sleeve 비움");
+  // 뒤판 서브셋: back 만
+  ok(rbk.back === p.referenceGeometry.back && rbk.front.outline.length === 0 && rbk.shared.outline.length === 0, "5: 뒤판 subset=back(shared 제외)");
+  // 소매 서브셋: sleeve 만
+  ok(rs.sleeve === p.referenceGeometry.sleeve && rs.front.outline.length === 0, "5: 소매 subset=sleeve");
+  const wf = h.workArgs[0], wbk = h.workArgs[1], ws = h.workArgs[2];
+  ok(wf.front === p.working.geometry.front && wbk.back === p.working.geometry.back && ws.sleeve === p.working.geometry.sleeve, "5: working subset=working.geometry");
 }
 // 6. status 문구가 sourceBlock id/version 사용
 {
