@@ -2593,6 +2593,47 @@ SVG 내부라 드래그 접근은 항상 가능.)
 **미구현(경계 준수)**: 옆선 실루엣(허리 접점 큰 꺾임 연결) / 배치 저장·복원 / 몸판 offset
 자동 활용 / 다중 designProject — 별도 사양·승인 후.
 
+## ✅ Design 앞판·뒤판·소매 독립 배치 (2026-08) — piece별 offset
+
+**배경(사용자 계약)**: design 부터 `front / back / sleeve` 를 **독립 배치**한다(draft 원형은
+무변경). 이후 패턴선 도구가 "앞판선/뒤판선" 을 정확히 구분하려면 각 조각이 독립 좌표계로
+배치돼 있어야 한다. 이번엔 **배치 기반만** 세우고 패턴선 도구는 다음 작업.
+
+**핵심 결정 (잠금)**
+- 배치 offset 을 `working.layout.{body,sleeve}` → **`working.layout.{front,back,sleeve}`** 로
+  확장. `placement` 는 **피스별** `"auto"|"manual"`(사용자가 그 피스를 드래그하면 manual →
+  이후 auto 배치에서 안 움직임). geometry 좌표 불변, 표시 offset 만.
+- **shared(허리다트 c 다리)는 앞판 offset 을 따른다** — 앞·뒤가 벌어져도 붙일 곳은 하나여야
+  하고 shared/outline 은 비어 있어 construction 잔재뿐이라 앞판에 귀속(render 의 `frontSub`
+  가 `shared` 포함). 필요 시 뒤판으로 바꾸기 쉬움.
+- **초기 배치 = 앞판 → 뒤판 → 소매 가로**, 피스 사이 **실제 봉제선(outline) 간격 10cm**
+  (`autoLayout`, `outlineBBoxOf` 로 outline 만 측정), 세 피스 **세로중심을 앞판 세로중심에
+  정렬**(옆으로 나란히). 앞판=앵커(0,0).
+- **reference·working 에 같은 piece offset** 을 적용(회색+남색 함께 이동). 전역 z-order 유지:
+  `grid → reference(front,back,sleeve) → working(front,back,sleeve) → hit(front,back,sleeve)`.
+- **앞/뒤/소매 각각 독립 hit rect** → 각각 드래그(기존 body/sleeve 드래그 구조를 3피스로 확장).
+- **fit = 세 피스 union 중심**을 viewport 중심에(카메라만). enterDesign·배치초기화·소매오른쪽·
+  엉덩이 길이(auto 일 때)에서 auto 재배치, 리사이즈 시 재fit.
+
+**API**: `bboxOf(front|back|sleeve|body)` (outline+construction, `PIECE_KEYS` — front=front+shared),
+`outlineBBoxOf`(outline만, 간격·세로중심용), `autoLayout(geometry)`(순수: front/back/sleeve
+offset), `ensureLayout`(신형 + 구형 `{body,sleeve,sleevePlacement}` 마이그레이션). DOM 액션명
+(`enterDesign/centerBody/placeSleeveRight/resetLayout/afterBodyLength/resetViewForDesign`) 보존.
+
+**변경 파일**: `js/designLayout.js`(재작성) / `js/render.js`(design 분기 front/back/sleeve +
+hit rect) / `js/designProject.js`(layout 기본값). 하네스: designLayoutCheck(22)·
+designProjectCheck·designRenderBranchCheck 갱신. **엔진·draft·shape/perf 골든 무변경.**
+캐시 `?v=2026081010`.
+
+**검증(격리 origin, storage 0, 저장 0, 콘솔 0)** — desktop·390:
+- 앞→뒤→소매 순, **봉제선 간격 10/10cm**, 세 피스 세로중심 일치(16.858), union 중심 ≤1px
+  (0/0.05·0/0.02), reference=working transform 동일.
+- **앞·뒤·소매 독립 드래그**: 앞판 드래그 시 back/sleeve delta 0(무변화), 드래그한 피스만
+  manual, reference=working 유지, geometry(working==reference) 불변.
+
+**미구현(다음 작업)**: 실제 패턴선 도구(그 선이 어느 piece 소유인지 `piece:"front"|"back"`
+태깅) — 이번 배치 기반 위에 별도로. shared 를 뒤판/양쪽으로 나누는 세분화도 필요 시 별도.
+
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 
 사용자 계약대로 세 가지를 한 사이클로 처리(엔진 무변경, 시각/표시만).
