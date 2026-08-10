@@ -27,7 +27,7 @@ function load() {
 const T = load();
 
 // 0. API
-ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "function" && typeof T.makeLine === "function" && typeof T.toggle === "function" && Object.isFrozen(T), "0: API·frozen");
+ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "function" && typeof T.makePatternLine === "function" && typeof T.nextId === "function" && typeof T.toggle === "function" && Object.isFrozen(T), "0: API·frozen");
 
 // 1. offset 역변환: 형상 cm = 도안 cm − offset
 {
@@ -52,21 +52,29 @@ ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "f
   // 그러나 화면 표시 위치는 동일(각자 offset 더하면 같은 도안 cm)
   ok(near(T.geometryToDrawCm(front, { dx: 0, dy: 0 }).x, T.geometryToDrawCm(back, { dx: 57.5, dy: 0 }).x), "3: 표시 위치는 동일(클릭 지점)");
 }
-// 4. makeLine: piece 소유권 기록 + from/to 복사(입력 참조 아님)
+// 4. makePatternLine: { id, piece, segments:[{kind:"line",from,to}] } + 소유권 + 좌표 복사
 {
   const from = { x: 1, y: 2 }, to = { x: 3, y: 4 };
-  const ln = T.makeLine(from, to, "front");
-  ok(ln.kind === "line" && ln.piece === "front" && near(ln.from.x, 1) && near(ln.to.y, 4), "4: makeLine 소유권+좌표");
+  const pl = T.makePatternLine("line-1", "front", from, to);
+  ok(pl.id === "line-1" && pl.piece === "front" && Array.isArray(pl.segments) && pl.segments.length === 1, "4: patternLine 구조(id/piece/segments)");
+  const sg = pl.segments[0];
+  ok(sg.kind === "line" && near(sg.from.x, 1) && near(sg.to.y, 4), "4: segment 좌표");
   from.x = 999;
-  ok(near(ln.from.x, 1), "4: from 복사(입력 참조 아님)");
+  ok(near(sg.from.x, 1), "4: from 복사(입력 참조 아님)");
 }
-// 5. 순수 함수 입력 비변형
+// 5. nextId: 기존 최대 id + 1 (삭제가 생겨도 충돌 없음)
+{
+  ok(T.nextId([]) === "line-1", "5: 빈 목록 → line-1");
+  ok(T.nextId([{ id: "line-1" }, { id: "line-2" }]) === "line-3", "5: 최대+1");
+  ok(T.nextId([{ id: "line-1" }, { id: "line-5" }]) === "line-6", "5: 구멍 있어도 최대+1(충돌 없음)");
+}
+// 6. 순수 함수 입력 비변형
 {
   const off = { dx: 5, dy: 6 }, os = JSON.stringify(off);
   T.pointToGeometryCm(1, 2, off);
   const g = { x: 1, y: 2 }, gs = JSON.stringify(g);
   T.geometryToDrawCm(g, off);
-  ok(JSON.stringify(off) === os && JSON.stringify(g) === gs, "5: 입력 비변형");
+  ok(JSON.stringify(off) === os && JSON.stringify(g) === gs, "6: 입력 비변형");
 }
 
 console.log("══════════════════════════════════════════════");

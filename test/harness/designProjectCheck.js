@@ -268,6 +268,11 @@ function makeHarness() {
   ok(JSON.stringify(dp.working.parameters) === "{}", "13: parameters 계약 유지");
   // referenceGeometry·sourceBlock 은 layout 편집과 무관하게 불변
   ok(Object.isFrozen(dp.referenceGeometry) && Object.isFrozen(dp.sourceBlock), "13: reference/sourceBlock 불변");
+  // 사용자 패턴선은 geometry 와 **분리** — 기본 [], geometry 를 통째 교체해도 유지된다
+  ok(Array.isArray(dp.working.patternLines) && dp.working.patternLines.length === 0, "13: patternLines 기본 []");
+  dp.working.patternLines.push({ id: "line-1", piece: "front", segments: [] });
+  dp.working.geometry = { replaced: true };   // 엉덩이 길이 적용 상당(geometry 통째 교체)
+  ok(dp.working.patternLines.length === 1 && dp.working.patternLines[0].id === "line-1", "13: geometry 교체돼도 patternLines 유지");
 }
 
 // ── 결과 ──

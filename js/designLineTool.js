@@ -28,7 +28,16 @@
   function pointToGeometryCm(drawCmX, drawCmY, off) { return { x: drawCmX - off.dx, y: drawCmY - off.dy }; }
   // 역: 형상 cm → 도안 cm(렌더 정합 검증용). display = geo + off.
   function geometryToDrawCm(geo, off) { return { x: geo.x + off.dx, y: geo.y + off.dy }; }
-  function makeLine(from, to, piece) { return { kind: "line", from: { x: from.x, y: from.y }, to: { x: to.x, y: to.y }, piece: piece }; }
+  // 패턴선 1개: { id, piece, segments:[{kind:"line",from,to}] } (좌표는 형상 cm).
+  function makePatternLine(id, piece, from, to) {
+    return { id: id, piece: piece, segments: [{ kind: "line", from: { x: from.x, y: from.y }, to: { x: to.x, y: to.y } }] };
+  }
+  // 기존 id 최대치 + 1(삭제가 생겨도 충돌 없음).
+  function nextId(lines) {
+    let max = 0;
+    lines.forEach(l => { const m = /^line-(\d+)$/.exec(l.id); if (m) max = Math.max(max, +m[1]); });
+    return "line-" + (max + 1);
+  }
 
   function pieceOffset(piece) {
     const L = window.designLayout ? window.designLayout.ensureLayout(project()) : null;
@@ -38,7 +47,8 @@
     const hit = target && target.closest && target.closest(".design-layout-hit");
     return hit ? hit.getAttribute("data-layout-piece") : null;
   }
-  function ensureLines(geom, piece) { if (!Array.isArray(geom[piece].designLines)) geom[piece].designLines = []; return geom[piece].designLines; }
+  // 사용자 패턴선은 geometry 가 아니라 working.patternLines 에 별도 저장(geometry 교체와 분리).
+  function ensurePatternLines(p) { if (!Array.isArray(p.working.patternLines)) p.working.patternLines = []; return p.working.patternLines; }
 
   function setNote(msg) { const el = document.getElementById("designLineNote"); if (el) el.textContent = msg; }
   function syncButton() {
@@ -69,7 +79,8 @@
       } else if (pending.piece !== piece) {
         setNote("같은 피스 안에서 두 점을 찍으세요");                  // 다른 피스 거부(pending 유지)
       } else {
-        ensureLines(p.working.geometry, piece).push(makeLine(pending.from, geo, piece));
+        const lines = ensurePatternLines(p);
+        lines.push(makePatternLine(nextId(lines), piece, pending.from, geo));
         pending = null;
         setNote("선 추가됨 · 계속 그리려면 다시 두 점 클릭");
         if (typeof render === "function") render();
@@ -79,5 +90,5 @@
     document.addEventListener("keydown", e => { if (e.key === "Escape" && active) cancel(); });
   }
 
-  window.designLineTool = Object.freeze({ toggle, cancel, isActive, pointToGeometryCm, geometryToDrawCm, makeLine });
+  window.designLineTool = Object.freeze({ toggle, cancel, isActive, pointToGeometryCm, geometryToDrawCm, makePatternLine, nextId });
 })();

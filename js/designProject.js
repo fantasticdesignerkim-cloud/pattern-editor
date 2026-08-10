@@ -89,8 +89,12 @@
       baseSource: deepFrozenClone(completed.snapshot.source),          // 동결 근거(불변)
       referenceGeometry: deepFrozenClone(completed.snapshot.geometry), // 불변 reference
       working: {
-        geometry: deepClone(completed.snapshot.geometry),             // 실제 편집 대상(mutable)
+        geometry: deepClone(completed.snapshot.geometry),             // 몸판 계산 결과(mutable, 재계산 시 교체)
         parameters: {},
+        // 사용자가 그린 디자인 선(세션 전용). geometry 와 **책임 분리** — 엉덩이 길이 적용이
+        // working.geometry 를 통째 교체해도(computeGeometry 결과) 그린 선은 사라지지 않는다.
+        // 각 항목 { id, piece, segments:[{kind:"line",from,to}] }, 좌표는 형상 cm(offset 역변환).
+        patternLines: [],
         // 작업 화면 배치(세션 전용, cm). 형상 좌표가 아니라 표시 offset 이다 — reference 와
         // working 에 동일 offset 을 적용해 함께 움직인다. 앞판/뒤판/소매 각각 독립 offset,
         // placement 는 피스별 "auto"|"manual"(사용자가 드래그하면 manual). 초기 side-by-side

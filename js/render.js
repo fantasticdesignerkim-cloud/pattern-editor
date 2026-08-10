@@ -27,14 +27,18 @@ function _tagDart(g, dart, piece){
 
 // design 배치 드래그용 투명 hit rect. piece bbox(도안 cm)를 화면 좌표로 변환해
 // piece offset transform 그룹에 넣는다. bbox 없으면(빈 piece) 생략.
-// 사용자가 그린 패턴선(working.geometry[piece].designLines, 형상 cm)을 피스 그룹에 append.
+// 사용자가 그린 패턴선(working.patternLines, geometry 와 분리)을 그 피스 그룹에 append.
 // 그룹이 이미 piece offset transform 을 갖고 있어 c2p(형상 cm) 만 쓰면 클릭 위치에 정합된다.
-function _appendDesignLines(grp, pieceGeom, pc){
-  if(!pieceGeom || !Array.isArray(pieceGeom.designLines)) return;
-  pieceGeom.designLines.forEach(ln=>{
-    if(!ln || !ln.from || !ln.to) return;
-    const [x1,y1]=c2p(ln.from.x, ln.from.y), [x2,y2]=c2p(ln.to.x, ln.to.y);
-    grp.appendChild(E("line",{ x1, y1, x2, y2, class:"design-line", "data-piece":pc, "data-geometry-role":"design-line" }));
+// 각 항목 { id, piece, segments:[{kind:"line",from,to}] }, 좌표는 형상 cm(offset 역변환).
+function _appendPatternLines(grp, patternLines, pc){
+  if(!Array.isArray(patternLines)) return;
+  patternLines.forEach(pl=>{
+    if(!pl || pl.piece !== pc || !Array.isArray(pl.segments)) return;
+    pl.segments.forEach(sg=>{
+      if(!sg || sg.kind !== "line" || !sg.from || !sg.to) return;
+      const [x1,y1]=c2p(sg.from.x, sg.from.y), [x2,y2]=c2p(sg.to.x, sg.to.y);
+      grp.appendChild(E("line",{ x1, y1, x2, y2, class:"design-line", "data-piece":pc, "data-geometry-role":"design-line", "data-line-id":pl.id }));
+    });
   });
 }
 
@@ -109,7 +113,7 @@ function render(){
     const workRoot = E("g"); workRoot.setAttribute("data-design-root", "working");
     SUBS.forEach(([pc, sub]) => {
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
-      _appendDesignLines(grp, dp.working.geometry[pc], pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
+      _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
       workRoot.appendChild(grp);
     });
     svg.appendChild(workRoot);

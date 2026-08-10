@@ -2647,11 +2647,15 @@ designProjectCheck·designRenderBranchCheck 갱신. **엔진·draft·shape/perf 
    형상에 정확히 붙어 있고, 렌더는 reference/working 과 같은 transform 을 타 자동 정합된다.
    (실측: 그린 선이 있는 앞판을 드래그해도 **저장 형상 cm 불변**·화면선은 피스와 동반 이동.)
 
-**저장/렌더**
-- `working.geometry[piece].designLines` **신규 배열**(`{kind:"line",from,to,piece}`, 형상 cm).
-  기존 outline/construction·designRenderer·shape 골든 무변경(designRenderer 는 outline/
-  construction 만 iterate — designLines 는 render.js `_appendDesignLines` 가 working 피스
-  그룹에 별도 append, 그룹 transform 동승). reference 엔 없음(working 전용, 세션 한정).
+**저장/렌더 — geometry 와 책임 분리 (★ 중요 교정)**
+- ~~`working.geometry[piece].designLines`~~ → **`working.patternLines`** 별도 배열
+  (`{id,piece,segments:[{kind:"line",from,to}]}`, 좌표는 형상 cm). **geometry 안에 넣으면 안 된다** —
+  엉덩이 길이 적용(`ui.js:385 project.working.geometry = computeGeometry(...)`)이 working.geometry 를
+  **통째 교체**하므로 그 안의 선은 사라진다. `working.geometry`=몸판 계산 결과,
+  `working.patternLines`=사용자가 그린 디자인 선으로 **책임 분리**.
+- 기존 outline/construction·designRenderer·shape 골든 무변경. render.js `_appendPatternLines`
+  가 `working.patternLines` 를 피스별로 필터해 working 피스 그룹에 별도 append(그룹 transform
+  동승). reference 엔 없음(working 전용, 세션 한정). `id`=`nextId`(기존 최대+1, 삭제 충돌 없음).
 - 색: 주황(`--orange`), `.design-working .design-line`(0,1,1 인 `.design-working line` 보다
   우선하도록 working 스코프). shared 는 앞판 그룹이라 앞판에 그린 선은 front 소유.
 - 두 점이 다른 피스면 **거부**(pending 유지, "같은 피스 안에서 두 점을 찍으세요").
@@ -2670,7 +2674,10 @@ designProjectCheck·designRenderBranchCheck 갱신. **엔진·draft·shape/perf 
   **렌더 화면 위치 오차 0px**(클릭 지점 정합). afterFirstClick 0(두 번째 클릭에 생성).
 - 선 있는 앞판 드래그(+50,−30) → 화면선 동일 이동, **저장 형상 cm 불변**(offset 역변환이
   피스 귀속을 보장). 다른 피스(앞→뒤) 클릭 → 선 안 생김.
-- reference 무변(designLines 없음), 주황 렌더.
+- **엉덩이 길이 10→20→0 적용에도 선 유지·좌표 불변**(working.patternLines 분리 덕에
+  working.geometry 통째 교체와 무관), 배치 초기화 후 유지, 선 그리기가 working.geometry
+  무변경, reference frozen·무변. 주황 렌더. designLineToolCheck 12 + designProjectCheck
+  patternLines 분리 검사.
 
 **미구현(다음)**: 곡선/연속선, 선 편집·삭제·선택, snap, `piece:"sleeve"` 도 소유 가능하나
 UI 상 앞/뒤 중심. 선을 outline/봉제선으로 승격하는 단계(패턴선 확정)는 별도.
