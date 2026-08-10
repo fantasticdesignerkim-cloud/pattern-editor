@@ -53,6 +53,14 @@ function _appendSelectionOverlay(grp, overlay){
   (overlay.anchors||[]).forEach(a=>{ const [x,y]=c2p(a.x, a.y); grp.appendChild(E("circle",{ cx:x, cy:y, r:4, class:"design-line-anchor" })); });
 }
 
+// snap 흡착 표시: cyan 링 + 중심점(형상 cm → c2p, 피스 transform 동승).
+function _appendSnapHint(grp, point){
+  if(!point) return;
+  const [x,y]=c2p(point.x, point.y);
+  grp.appendChild(E("circle",{ cx:x, cy:y, r:7, class:"design-snap-ring" }));
+  grp.appendChild(E("circle",{ cx:x, cy:y, r:2, class:"design-snap-dot" }));
+}
+
 // line/cubic 세그먼트 배열 → SVG path d 문자열(형상 cm → c2p). 세그먼트는 끝점 공유(연속).
 function _patternPathD(segments){
   if(!Array.isArray(segments) || segments.length===0) return null;
@@ -159,11 +167,13 @@ function render(){
     const _dlt = window.designLineTool || null;
     const _draft = (_dlt && _dlt.getDraft) ? _dlt.getDraft() : null;
     const _overlay = (_dlt && _dlt.getSelectionOverlay) ? _dlt.getSelectionOverlay() : null;
+    const _snap = (_dlt && _dlt.getSnapHint) ? _dlt.getSnapHint() : null;
     SUBS.forEach(([pc, sub]) => {
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
       _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
       if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay
+      if (_snap && _snap.piece === pc) _appendSnapHint(grp, _snap.point);              // 흡착 표시(cyan)
       workRoot.appendChild(grp);
     });
     svg.appendChild(workRoot);

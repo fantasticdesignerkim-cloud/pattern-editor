@@ -2779,7 +2779,34 @@ cubic 핸들선/점. render.js `_appendSelectionOverlay`(피스 그룹 안 → o
   전체 선 좌표 불변, reference frozen. `designLineToolCheck` 23(anchorsFromSegments/moveAnchor
   공유끝점/distToSegment line·cubic).
 
-**미구현(다음)**: snap(anchor/핸들을 격자·다른 선 끝점에 흡착).
+## ✅ Design 패턴선 도구 5차 (2026-08) — anchor snap(흡착)
+
+편집 위에, **anchor 에만 snap**(cubic 핸들은 곡률·방향 제어점이라 흡착 시 곡선이 망가지므로
+제외). draw 의 새 anchor·select 의 anchor 이동에 **동일 적용**. 각도 고정(수평·수직·45°)은 별도.
+
+**우선순위 캐스케이드(잠금)** — 같은 피스·working geometry 기준, 상위 tier 에 임계 내 후보가
+있으면 그 tier 최근접을 쓴다(격자는 최저 폴백). `chooseSnap(cursor, sources, thr, grid)`:
+1. **기존 패턴선 anchor**(자기 자신 제외) → 2. **working geometry 끝점·semantic junction**
+   (outline+construction primitive 의 on-curve 점) → 3. **working outline 최근접점**
+   (`nearestOnSegs`: line 정확·cubic 16샘플 투영) → 4. **0.5cm 격자**.
+- **화면 8px 이내에서만 흡착**(`SNAP_PX=8`), zoom→cm 환산(`thr=8·(1/(SC·viewZ))`).
+- **Alt** 누르면 해제(자유). **cubic 핸들 드래그는 snap 없음**(자유). **다른 피스·소매 후보 금지**
+  (`patternAnchorPts`/`geomEndpoints`/`outlineSegsOf` 가 `PIECE_GEOM_KEYS[piece]`만 스캔).
+- **reference 아님, working geometry(실제 결과) 기준.**
+
+**적용/표시**: draw pointerdown 이 새 anchor 를 `snapForCursor` 로 흡착, draw hover(pointermove
+무버튼)가 다음 anchor 흡착 미리보기, select anchor 드래그는 `origAnchor + delta` 를 흡착(자기
+anchor 제외). 흡착점은 cyan 링(`_appendSnapHint`) + note "흡착 → 기존 anchor/형상 끝점/외곽선/
+격자 0.5cm". snapHint 는 세션 UI 상태(patternLines 미저장), pointerup·모드전환에 해제.
+
+**검증(격리 origin, storage 0, console 0)** — desktop:
+- draw 새 anchor: A 근처(5px) 클릭 → 기존 anchor A 로 정확 흡착. Alt 클릭 → 해제(커서 위치).
+- select anchor 드래그 → A 흡착, hint type "anchor"·cyan 렌더. cubic 핸들 드래그 → **흡착 안 됨**
+  (커서에 자유), hint 없음. draw hover → snapHint(anchor)·cyan. working geometry **끝점 흡착**
+  (type endpoint). `designLineToolCheck` 31(chooseSnap 우선순위·임계·격자 폴백·closestOnSeg·
+  nearestOnSegs).
+
+**미구현(다음)**: 핸들 각도 고정(수평·수직·45°)은 별도 기능.
 
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 

@@ -24,11 +24,16 @@
   const DRAG_PX = 4;          // draw: 이 픽셀 미만 이동은 클릭(모서리), 이상은 드래그(곡선 핸들)
   const LINE_HIT_PX = 7;      // select: 선 히트 반경(px)
   const NODE_HIT_PX = 9;      // select: anchor·handle 히트 반경(px)
+  const SNAP_PX = 8;          // snap: 화면 8px 이내에서만 흡착(zoom→cm 환산)
+  const GRID_CM = 0.5;        // snap: 격자 0.5cm(최저 우선순위)
   const EPS = 1e-9;
+  const PIECE_GEOM_KEYS = { front: ["front", "shared"], back: ["back"], sleeve: ["sleeve"] };
+  const SNAP_LABEL = { anchor: "기존 anchor", endpoint: "형상 끝점", outline: "외곽선", grid: "격자 0.5cm" };
 
   let mode = "off";
   let draft = null, drawDrag = null;                 // draw 상태
   let selectedId = null, editDrag = null;            // select 상태
+  let snapHint = null;                               // {piece, point, type} — 흡착 표시(세션 UI)
 
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
   function inDesign() { return typeof window.isDesignStageActive === "function" && window.isDesignStageActive() && !!project(); }
@@ -95,11 +100,76 @@
     line.segments.forEach((s, i) => { if (s.kind === "cubic") { hs.push({ seg: i, which: "c1", c: s.c1, a: s.from }); hs.push({ seg: i, which: "c2", c: s.c2, a: s.to }); } });
     return hs;
   }
+  // 선분 위 최근접점 / 점 목록 최근접(임계 내) / 세그먼트 목록 최근접점(line·cubic)
+  function closestOnSeg(p, a, b) {
+    const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy;
+    let t = L2 > 0 ? ((p.x - a.x) * vx + (p.y - a.y) * vy) / L2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return { x: a.x + t * vx, y: a.y + t * vy };
+  }
+  function nearestPoint(cursor, pts, thr) {
+    let best = null, bd = thr;
+    pts.forEach(pt => { const d = Math.hypot(cursor.x - pt.x, cursor.y - pt.y); if (d < bd) { bd = d; best = pt; } });
+    return best ? { pt: { x: best.x, y: best.y }, d: bd } : null;
+  }
+  function nearestOnSegs(cursor, segs, thr) {
+    let best = null, bd = thr;
+    segs.forEach(s => {
+      if (s.kind === "line") { const c = closestOnSeg(cursor, s.from, s.to); const d = Math.hypot(cursor.x - c.x, cursor.y - c.y); if (d < bd) { bd = d; best = c; } }
+      else if (s.kind === "cubic") { let prev = cubicAt(s, 0); for (let i = 1; i <= 16; i++) { const cur = cubicAt(s, i / 16); const c = closestOnSeg(cursor, prev, cur); const d = Math.hypot(cursor.x - c.x, cursor.y - c.y); if (d < bd) { bd = d; best = c; } prev = cur; } }
+    });
+    return best ? { pt: best, d: bd } : null;
+  }
+  // 순수 snap 선택(우선순위 캐스케이드): anchor → geometry 끝점 → outline 최근접 → 격자.
+  // 상위 우선순위에 임계 내 후보가 있으면 그 tier 에서 최근접을 고른다(격자는 최저 폴백).
+  function chooseSnap(cursor, sources, thr, grid) {
+    let c = nearestPoint(cursor, sources.anchors || [], thr);
+    if (c) return { point: c.pt, type: "anchor", dist: c.d };
+    c = nearestPoint(cursor, sources.endpoints || [], thr);
+    if (c) return { point: c.pt, type: "endpoint", dist: c.d };
+    c = nearestOnSegs(cursor, sources.outlineSegs || [], thr);
+    if (c) return { point: c.pt, type: "outline", dist: c.d };
+    const gp = { x: Math.round(cursor.x / grid) * grid, y: Math.round(cursor.y / grid) * grid };
+    const gd = Math.hypot(cursor.x - gp.x, cursor.y - gp.y);
+    if (gd < thr) return { point: gp, type: "grid", dist: gd };
+    return null;
+  }
 
   // ── DOM 연동 ──
   function pieceOffset(piece) { const L = window.designLayout ? window.designLayout.ensureLayout(project()) : null; return (L && L[piece]) ? L[piece] : { dx: 0, dy: 0 }; }
   function pieceAt(target) { const h = target && target.closest && target.closest(".design-layout-hit"); return h ? h.getAttribute("data-layout-piece") : null; }
   function geoAt(e, piece) { const [dx, dy] = eventToPatternPoint(e); return pointToGeometryCm(dx, dy, pieceOffset(piece)); }
+
+  // ── snap 후보 소스(working geometry·같은 피스만) ──
+  function geomEndpoints(geom, keys) {
+    const pts = [];
+    keys.forEach(k => { const b = geom[k]; if (!b) return; ["outline", "construction"].forEach(rl => (b[rl] || []).forEach(pr => {
+      if (pr.kind === "line") { pts.push(pr.from); pts.push(pr.to); }
+      else if (pr.kind === "path") pr.commands.forEach(c => { if (c.type === "M") pts.push(c.points[0]); else if (c.type === "C") pts.push(c.points[c.points.length - 1]); });
+    })); });
+    return pts;
+  }
+  function outlineSegsOf(geom, keys) {
+    const segs = [];
+    keys.forEach(k => { const b = geom[k]; if (!b) return; (b.outline || []).forEach(pr => {
+      if (pr.kind === "line") segs.push({ kind: "line", from: pr.from, to: pr.to });
+      else if (pr.kind === "path") { let cur = null; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { segs.push({ kind: "cubic", from: cur, c1: c.points[0], c2: c.points[1], to: c.points[2] }); cur = c.points[2]; } }); }
+    }); });
+    return segs;
+  }
+  function patternAnchorPts(piece, exclude) {
+    const pts = [];
+    lines().forEach(l => { if (l.piece !== piece) return; anchorsFromSegments(l.segments).forEach(a => { if (exclude && Math.abs(a.x - exclude.x) < EPS && Math.abs(a.y - exclude.y) < EPS) return; pts.push(a); }); });
+    return pts;
+  }
+  // 커서(형상 cm)를 같은 피스의 working geometry 기준으로 snap. Alt 면 해제(자유).
+  // exclude = 선택 편집 중 자기 자신 anchor(있으면 후보에서 제외).
+  function snapForCursor(cursor, piece, altKey, exclude) {
+    if (altKey) return null;
+    const p = project(); if (!p) return null;
+    const geom = p.working.geometry, keys = PIECE_GEOM_KEYS[piece] || [piece];
+    const thr = SNAP_PX * pxToCm();
+    return chooseSnap(cursor, { anchors: patternAnchorPts(piece, exclude), endpoints: geomEndpoints(geom, keys), outlineSegs: outlineSegsOf(geom, keys) }, thr, GRID_CM);
+  }
   function pxToCm() { const s = SC * viewZ; return s > 0 ? 1 / s : 1; }
   function ensurePatternLines(p) { if (!Array.isArray(p.working.patternLines)) p.working.patternLines = []; return p.working.patternLines; }
   function setNote(m) { const el = document.getElementById("designLineNote"); if (el) el.textContent = m; }
@@ -114,9 +184,17 @@
 
   // ── 모드 전환(그리기/선택 상호배타) ──
   function setMode(m) {
-    mode = m; draft = null; drawDrag = null; editDrag = null; selectedId = null;
+    mode = m; draft = null; drawDrag = null; editDrag = null; selectedId = null; snapHint = null;
     setNote(m === "draw" ? "첫 점을 클릭(또는 드래그)하세요" : m === "select" ? SELECT_NOTE : "");
     syncButtons(); rerender();
+  }
+  function getSnapHint() { return snapHint ? { piece: snapHint.piece, point: { x: snapHint.point.x, y: snapHint.point.y }, type: snapHint.type } : null; }
+  // snapHint 갱신(변화 시에만 rerender 신호). 흡착 안내를 note 에 병기.
+  function setSnapHint(h, baseNote) {
+    const changed = JSON.stringify(h) !== JSON.stringify(snapHint);
+    snapHint = h;
+    setNote(h ? ("흡착 → " + (SNAP_LABEL[h.type] || h.type)) : baseNote);
+    return changed;
   }
   function toggle() { setMode(mode === "draw" ? "off" : "draw"); }          // 그리기 버튼
   function toggleSelect() { setMode(mode === "select" ? "off" : "select"); } // 선택·편집 버튼
@@ -169,7 +247,7 @@
         for (const h of hs) if (Math.hypot(geo.x - h.c.x, geo.y - h.c.y) < rCm) { editDrag = { kind: "handle", seg: h.seg, which: h.which }; return; }
         const as = anchorsFromSegments(line.segments);
         for (let k = 0; k < as.length; k++) if (Math.hypot(geo.x - as[k].x, geo.y - as[k].y) < rCm) {
-          editDrag = { kind: "anchor", k: k, startGeo: geo, orig: JSON.parse(JSON.stringify(line.segments)) }; return;
+          editDrag = { kind: "anchor", k: k, startGeo: geo, origAnchor: { x: as[k].x, y: as[k].y }, orig: JSON.parse(JSON.stringify(line.segments)) }; return;
         }
       }
     }
@@ -179,13 +257,20 @@
     selectedId = best ? best.id : null;
     setNote(best ? "선택됨 · Delete 삭제 · anchor/핸들 드래그 · Esc 해제" : SELECT_NOTE);
   }
-  function editMove(geo) {
+  function editMove(geo, altKey) {
     const line = findLine(selectedId); if (!line || !editDrag) return;
     if (editDrag.kind === "handle") {
-      line.segments[editDrag.seg][editDrag.which] = { x: geo.x, y: geo.y };   // c1/c2 절대 이동
-    } else {                                                                  // anchor: 원본에서 총 delta 적용
+      line.segments[editDrag.seg][editDrag.which] = { x: geo.x, y: geo.y };   // 핸들: snap 없음(자유 이동)
+      snapHint = null; setNote("핸들 이동 · Esc 해제");
+    } else {                                                                  // anchor: 총 delta + snap
+      const oa = editDrag.origAnchor;
+      const nx = oa.x + (geo.x - editDrag.startGeo.x), ny = oa.y + (geo.y - editDrag.startGeo.y);
+      const snap = snapForCursor({ x: nx, y: ny }, line.piece, altKey, oa);   // 자기 자신 anchor 제외
+      const t = snap ? snap.point : { x: nx, y: ny };
+      snapHint = snap ? { piece: line.piece, point: snap.point, type: snap.type } : null;
       line.segments = JSON.parse(JSON.stringify(editDrag.orig));
-      moveAnchor(line, editDrag.k, geo.x - editDrag.startGeo.x, geo.y - editDrag.startGeo.y);
+      moveAnchor(line, editDrag.k, t.x - oa.x, t.y - oa.y);
+      setNote(snapHint ? ("흡착 → " + (SNAP_LABEL[snapHint.type] || snapHint.type)) : "anchor 이동 · Esc 해제");
     }
     rerender();
   }
@@ -195,11 +280,13 @@
       if (mode === "off" || e.button !== 0 || !inDesign()) return;
       const piece = pieceAt(e.target);
       if (mode === "draw") {
+        // 새 anchor 는 snap 적용(같은 피스 · working geometry 기준 · Alt 해제).
+        const placeGeo = pc => { const g = geoAt(e, pc); const s = snapForCursor(g, pc, e.altKey, null); snapHint = s ? { piece: pc, point: s.point, type: s.type } : null; return s ? { x: s.point.x, y: s.point.y } : g; };
         if (!draft) {
           if (!piece) { setNote("피스 위를 클릭하세요"); return; }
-          draft = { piece: piece, anchors: [{ p: geoAt(e, piece), h: null }] }; setNote(DRAW_NOTE);
+          draft = { piece: piece, anchors: [{ p: placeGeo(piece), h: null }] }; setNote(DRAW_NOTE);
         } else if (piece !== draft.piece) { setNote("같은 피스 안에서 이어 그리세요"); return; }
-        else { draft.anchors.push({ p: geoAt(e, piece), h: null }); setNote(DRAW_NOTE); }
+        else { draft.anchors.push({ p: placeGeo(draft.piece), h: null }); setNote(DRAW_NOTE); }
         drawDrag = { startX: e.clientX, startY: e.clientY };
       } else { // select
         if (!piece) { selectedId = null; editDrag = null; setNote(SELECT_NOTE); }
@@ -210,23 +297,29 @@
     });
     svg.addEventListener("pointermove", e => {
       if (mode === "draw") {
-        if (!drawDrag || !draft) return;
-        const anchor = draft.anchors[draft.anchors.length - 1];
-        if (Math.hypot(e.clientX - drawDrag.startX, e.clientY - drawDrag.startY) > DRAG_PX) {
-          const g = geoAt(e, draft.piece); anchor.h = { x: g.x - anchor.p.x, y: g.y - anchor.p.y };
-        } else anchor.h = null;
-        rerender();
+        if (drawDrag && draft) {                                   // 곡선 핸들 드래그(snap 없음)
+          const anchor = draft.anchors[draft.anchors.length - 1];
+          if (Math.hypot(e.clientX - drawDrag.startX, e.clientY - drawDrag.startY) > DRAG_PX) {
+            const g = geoAt(e, draft.piece); anchor.h = { x: g.x - anchor.p.x, y: g.y - anchor.p.y };
+          } else anchor.h = null;
+          snapHint = null; rerender();
+        } else {                                                   // hover: 다음 anchor 의 snap 미리보기
+          const piece = draft ? draft.piece : pieceAt(e.target);
+          let h = null;
+          if (piece) { const s = snapForCursor(geoAt(e, piece), piece, e.altKey, null); if (s) h = { piece: piece, point: s.point, type: s.type }; }
+          if (setSnapHint(h, DRAW_NOTE)) rerender();
+        }
       } else if (mode === "select" && editDrag) {
-        editMove(geoAt(e, findLine(selectedId).piece));
+        editMove(geoAt(e, findLine(selectedId).piece), e.altKey);
       }
     });
     const endDrag = e => {
       if (mode === "draw" && drawDrag) {
         const anchor = draft && draft.anchors[draft.anchors.length - 1];
         if (anchor && anchor.h && Math.hypot(anchor.h.x, anchor.h.y) < EPS) anchor.h = null;
-        drawDrag = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
+        drawDrag = null; snapHint = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
       } else if (mode === "select" && editDrag) {
-        editDrag = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
+        editDrag = null; snapHint = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
       }
     };
     svg.addEventListener("pointerup", endDrag);
@@ -251,9 +344,10 @@
 
   window.designLineTool = Object.freeze({
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
-    getDraft, getSelectedId, getSelectionOverlay, deleteSelected,
+    getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
-    anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf
+    anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf,
+    chooseSnap, closestOnSeg, nearestOnSegs
   });
 })();

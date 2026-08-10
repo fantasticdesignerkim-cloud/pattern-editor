@@ -94,6 +94,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 선택된 선 강조 + anchor 점(편집 대상). */
 .design-working .design-line.selected{stroke:var(--cyan);stroke-width:2.6}
 .design-working .design-line-anchor{fill:#fff;stroke:var(--cyan);stroke-width:1.6}
+/* snap 흡착 표시(cyan 링). */
+.design-working .design-snap-ring{fill:none;stroke:var(--cyan);stroke-width:1.6;opacity:.9}
+.design-working .design-snap-dot{fill:var(--cyan);stroke:none}
 #btnDesignLine[aria-pressed="true"],#btnDesignSelect[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
 
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */

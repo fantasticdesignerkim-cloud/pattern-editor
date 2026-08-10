@@ -118,6 +118,35 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   ok(JSON.stringify(off) === os && JSON.stringify(g) === gs, "6: 입력 비변형");
 }
 
+// 10. snap 순수 로직: 우선순위 캐스케이드(anchor→endpoint→outline→격자), 임계, 격자 폴백
+{
+  const outSeg = { kind: "line", from: { x: 0, y: 0 }, to: { x: 20, y: 0 } };
+  const sources = { anchors: [{ x: 5, y: 5 }], endpoints: [{ x: 8, y: 5 }], outlineSegs: [outSeg] };
+  // anchor(5,5) 근처(임계 2) → anchor 우선(더 먼 endpoint·outline 무시)
+  let s = T.chooseSnap({ x: 5.5, y: 5 }, sources, 2, 0.5);
+  ok(s && s.type === "anchor" && near(s.point.x, 5) && near(s.point.y, 5), "10: anchor 우선");
+  // anchor 없는 곳, endpoint(8,5) 근처 → endpoint
+  s = T.chooseSnap({ x: 8.3, y: 5 }, { anchors: [], endpoints: [{ x: 8, y: 5 }], outlineSegs: [outSeg] }, 1, 0.5);
+  ok(s && s.type === "endpoint", "10: endpoint 우선(anchor 없을 때)");
+  // outline 위(투영), anchor·endpoint 임계 밖 → outline 최근접점
+  s = T.chooseSnap({ x: 10, y: 0.3 }, { anchors: [{ x: 50, y: 50 }], endpoints: [{ x: 50, y: 50 }], outlineSegs: [outSeg] }, 1, 0.5);
+  ok(s && s.type === "outline" && near(s.point.y, 0) && near(s.point.x, 10), "10: outline 최근접점");
+  // 아무 후보도 임계 밖 → 격자(0.5) 폴백
+  s = T.chooseSnap({ x: 3.1, y: 4.9 }, { anchors: [], endpoints: [], outlineSegs: [] }, 1, 0.5);
+  ok(s && s.type === "grid" && near(s.point.x, 3) && near(s.point.y, 5), "10: 격자 0.5 폴백");
+  // 임계 밖이면 null(격자도 8px 밖이면 안 잡힘) — 임계 0.1, 커서가 격자에서 먼 경우
+  s = T.chooseSnap({ x: 3.25, y: 3.25 }, { anchors: [], endpoints: [], outlineSegs: [] }, 0.1, 0.5);
+  ok(s === null, "10: 임계 밖 → null(격자도 안 잡힘)");
+}
+// 11. closestOnSeg / nearestOnSegs
+{
+  ok(near(T.closestOnSeg({ x: 5, y: 3 }, { x: 0, y: 0 }, { x: 10, y: 0 }).x, 5) && near(T.closestOnSeg({ x: 5, y: 3 }, { x: 0, y: 0 }, { x: 10, y: 0 }).y, 0), "11: 선분 위 최근접점");
+  // 끝점 넘어가면 clamp
+  ok(near(T.closestOnSeg({ x: -5, y: 0 }, { x: 0, y: 0 }, { x: 10, y: 0 }).x, 0), "11: clamp 시작점");
+  const r = T.nearestOnSegs({ x: 5, y: 0.2 }, [{ kind: "line", from: { x: 0, y: 0 }, to: { x: 10, y: 0 } }], 1);
+  ok(r && near(r.pt.x, 5) && near(r.pt.y, 0), "11: nearestOnSegs line");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);
