@@ -2744,7 +2744,42 @@ preview 는 점선 path + 꼭짓점(`.design-line-vertex`) + **곡선 핸들선/
 - 엉덩이 길이 10→20→0·앞판 드래그에도 **곡선 좌표 불변**, 곡선 path 피스 동반 이동, 다른
   피스 거부. `designLineToolCheck` 15(segmentsFromAnchors line/cubic/혼합·makePatternLine).
 
-**미구현(다음)**: 완성 선의 선택·점 이동·핸들 편집·삭제(`id` 지목), snap.
+## ✅ Design 패턴선 도구 4차 (2026-08) — 완성 선의 선택·편집·삭제
+
+곡선 위에, **완성된 선을 선택해 편집/삭제**. 그리기와 선택을 **명확히 분리된 모드**로 나눴다
+(`mode ∈ {"off","draw","select"}`, 버튼 2개 `btnDesignLine`·`btnDesignSelect` 상호배타).
+
+**6단계 동작 계약(잠금)**: ① 선 클릭=선택 강조 ② Delete·Backspace=선택 선 삭제 ③ 선택 선의
+anchor·cubic 핸들 표시 ④ anchor 드래그=공유 이웃 세그먼트 to/from(+인접 cubic 핸들) 함께
+이동 ⑤ cubic 핸들 드래그=그 c1/c2만 수정 ⑥ Esc=선택 해제.
+
+**핵심 계약**
+- **같은 anchor 를 공유하는 이웃 세그먼트의 to/from 을 반드시 함께 갱신** — `moveAnchor(line,k,dx,dy)`:
+  `k>0`이면 `seg[k-1].to`(+cubic이면 `c2`), `k<n`이면 `seg[k].from`(+cubic이면 `c1`)을 동시에 delta.
+  anchor 드래그는 시작 시점 `orig` 스냅샷에서 **총 delta** 로 재계산(증분 누적 오차 없음).
+- **편집 좌표도 피스 offset 역변환 후 형상 cm** 로 저장(`geoAt`=eventToPatternPoint−offset).
+- **선택 상태는 세션 UI 상태**(`selectedId`) — working.patternLines 에 저장 안 함(선 데이터에 흔적 0).
+- reference·geometry·**다른 선 불변**. 피스 이동·엉덩이 길이 재계산에도 선 좌표 불변.
+- **작성 중(draw)에는 선택 차단** — 모드가 분리돼 있어 select 로직은 select 모드에서만 동작.
+  isActive()=mode!=="off" 라 draw·select 모두 designLayout 피스 드래그를 가드로 막는다.
+
+**히트 테스트(순수)**: 클릭 형상 cm 에서 — 선택 선의 핸들(`NODE_HIT_PX 9`)→anchor(9)→그 외
+가장 가까운 선(`LINE_HIT_PX 7`, 없으면 해제). `distToSegment`(line 정확·cubic 16샘플)·
+`distToLine`·`anchorsFromSegments`·`handlesOf` 로 계산. px 임계는 `1/(SC·viewZ)` 로 cm 환산.
+
+**렌더**: 선택 선 path 에 `.selected`(cyan 굵게). overlay=anchor 점(`.design-line-anchor`) +
+cubic 핸들선/점. render.js `_appendSelectionOverlay`(피스 그룹 안 → offset transform 동승).
+
+**검증(격리 origin, storage 0, saves 0, console 0)** — desktop·390px:
+- 그리기→선택 토글 시 mode 전환·버튼 aria-pressed 상호배타. 선 클릭→`selectedId`·강조·anchor 3·
+  handle 2, **선택은 patternLines 에 없음**.
+- anchor 1(공유) 드래그→`seg0.to==seg1.from` 함께 이동·인접 c2 동반·delta 정확. cubic 핸들
+  드래그→c1만 커서로, c2/to 불변.
+- Esc 해제, Delete→선 삭제·다른 선 생존·격리·선택 해제. 엉덩이 길이 10→20→0·피스 드래그에도
+  전체 선 좌표 불변, reference frozen. `designLineToolCheck` 23(anchorsFromSegments/moveAnchor
+  공유끝점/distToSegment line·cubic).
+
+**미구현(다음)**: snap(anchor/핸들을 격자·다른 선 끝점에 흡착).
 
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 

@@ -1,57 +1,51 @@
 // ══════════════════════════════════════════════
-// js/designLineTool.js — Design 패턴선 도구(직선+곡선 혼합 연속선).
+// js/designLineTool.js — Design 패턴선 도구(그리기 + 선택·편집).
 //
-// 동작 계약(사용자 잠금):
-//  · 클릭: 모서리 점 → 그 점으로 들어오는 세그먼트는 **직선(line)**
-//  · 클릭 후 드래그: 곡선 점 + 베지어 핸들 → 그 점으로 들어오는 세그먼트는 **곡선(cubic)**
-//  · 하나의 patternLine 안에 line·cubic 세그먼트 혼합 가능
-//  · 다른 피스/빈 영역 클릭: 거부(작성 유지)
-//  · 더블클릭 또는 Enter: 완료(점 2개 미만이면 불가) / Backspace: 마지막 점 취소 / Esc: 전체 취소
-//  · 작성 중 선은 **preview 일 뿐** — 완료 시 한 번에 커밋
+// 모드 분리(핵심 계약): mode ∈ {"off","draw","select"}. 그리기 모드와 선택 모드를
+// 명확히 분리한다. 작성 중(draw)에는 기존 선 선택을 막는다.
 //
-// 세그먼트 도출(anchor 모델): 각 anchor = { p(위치), h(핸들 벡터)|null }. 드래그가 h 를 만든다.
-//  · 도착 anchor.h == null(클릭) → line { from, to }
-//  · 도착 anchor.h != null(드래그) → cubic { from, c1, c2, to }
-//        c1 = 출발 anchor.p + 출발.h (출발이 곡선점이면 부드럽게 이어짐, 아니면 = 출발.p)
-//        c2 = 도착 anchor.p − 도착.h (드래그의 반대쪽 = 들어오는 접선)
+// [draw] 클릭=직선 점 / 클릭-드래그=곡선(베지어) 점. 하나의 patternLine 에 line·cubic
+//   혼합. 완료(Enter·더블클릭)·취소(Esc)·Backspace(마지막 점)·2점미만 불가·다른 피스 거부·
+//   preview 미커밋. anchor 모델(p, h) → segmentsFromAnchors.
 //
-// 좌표: 클릭(px) → eventToPatternPoint(도안 cm) → 피스 offset 역변환(pointToGeometryCm) →
-//  형상 cm. 핸들 h 는 (드래그점 − anchor)라 offset 이 상쇄돼 순수 형상 cm 델타. from/c1/c2/to
-//  모두 형상 cm 로 working.patternLines 에 저장(geometry 와 분리 → 재계산·이동에 불변).
+// [select] 선 클릭=선택 강조 / Delete·Backspace=선택 선 삭제 / 선택 선의 anchor·handle 표시 /
+//   anchor 드래그=공유 이웃 세그먼트 to·from(+인접 핸들) 함께 이동 / cubic 핸들 드래그=c1·c2
+//   수정 / Esc=선택 해제. 선택 상태는 **세션 UI 상태**일 뿐 working.patternLines 에 저장 안 함.
 //
-// 이번 단계 제외: 완성된 선의 재편집·삭제·스냅.
+// 공통: 화면 클릭(px) → eventToPatternPoint(도안 cm) → 피스 offset 역변환 → 형상 cm 저장/편집.
+//   working.patternLines(=geometry 와 분리). 피스 이동·엉덩이 길이 재계산에도 좌표 불변.
+//   reference·geometry·다른 선 불변.
+//
+// 이번 단계 제외: snap(편집 완성 후 별도).
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
 
-  const DRAG_PX = 4;          // 이 픽셀 미만 이동은 클릭(모서리), 이상은 드래그(곡선 핸들)
+  const DRAG_PX = 4;          // draw: 이 픽셀 미만 이동은 클릭(모서리), 이상은 드래그(곡선 핸들)
+  const LINE_HIT_PX = 7;      // select: 선 히트 반경(px)
+  const NODE_HIT_PX = 9;      // select: anchor·handle 히트 반경(px)
   const EPS = 1e-9;
-  let active = false, draft = null, dragging = null;   // draft={piece,anchors:[{p,h}]}, dragging={startX,startY}
+
+  let mode = "off";
+  let draft = null, drawDrag = null;                 // draw 상태
+  let selectedId = null, editDrag = null;            // select 상태
 
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
   function inDesign() { return typeof window.isDesignStageActive === "function" && window.isDesignStageActive() && !!project(); }
-  function isActive() { return active; }
-  // render.js preview 용: anchors(위치+핸들 복사) + 도출 segments.
-  function getDraft() {
-    if (!draft) return null;
-    return {
-      piece: draft.piece,
-      anchors: draft.anchors.map(a => ({ p: { x: a.p.x, y: a.p.y }, h: a.h ? { x: a.h.x, y: a.h.y } : null })),
-      segments: segmentsFromAnchors(draft.anchors)
-    };
-  }
+  function isActive() { return mode !== "off"; }     // draw·select 모두 피스 드래그(designLayout) 차단
+  function getMode() { return mode; }
+  function lines() { const p = project(); return (p && Array.isArray(p.working.patternLines)) ? p.working.patternLines : []; }
+  function findLine(id) { return lines().filter(l => l.id === id)[0] || null; }
 
   // ── 순수(harness) ──
   function pointToGeometryCm(drawCmX, drawCmY, off) { return { x: drawCmX - off.dx, y: drawCmY - off.dy }; }
   function geometryToDrawCm(geo, off) { return { x: geo.x + off.dx, y: geo.y + off.dy }; }
-  // anchors → line/cubic 세그먼트. 도착 anchor 의 핸들 유무가 세그먼트 타입을 정한다.
   function segmentsFromAnchors(anchors) {
     const segs = [];
     for (let i = 0; i < anchors.length - 1; i++) {
       const a = anchors[i], b = anchors[i + 1];
-      if (!b.h) {
-        segs.push({ kind: "line", from: { x: a.p.x, y: a.p.y }, to: { x: b.p.x, y: b.p.y } });
-      } else {
+      if (!b.h) segs.push({ kind: "line", from: { x: a.p.x, y: a.p.y }, to: { x: b.p.x, y: b.p.y } });
+      else {
         const c1 = a.h ? { x: a.p.x + a.h.x, y: a.p.y + a.h.y } : { x: a.p.x, y: a.p.y };
         const c2 = { x: b.p.x - b.h.x, y: b.p.y - b.h.y };
         segs.push({ kind: "cubic", from: { x: a.p.x, y: a.p.y }, c1: c1, c2: c2, to: { x: b.p.x, y: b.p.y } });
@@ -60,96 +54,206 @@
     return segs;
   }
   function makePatternLine(id, piece, anchors) { return { id: id, piece: piece, segments: segmentsFromAnchors(anchors) }; }
-  function nextId(lines) { let m = 0; lines.forEach(l => { const x = /^line-(\d+)$/.exec(l.id); if (x) m = Math.max(m, +x[1]); }); return "line-" + (m + 1); }
+  function nextId(ls) { let m = 0; ls.forEach(l => { const x = /^line-(\d+)$/.exec(l.id); if (x) m = Math.max(m, +x[1]); }); return "line-" + (m + 1); }
+  // 세그먼트 배열 → anchor 점 목록(공유 끝점). anchors[0]=seg0.from, anchors[k]=seg[k-1].to.
+  function anchorsFromSegments(segments) {
+    if (!segments || !segments.length) return [];
+    const a = [{ x: segments[0].from.x, y: segments[0].from.y }];
+    segments.forEach(s => a.push({ x: s.to.x, y: s.to.y }));
+    return a;
+  }
+  // anchor k 이동: 공유 이웃 세그먼트의 to/from(+인접 cubic 핸들)을 함께 갱신. line 을 변형.
+  function moveAnchor(line, k, dx, dy) {
+    const s = line.segments, n = s.length;
+    if (k > 0) { s[k - 1].to.x += dx; s[k - 1].to.y += dy; if (s[k - 1].kind === "cubic") { s[k - 1].c2.x += dx; s[k - 1].c2.y += dy; } }
+    if (k < n) { s[k].from.x += dx; s[k].from.y += dy; if (s[k].kind === "cubic") { s[k].c1.x += dx; s[k].c1.y += dy; } }
+  }
+  // 점-선분 거리 / 점-세그먼트(line·cubic) 최소거리 / 점-선 최소거리
+  function distPointSeg(p, a, b) {
+    const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy;
+    let t = L2 > 0 ? ((p.x - a.x) * vx + (p.y - a.y) * vy) / L2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return Math.hypot(p.x - (a.x + t * vx), p.y - (a.y + t * vy));
+  }
+  function cubicAt(s, t) {
+    const m = 1 - t;
+    return {
+      x: m * m * m * s.from.x + 3 * m * m * t * s.c1.x + 3 * m * t * t * s.c2.x + t * t * t * s.to.x,
+      y: m * m * m * s.from.y + 3 * m * m * t * s.c1.y + 3 * m * t * t * s.c2.y + t * t * t * s.to.y
+    };
+  }
+  function distToSegment(p, seg) {
+    if (seg.kind === "line") return distPointSeg(p, seg.from, seg.to);
+    let prev = cubicAt(seg, 0), min = Infinity;
+    for (let i = 1; i <= 16; i++) { const cur = cubicAt(seg, i / 16); min = Math.min(min, distPointSeg(p, prev, cur)); prev = cur; }
+    return min;
+  }
+  function distToLine(p, line) { let m = Infinity; line.segments.forEach(s => { m = Math.min(m, distToSegment(p, s)); }); return m; }
+  // 선의 cubic 핸들 목록: [{seg, which, c(제어점), a(연결 anchor)}]
+  function handlesOf(line) {
+    const hs = [];
+    line.segments.forEach((s, i) => { if (s.kind === "cubic") { hs.push({ seg: i, which: "c1", c: s.c1, a: s.from }); hs.push({ seg: i, which: "c2", c: s.c2, a: s.to }); } });
+    return hs;
+  }
 
   // ── DOM 연동 ──
   function pieceOffset(piece) { const L = window.designLayout ? window.designLayout.ensureLayout(project()) : null; return (L && L[piece]) ? L[piece] : { dx: 0, dy: 0 }; }
   function pieceAt(target) { const h = target && target.closest && target.closest(".design-layout-hit"); return h ? h.getAttribute("data-layout-piece") : null; }
   function geoAt(e, piece) { const [dx, dy] = eventToPatternPoint(e); return pointToGeometryCm(dx, dy, pieceOffset(piece)); }
+  function pxToCm() { const s = SC * viewZ; return s > 0 ? 1 / s : 1; }
   function ensurePatternLines(p) { if (!Array.isArray(p.working.patternLines)) p.working.patternLines = []; return p.working.patternLines; }
   function setNote(m) { const el = document.getElementById("designLineNote"); if (el) el.textContent = m; }
-  function syncButton() { const b = document.getElementById("btnDesignLine"); if (b) { b.textContent = active ? "그리기 종료" : "선·곡선 그리기"; b.setAttribute("aria-pressed", active ? "true" : "false"); } }
   function rerender() { if (typeof render === "function") render(); }
-  const START_NOTE = "클릭=직선 점 · 드래그=곡선 · 더블클릭/Enter 완료";
-
-  function toggle() { active = !active; draft = null; dragging = null; setNote(active ? "첫 점을 클릭(또는 드래그)하세요" : ""); syncButton(); rerender(); }
-  function cancel() { draft = null; dragging = null; setNote(active ? "취소됨 · 첫 점을 다시 찍으세요" : ""); rerender(); }   // Esc
-
-  function commit() {
-    if (!draft || draft.anchors.length < 2) { setNote("점 2개 이상 필요"); return false; }
-    const p = project(); const lines = ensurePatternLines(p);
-    lines.push(makePatternLine(nextId(lines), draft.piece, draft.anchors));
-    draft = null; dragging = null; setNote("완료 · 새 선은 다시 첫 점부터"); rerender(); return true;
+  function syncButtons() {
+    const bd = document.getElementById("btnDesignLine"), bs = document.getElementById("btnDesignSelect");
+    if (bd) { bd.textContent = mode === "draw" ? "그리기 종료" : "선·곡선 그리기"; bd.setAttribute("aria-pressed", mode === "draw" ? "true" : "false"); }
+    if (bs) { bs.textContent = mode === "select" ? "편집 종료" : "선택·편집"; bs.setAttribute("aria-pressed", mode === "select" ? "true" : "false"); }
   }
-  function backspace() {   // 마지막 점 하나 취소
-    if (!draft || draft.anchors.length === 0) return;
+  const DRAW_NOTE = "클릭=직선 점 · 드래그=곡선 · 더블클릭/Enter 완료";
+  const SELECT_NOTE = "선을 클릭해 선택 · Delete 삭제 · anchor/핸들 드래그 편집 · Esc 해제";
+
+  // ── 모드 전환(그리기/선택 상호배타) ──
+  function setMode(m) {
+    mode = m; draft = null; drawDrag = null; editDrag = null; selectedId = null;
+    setNote(m === "draw" ? "첫 점을 클릭(또는 드래그)하세요" : m === "select" ? SELECT_NOTE : "");
+    syncButtons(); rerender();
+  }
+  function toggle() { setMode(mode === "draw" ? "off" : "draw"); }          // 그리기 버튼
+  function toggleSelect() { setMode(mode === "select" ? "off" : "select"); } // 선택·편집 버튼
+
+  // render.js preview 용(draw): anchors + 도출 segments.
+  function getDraft() {
+    if (mode !== "draw" || !draft) return null;
+    return { piece: draft.piece, anchors: draft.anchors.map(a => ({ p: { x: a.p.x, y: a.p.y }, h: a.h ? { x: a.h.x, y: a.h.y } : null })), segments: segmentsFromAnchors(draft.anchors) };
+  }
+  // render.js overlay 용(select): 선택 선의 piece·anchors·handles.
+  function getSelectedId() { return mode === "select" ? selectedId : null; }
+  function getSelectionOverlay() {
+    if (mode !== "select" || !selectedId) return null;
+    const line = findLine(selectedId); if (!line) return null;
+    return {
+      piece: line.piece,
+      anchors: anchorsFromSegments(line.segments),
+      handles: handlesOf(line).map(h => ({ c: { x: h.c.x, y: h.c.y }, a: { x: h.a.x, y: h.a.y } }))
+    };
+  }
+
+  // ── draw 동작 ──
+  function commitDraft() {
+    if (!draft || draft.anchors.length < 2) { setNote("점 2개 이상 필요"); return false; }
+    const p = project(); const ls = ensurePatternLines(p);
+    ls.push(makePatternLine(nextId(ls), draft.piece, draft.anchors));
+    draft = null; drawDrag = null; setNote("완료 · 새 선은 다시 첫 점부터"); rerender(); return true;
+  }
+  function draftBackspace() {
+    if (!draft || !draft.anchors.length) return;
     draft.anchors.pop();
-    if (draft.anchors.length === 0) { draft = null; setNote("첫 점을 찍으세요"); }
-    else setNote(START_NOTE);
-    dragging = null; rerender();
+    if (!draft.anchors.length) { draft = null; setNote("첫 점을 찍으세요"); } else setNote(DRAW_NOTE);
+    drawDrag = null; rerender();
+  }
+
+  // ── select 동작 ──
+  function deleteSelected() {
+    if (mode !== "select" || !selectedId) return;
+    const p = project(); p.working.patternLines = ensurePatternLines(p).filter(l => l.id !== selectedId);
+    selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); rerender();
+  }
+  // 선택 모드 pointerdown: 선택 선의 핸들·anchor 히트 → 편집 시작. 아니면 선 선택/해제.
+  function selectDown(e, piece, geo) {
+    const rCm = NODE_HIT_PX * pxToCm(), lCm = LINE_HIT_PX * pxToCm();
+    if (selectedId) {
+      const line = findLine(selectedId);
+      if (line && line.piece === piece) {
+        // 핸들 먼저(위에 그려짐)
+        const hs = handlesOf(line);
+        for (const h of hs) if (Math.hypot(geo.x - h.c.x, geo.y - h.c.y) < rCm) { editDrag = { kind: "handle", seg: h.seg, which: h.which }; return; }
+        const as = anchorsFromSegments(line.segments);
+        for (let k = 0; k < as.length; k++) if (Math.hypot(geo.x - as[k].x, geo.y - as[k].y) < rCm) {
+          editDrag = { kind: "anchor", k: k, startGeo: geo, orig: JSON.parse(JSON.stringify(line.segments)) }; return;
+        }
+      }
+    }
+    // 선 선택(같은 피스에서 가장 가까운 선, 임계 내). 없으면 해제.
+    let best = null, bestD = lCm;
+    lines().forEach(l => { if (l.piece !== piece) return; const d = distToLine(geo, l); if (d < bestD) { bestD = d; best = l; } });
+    selectedId = best ? best.id : null;
+    setNote(best ? "선택됨 · Delete 삭제 · anchor/핸들 드래그 · Esc 해제" : SELECT_NOTE);
+  }
+  function editMove(geo) {
+    const line = findLine(selectedId); if (!line || !editDrag) return;
+    if (editDrag.kind === "handle") {
+      line.segments[editDrag.seg][editDrag.which] = { x: geo.x, y: geo.y };   // c1/c2 절대 이동
+    } else {                                                                  // anchor: 원본에서 총 delta 적용
+      line.segments = JSON.parse(JSON.stringify(editDrag.orig));
+      moveAnchor(line, editDrag.k, geo.x - editDrag.startGeo.x, geo.y - editDrag.startGeo.y);
+    }
+    rerender();
   }
 
   if (typeof svg !== "undefined" && svg) {
     svg.addEventListener("pointerdown", e => {
-      if (!active || e.button !== 0 || !inDesign()) return;
+      if (mode === "off" || e.button !== 0 || !inDesign()) return;
       const piece = pieceAt(e.target);
-      if (!draft) {
-        if (!piece) { setNote("피스 위를 클릭하세요"); return; }
-        draft = { piece: piece, anchors: [{ p: geoAt(e, piece), h: null }] };   // 첫 점 + piece 확정
-        setNote(START_NOTE);
-      } else if (piece !== draft.piece) {
-        setNote("같은 피스 안에서 이어 그리세요"); return;   // 다른 피스/빈 영역 거부 → 작성 유지
-      } else {
-        draft.anchors.push({ p: geoAt(e, piece), h: null });   // 같은 피스에 점 추가
-        setNote(START_NOTE);
+      if (mode === "draw") {
+        if (!draft) {
+          if (!piece) { setNote("피스 위를 클릭하세요"); return; }
+          draft = { piece: piece, anchors: [{ p: geoAt(e, piece), h: null }] }; setNote(DRAW_NOTE);
+        } else if (piece !== draft.piece) { setNote("같은 피스 안에서 이어 그리세요"); return; }
+        else { draft.anchors.push({ p: geoAt(e, piece), h: null }); setNote(DRAW_NOTE); }
+        drawDrag = { startX: e.clientX, startY: e.clientY };
+      } else { // select
+        if (!piece) { selectedId = null; editDrag = null; setNote(SELECT_NOTE); }
+        else selectDown(e, piece, geoAt(e, piece));
       }
-      dragging = { startX: e.clientX, startY: e.clientY };      // 드래그 시 핸들 생성 추적
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
-      e.stopPropagation();
-      rerender();
+      e.stopPropagation(); rerender();
     });
     svg.addEventListener("pointermove", e => {
-      if (!active || !dragging || !draft) return;
-      const anchor = draft.anchors[draft.anchors.length - 1];
-      const dist = Math.hypot(e.clientX - dragging.startX, e.clientY - dragging.startY);
-      if (dist > DRAG_PX) {                                     // 드래그 → 베지어 핸들(형상 cm 델타)
-        const g = geoAt(e, draft.piece);
-        anchor.h = { x: g.x - anchor.p.x, y: g.y - anchor.p.y };
-      } else {
-        anchor.h = null;                                       // 아직 클릭 수준 → 모서리 유지
+      if (mode === "draw") {
+        if (!drawDrag || !draft) return;
+        const anchor = draft.anchors[draft.anchors.length - 1];
+        if (Math.hypot(e.clientX - drawDrag.startX, e.clientY - drawDrag.startY) > DRAG_PX) {
+          const g = geoAt(e, draft.piece); anchor.h = { x: g.x - anchor.p.x, y: g.y - anchor.p.y };
+        } else anchor.h = null;
+        rerender();
+      } else if (mode === "select" && editDrag) {
+        editMove(geoAt(e, findLine(selectedId).piece));
       }
-      rerender();
     });
     const endDrag = e => {
-      if (dragging) {
+      if (mode === "draw" && drawDrag) {
         const anchor = draft && draft.anchors[draft.anchors.length - 1];
         if (anchor && anchor.h && Math.hypot(anchor.h.x, anchor.h.y) < EPS) anchor.h = null;
-        dragging = null;
-        try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {}
-        rerender();
+        drawDrag = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
+      } else if (mode === "select" && editDrag) {
+        editDrag = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
       }
     };
     svg.addEventListener("pointerup", endDrag);
     svg.addEventListener("pointercancel", endDrag);
-    // 더블클릭 완료: 두 번째 down 이 만든 중복 anchor 제거 후 커밋.
     svg.addEventListener("dblclick", e => {
-      if (!active || !draft) return;
-      draft.anchors.pop();
-      commit();
-      e.preventDefault(); e.stopPropagation();
+      if (mode !== "draw" || !draft) return;
+      draft.anchors.pop(); commitDraft(); e.preventDefault(); e.stopPropagation();
     });
     document.addEventListener("keydown", e => {
-      if (!active || !inDesign()) return;
-      const t = e.target;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;   // 입력 필드 방해 금지
-      if (e.key === "Escape") cancel();
-      else if (e.key === "Enter" && draft) { e.preventDefault(); commit(); }
-      else if (e.key === "Backspace" && draft) { e.preventDefault(); backspace(); }
+      if (mode === "off" || !inDesign()) return;
+      const t = e.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+      if (mode === "draw") {
+        if (e.key === "Escape") { draft = null; drawDrag = null; setNote("취소됨 · 첫 점을 다시 찍으세요"); rerender(); }
+        else if (e.key === "Enter" && draft) { e.preventDefault(); commitDraft(); }
+        else if (e.key === "Backspace" && draft) { e.preventDefault(); draftBackspace(); }
+      } else { // select
+        if (e.key === "Escape") { selectedId = null; editDrag = null; setNote(SELECT_NOTE); rerender(); }
+        else if ((e.key === "Delete" || e.key === "Backspace") && selectedId) { e.preventDefault(); deleteSelected(); }
+      }
     });
   }
 
   window.designLineTool = Object.freeze({
-    toggle, cancel, commit, backspace, isActive, getDraft,
-    pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId
+    toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
+    getDraft, getSelectedId, getSelectionOverlay, deleteSelected,
+    // 순수
+    pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
+    anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf
   });
 })();

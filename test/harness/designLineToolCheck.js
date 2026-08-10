@@ -27,7 +27,39 @@ function load() {
 const T = load();
 
 // 0. API
-ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "function" && typeof T.makePatternLine === "function" && typeof T.segmentsFromAnchors === "function" && typeof T.nextId === "function" && typeof T.commit === "function" && typeof T.backspace === "function" && Object.isFrozen(T), "0: API·frozen");
+ok(["pointToGeometryCm", "geometryToDrawCm", "makePatternLine", "segmentsFromAnchors", "nextId", "anchorsFromSegments", "moveAnchor", "distToLine", "distToSegment", "handlesOf", "toggle", "toggleSelect", "getSelectionOverlay", "deleteSelected"].every(k => typeof T[k] === "function") && Object.isFrozen(T), "0: API·frozen");
+
+// ── 선택·편집 순수 로직 ──
+const corner = (x, y) => ({ p: { x, y }, h: null });
+const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
+// 7. anchorsFromSegments: 세그먼트 공유 끝점 → anchor 목록(seg수+1)
+{
+  const line = T.makePatternLine("l", "front", [corner(0, 0), curved(10, 0, 2, 3), corner(20, 0)]);
+  const as = T.anchorsFromSegments(line.segments);
+  ok(as.length === 3 && near(as[0].x, 0) && near(as[1].x, 10) && near(as[2].x, 20), "7: anchorsFromSegments = seg수+1, 공유 끝점");
+}
+// 8. moveAnchor: 공유 anchor 이동 시 이웃 세그먼트 to/from + 인접 cubic 핸들 함께 갱신
+{
+  const line = T.makePatternLine("l", "front", [corner(0, 0), curved(10, 0, 2, 3), corner(20, 0)]);
+  // anchor 1(= seg0.to == seg1.from)을 (+5,+4) 이동
+  const c2before = { x: line.segments[0].c2.x, y: line.segments[0].c2.y };
+  T.moveAnchor(line, 1, 5, 4);
+  ok(near(line.segments[0].to.x, 15) && near(line.segments[0].to.y, 4), "8: seg0.to 이동");
+  ok(near(line.segments[1].from.x, 15) && near(line.segments[1].from.y, 4), "8: seg1.from 함께 이동(공유 끝점)");
+  ok(near(line.segments[0].c2.x, c2before.x + 5) && near(line.segments[0].c2.y, c2before.y + 4), "8: 인접 cubic 핸들 c2 함께 이동");
+  // 끝 anchor(2) 이동은 seg1.to 만
+  T.moveAnchor(line, 2, -3, 0);
+  ok(near(line.segments[1].to.x, 17), "8: 끝 anchor 는 마지막 seg.to 만");
+}
+// 9. distToSegment: line 정확·cubic 근사, distToLine 최소
+{
+  const lineSeg = { kind: "line", from: { x: 0, y: 0 }, to: { x: 10, y: 0 } };
+  ok(near(T.distToSegment({ x: 5, y: 3 }, lineSeg), 3), "9: 점-직선 거리");
+  const cub = { kind: "cubic", from: { x: 0, y: 0 }, c1: { x: 0, y: 10 }, c2: { x: 10, y: 10 }, to: { x: 10, y: 0 } };
+  ok(T.distToSegment({ x: 5, y: 7.5 }, cub) < 0.2, "9: 점-cubic 근사(정점 근처)");
+  const line = { segments: [lineSeg, cub] };
+  ok(near(T.distToLine({ x: 5, y: 3 }, line), 3), "9: distToLine 최소거리");
+}
 
 // 1. offset 역변환: 형상 cm = 도안 cm − offset
 {

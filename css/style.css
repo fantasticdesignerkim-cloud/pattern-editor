@@ -91,7 +91,10 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-working .design-line-vertex{fill:var(--orange);stroke:#fff;stroke-width:1}
 .design-working .design-line-handle{stroke:var(--cyan);stroke-width:1;fill:none;opacity:.9}
 .design-working .design-line-handledot{fill:var(--cyan);stroke:#fff;stroke-width:.8}
-#btnDesignLine[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
+/* 선택된 선 강조 + anchor 점(편집 대상). */
+.design-working .design-line.selected{stroke:var(--cyan);stroke-width:2.6}
+.design-working .design-line-anchor{fill:#fff;stroke:var(--cyan);stroke-width:1.6}
+#btnDesignLine[aria-pressed="true"],#btnDesignSelect[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
 
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */
 .brand{font-weight:600;color:var(--navy);font-size:15px;letter-spacing:.06em;white-space:nowrap;margin-right:8px}

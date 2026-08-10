@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026081015">
+<link rel="stylesheet" href="css/style.css?v=2026081016">
 </head>
 <body>
 
@@ -185,7 +185,8 @@
              offset 역변환해 형상 cm 로 working.patternLines 에 저장(geometry 와 분리). -->
         <div class="row" style="margin-top:8px"><label>패턴선</label></div>
         <div class="row" style="gap:4px">
-          <button class="btn" id="btnDesignLine" aria-pressed="false" onclick="designLineTool.toggle()">연속선 그리기</button>
+          <button class="btn" id="btnDesignLine" aria-pressed="false" onclick="designLineTool.toggle()">선·곡선 그리기</button>
+          <button class="btn" id="btnDesignSelect" aria-pressed="false" onclick="designLineTool.toggleSelect()">선택·편집</button>
         </div>
         <div class="row note" id="designLineNote" aria-live="polite"></div>
       </div>
@@ -202,7 +203,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026070731"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026081015"></script>
+<script src="js/render.js?v=2026081016"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -223,7 +224,7 @@
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026081011"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026081015"></script>
+<script src="js/designLineTool.js?v=2026081016"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>

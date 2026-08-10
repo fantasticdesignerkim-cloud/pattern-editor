@@ -32,12 +32,25 @@ function _tagDart(g, dart, piece){
 // 각 항목 { id, piece, segments:[{kind:"line",from,to}] }, 좌표는 형상 cm(offset 역변환).
 function _appendPatternLines(grp, patternLines, pc){
   if(!Array.isArray(patternLines)) return;
+  const selId=(window.designLineTool && window.designLineTool.getSelectedId) ? window.designLineTool.getSelectedId() : null;
   patternLines.forEach(pl=>{
     if(!pl || pl.piece !== pc || !Array.isArray(pl.segments)) return;
     const d=_patternPathD(pl.segments);   // line·cubic 혼합 → 하나의 연속 path
     if(!d) return;
-    grp.appendChild(E("path",{ d, fill:"none", class:"design-line", "data-piece":pc, "data-geometry-role":"design-line", "data-line-id":pl.id }));
+    const cls="design-line"+(pl.id===selId?" selected":"");
+    grp.appendChild(E("path",{ d, fill:"none", class:cls, "data-piece":pc, "data-geometry-role":"design-line", "data-line-id":pl.id }));
   });
+}
+
+// 선택 선의 편집 overlay: cubic 핸들선/점 + anchor 점. 피스 그룹 안이라 offset transform 동승.
+function _appendSelectionOverlay(grp, overlay){
+  if(!overlay) return;
+  (overlay.handles||[]).forEach(h=>{
+    const [ax,ay]=c2p(h.a.x, h.a.y), [cx,cy]=c2p(h.c.x, h.c.y);
+    grp.appendChild(E("line",{ x1:ax, y1:ay, x2:cx, y2:cy, class:"design-line-handle" }));
+    grp.appendChild(E("circle",{ cx, cy, r:3.5, class:"design-line-handledot" }));
+  });
+  (overlay.anchors||[]).forEach(a=>{ const [x,y]=c2p(a.x, a.y); grp.appendChild(E("circle",{ cx:x, cy:y, r:4, class:"design-line-anchor" })); });
 }
 
 // line/cubic 세그먼트 배열 → SVG path d 문자열(형상 cm → c2p). 세그먼트는 끝점 공유(연속).
@@ -143,11 +156,14 @@ function render(){
     svg.appendChild(refRoot);
 
     const workRoot = E("g"); workRoot.setAttribute("data-design-root", "working");
-    const _draft = (window.designLineTool && window.designLineTool.getDraft) ? window.designLineTool.getDraft() : null;
+    const _dlt = window.designLineTool || null;
+    const _draft = (_dlt && _dlt.getDraft) ? _dlt.getDraft() : null;
+    const _overlay = (_dlt && _dlt.getSelectionOverlay) ? _dlt.getSelectionOverlay() : null;
     SUBS.forEach(([pc, sub]) => {
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
       _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
-      if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);   // 작성 중 preview(미커밋)
+      if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
+      if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay
       workRoot.appendChild(grp);
     });
     svg.appendChild(workRoot);
