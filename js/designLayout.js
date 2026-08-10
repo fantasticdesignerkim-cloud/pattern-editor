@@ -207,6 +207,8 @@
     document.addEventListener("keyup", e => { if (e.code === "Space") spaceHeld = false; });
     svg.addEventListener("pointerdown", e => {
       if (e.button !== 0 || spaceHeld || !inDesign()) return;
+      // 패턴선 도구 활성 중엔 드래그 대신 선 그리기 → 드래그 건너뜀(designLineTool 이 처리).
+      if (window.designLineTool && window.designLineTool.isActive()) return;
       const hit = e.target && e.target.closest && e.target.closest(".design-layout-hit");
       if (!hit) return;
       const piece = hit.getAttribute("data-layout-piece");

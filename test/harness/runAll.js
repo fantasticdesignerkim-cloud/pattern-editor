@@ -45,6 +45,7 @@ const suites = [
   // Design 배치(piece layout): designLayout.js 의 순수 기하(bbox/auto 배치) 검증.
   { file: "designLayoutCheck.js",       golden: false },
   { file: "draftLayoutCheck.js",        golden: false },
+  { file: "designLineToolCheck.js",     golden: false },
 ];
 
 let anyFail = false;
