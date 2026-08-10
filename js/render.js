@@ -34,22 +34,44 @@ function _appendPatternLines(grp, patternLines, pc){
   if(!Array.isArray(patternLines)) return;
   patternLines.forEach(pl=>{
     if(!pl || pl.piece !== pc || !Array.isArray(pl.segments)) return;
-    pl.segments.forEach(sg=>{
-      if(!sg || sg.kind !== "line" || !sg.from || !sg.to) return;
-      const [x1,y1]=c2p(sg.from.x, sg.from.y), [x2,y2]=c2p(sg.to.x, sg.to.y);
-      grp.appendChild(E("line",{ x1, y1, x2, y2, class:"design-line", "data-piece":pc, "data-geometry-role":"design-line", "data-line-id":pl.id }));
-    });
+    const d=_patternPathD(pl.segments);   // line·cubic 혼합 → 하나의 연속 path
+    if(!d) return;
+    grp.appendChild(E("path",{ d, fill:"none", class:"design-line", "data-piece":pc, "data-geometry-role":"design-line", "data-line-id":pl.id }));
   });
 }
 
-// 작성 중 연속선 preview(미커밋). 점선 + 꼭짓점. 피스 그룹 안이라 offset transform 동승.
-function _appendPatternLinePreview(grp, points){
-  if(!Array.isArray(points) || points.length===0) return;
-  for(let i=0;i<points.length-1;i++){
-    const [x1,y1]=c2p(points[i].x, points[i].y), [x2,y2]=c2p(points[i+1].x, points[i+1].y);
-    grp.appendChild(E("line",{ x1, y1, x2, y2, class:"design-line-preview" }));
-  }
-  points.forEach(pt=>{ const [cx,cy]=c2p(pt.x, pt.y); grp.appendChild(E("circle",{ cx, cy, r:3, class:"design-line-vertex" })); });
+// line/cubic 세그먼트 배열 → SVG path d 문자열(형상 cm → c2p). 세그먼트는 끝점 공유(연속).
+function _patternPathD(segments){
+  if(!Array.isArray(segments) || segments.length===0) return null;
+  const [mx,my]=c2p(segments[0].from.x, segments[0].from.y);
+  let d="M"+mx+","+my;
+  segments.forEach(sg=>{
+    if(sg.kind==="line"){ const [x,y]=c2p(sg.to.x, sg.to.y); d+="L"+x+","+y; }
+    else if(sg.kind==="cubic"){
+      const [c1x,c1y]=c2p(sg.c1.x, sg.c1.y), [c2x,c2y]=c2p(sg.c2.x, sg.c2.y), [x,y]=c2p(sg.to.x, sg.to.y);
+      d+="C"+c1x+","+c1y+" "+c2x+","+c2y+" "+x+","+y;
+    }
+  });
+  return d;
+}
+
+// 작성 중 연속선 preview(미커밋): 점선 path + 꼭짓점 + 곡선 핸들선. 피스 그룹 안이라 transform 동승.
+function _appendPatternLinePreview(grp, draft){
+  if(!draft) return;
+  const d=_patternPathD(draft.segments);
+  if(d) grp.appendChild(E("path",{ d, class:"design-line-preview", fill:"none" }));
+  (draft.anchors||[]).forEach(a=>{
+    // 곡선 핸들선: (p−h)—p—(p+h)
+    if(a.h){
+      const [px,py]=c2p(a.p.x, a.p.y);
+      const [ox,oy]=c2p(a.p.x+a.h.x, a.p.y+a.h.y), [ix,iy]=c2p(a.p.x-a.h.x, a.p.y-a.h.y);
+      grp.appendChild(E("line",{ x1:ix, y1:iy, x2:ox, y2:oy, class:"design-line-handle" }));
+      grp.appendChild(E("circle",{ cx:ox, cy:oy, r:2.5, class:"design-line-handledot" }));
+      grp.appendChild(E("circle",{ cx:ix, cy:iy, r:2.5, class:"design-line-handledot" }));
+    }
+    const [cx,cy]=c2p(a.p.x, a.p.y);
+    grp.appendChild(E("circle",{ cx, cy, r:3, class:"design-line-vertex" }));
+  });
 }
 
 function _appendDesignHitRect(root, geometry, pieceName, off, scale){
@@ -125,7 +147,7 @@ function render(){
     SUBS.forEach(([pc, sub]) => {
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
       _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
-      if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft.points);   // 작성 중 preview(미커밋)
+      if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);   // 작성 중 preview(미커밋)
       workRoot.appendChild(grp);
     });
     svg.appendChild(workRoot);

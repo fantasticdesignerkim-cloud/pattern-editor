@@ -2711,9 +2711,40 @@ working.patternLines 에 커밋하지 않음**.
 - 다른 피스(앞→뒤) 클릭 거부·draft(front) 유지, Backspace 마지막 점 −1, 1점에서 Enter
   완료 불가(커밋 불변), Esc 전체 취소(preview 제거).
 - 도구 OFF 후 앞판 드래그 → 커밋된 연속선 동반 이동·**저장 형상 cm 불변**.
-- `designLineToolCheck` 13(segmentsFromPoints/makePatternLine points 기반 포함).
+- `designLineToolCheck`(연속선 시점 13).
 
-**미구현(다음)**: 곡선(`kind:"path"` segment), 선택·점 이동·삭제(`id` 지목), snap.
+## ✅ Design 패턴선 도구 3차 (2026-08) — 직선+곡선(cubic) 혼합
+
+연속선 위에, **같은 도구에서 클릭=직선 / 클릭-드래그=곡선(베지어)**. 하나의 patternLine 에
+`line`·`cubic` 세그먼트 혼합. 저장 모델(`working.patternLines`·형상 cm·offset 역변환·geometry
+분리)은 그대로. 곡선 형식 `{kind:"cubic", from, c1, c2, to}`. 완료/취소 계약(Enter·더블클릭·
+Backspace·Esc·2점미만 불가·다른 피스 거부·preview 미커밋)은 연속선과 동일.
+
+**anchor 모델(핵심)**: `draft = {piece, anchors:[{p, h}]}`. `p`=점 위치, `h`=드래그가 만든
+핸들 벡터(형상 cm 델타, `드래그점−p` 라 offset 상쇄)|null(클릭=모서리). 세그먼트는 anchors
+에서 도출(`segmentsFromAnchors`):
+- 도착 anchor.h==null(클릭) → **line** `{from,to}`
+- 도착 anchor.h!=null(드래그) → **cubic**: `c1 = 출발.p + 출발.h`(출발이 곡선점이면
+  부드럽게 이어짐, 모서리면 = 출발.p) / `c2 = 도착.p − 도착.h`(드래그 반대쪽=들어오는 접선).
+- **세그먼트 타입은 "도착점 제스처"가 정한다** — 곡선점 뒤에 클릭하면 그 구간은 line
+  (모서리). 전부 클릭이면 전부 line(= 기존 연속선).
+
+**클릭 vs 드래그 판정**: pointerdown 이 anchor 추가 + `dragging` 시작 → pointermove 가
+시작점에서 `DRAG_PX(4px)` 넘게 움직이면 마지막 anchor 에 핸들 h 설정(live), 미만이면
+모서리 유지 → pointerup 확정. designLayout 드래그는 도구 활성 시 가드로 skip.
+
+**렌더**: 커밋·preview 모두 **하나의 `<path>`**(`_patternPathD`: line→`L`, cubic→`C`).
+preview 는 점선 path + 꼭짓점(`.design-line-vertex`) + **곡선 핸들선/점**(`.design-line-handle`
+/`-handledot`, cyan). 기존 직선/연속선 데이터(segments)도 같은 path 렌더러로 계속 표시.
+
+**검증(격리 origin, storage 0, saves 0, console 0)** — desktop·390px:
+- 클릭 P1 → 드래그 P2(곡선) → 클릭 P3 → Enter: segments `[cubic, line]`, cubic c1=P1(모서리)·
+  c2=P2−핸들·to=P2 실측 일치, 커밋 path 에 `C`·`L` 모두, 작성 중 preview 핸들선 표시·**커밋 0**.
+- 더블클릭 완료(cubic+line 혼합), Backspace −1, 1점 Enter 완료 불가, Esc 전체 취소.
+- 엉덩이 길이 10→20→0·앞판 드래그에도 **곡선 좌표 불변**, 곡선 path 피스 동반 이동, 다른
+  피스 거부. `designLineToolCheck` 15(segmentsFromAnchors line/cubic/혼합·makePatternLine).
+
+**미구현(다음)**: 완성 선의 선택·점 이동·핸들 편집·삭제(`id` 지목), snap.
 
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 

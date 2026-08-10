@@ -27,7 +27,7 @@ function load() {
 const T = load();
 
 // 0. API
-ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "function" && typeof T.makePatternLine === "function" && typeof T.segmentsFromPoints === "function" && typeof T.nextId === "function" && typeof T.commit === "function" && typeof T.backspace === "function" && Object.isFrozen(T), "0: API·frozen");
+ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "function" && typeof T.makePatternLine === "function" && typeof T.segmentsFromAnchors === "function" && typeof T.nextId === "function" && typeof T.commit === "function" && typeof T.backspace === "function" && Object.isFrozen(T), "0: API·frozen");
 
 // 1. offset 역변환: 형상 cm = 도안 cm − offset
 {
@@ -52,18 +52,24 @@ ok(typeof T.pointToGeometryCm === "function" && typeof T.geometryToDrawCm === "f
   // 그러나 화면 표시 위치는 동일(각자 offset 더하면 같은 도안 cm)
   ok(near(T.geometryToDrawCm(front, { dx: 0, dy: 0 }).x, T.geometryToDrawCm(back, { dx: 57.5, dy: 0 }).x), "3: 표시 위치는 동일(클릭 지점)");
 }
-// 4. segmentsFromPoints / makePatternLine: 연속 점 → 여러 line segment
+// 4. segmentsFromAnchors: 클릭(h=null)→line, 드래그(h)→cubic. 하나의 선에 혼합.
 {
-  // 2점 → 1 segment(기존 직선과 동일 모델)
-  ok(T.segmentsFromPoints([{ x: 1, y: 2 }, { x: 3, y: 4 }]).length === 1, "4: 2점 → 1 segment(직선 호환)");
-  // 4점 → 3 segment, 이어짐
-  const pts = [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 0 }, { x: 3, y: 2 }];
-  const segs = T.segmentsFromPoints(pts);
-  ok(segs.length === 3 && segs[0].kind === "line" && near(segs[0].to.x, 1) && near(segs[1].from.x, 1) && near(segs[2].to.y, 2), "4: 연속 segment(이어짐)");
-  const pl = T.makePatternLine("line-1", "front", pts);
-  ok(pl.id === "line-1" && pl.piece === "front" && pl.segments.length === 3, "4: polyline 하나 = patternLine 하나 + 여러 segment");
-  pts[0].x = 999;
-  ok(near(pl.segments[0].from.x, 0), "4: 좌표 복사(입력 참조 아님)");
+  const corner = (x, y) => ({ p: { x, y }, h: null });
+  const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
+  // 모두 클릭 → 전부 line (기존 연속선과 동일)
+  const allLine = T.segmentsFromAnchors([corner(0, 0), corner(1, 1), corner(2, 0)]);
+  ok(allLine.length === 2 && allLine.every(s => s.kind === "line"), "4: 클릭만 → 전부 line");
+  // 도착점이 드래그 → cubic. c2 = 도착.p − 도착.h(들어오는 접선), 출발 모서리면 c1 = 출발.p
+  const mix = T.segmentsFromAnchors([corner(0, 0), curved(10, 0, 2, 3), corner(20, 0)]);
+  ok(mix.length === 2, "4: 3 anchor → 2 segment");
+  ok(mix[0].kind === "cubic" && near(mix[0].c1.x, 0) && near(mix[0].c1.y, 0) && near(mix[0].c2.x, 10 - 2) && near(mix[0].c2.y, 0 - 3) && near(mix[0].from.x, 0) && near(mix[0].to.x, 10), "4: 드래그 도착 → cubic(c1=출발.p, c2=도착−h)");
+  ok(mix[1].kind === "line" && near(mix[1].from.x, 10) && near(mix[1].to.x, 20), "4: 클릭 도착 → line (곡선점 뒤 모서리)");
+  // 곡선점 → 곡선점: 출발 핸들이 c1 에 반영(부드럽게 이어짐)
+  const smooth = T.segmentsFromAnchors([curved(0, 0, 1, 1), curved(10, 0, 2, -1)]);
+  ok(smooth[0].kind === "cubic" && near(smooth[0].c1.x, 0 + 1) && near(smooth[0].c1.y, 0 + 1) && near(smooth[0].c2.x, 10 - 2) && near(smooth[0].c2.y, 0 + 1), "4: 곡선→곡선 c1=출발+h");
+  // makePatternLine(anchors) → { id, piece, segments } 혼합
+  const pl = T.makePatternLine("line-1", "front", [corner(0, 0), curved(10, 0, 2, 3), corner(20, 0)]);
+  ok(pl.id === "line-1" && pl.piece === "front" && pl.segments.length === 2 && pl.segments[0].kind === "cubic" && pl.segments[1].kind === "line", "4: patternLine 하나 = line·cubic 혼합");
 }
 // 5. nextId: 기존 최대 id + 1 (삭제가 생겨도 충돌 없음)
 {
