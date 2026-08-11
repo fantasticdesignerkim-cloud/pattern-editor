@@ -80,17 +80,33 @@
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     return Math.hypot(p.x - (a.x + t * vx), p.y - (a.y + t * vy));
   }
-  function cubicAt(s, t) {
-    const m = 1 - t;
-    return {
-      x: m * m * m * s.from.x + 3 * m * m * t * s.c1.x + 3 * m * t * t * s.c2.x + t * t * t * s.to.x,
-      y: m * m * m * s.from.y + 3 * m * m * t * s.c1.y + 3 * m * t * t * s.c2.y + t * t * t * s.to.y
-    };
+  // adaptive de Casteljau flattening — designBodice 교차검사와 **동일 경계**(FLAT_TOL 1e-4,
+  // 최대 depth 16). 고정 분할은 최근접점이 샘플 사이/꼭짓점에 걸리면 오차가 남으므로 안 쓴다.
+  // snap 최근접점(nearestOnSegs)·선 선택 hit-test(distToSegment) 둘 다 이 flattenSegment 를 공유.
+  const FLAT_TOL = 1e-4, FLAT_MAX_DEPTH = 16;
+  function _mid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+  function _cubicFlatEnough(p0, p1, p2, p3) {
+    let ux = 3 * p1.x - 2 * p0.x - p3.x, uy = 3 * p1.y - 2 * p0.y - p3.y;
+    let vx = 3 * p2.x - p0.x - 2 * p3.x, vy = 3 * p2.y - p0.y - 2 * p3.y;
+    ux *= ux; uy *= uy; vx *= vx; vy *= vy;
+    if (ux < vx) ux = vx; if (uy < vy) uy = vy;
+    return (ux + uy) <= 16 * FLAT_TOL * FLAT_TOL;
+  }
+  function _flattenCubic(p0, p1, p2, p3, depth, out) {
+    if (depth >= FLAT_MAX_DEPTH || _cubicFlatEnough(p0, p1, p2, p3)) { out.push([p0, p3]); return; }
+    const p01 = _mid(p0, p1), p12 = _mid(p1, p2), p23 = _mid(p2, p3);
+    const p012 = _mid(p01, p12), p123 = _mid(p12, p23), p0123 = _mid(p012, p123);
+    _flattenCubic(p0, p01, p012, p0123, depth + 1, out);   // 좌 → 우 결정론적
+    _flattenCubic(p0123, p123, p23, p3, depth + 1, out);
+  }
+  // 세그먼트(line·cubic) → 평탄화된 [a,b] 선분 배열.
+  function flattenSegment(seg) {
+    if (seg.kind === "cubic") { const out = []; _flattenCubic(seg.from, seg.c1, seg.c2, seg.to, 0, out); return out; }
+    return [[seg.from, seg.to]];
   }
   function distToSegment(p, seg) {
-    if (seg.kind === "line") return distPointSeg(p, seg.from, seg.to);
-    let prev = cubicAt(seg, 0), min = Infinity;
-    for (let i = 1; i <= 16; i++) { const cur = cubicAt(seg, i / 16); min = Math.min(min, distPointSeg(p, prev, cur)); prev = cur; }
+    let min = Infinity;
+    flattenSegment(seg).forEach(ab => { const d = distPointSeg(p, ab[0], ab[1]); if (d < min) min = d; });
     return min;
   }
   function distToLine(p, line) { let m = Infinity; line.segments.forEach(s => { m = Math.min(m, distToSegment(p, s)); }); return m; }
@@ -114,8 +130,10 @@
   function nearestOnSegs(cursor, segs, thr) {
     let best = null, bd = thr;
     segs.forEach(s => {
-      if (s.kind === "line") { const c = closestOnSeg(cursor, s.from, s.to); const d = Math.hypot(cursor.x - c.x, cursor.y - c.y); if (d < bd) { bd = d; best = c; } }
-      else if (s.kind === "cubic") { let prev = cubicAt(s, 0); for (let i = 1; i <= 16; i++) { const cur = cubicAt(s, i / 16); const c = closestOnSeg(cursor, prev, cur); const d = Math.hypot(cursor.x - c.x, cursor.y - c.y); if (d < bd) { bd = d; best = c; } prev = cur; } }
+      flattenSegment(s).forEach(ab => {   // line·cubic 모두 adaptive flatten 선분에 투영(동일 경계)
+        const c = closestOnSeg(cursor, ab[0], ab[1]); const d = Math.hypot(cursor.x - c.x, cursor.y - c.y);
+        if (d < bd) { bd = d; best = c; }
+      });
     });
     return best ? { pt: best, d: bd } : null;
   }
@@ -348,6 +366,6 @@
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf,
-    chooseSnap, closestOnSeg, nearestOnSegs
+    chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment
   });
 })();

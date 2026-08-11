@@ -2788,7 +2788,12 @@ cubic 핸들선/점. render.js `_appendSelectionOverlay`(피스 그룹 안 → o
 있으면 그 tier 최근접을 쓴다(격자는 최저 폴백). `chooseSnap(cursor, sources, thr, grid)`:
 1. **기존 패턴선 anchor**(자기 자신 제외) → 2. **working geometry 끝점·semantic junction**
    (outline+construction primitive 의 on-curve 점) → 3. **working outline 최근접점**
-   (`nearestOnSegs`: line 정확·cubic 16샘플 투영) → 4. **0.5cm 격자**.
+   (`nearestOnSegs`) → 4. **0.5cm 격자**.
+   - ★ **cubic 최근접점은 adaptive de Casteljau flattening**(`flattenSegment`, designBodice
+     교차검사와 **동일 경계** FLAT_TOL=1e-4·최대 depth 16)으로 계산한다. 고정 16분할은 최근접점이
+     샘플 선분(현) 위에 흡착돼 실제 곡선에서 벗어나므로(패턴 좌표에서 봉제선 연결에 오차가 남음)
+     쓰지 않는다. **snap 최근접점(`nearestOnSegs`)과 선 선택 hit-test(`distToSegment`)가 같은
+     `flattenSegment` 경계를 공유**한다.
 - **화면 8px 이내에서만 흡착**(`SNAP_PX=8`), zoom→cm 환산(`thr=8·(1/(SC·viewZ))`).
 - **Alt** 누르면 해제(자유). **cubic 핸들 드래그는 snap 없음**(자유). **다른 피스·소매 후보 금지**
   (`patternAnchorPts`/`geomEndpoints`/`outlineSegsOf` 가 `PIECE_GEOM_KEYS[piece]`만 스캔).
@@ -2803,8 +2808,13 @@ anchor 제외). 흡착점은 cyan 링(`_appendSnapHint`) + note "흡착 → 기�
 - draw 새 anchor: A 근처(5px) 클릭 → 기존 anchor A 로 정확 흡착. Alt 클릭 → 해제(커서 위치).
 - select anchor 드래그 → A 흡착, hint type "anchor"·cyan 렌더. cubic 핸들 드래그 → **흡착 안 됨**
   (커서에 자유), hint 없음. draw hover → snapHint(anchor)·cyan. working geometry **끝점 흡착**
-  (type endpoint). `designLineToolCheck` 31(chooseSnap 우선순위·임계·격자 폴백·closestOnSeg·
-  nearestOnSegs).
+  (type endpoint). `designLineToolCheck` 36(chooseSnap 우선순위·임계·격자 폴백·closestOnSeg·
+  nearestOnSegs + cubic 정밀도).
+- **cubic 정밀도(정밀 보완)**: 고곡률 cubic 에서 16분할 꼭짓점 사이가 최근접인 fixture —
+  adaptive 결과가 **실제 cubic 위(오차<1e-3)** 이고 실제 최근접과 일치, 고정 16분할은 곡선에서
+  **5배 이상** 벗어남(정밀도 개선 실증). 실브라우저: front cubic outline 근처를 두 zoom
+  (0.99·1.88)에서 흡착 → **동일 저장 좌표**(44.8291,2.33769)·실제 곡선 오차 4.4e-4(4000샘플
+  측정 해상도 한계 내)·type outline. `distToSegment`(선 hit-test)도 같은 flatten 경계로 정밀.
 
 **미구현(다음)**: 핸들 각도 고정(수평·수직·45°)은 별도 기능.
 

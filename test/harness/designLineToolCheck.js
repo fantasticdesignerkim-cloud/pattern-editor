@@ -146,6 +146,33 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   const r = T.nearestOnSegs({ x: 5, y: 0.2 }, [{ kind: "line", from: { x: 0, y: 0 }, to: { x: 10, y: 0 } }], 1);
   ok(r && near(r.pt.x, 5) && near(r.pt.y, 0), "11: nearestOnSegs line");
 }
+// 12. cubic 최근접점 정밀도 — adaptive de Casteljau flattening(1e-4)이 고정 16분할보다 정확
+{
+  const trueCubicAt = (s, t) => { const m = 1 - t; return { x: m*m*m*s.from.x + 3*m*m*t*s.c1.x + 3*m*t*t*s.c2.x + t*t*t*s.to.x, y: m*m*m*s.from.y + 3*m*m*t*s.c1.y + 3*m*t*t*s.c2.y + t*t*t*s.to.y }; };
+  // 밀집 샘플로 실제 곡선 최근접점
+  const trueNearest = (s, p) => { let best=null, bd=Infinity; for (let i=0;i<=4000;i++){ const q=trueCubicAt(s,i/4000); const d=Math.hypot(p.x-q.x,p.y-q.y); if(d<bd){bd=d;best=q;} } return { pt: best, d: bd }; };
+  // 곡선 위 점이 실제 cubic 과 얼마나 떨어졌나(허용오차 확인)
+  const distToCurve = (s, pt) => { let m=Infinity; for(let i=0;i<=4000;i++){ const q=trueCubicAt(s,i/4000); const d=Math.hypot(pt.x-q.x,pt.y-q.y); if(d<m)m=d; } return m; };
+  // 고곡률 cubic(꺾이는 아치). 커서를 16분할 꼭짓점 사이(t≈0.53)에 두어 샘플 선분 위가 아니라
+  // 실제 곡선 위 점이 최근접이 되게 한다.
+  const seg = { kind: "cubic", from: { x: 0, y: 0 }, c1: { x: 24, y: 0 }, c2: { x: 24, y: 12 }, to: { x: 0, y: 12 } };
+  const t0 = 0.53, on = trueCubicAt(seg, t0);
+  // 곡선 바깥 법선 근처의 커서(곡선에서 약간 떨어진 점)
+  const cursor = { x: on.x + 0.8, y: on.y };
+  const tn = trueNearest(seg, cursor);
+  const adaptive = T.nearestOnSegs(cursor, [seg], 100).pt;
+  // 16분할(옛 방식) 재현: 샘플 선분에 투영
+  let fixed=null, fd=Infinity, prev=trueCubicAt(seg,0);
+  for(let i=1;i<=16;i++){ const cur=trueCubicAt(seg,i/16); const c=T.closestOnSeg(cursor,prev,cur); const d=Math.hypot(cursor.x-c.x,cursor.y-c.y); if(d<fd){fd=d;fixed=c;} prev=cur; }
+  ok(distToCurve(seg, adaptive) < 1e-3, "12: adaptive 최근접점이 실제 cubic 위(오차<1e-3)");
+  ok(Math.hypot(adaptive.x - tn.pt.x, adaptive.y - tn.pt.y) < 1e-3, "12: adaptive 결과 = 실제 최근접(오차<1e-3)");
+  ok(distToCurve(seg, fixed) > distToCurve(seg, adaptive) * 5, "12: 고정 16분할은 곡선에서 더 벗어남(정밀도 개선 실증)");
+  // flattenSegment 계약: cubic 은 line 여러 개, line 은 자기 자신
+  ok(T.flattenSegment(seg).length > 16 && T.flattenSegment({ kind: "line", from: { x: 0, y: 0 }, to: { x: 1, y: 1 } }).length === 1, "12: flattenSegment(cubic 세분·line 단일)");
+  // distToSegment(선 선택 hit-test)도 같은 flatten 경계 사용 → 곡선 위 최근접 거리
+  const near0 = T.distToSegment(on, seg);
+  ok(near0 < 1e-3, "12: distToSegment(hit-test)도 정밀 — 곡선 위 점 거리 ~0");
+}
 
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
