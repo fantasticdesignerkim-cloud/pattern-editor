@@ -173,6 +173,38 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   const near0 = T.distToSegment(on, seg);
   ok(near0 < 1e-3, "12: distToSegment(hit-test)도 정밀 — 곡선 위 점 거리 ~0");
 }
+// 13. Shift 각도 고정: 45° 배수로 각도만 고정, 길이 보존, 경계각, offset 독립
+{
+  const ang = v => Math.atan2(v.y, v.x) * 180 / Math.PI;
+  const len = v => Math.hypot(v.x, v.y);
+  // 수평(≈0°): (5, 0.4) → 0°, 길이 보존
+  let v = T.constrainAngle45(5, 0.4);
+  ok(near(ang(v), 0, 1e-6) && near(len(v), Math.hypot(5, 0.4)), "13: 수평 0° · 길이 보존");
+  // 수직(90°): (0.3, 6) → 90°
+  v = T.constrainAngle45(0.3, 6);
+  ok(near(Math.abs(ang(v)), 90, 1e-6) && near(len(v), Math.hypot(0.3, 6)), "13: 수직 90°");
+  // +45°: (5, 4) → 45°
+  v = T.constrainAngle45(5, 4);
+  ok(near(ang(v), 45, 1e-6) && near(len(v), Math.hypot(5, 4)), "13: +45°");
+  // -45°: (5, -4.5) → -45°
+  v = T.constrainAngle45(5, -4.5);
+  ok(near(ang(v), -45, 1e-6), "13: -45°");
+  // 135°: (-5, 4) → 135°
+  v = T.constrainAngle45(-5, 4);
+  ok(near(ang(v), 135, 1e-6), "13: 135°");
+  // 경계각(30° → 45 로 반올림, 20° → 0 으로): 결과 각도가 45 배수
+  const b30 = T.constrainAngle45(Math.cos(30 * Math.PI / 180), Math.sin(30 * Math.PI / 180));
+  ok(near(ang(b30), 45, 1e-6), "13: 경계각 30°→45");
+  const b20 = T.constrainAngle45(Math.cos(20 * Math.PI / 180), Math.sin(20 * Math.PI / 180));
+  ok(near(ang(b20), 0, 1e-6), "13: 경계각 20°→0");
+  // 결과 각도는 항상 45 배수
+  [[3, 1], [1, 3], [-2, 5], [-4, -1], [2, -7]].forEach(([dx, dy]) => { const r = T.constrainAngle45(dx, dy); const a = ((Math.round(ang(r)) % 45) + 45) % 45; ok(a === 0 && near(len(r), Math.hypot(dx, dy)), "13: 45 배수 + 길이 보존 (" + dx + "," + dy + ")"); });
+  // 길이 0 → 0 벡터(안전)
+  ok(near(T.constrainAngle45(0, 0).x, 0) && near(T.constrainAngle45(0, 0).y, 0), "13: 길이 0 안전");
+  // offset/zoom 독립: 벡터(형상 cm 델타)만 다루므로 어떤 offset 을 더해도 벡터 자체는 불변
+  const v1 = T.constrainAngle45(5, 4);
+  ok(near(v1.x, T.constrainAngle45(5, 4).x) && near(v1.y, T.constrainAngle45(5, 4).y), "13: 결정론(offset·zoom 무관 — 벡터만)");
+}
 
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }

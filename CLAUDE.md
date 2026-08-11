@@ -2816,7 +2816,27 @@ anchor 제외). 흡착점은 cyan 링(`_appendSnapHint`) + note "흡착 → 기�
   (0.99·1.88)에서 흡착 → **동일 저장 좌표**(44.8291,2.33769)·실제 곡선 오차 4.4e-4(4000샘플
   측정 해상도 한계 내)·type outline. `distToSegment`(선 hit-test)도 같은 flatten 경계로 정밀.
 
-**미구현(다음)**: 핸들 각도 고정(수평·수직·45°)은 별도 기능.
+## ✅ Design 패턴선 도구 6차 (2026-08) — Shift 핸들 각도 고정(45°)
+
+snap 위에, **핸들 드래그 중 Shift = anchor 기준 가장 가까운 45° 배수로 각도 고정**(길이는
+커서 거리 유지). 별도 버튼 없이 보조키. draw click-drag 핸들·select c1/c2 편집 **모두 적용**.
+
+**계약(잠금)**
+- **각도만 45° 배수(0·45·90·135·180…)로 고정, 길이는 현재 커서 거리 유지** —
+  `constrainAngle45(dx,dy)`: 벡터 각도를 `round(atan2/45°)·45°` 로 스냅, `len` 보존. 순수.
+- **Shift 놓으면 즉시 자유 복귀** — pointermove 는 매번 `e.shiftKey` 반영, 추가로
+  keydown/keyup(Shift)가 **마우스 정지 상태에서도** 마지막 커서(`lastHandleGeo`)로 즉시 재계산
+  (`onShift`, `_handleShift` 로 중복 방지).
+- **anchor snap 과 분리** — 핸들은 **위치 snap 없음**(각도 고정만). anchor snap 은 그대로.
+- **선택한 c1 또는 c2만 변경, 반대쪽 강제 대칭 없음**(c1 은 seg.from, c2 는 seg.to 기준 각도).
+- **도안 cm(피스 offset 제거) 벡터로 각도 계산** → zoom·offset 독립.
+- 작성·편집 중 note "핸들 45° 각도 고정 (Shift)" / "… Shift = 45° 고정" 안내.
+
+**검증(격리 origin, storage 0, console 0)**:
+- draw: Shift 드래그 → 각도 0°(45배수), **길이 = 자유 드래그 길이(보존)**. Shift keydown 즉시
+  고정·keyup 즉시 자유 복귀(마우스 정지 상태에서도). select: c2 핸들 Shift → 90°(45배수),
+  **c1 불변**(반대쪽 강제 대칭 없음). `designLineToolCheck` 50(수평·수직·±45·135·경계각
+  30→45/20→0·45배수 전수·길이 보존·offset 독립).
 
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 

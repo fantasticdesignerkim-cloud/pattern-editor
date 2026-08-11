@@ -34,6 +34,7 @@
   let draft = null, drawDrag = null;                 // draw 상태
   let selectedId = null, editDrag = null;            // select 상태
   let snapHint = null;                               // {piece, point, type} — 흡착 표시(세션 UI)
+  let lastHandleGeo = null;                           // 핸들 드래그 중 마지막 커서(형상 cm) — Shift 즉시 반영
 
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
   function inDesign() { return typeof window.isDesignStageActive === "function" && window.isDesignStageActive() && !!project(); }
@@ -150,6 +151,15 @@
     const gd = Math.hypot(cursor.x - gp.x, cursor.y - gp.y);
     if (gd < thr) return { point: gp, type: "grid", dist: gd };
     return null;
+  }
+  // Shift 각도 고정: 핸들 벡터(dx,dy)의 각도만 45° 배수로 고정하고 길이는 유지.
+  // 도안 cm(피스 offset 제거) 벡터라 zoom·offset 독립. anchor snap 과 분리(핸들 위치 snap 없음).
+  function constrainAngle45(dx, dy) {
+    const len = Math.hypot(dx, dy);
+    if (len < EPS) return { x: 0, y: 0 };
+    const step = Math.PI / 4;
+    const a = Math.round(Math.atan2(dy, dx) / step) * step;
+    return { x: len * Math.cos(a), y: len * Math.sin(a) };
   }
 
   // ── DOM 연동 ──
@@ -275,11 +285,22 @@
     selectedId = best ? best.id : null;
     setNote(best ? "선택됨 · Delete 삭제 · anchor/핸들 드래그 · Esc 해제" : SELECT_NOTE);
   }
-  function editMove(geo, altKey) {
+  // draw 곡선 핸들: 커서 g(형상 cm) → 마지막 anchor.h. Shift=45° 고정(길이 유지).
+  function applyDrawHandle(g, shift) {
+    const anchor = draft.anchors[draft.anchors.length - 1];
+    anchor.h = shift ? constrainAngle45(g.x - anchor.p.x, g.y - anchor.p.y) : { x: g.x - anchor.p.x, y: g.y - anchor.p.y };
+    setNote(shift ? "핸들 45° 각도 고정 (Shift)" : "곡선 핸들 · Shift = 45° 고정");
+  }
+  function editMove(geo, altKey, shiftKey) {
     const line = findLine(selectedId); if (!line || !editDrag) return;
     if (editDrag.kind === "handle") {
-      line.segments[editDrag.seg][editDrag.which] = { x: geo.x, y: geo.y };   // 핸들: snap 없음(자유 이동)
-      snapHint = null; setNote("핸들 이동 · Esc 해제");
+      lastHandleGeo = { x: geo.x, y: geo.y };
+      const seg = line.segments[editDrag.seg];
+      const anchor = editDrag.which === "c1" ? seg.from : seg.to;             // c1=from쪽 · c2=to쪽 기준
+      let tip = { x: geo.x, y: geo.y };                                       // 핸들 위치 snap 없음(자유)
+      if (shiftKey) { const v = constrainAngle45(geo.x - anchor.x, geo.y - anchor.y); tip = { x: anchor.x + v.x, y: anchor.y + v.y }; }
+      seg[editDrag.which] = tip;                                              // 선택한 c1/c2만(반대쪽 강제 대칭 없음)
+      snapHint = null; setNote(shiftKey ? "핸들 45° 각도 고정 (Shift)" : "핸들 이동 · Shift = 45° 고정");
     } else {                                                                  // anchor: 총 delta + snap
       const oa = editDrag.origAnchor;
       const nx = oa.x + (geo.x - editDrag.startGeo.x), ny = oa.y + (geo.y - editDrag.startGeo.y);
@@ -315,11 +336,11 @@
     });
     svg.addEventListener("pointermove", e => {
       if (mode === "draw") {
-        if (drawDrag && draft) {                                   // 곡선 핸들 드래그(snap 없음)
+        if (drawDrag && draft) {                                   // 곡선 핸들 드래그(핸들 위치 snap 없음)
           const anchor = draft.anchors[draft.anchors.length - 1];
           if (Math.hypot(e.clientX - drawDrag.startX, e.clientY - drawDrag.startY) > DRAG_PX) {
-            const g = geoAt(e, draft.piece); anchor.h = { x: g.x - anchor.p.x, y: g.y - anchor.p.y };
-          } else anchor.h = null;
+            const g = geoAt(e, draft.piece); lastHandleGeo = g; applyDrawHandle(g, e.shiftKey);
+          } else { anchor.h = null; lastHandleGeo = null; }
           snapHint = null; rerender();
         } else {                                                   // hover: 다음 anchor 의 snap 미리보기
           const piece = draft ? draft.piece : pieceAt(e.target);
@@ -328,20 +349,29 @@
           if (setSnapHint(h, DRAW_NOTE)) rerender();
         }
       } else if (mode === "select" && editDrag) {
-        editMove(geoAt(e, findLine(selectedId).piece), e.altKey);
+        editMove(geoAt(e, findLine(selectedId).piece), e.altKey, e.shiftKey);
       }
     });
     const endDrag = e => {
       if (mode === "draw" && drawDrag) {
         const anchor = draft && draft.anchors[draft.anchors.length - 1];
         if (anchor && anchor.h && Math.hypot(anchor.h.x, anchor.h.y) < EPS) anchor.h = null;
-        drawDrag = null; snapHint = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
+        drawDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
       } else if (mode === "select" && editDrag) {
-        editDrag = null; snapHint = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
+        editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
       }
     };
     svg.addEventListener("pointerup", endDrag);
     svg.addEventListener("pointercancel", endDrag);
+    // Shift 즉시 반영: 핸들 드래그 중(마우스 정지 상태 포함) Shift 누름/뗌에 각도 고정/해제.
+    let _handleShift = false;
+    function onShift(shift) {
+      if (shift === _handleShift || !lastHandleGeo) return; _handleShift = shift;
+      if (mode === "draw" && drawDrag && draft) { applyDrawHandle(lastHandleGeo, shift); rerender(); }
+      else if (mode === "select" && editDrag && editDrag.kind === "handle") { editMove(lastHandleGeo, false, shift); }
+    }
+    document.addEventListener("keydown", e => { if (e.key === "Shift") onShift(true); });
+    document.addEventListener("keyup", e => { if (e.key === "Shift") onShift(false); });
     svg.addEventListener("dblclick", e => {
       if (mode !== "draw" || !draft) return;
       draft.anchors.pop(); commitDraft(); e.preventDefault(); e.stopPropagation();
@@ -366,6 +396,6 @@
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf,
-    chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment
+    chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment, constrainAngle45
   });
 })();
