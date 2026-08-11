@@ -99,9 +99,12 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   // 곡선점 → 곡선점: 출발 핸들이 c1 에 반영(부드럽게 이어짐)
   const smooth = T.segmentsFromAnchors([curved(0, 0, 1, 1), curved(10, 0, 2, -1)]);
   ok(smooth[0].kind === "cubic" && near(smooth[0].c1.x, 0 + 1) && near(smooth[0].c1.y, 0 + 1) && near(smooth[0].c2.x, 10 - 2) && near(smooth[0].c2.y, 0 + 1), "4: 곡선→곡선 c1=출발+h");
-  // makePatternLine(anchors) → { id, piece, segments } 혼합
+  // makePatternLine(anchors) → { id, piece, role, segments } 혼합
   const pl = T.makePatternLine("line-1", "front", [corner(0, 0), curved(10, 0, 2, 3), corner(20, 0)]);
   ok(pl.id === "line-1" && pl.piece === "front" && pl.segments.length === 2 && pl.segments[0].kind === "cubic" && pl.segments[1].kind === "line", "4: patternLine 하나 = line·cubic 혼합");
+  // role: 기본 guide, 명시 role 반영
+  ok(pl.role === "guide", "4: 새 선 기본 role = guide(참고)");
+  ok(T.makePatternLine("l", "back", [corner(0, 0), corner(1, 1)], "cut").role === "cut", "4: 명시 role 반영");
 }
 // 5. nextId: 기존 최대 id + 1 (삭제가 생겨도 충돌 없음)
 {

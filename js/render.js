@@ -38,7 +38,7 @@ function _appendPatternLines(grp, patternLines, pc){
     const d=_patternPathD(pl.segments);   // line·cubic 혼합 → 하나의 연속 path
     if(!d) return;
     const cls="design-line"+(pl.id===selId?" selected":"");
-    grp.appendChild(E("path",{ d, fill:"none", class:cls, "data-piece":pc, "data-geometry-role":"design-line", "data-line-id":pl.id }));
+    grp.appendChild(E("path",{ d, fill:"none", class:cls, "data-piece":pc, "data-geometry-role":"design-line", "data-role":pl.role||"guide", "data-line-id":pl.id }));
   });
 }
 

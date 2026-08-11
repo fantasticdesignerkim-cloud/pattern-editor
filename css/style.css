@@ -85,19 +85,23 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 
 /* 디자인 패턴선(사용자가 그린 선) — working 전용, 주황으로 구분. 활성 버튼은 navy.
    .design-working line(0,1,1) 보다 우선하도록 working 스코프로 올린다. */
-.design-working .design-line{stroke:var(--orange);stroke-width:1.8;fill:none;stroke-linecap:round}
+.design-working .design-line{fill:none;stroke-linecap:round;stroke:var(--orange);stroke-width:1.8}
+/* 역할별 표시 구분: 절개선=빨강 점선 / 외곽 대체선=navy 실선(굵게) / 보조선=주황 얇은 점선(참고). */
+.design-working .design-line[data-role="cut"]{stroke:#cc3333;stroke-width:1.8;stroke-dasharray:8 4}
+.design-working .design-line[data-role="boundary"]{stroke:var(--navy);stroke-width:2.4;stroke-dasharray:none}
+.design-working .design-line[data-role="guide"]{stroke:var(--orange);stroke-width:1.5;stroke-dasharray:3 3;opacity:.85}
 /* 작성 중 연속선 preview(미커밋): 점선 path + 주황 꼭짓점 + 곡선 핸들선. */
 .design-working .design-line-preview{stroke:var(--orange);stroke-width:1.6;fill:none;stroke-dasharray:5 3;opacity:.85}
 .design-working .design-line-vertex{fill:var(--orange);stroke:#fff;stroke-width:1}
 .design-working .design-line-handle{stroke:var(--cyan);stroke-width:1;fill:none;opacity:.9}
 .design-working .design-line-handledot{fill:var(--cyan);stroke:#fff;stroke-width:.8}
 /* 선택된 선 강조 + anchor 점(편집 대상). */
-.design-working .design-line.selected{stroke:var(--cyan);stroke-width:2.6}
+.design-working .design-line.selected{stroke:var(--cyan);stroke-width:2.6;stroke-dasharray:none;opacity:1}
 .design-working .design-line-anchor{fill:#fff;stroke:var(--cyan);stroke-width:1.6}
 /* snap 흡착 표시(cyan 링). */
 .design-working .design-snap-ring{fill:none;stroke:var(--cyan);stroke-width:1.6;opacity:.9}
 .design-working .design-snap-dot{fill:var(--cyan);stroke:none}
-#btnDesignLine[aria-pressed="true"],#btnDesignSelect[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
+#btnDesignLine[aria-pressed="true"],#btnDesignSelect[aria-pressed="true"],#btnRoleCut[aria-pressed="true"],#btnRoleBoundary[aria-pressed="true"],#btnRoleGuide[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
 
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */
 .brand{font-weight:600;color:var(--navy);font-size:15px;letter-spacing:.06em;white-space:nowrap;margin-right:8px}

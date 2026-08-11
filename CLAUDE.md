@@ -2838,6 +2838,33 @@ snap 위에, **핸들 드래그 중 Shift = anchor 기준 가장 가까운 45° 
   **c1 불변**(반대쪽 강제 대칭 없음). `designLineToolCheck` 50(수평·수직·±45·135·경계각
   30→45/20→0·45배수 전수·길이 보존·offset 독립).
 
+## ✅ Design 패턴선 역할(role) 지정 1차 (2026-08) — 표시 구분까지
+
+그린 선은 화면 디자인 선일 뿐 실제 패턴 외곽/절개선이 아니다. **선택한 선에 역할을 부여**한다.
+이번은 **역할 선택 + 표시 구분까지만**, 실제 outline 분할은 다음 단계(파트 분리).
+
+**데이터**: `{ id, piece, role: "cut"|"boundary"|"guide", segments }`.
+- `cut`(절개선)=몸판을 여러 조각으로 나눌 선 / `boundary`(외곽 대체선)=네크라인·옆선·밑단 등
+  교체 / `guide`(보조선)=형상 분리에 안 쓰는 참고선. **새 선은 `guide`로 시작**(makePatternLine
+  기본), 선택 후 지정.
+
+**표시 구분(CSS `data-role`)**: cut=빨강(#cc3333) 점선 / boundary=navy 실선(굵게) /
+guide=주황 얇은 점선(참고). **선택 중엔 `.selected`(cyan 실선)가 역할색을 덮는다**(편집 강조 우선,
+해제 시 역할색 복귀).
+
+**UI**: design inspector 에 역할 버튼 3개(`btnRoleCut`/`btnRoleBoundary`/`btnRoleGuide`).
+선택 선이 있을 때만 활성(`syncRoleButtons`), 현재 역할 `aria-pressed`. `designLineTool.setRole`
+이 선택 선의 role 만 바꾼다(세션 UI 상태 아님 — patternLines 에 저장). 선택/해제/삭제/모드전환에
+버튼 상태 동기화.
+
+**검증(격리 origin, storage 0, console 0)**: 새 선 기본 role=guide(주황 점선), 선택 시 역할버튼
+활성·현재 역할 강조, cut→data-role=cut·해제 시 **빨강 점선**, boundary→해제 시 **navy 실선**,
+role 이 patternLines 에 저장, Esc 해제 시 버튼 비활성. `designLineToolCheck` 52(makePatternLine
+role 기본 guide·명시 role). 엔진·draft·골든 무변경.
+
+**다음(별도 단계)**: `cut` 양 끝이 같은 피스 외곽선에 정확히 snap 됐는지 검증 → 실제 outline
+분할(파트 분리). `boundary` 는 기존 외곽 교체 로직.
+
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 
 사용자 계약대로 세 가지를 한 사이클로 처리(엔진 무변경, 시각/표시만).

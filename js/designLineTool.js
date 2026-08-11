@@ -29,6 +29,7 @@
   const EPS = 1e-9;
   const PIECE_GEOM_KEYS = { front: ["front", "shared"], back: ["back"], sleeve: ["sleeve"] };
   const SNAP_LABEL = { anchor: "기존 anchor", endpoint: "형상 끝점", outline: "외곽선", grid: "격자 0.5cm" };
+  const ROLE_LABEL = { cut: "절개선", boundary: "외곽 대체선", guide: "보조선" };
 
   let mode = "off";
   let draft = null, drawDrag = null;                 // draw 상태
@@ -59,7 +60,8 @@
     }
     return segs;
   }
-  function makePatternLine(id, piece, anchors) { return { id: id, piece: piece, segments: segmentsFromAnchors(anchors) }; }
+  // role: "cut"(절개선) | "boundary"(외곽 대체선) | "guide"(보조선). 새 선은 guide(참고)로 시작.
+  function makePatternLine(id, piece, anchors, role) { return { id: id, piece: piece, role: role || "guide", segments: segmentsFromAnchors(anchors) }; }
   function nextId(ls) { let m = 0; ls.forEach(l => { const x = /^line-(\d+)$/.exec(l.id); if (x) m = Math.max(m, +x[1]); }); return "line-" + (m + 1); }
   // 세그먼트 배열 → anchor 점 목록(공유 끝점). anchors[0]=seg0.from, anchors[k]=seg[k-1].to.
   function anchorsFromSegments(segments) {
@@ -214,7 +216,7 @@
   function setMode(m) {
     mode = m; draft = null; drawDrag = null; editDrag = null; selectedId = null; snapHint = null;
     setNote(m === "draw" ? "첫 점을 클릭(또는 드래그)하세요" : m === "select" ? SELECT_NOTE : "");
-    syncButtons(); rerender();
+    syncButtons(); syncRoleButtons(); rerender();
   }
   function getSnapHint() { return snapHint ? { piece: snapHint.piece, point: { x: snapHint.point.x, y: snapHint.point.y }, type: snapHint.type } : null; }
   // snapHint 갱신(변화 시에만 rerender 신호). 흡착 안내를 note 에 병기.
@@ -262,7 +264,22 @@
   function deleteSelected() {
     if (mode !== "select" || !selectedId) return;
     const p = project(); p.working.patternLines = ensurePatternLines(p).filter(l => l.id !== selectedId);
-    selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); rerender();
+    selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); rerender();
+  }
+  // 선택한 선의 역할 지정(cut/boundary/guide). 표시만 바뀌고 outline 분할은 다음 단계.
+  function setRole(role) {
+    if (mode !== "select" || !selectedId || !ROLE_LABEL[role]) return;
+    const line = findLine(selectedId); if (!line) return;
+    line.role = role; setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); rerender();
+  }
+  // 역할 버튼(design inspector): 선택 시 활성, 현재 역할 강조.
+  function syncRoleButtons() {
+    const sel = (mode === "select" && selectedId) ? findLine(selectedId) : null;
+    const role = sel ? (sel.role || "guide") : null;
+    [["btnRoleCut", "cut"], ["btnRoleBoundary", "boundary"], ["btnRoleGuide", "guide"]].forEach(pair => {
+      const b = document.getElementById(pair[0]); if (!b) return;
+      b.disabled = !sel; b.setAttribute("aria-pressed", role === pair[1] ? "true" : "false");
+    });
   }
   // 선택 모드 pointerdown: 선택 선의 핸들·anchor 히트 → 편집 시작. 아니면 선 선택/해제.
   function selectDown(e, piece, geo) {
@@ -330,6 +347,7 @@
       } else { // select
         if (!piece) { selectedId = null; editDrag = null; setNote(SELECT_NOTE); }
         else selectDown(e, piece, geoAt(e, piece));
+        syncRoleButtons();   // 선택 변화 → 역할 버튼 활성/강조 갱신
       }
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       e.stopPropagation(); rerender();
@@ -384,7 +402,7 @@
         else if (e.key === "Enter" && draft) { e.preventDefault(); commitDraft(); }
         else if (e.key === "Backspace" && draft) { e.preventDefault(); draftBackspace(); }
       } else { // select
-        if (e.key === "Escape") { selectedId = null; editDrag = null; setNote(SELECT_NOTE); rerender(); }
+        if (e.key === "Escape") { selectedId = null; editDrag = null; setNote(SELECT_NOTE); syncRoleButtons(); rerender(); }
         else if ((e.key === "Delete" || e.key === "Backspace") && selectedId) { e.preventDefault(); deleteSelected(); }
       }
     });
@@ -392,7 +410,7 @@
 
   window.designLineTool = Object.freeze({
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
-    getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected,
+    getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf,
