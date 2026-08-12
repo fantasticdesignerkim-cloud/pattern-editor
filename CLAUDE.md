@@ -2865,6 +2865,40 @@ role 기본 guide·명시 role). 엔진·draft·골든 무변경.
 **다음(별도 단계)**: `cut` 양 끝이 같은 피스 외곽선에 정확히 snap 됐는지 검증 → 실제 outline
 분할(파트 분리). `boundary` 는 기존 외곽 교체 로직.
 
+## ✅ Design 절개선 유효성 검사 (2026-08) — 분할 전 독립 검증 단계
+
+역할 지정 위에, **outline 을 자르기 전에 절개선이 실제로 분할 가능한지 독립 검사**한다.
+**geometry 를 바꾸지 않고 UI 상태로만** 표시. ★ **snapHint(세션 UI)를 근거로 쓰지 않고,
+현재 working outline 좌표·교차를 다시 계산**한다(사용자 핵심 지시).
+
+**검사 조건(순수 `validateCut(cutLine, outlineFlat, otherCutsFlat, opts)`)** — 순서대로, 첫
+실패의 구체 이유 반환:
+1. `role==="cut"` 아님 → "절개선이 아님"
+2. 시작/끝점이 현재 working outline 위(거리 ≤ `onTol` 0.05cm) → "시작점/끝점이 외곽선에 연결되지 않음"
+3. 두 끝점이 서로 다름(≥ `minSep` 0.1cm) → "시작점과 끝점이 같음"
+4. 자기 교차(비인접 세그먼트) → "절개선이 자기 자신과 교차"
+5. 중간이 outline 에 추가로 닿음(끝점 접촉 제외) → "절개선 중간이 외곽선에 닿음"
+6. outline 따라가는 중복(내부 샘플 전부 outline 위) → "외곽선을 따라가는 중복 선"
+7. 기존 cut 과 교차 → "다른 절개선과 교차"
+→ 전부 통과 시 `{ok:true, reason:"분리 가능"}`.
+
+- **cubic 교차·거리 판정은 기존 adaptive de Casteljau `flattenLine`(FLAT_TOL 1e-4) 재사용**
+  (snap·hit-test 와 동일 경계). `segCross`(proper/touch), `distPtToSegs`, `nearAny` 순수 보조.
+- `validateSelectedCut()`: 선택 cut 을 현재 `working.geometry` outline(`outlineSegsOf`, path→cubic
+  변환)·같은 피스 다른 cut 기준으로 검사. `syncCutStatus` 가 `#designCutStatus` 에 "분리 가능"
+  (녹색)/실패 이유(빨강) 표시. 선택·역할변경·삭제·모드전환에 갱신, **`revalidate()` 는 ui.js
+  `onApplyBodyLength`(geometry 재계산)에서 호출**.
+- **유효한 cut(`ok`)만 다음 단계 파트 분리 함수가 소비**(validateSelectedCut 노출).
+
+**검증(격리 origin, storage 0, console 0)**: 실제 앞판 outline 에 중앙 세로 절개선(위 -2.12·
+아래 38 두 점만 교차 = 내부) → "분리 가능". 시작점 3cm 안쪽 → "시작점이 외곽선에 연결되지
+않음"·복원 시 재통과. 검사가 geometry 무변경. **엉덩이 길이 10 적용(geometry 재계산) → 재검사
+자동 갱신 "끝점이 외곽선에 연결되지 않음"**(waist 가 내려가 끝점이 내부화), **선 좌표는 불변**,
+0 복원 → "분리 가능". 하네스 `designLineToolCheck` 62(유효·role아님·양끝미연결·동일·자기교차·
+중간접촉·outline중복·기존cut교차·cubic 유효).
+
+**다음(별도 단계)**: 유효 cut 을 실제로 **outline 두 폐곡선으로 분할**(파트 분리).
+
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 
 사용자 계약대로 세 가지를 한 사이클로 처리(엔진 무변경, 시각/표시만).
