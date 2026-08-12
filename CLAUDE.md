@@ -2899,6 +2899,67 @@ role 기본 guide·명시 role). 엔진·draft·골든 무변경.
 
 **다음(별도 단계)**: 유효 cut 을 실제로 **outline 두 폐곡선으로 분할**(파트 분리).
 
+## ✅ Design 파트 분리 1차 (2026-08) — 유효 절개선으로 두 폐곡선 생성
+
+유효성 검사 위에, 선택된 유효 절개선 1개로 outline 을 **두 폐곡선(파트)으로 분할**한다.
+원본 `working.geometry`·`patternLines` 는 안 건드리고 결과만 별도 `working.parts` 에 저장,
+서로 다른 색 미리보기까지. 파트명·수량·식서·시접 UI 는 후속.
+
+### ★ 발견: outline 은 깨끗한 폐곡선이 아니다 — 열린 다트 입구 (실측)
+front/back outline 은 **열린 다트 입구 gap** 을 하나씩 갖는다(단일 폐곡선 아님):
+앞=가슴다트 3.72cm(진동선을 상·하로 가름), 뒤=어깨다트 1.79cm. 자유단(입구점)은 정확히
+**2개**이고, construction 에 **다트 다리(입구→apex→입구)** 가 있으며 그 끝점이 자유단과
+**정확히 일치(dist 0)** 한다. 허리다트는 waist outline 이 실선이라 construction 참고선일 뿐
+(outline 안 끊음). **사용자 결정: ① 다트 다리로 닫아 물리적 폐곡선 구성 ② 1차는 절개선이
+다트와 상호작용(끝점이 다리 위·다트 V 가로지름)하면 거부.**
+
+### 알고리즘 (순수, `js/designLineTool.js`)
+- **`buildPieceRing(outlineSegs, constrLines)`**: outline 을 인접(RING_EPS=0.02cm)으로 단일
+  열린 체인으로 잇고(내부 junction 은 정확 공유로 drift 제거), 자유단 2개를 construction
+  다트 다리로 닫아 폐곡선 `ring:[{seg, source:"outline"|"dartleg"}]` 반환. 자유단이 2개가
+  아니거나 체인이 안 이어지면 토폴로지 예외로 실패.
+- **`splitRingByCut(ring, cutSegs)`**: 절개선 두 끝점을 ring 에 투영(cubic 은 40샘플+Newton),
+  두 arc 를 forward 로 추출해 `arcA+cutRev` / `arcB+cutFwd` 두 폐곡선 생성.
+  - **1차 거부(다트 상호작용)**: 끝점이 dartleg 세그먼트 위 → "끝점이 다트 다리 위 — 후속",
+    절개선이 dartleg 를 가로지름 → "다트를 가로지름 — 후속".
+  - 검증: 연속성·폐곡선 오차 ≤1e-4(CLOSE_EPS)·자기교차 0·면적≥0.01·**두 파트 방향(부호)이
+    ring 과 일치**. 하나라도 실패 시 전체 실패(working.parts 불변).
+- **★ 곡선 보존(핵심 계약)**: flatten(adaptive de Casteljau, FLAT_TOL 1e-4)은 **교차·검증·면적
+  에만** 쓴다. 실제 파트 outline cubic 은 투영 parameter t 에서 **de Casteljau 로 정확 분할**
+  (`subSegment`→`_cubicBetween`, split@t1 후 split@t0/t1). 폴리라인으로 저장하지 않는다.
+  arc 끝점과 cut 끝점 모두 **동일 투영점**(`_evalSeg`==de Casteljau)이라 연결오차 **정확히 0**.
+  cut 끝점만 투영점으로 강제(≤onTol 0.05 nudge)하고 내부 제어점은 불변.
+
+### DOM·저장·무효화
+- `doSplit()`(버튼 `#btnDesignSplit`): mode select + 유효 cut(front/back) 선택 시에만 활성
+  (`syncSplitButton`←`validateSelectedCut`). **분할 직전 `validateSelectedCut()` 재실행** →
+  `buildRingForPiece` → `splitRingByCut` → **성공 후에만** `working.parts` 원자적 교체.
+  실패 시 `#designSplitNote` 에 사유만(parts 불변).
+- `working.parts = [{id:"part-1", sourcePiece, sourceCutId, outline:[segs]}, {id:"part-2", …}]`
+  (한 절개선 → 두 파트). 좌표는 형상 cm(원본과 동일 좌표계).
+- **무효화**: geometry·절개선 변경 시 `invalidateParts()` 로 즉시 비움 — commitDraft/
+  deleteSelected/setRole/편집 드래그 종료/`revalidate`(ui.js `onApplyBodyLength`, 엉덩이 길이
+  재계산). 무효화 후 render 가 parts 레이어 제거.
+- **렌더(`render.js` `_appendParts`)**: working 위·hit layer 아래 `data-design-root="parts"`,
+  각 파트 닫힌 path 를 소속 piece offset transform 동승. 두 색: `data-part-index` 0=청록
+  #0EA5A5 / 1=자주 #C026A9(옅은 fill+stroke). render.js 라이브 원형 경로·shape 골든 무변경.
+
+### 검증 (격리 origin 127.0.0.1:8420, storage 0, saves 0, console 0)
+- **실제 front/back 알고리즘**: front ring 11(outline 9+dartleg 2)·back ring 10(8+2), 분할
+  성공, 두 파트 폐곡선 **오차 0**, **cubic 유지(곡선 보존)**, geometry/working 무변경.
+- **UI 경로**: 절개선(role cut) 선택→"분리 가능"→버튼 활성→분할→`working.parts` 2개
+  (오차 0)·원본 geometry/patternLines **무변경**·2색 path 2개 렌더·스크린샷(청록 상단[가슴다트
+  V 포함]+자주 하단 strip, 뒤판·소매 무영향).
+- **무효화**: 엉덩이 길이 적용 → parts 2→0·parts 레이어 제거. **다트 가로지르는 절개선(x=35
+  가슴다트 관통) 거부**("다트를 가로지름 — 후속").
+- 하네스 `designLineToolCheck` **79**(파트 분리 17: 링 구성·다트 닫힘·폐곡선 정확 닫힘·분할·
+  두 파트·오차 ≤1e-4·면적 96(사각형−다트노치)·양끝 동일 거부·다트 가로지름 거부·cubic 분할·
+  곡선 보존·`subSegment` de Casteljau 정확·reverseSeg). runAll 전체 통과, shape/perf 골든 diff 0.
+  캐시 `?v=2026081201`(designLineTool·render·css).
+
+**미구현(다음)**: 다트 상호작용 절개선(끝점 다리 위·다트 가로지름) 지원 / 소매 / 다중 절개 /
+파트명·수량·식서·시접·재단 UI / 파트를 실제 재단 조각으로 확정.
+
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 
 사용자 계약대로 세 가지를 한 사이클로 처리(엔진 무변경, 시각/표시만).
