@@ -209,6 +209,35 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   ok(near(v1.x, T.constrainAngle45(5, 4).x) && near(v1.y, T.constrainAngle45(5, 4).y), "13: 결정론(offset·zoom 무관 — 벡터만)");
 }
 
+// 14. validateCut: 절개선 유효성(현재 outline 기준, geometry 무변경)
+{
+  // 사각 outline (0,0)-(10,0)-(10,10)-(0,10) 평탄 선분
+  const sq = [[{ x: 0, y: 0 }, { x: 10, y: 0 }], [{ x: 10, y: 0 }, { x: 10, y: 10 }], [{ x: 10, y: 10 }, { x: 0, y: 10 }], [{ x: 0, y: 10 }, { x: 0, y: 0 }]];
+  const cut = (segs) => ({ id: "c", piece: "front", role: "cut", segments: segs });
+  const lineSeg = (a, b) => ({ kind: "line", from: a, to: b });
+  // 유효: 바닥(5,0) → 천장(5,10) 수직 분할
+  ok(T.validateCut(cut([lineSeg({ x: 5, y: 0 }, { x: 5, y: 10 })]), sq, []).ok === true, "14: 유효 절개선 → 분리 가능");
+  // role 아님
+  ok(T.validateCut({ id: "c", piece: "front", role: "guide", segments: [lineSeg({ x: 5, y: 0 }, { x: 5, y: 10 })] }, sq, []).reason === "절개선이 아님", "14: role!=cut");
+  // 시작점 외곽선 밖
+  ok(T.validateCut(cut([lineSeg({ x: 5, y: 0.5 }, { x: 5, y: 10 })]), sq, []).reason === "시작점이 외곽선에 연결되지 않음", "14: 시작점 미연결");
+  // 끝점 외곽선 밖
+  ok(T.validateCut(cut([lineSeg({ x: 5, y: 0 }, { x: 5, y: 9.4 })]), sq, []).reason === "끝점이 외곽선에 연결되지 않음", "14: 끝점 미연결");
+  // 시작=끝
+  ok(T.validateCut(cut([lineSeg({ x: 5, y: 0 }, { x: 5, y: 0.04 })]), sq, []).reason === "시작점과 끝점이 같음", "14: 끝점 동일");
+  // 자기 교차(bowtie): (2,0)-(8,8)-(2,8)-(8,0)
+  ok(T.validateCut(cut([lineSeg({ x: 2, y: 0 }, { x: 8, y: 8 }), lineSeg({ x: 8, y: 8 }, { x: 2, y: 8 }), lineSeg({ x: 2, y: 8 }, { x: 8, y: 0 })]), sq, []).reason === "절개선이 자기 자신과 교차", "14: 자기 교차");
+  // 중간이 외곽선에 닿음: (5,0)-(0,5)-(5,10), 중간 (0,5)가 좌변 위
+  ok(T.validateCut(cut([lineSeg({ x: 5, y: 0 }, { x: 0, y: 5 }), lineSeg({ x: 0, y: 5 }, { x: 5, y: 10 })]), sq, []).reason === "절개선 중간이 외곽선에 닿음", "14: 중간 외곽선 접촉");
+  // 외곽선 따라가는 중복: (0,0)-(10,0) = 바닥변
+  ok(T.validateCut(cut([lineSeg({ x: 0, y: 0 }, { x: 10, y: 0 })]), sq, []).reason === "외곽선을 따라가는 중복 선", "14: outline 중복");
+  // 기존 절개선과 교차: cut2(0,5)-(10,5) × cut1(5,0)-(5,10)
+  const cut1flat = T.flattenLine([lineSeg({ x: 5, y: 0 }, { x: 5, y: 10 })]);
+  ok(T.validateCut(cut([lineSeg({ x: 0, y: 5 }, { x: 10, y: 5 })]), sq, [cut1flat]).reason === "다른 절개선과 교차", "14: 기존 절개선 교차");
+  // cubic 절개선(내부 곡선, adaptive flatten) → 유효
+  ok(T.validateCut(cut([{ kind: "cubic", from: { x: 5, y: 0 }, c1: { x: 3, y: 3 }, c2: { x: 3, y: 7 }, to: { x: 5, y: 10 } }]), sq, []).ok === true, "14: cubic 절개선 유효(adaptive flatten)");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

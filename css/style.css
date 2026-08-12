@@ -102,6 +102,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-working .design-snap-ring{fill:none;stroke:var(--cyan);stroke-width:1.6;opacity:.9}
 .design-working .design-snap-dot{fill:var(--cyan);stroke:none}
 #btnDesignLine[aria-pressed="true"],#btnDesignSelect[aria-pressed="true"],#btnRoleCut[aria-pressed="true"],#btnRoleBoundary[aria-pressed="true"],#btnRoleGuide[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
+/* 절개선 유효성: 통과=녹색 / 실패=빨강. */
+#designCutStatus[data-ok="1"]{color:#0F8A4A;font-weight:600}
+#designCutStatus[data-ok="0"]{color:#cc3333;font-weight:600}
 
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */
 .brand{font-weight:600;color:var(--navy);font-size:15px;letter-spacing:.06em;white-space:nowrap;margin-right:8px}

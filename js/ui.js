@@ -385,6 +385,8 @@
     project.working.geometry = nextGeometry;
     // 엉덩이 길이 변경: auto 면 소매 재배치+fit, manual 이면 카메라·offset 유지(자동 이동 안 함).
     if (window.designLayout) window.designLayout.afterBodyLength();
+    // geometry 재계산됨 → 선택된 절개선 유효성 재검사(현재 working outline 기준).
+    if (window.designLineTool && window.designLineTool.revalidate) window.designLineTool.revalidate();
     if (typeof render === "function") render();
     if (st.input && document.activeElement !== st.input) st.input.value = fmtL(L);
     setBodyNote(L === 0 ? "원형 길이로 복원됨 · 세션 전용" : "엉덩이 길이 " + fmtL(L) + "cm 적용 중 · 세션 전용");

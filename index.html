@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026081020">
+<link rel="stylesheet" href="css/style.css?v=2026081021">
 </head>
 <body>
 
@@ -194,6 +194,8 @@
           <button class="btn" id="btnRoleBoundary" aria-pressed="false" onclick="designLineTool.setRole('boundary')" disabled>외곽</button>
           <button class="btn" id="btnRoleGuide" aria-pressed="false" onclick="designLineTool.setRole('guide')" disabled>보조선</button>
         </div>
+        <!-- 절개선 유효성(분리 가능/실패 이유). geometry 무변경 UI 상태만. 실제 분할은 다음 단계. -->
+        <div class="row note" id="designCutStatus" aria-live="polite"></div>
         <div class="row note" id="designLineNote" aria-live="polite"></div>
       </div>
     </details>
@@ -230,12 +232,12 @@
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026081011"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026081020"></script>
+<script src="js/designLineTool.js?v=2026081021"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026080502"></script>
+<script src="js/ui.js?v=2026081021"></script>
 
 </body>
 </html>

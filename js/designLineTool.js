@@ -164,6 +164,50 @@
     return { x: len * Math.cos(a), y: len * Math.sin(a) };
   }
 
+  // ── 절개선 유효성 검사(순수) — snapHint 아님, 실제 좌표·교차 재계산 ──
+  // 세그먼트(line·cubic) 배열 → 평탄화된 [a,b] 선분 배열(cubic 은 adaptive de Casteljau).
+  function flattenLine(segments) { const out = []; (segments || []).forEach(s => { flattenSegment(s).forEach(ab => out.push(ab)); }); return out; }
+  function distPtToSegs(p, segs) { let m = Infinity; segs.forEach(ab => { const d = distPointSeg(p, ab[0], ab[1]); if (d < m) m = d; }); return m; }
+  // 두 선분의 proper/touch 교차점(평행·공선은 null — 중복/스침은 별도 검사).
+  function segCross(a, b, c, d) {
+    const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
+    const den = rx * sy - ry * sx; if (Math.abs(den) < 1e-12) return null;
+    const ex = c.x - a.x, ey = c.y - a.y;
+    const t = (ex * sy - ey * sx) / den, u = (ex * ry - ey * rx) / den, E = 1e-9;
+    if (t >= -E && t <= 1 + E && u >= -E && u <= 1 + E) return { x: a.x + t * rx, y: a.y + t * ry };
+    return null;
+  }
+  function nearAny(p, pts, tol) { return pts.some(q => Math.hypot(p.x - q.x, p.y - q.y) < tol); }
+  // 절개선 유효성: role=cut / 양끝 outline 위 / 양끝 다름 / 자기교차 없음 / 중간이 outline 에
+  // 닿지 않음 / outline 따라가는 중복 아님 / 기존 cut 과 교차 없음. {ok, reason} 반환(순수).
+  // outlineFlat·otherCutsFlat = 미리 평탄화한 [a,b] 선분들. geometry 를 바꾸지 않는다.
+  function validateCut(cutLine, outlineFlat, otherCutsFlat, opts) {
+    opts = opts || {}; const ON = opts.onTol != null ? opts.onTol : 0.05, SEP = opts.minSep != null ? opts.minSep : 0.1;
+    if (!cutLine || cutLine.role !== "cut") return { ok: false, reason: "절개선이 아님" };
+    const segs = cutLine.segments; if (!segs || !segs.length) return { ok: false, reason: "선이 비었음" };
+    const start = segs[0].from, end = segs[segs.length - 1].to;
+    if (!outlineFlat || !outlineFlat.length) return { ok: false, reason: "피스 외곽선을 찾을 수 없음" };
+    if (distPtToSegs(start, outlineFlat) > ON) return { ok: false, reason: "시작점이 외곽선에 연결되지 않음" };
+    if (distPtToSegs(end, outlineFlat) > ON) return { ok: false, reason: "끝점이 외곽선에 연결되지 않음" };
+    if (Math.hypot(start.x - end.x, start.y - end.y) < SEP) return { ok: false, reason: "시작점과 끝점이 같음" };
+    const cf = flattenLine(segs);
+    for (let i = 0; i < cf.length; i++) for (let j = i + 2; j < cf.length; j++) {
+      if (segCross(cf[i][0], cf[i][1], cf[j][0], cf[j][1])) return { ok: false, reason: "절개선이 자기 자신과 교차" };
+    }
+    for (const cs of cf) for (const os of outlineFlat) {
+      const p = segCross(cs[0], cs[1], os[0], os[1]);
+      if (p && !nearAny(p, [start, end], ON)) return { ok: false, reason: "절개선 중간이 외곽선에 닿음" };
+    }
+    // outline 따라가는 중복: 끝점 근처를 뺀 내부 샘플이 전부 outline 위면 중복.
+    const samples = []; cf.forEach(ab => { samples.push(ab[0]); samples.push({ x: (ab[0].x + ab[1].x) / 2, y: (ab[0].y + ab[1].y) / 2 }); }); if (cf.length) samples.push(cf[cf.length - 1][1]);
+    const interior = samples.filter(pt => !nearAny(pt, [start, end], ON));
+    if (interior.length && interior.every(pt => distPtToSegs(pt, outlineFlat) <= ON)) return { ok: false, reason: "외곽선을 따라가는 중복 선" };
+    for (const oc of (otherCutsFlat || [])) for (const cs of cf) for (const os of oc) {
+      if (segCross(cs[0], cs[1], os[0], os[1])) return { ok: false, reason: "다른 절개선과 교차" };
+    }
+    return { ok: true, reason: "분리 가능" };
+  }
+
   // ── DOM 연동 ──
   function pieceOffset(piece) { const L = window.designLayout ? window.designLayout.ensureLayout(project()) : null; return (L && L[piece]) ? L[piece] : { dx: 0, dy: 0 }; }
   function pieceAt(target) { const h = target && target.closest && target.closest(".design-layout-hit"); return h ? h.getAttribute("data-layout-piece") : null; }
@@ -216,7 +260,7 @@
   function setMode(m) {
     mode = m; draft = null; drawDrag = null; editDrag = null; selectedId = null; snapHint = null;
     setNote(m === "draw" ? "첫 점을 클릭(또는 드래그)하세요" : m === "select" ? SELECT_NOTE : "");
-    syncButtons(); syncRoleButtons(); rerender();
+    syncButtons(); syncRoleButtons(); syncCutStatus(); rerender();
   }
   function getSnapHint() { return snapHint ? { piece: snapHint.piece, point: { x: snapHint.point.x, y: snapHint.point.y }, type: snapHint.type } : null; }
   // snapHint 갱신(변화 시에만 rerender 신호). 흡착 안내를 note 에 병기.
@@ -264,13 +308,13 @@
   function deleteSelected() {
     if (mode !== "select" || !selectedId) return;
     const p = project(); p.working.patternLines = ensurePatternLines(p).filter(l => l.id !== selectedId);
-    selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); rerender();
+    selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); syncCutStatus(); rerender();
   }
   // 선택한 선의 역할 지정(cut/boundary/guide). 표시만 바뀌고 outline 분할은 다음 단계.
   function setRole(role) {
     if (mode !== "select" || !selectedId || !ROLE_LABEL[role]) return;
     const line = findLine(selectedId); if (!line) return;
-    line.role = role; setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); rerender();
+    line.role = role; setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); syncCutStatus(); rerender();
   }
   // 역할 버튼(design inspector): 선택 시 활성, 현재 역할 강조.
   function syncRoleButtons() {
@@ -281,6 +325,27 @@
       b.disabled = !sel; b.setAttribute("aria-pressed", role === pair[1] ? "true" : "false");
     });
   }
+  // 선택한 절개선을 **현재 working outline** 기준으로 재검사(snapHint 아님). geometry 무변경.
+  // 반환 {ok, reason} | null(cut 아님/미선택). 다음 단계 파트 분리는 ok 인 것만 소비.
+  function validateSelectedCut() {
+    const line = (mode === "select" && selectedId) ? findLine(selectedId) : null;
+    if (!line || line.role !== "cut") return null;
+    const p = project(); if (!p) return null;
+    const keys = PIECE_GEOM_KEYS[line.piece] || [line.piece];
+    const outlineFlat = flattenLine(outlineSegsOf(p.working.geometry, keys));
+    const others = lines().filter(l => l.piece === line.piece && l.role === "cut" && l.id !== line.id).map(l => flattenLine(l.segments));
+    return validateCut(line, outlineFlat, others);
+  }
+  // 검사 결과를 UI 상태로만 표시(#designCutStatus). data-ok 로 통과/실패 색 구분.
+  function syncCutStatus() {
+    const el = document.getElementById("designCutStatus"); if (!el) return;
+    const v = validateSelectedCut();
+    if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); return; }
+    el.textContent = v.ok ? "분리 가능" : v.reason;
+    el.setAttribute("data-ok", v.ok ? "1" : "0");
+  }
+  // geometry 재계산(엉덩이 길이 등) 후 외부(ui.js)에서 호출: 절개선 재검사.
+  function revalidate() { syncRoleButtons(); syncCutStatus(); }
   // 선택 모드 pointerdown: 선택 선의 핸들·anchor 히트 → 편집 시작. 아니면 선 선택/해제.
   function selectDown(e, piece, geo) {
     const rCm = NODE_HIT_PX * pxToCm(), lCm = LINE_HIT_PX * pxToCm();
@@ -347,7 +412,7 @@
       } else { // select
         if (!piece) { selectedId = null; editDrag = null; setNote(SELECT_NOTE); }
         else selectDown(e, piece, geoAt(e, piece));
-        syncRoleButtons();   // 선택 변화 → 역할 버튼 활성/강조 갱신
+        syncRoleButtons(); syncCutStatus();   // 선택 변화 → 역할 버튼·절개 검사 갱신
       }
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       e.stopPropagation(); rerender();
@@ -402,7 +467,7 @@
         else if (e.key === "Enter" && draft) { e.preventDefault(); commitDraft(); }
         else if (e.key === "Backspace" && draft) { e.preventDefault(); draftBackspace(); }
       } else { // select
-        if (e.key === "Escape") { selectedId = null; editDrag = null; setNote(SELECT_NOTE); syncRoleButtons(); rerender(); }
+        if (e.key === "Escape") { selectedId = null; editDrag = null; setNote(SELECT_NOTE); syncRoleButtons(); syncCutStatus(); rerender(); }
         else if ((e.key === "Delete" || e.key === "Backspace") && selectedId) { e.preventDefault(); deleteSelected(); }
       }
     });
@@ -411,6 +476,7 @@
   window.designLineTool = Object.freeze({
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
+    validateSelectedCut, revalidate, validateCut, flattenLine, segCross, distPtToSegs,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf,
