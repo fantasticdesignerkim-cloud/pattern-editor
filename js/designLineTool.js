@@ -208,6 +208,199 @@
     return { ok: true, reason: "분리 가능" };
   }
 
+  // ── 파트 분리(파트 분할) — 순수(harness) ──
+  // 열린 다트 입구를 construction 다트 다리(입구→apex→입구)로 닫아 폐곡선 ring 을 만든 뒤,
+  // 유효 절개선으로 두 폐곡선으로 자른다. **flatten 은 교차·검증·면적에만 쓰고, 실제 파트
+  // outline cubic 은 교차 parameter t 에서 de Casteljau 로 정확히 분할한다(곡선 보존).**
+  const RING_EPS = 0.02;        // outline 끝점 연결 허용(부동소수 drift 0.0004 는 잇고, 다트 입구 1.79+ 는 gap 유지)
+  const SPLIT_MIN_AREA = 0.01;  // cm² — 면적 0 파트 차단
+  const CLOSE_EPS = 1e-4;       // 폐곡선 시작·끝 연결 허용오차(계약)
+  function _pt(p) { return { x: p.x, y: p.y }; }
+  function _lerpP(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
+  function _near2(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) <= RING_EPS; }
+  function _evalSeg(seg, t) {
+    if (seg.kind === "line") return _lerpP(seg.from, seg.to, t);
+    const a = _lerpP(seg.from, seg.c1, t), b = _lerpP(seg.c1, seg.c2, t), c = _lerpP(seg.c2, seg.to, t);
+    const d = _lerpP(a, b, t), e = _lerpP(b, c, t); return _lerpP(d, e, t);
+  }
+  function _deriv1(seg, t) { // cubic 1차 도함수
+    const p0 = seg.from, p1 = seg.c1, p2 = seg.c2, p3 = seg.to, u = 1 - t;
+    return { x: 3 * (u * u * (p1.x - p0.x) + 2 * u * t * (p2.x - p1.x) + t * t * (p3.x - p2.x)),
+      y: 3 * (u * u * (p1.y - p0.y) + 2 * u * t * (p2.y - p1.y) + t * t * (p3.y - p2.y)) };
+  }
+  function _deriv2(seg, t) { // cubic 2차 도함수
+    const p0 = seg.from, p1 = seg.c1, p2 = seg.c2, p3 = seg.to;
+    return { x: 6 * ((1 - t) * (p2.x - 2 * p1.x + p0.x) + t * (p3.x - 2 * p2.x + p1.x)),
+      y: 6 * ((1 - t) * (p2.y - 2 * p1.y + p0.y) + t * (p3.y - 2 * p2.y + p1.y)) };
+  }
+  // cubic 을 [t0,t1] 로 정확히 자른 새 cubic 제어점 [from,c1,c2,to]. de Casteljau 두 번.
+  function _cubicBetween(P0, P1, P2, P3, t0, t1) {
+    function split(p0, p1, p2, p3, t) {
+      const a = _lerpP(p0, p1, t), b = _lerpP(p1, p2, t), c = _lerpP(p2, p3, t);
+      const d = _lerpP(a, b, t), e = _lerpP(b, c, t), f = _lerpP(d, e, t);
+      return { left: [p0, a, d, f], right: [f, e, c, p3] };
+    }
+    const L = split(P0, P1, P2, P3, t1).left;                 // [0,t1]
+    const tt = t1 > 0 ? t0 / t1 : 0;
+    return split(L[0], L[1], L[2], L[3], tt).right;           // [t0,t1]
+  }
+  function subSegment(seg, t0, t1) {
+    if (seg.kind === "line") return { kind: "line", from: _lerpP(seg.from, seg.to, t0), to: _lerpP(seg.from, seg.to, t1) };
+    const R = _cubicBetween(seg.from, seg.c1, seg.c2, seg.to, t0, t1);
+    return { kind: "cubic", from: R[0], c1: R[1], c2: R[2], to: R[3] };
+  }
+  function reverseSeg(seg) {
+    if (seg.kind === "line") return { kind: "line", from: _pt(seg.to), to: _pt(seg.from) };
+    return { kind: "cubic", from: _pt(seg.to), c1: _pt(seg.c2), c2: _pt(seg.c1), to: _pt(seg.from) };
+  }
+  function cloneSeg(seg) {
+    return seg.kind === "cubic"
+      ? { kind: "cubic", from: _pt(seg.from), c1: _pt(seg.c1), c2: _pt(seg.c2), to: _pt(seg.to) }
+      : { kind: "line", from: _pt(seg.from), to: _pt(seg.to) };
+  }
+  function _segLen(seg) { return Math.hypot(seg.to.x - seg.from.x, seg.to.y - seg.from.y); }
+  // 점을 세그먼트에 투영 → {t, point, dist}. cubic 은 조밀 샘플 후 Newton 정밀화.
+  function projectOntoSeg(P, seg) {
+    if (seg.kind === "line") {
+      const vx = seg.to.x - seg.from.x, vy = seg.to.y - seg.from.y, L2 = vx * vx + vy * vy;
+      let t = L2 > 0 ? ((P.x - seg.from.x) * vx + (P.y - seg.from.y) * vy) / L2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t; const pt = _lerpP(seg.from, seg.to, t);
+      return { t: t, point: pt, dist: Math.hypot(P.x - pt.x, P.y - pt.y) };
+    }
+    let bt = 0, bd = Infinity, N = 40, k;
+    for (k = 0; k <= N; k++) { const t = k / N, pt = _evalSeg(seg, t), d = Math.hypot(P.x - pt.x, P.y - pt.y); if (d < bd) { bd = d; bt = t; } }
+    let t = bt;
+    for (let it = 0; it < 12; it++) {
+      const B = _evalSeg(seg, t), d1 = _deriv1(seg, t), d2 = _deriv2(seg, t);
+      const dx = B.x - P.x, dy = B.y - P.y;
+      const f = dx * d1.x + dy * d1.y, fp = d1.x * d1.x + d1.y * d1.y + dx * d2.x + dy * d2.y;
+      if (Math.abs(fp) < 1e-12) break;
+      let tn = t - f / fp; if (tn < 0) tn = 0; if (tn > 1) tn = 1;
+      if (Math.abs(tn - t) < 1e-10) { t = tn; break; } t = tn;
+    }
+    const pt = _evalSeg(seg, t); return { t: t, point: pt, dist: Math.hypot(P.x - pt.x, P.y - pt.y) };
+  }
+  function projectOntoRing(P, ring) {
+    let best = { dist: Infinity, i: -1, t: 0, point: null };
+    ring.forEach((r, i) => { const pr = projectOntoSeg(P, r.seg); if (pr.dist < best.dist) best = { dist: pr.dist, i: i, t: pr.t, point: pr.point }; });
+    return best;
+  }
+  // construction line 들로 fromPt→toPt 경로(다트 다리) 걷기. 반환 {ok, segs:[oriented line...]}.
+  function walkConstruction(constrLines, fromPt, toPt) {
+    const used = new Array(constrLines.length).fill(false), out = [];
+    let cur = _pt(fromPt);
+    for (let step = 0; step < constrLines.length; step++) {
+      if (_near2(cur, toPt)) return { ok: true, segs: out };
+      let found = -1, oriented = null;
+      for (let j = 0; j < constrLines.length; j++) {
+        if (used[j]) continue; const l = constrLines[j];
+        if (_near2(l.from, cur)) { found = j; oriented = { kind: "line", from: _pt(cur), to: _pt(l.to) }; break; }
+        if (_near2(l.to, cur)) { found = j; oriented = { kind: "line", from: _pt(cur), to: _pt(l.from) }; break; }
+      }
+      if (found < 0) return { ok: false, reason: "다트 다리 경로를 찾을 수 없음" };
+      used[found] = true; out.push(oriented); cur = oriented.to;
+    }
+    return _near2(cur, toPt) ? { ok: true, segs: out } : { ok: false, reason: "다트 다리 경로가 닫히지 않음" };
+  }
+  // outline 세그먼트(무순서) + construction line → 다트로 닫힌 폐곡선 ring.
+  // 반환 { ok, ring:[{seg, source:"outline"|"dartleg"}], reason }. 내부 junction 은 정확 공유로 강제.
+  function buildPieceRing(outlineSegs, constrLines) {
+    const segs = outlineSegs.map(cloneSeg), n = segs.length;
+    if (!n) return { ok: false, reason: "외곽선 없음" };
+    const E = []; for (let i = 0; i < n; i++) { E.push({ i: i, p: segs[i].from }); E.push({ i: i, p: segs[i].to }); }
+    const shared = (pt, exclI) => E.some(x => x.i !== exclI && _near2(x.p, pt));
+    const free = [];
+    for (let i = 0; i < n; i++) { if (!shared(segs[i].from, i)) free.push({ i: i, w: "from", p: segs[i].from }); if (!shared(segs[i].to, i)) free.push({ i: i, w: "to", p: segs[i].to }); }
+    if (free.length !== 2) return { ok: false, reason: "열린 다트 입구가 정확히 1개가 아님(토폴로지 예외)" };
+    const start = free[0], goal = free[1].p, chain = [], used = new Array(n).fill(false);
+    let first = start.w === "from" ? cloneSeg(segs[start.i]) : reverseSeg(segs[start.i]);
+    chain.push({ seg: first, source: "outline" }); used[start.i] = true; let cur = first.to;
+    for (let step = 1; step < n; step++) {
+      let found = -1, oriented = null;
+      for (let j = 0; j < n; j++) {
+        if (used[j]) continue;
+        if (_near2(segs[j].from, cur)) { found = j; oriented = cloneSeg(segs[j]); break; }
+        if (_near2(segs[j].to, cur)) { found = j; oriented = reverseSeg(segs[j]); break; }
+      }
+      if (found < 0) return { ok: false, reason: "외곽선이 단일 체인이 아님(토폴로지 예외)" };
+      oriented.from = _pt(cur);                       // 내부 junction 정확 공유(drift 제거)
+      used[found] = true; chain.push({ seg: oriented, source: "outline" }); cur = oriented.to;
+    }
+    if (!_near2(cur, goal)) return { ok: false, reason: "외곽선 체인이 다트 입구에서 끝나지 않음" };
+    const legs = walkConstruction(constrLines, cur, start.p);   // 입구→apex→시작 입구
+    if (!legs.ok) return { ok: false, reason: legs.reason };
+    legs.segs.forEach((s, idx) => { if (idx === 0) s.from = _pt(cur); chain.push({ seg: s, source: "dartleg" }); });
+    // 폐곡선 정확 닫기: 마지막 to = 첫 from
+    const last = chain[chain.length - 1].seg;
+    if (Math.hypot(last.to.x - chain[0].seg.from.x, last.to.y - chain[0].seg.from.y) > RING_EPS) return { ok: false, reason: "폐곡선이 닫히지 않음" };
+    last.to = _pt(chain[0].seg.from);
+    return { ok: true, ring: chain };
+  }
+  // ring 을 위치 A(=proj)에서 B(=proj)까지 forward 로 걷는 부분 경로(정확 분할).
+  function extractArc(ring, A, B) {
+    const n = ring.length, out = [];
+    if (A.i === B.i && A.t <= B.t) { const s = subSegment(ring[A.i].seg, A.t, B.t); if (_segLen(s) > 1e-9) out.push(s); return out; }
+    const tail = subSegment(ring[A.i].seg, A.t, 1); if (_segLen(tail) > 1e-9) out.push(tail);
+    let k = (A.i + 1) % n;
+    while (k !== B.i) { out.push(cloneSeg(ring[k].seg)); k = (k + 1) % n; }
+    const head = subSegment(ring[B.i].seg, 0, B.t); if (_segLen(head) > 1e-9) out.push(head);
+    return out;
+  }
+  function forceCutEnds(cutSegs, p0, p1) {
+    const out = cutSegs.map(cloneSeg);
+    out[0].from = _pt(p0); out[out.length - 1].to = _pt(p1); return out;
+  }
+  function _flattenPart(segs) { const pts = []; segs.forEach(s => { flattenSegment(s).forEach(ab => { if (!pts.length) pts.push(ab[0]); pts.push(ab[1]); }); }); return pts; }
+  function _signedArea(pts) { let a = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p.x * q.y - q.x * p.y; } return a / 2; }
+  function _partSelfIntersects(segs) {
+    const flat = []; segs.forEach(s => flattenSegment(s).forEach(ab => flat.push(ab)));
+    for (let i = 0; i < flat.length; i++) for (let j = i + 2; j < flat.length; j++) {
+      if (i === 0 && j === flat.length - 1) continue;   // 폐곡선 wrap 인접
+      const p = segCross(flat[i][0], flat[i][1], flat[j][0], flat[j][1]);
+      if (p) {
+        const shareEnd = _near2(flat[i][1], flat[j][0]) || _near2(flat[j][1], flat[i][0]) || _near2(flat[i][0], flat[j][0]) || _near2(flat[i][1], flat[j][1]);
+        if (!shareEnd) return true;
+      }
+    }
+    return false;
+  }
+  function _checkPart(part) {
+    if (part.length < 2) return { ok: false, reason: "세그먼트 부족" };
+    for (let i = 0; i < part.length - 1; i++) if (Math.hypot(part[i].to.x - part[i + 1].from.x, part[i].to.y - part[i + 1].from.y) > CLOSE_EPS) return { ok: false, reason: "연속성 끊김" };
+    const closeErr = Math.hypot(part[part.length - 1].to.x - part[0].from.x, part[part.length - 1].to.y - part[0].from.y);
+    if (closeErr > CLOSE_EPS) return { ok: false, reason: "폐곡선 미연결" };
+    if (_partSelfIntersects(part)) return { ok: false, reason: "자기 교차" };
+    const area = _signedArea(_flattenPart(part));
+    if (Math.abs(area) < SPLIT_MIN_AREA) return { ok: false, reason: "면적 0" };
+    return { ok: true, area: area };
+  }
+  // 유효 절개선으로 ring 을 두 폐곡선으로 분할. 반환 {ok, parts:[segsA, segsB], reason}.
+  // 1차 제한: 끝점이 outline(다트 다리 아님) 위, 절개선이 다트 다리를 가로지르지 않음.
+  function splitRingByCut(ring, cutSegs, opts) {
+    opts = opts || {}; const onTol = opts.onTol != null ? opts.onTol : 0.05;
+    if (!cutSegs || !cutSegs.length) return { ok: false, reason: "절개선 없음" };
+    const C0 = cutSegs[0].from, C1 = cutSegs[cutSegs.length - 1].to;
+    const pj0 = projectOntoRing(C0, ring), pj1 = projectOntoRing(C1, ring);
+    if (pj0.dist > onTol) return { ok: false, reason: "절개선 시작점이 경계에서 벗어남" };
+    if (pj1.dist > onTol) return { ok: false, reason: "절개선 끝점이 경계에서 벗어남" };
+    if (ring[pj0.i].source !== "outline" || ring[pj1.i].source !== "outline") return { ok: false, reason: "절개선 끝점이 다트 다리 위 — 후속 지원" };
+    const cutFlat = flattenLine(cutSegs);
+    for (const r of ring) {
+      if (r.source !== "dartleg") continue;
+      for (const cs of cutFlat) { const p = segCross(cs[0], cs[1], r.seg.from, r.seg.to); if (p && !nearAny(p, [C0, C1], onTol)) return { ok: false, reason: "절개선이 다트를 가로지름 — 후속 지원" }; }
+    }
+    if (pj0.i === pj1.i && Math.abs(pj0.t - pj1.t) < 1e-6) return { ok: false, reason: "절개선 양끝이 같은 지점" };
+    const arcA = extractArc(ring, pj0, pj1), arcB = extractArc(ring, pj1, pj0);
+    const cutFwd = forceCutEnds(cutSegs, pj0.point, pj1.point);      // pj0.point → pj1.point
+    const cutRev = cutFwd.slice().reverse().map(reverseSeg);         // pj1.point → pj0.point
+    const partA = arcA.concat(cutRev), partB = arcB.concat(cutFwd);
+    const cA = _checkPart(partA); if (!cA.ok) return { ok: false, reason: "파트 A: " + cA.reason };
+    const cB = _checkPart(partB); if (!cB.ok) return { ok: false, reason: "파트 B: " + cB.reason };
+    const ringArea = _signedArea(_flattenPart(ring.map(r => r.seg)));
+    if (Math.sign(cA.area) !== Math.sign(ringArea) || Math.sign(cB.area) !== Math.sign(ringArea)) return { ok: false, reason: "파트 방향 오류" };
+    return { ok: true, parts: [partA, partB] };
+  }
+
   // ── DOM 연동 ──
   function pieceOffset(piece) { const L = window.designLayout ? window.designLayout.ensureLayout(project()) : null; return (L && L[piece]) ? L[piece] : { dx: 0, dy: 0 }; }
   function pieceAt(target) { const h = target && target.closest && target.closest(".design-layout-hit"); return h ? h.getAttribute("data-layout-piece") : null; }
@@ -295,6 +488,7 @@
     if (!draft || draft.anchors.length < 2) { setNote("점 2개 이상 필요"); return false; }
     const p = project(); const ls = ensurePatternLines(p);
     ls.push(makePatternLine(nextId(ls), draft.piece, draft.anchors));
+    invalidateParts(p);
     draft = null; drawDrag = null; setNote("완료 · 새 선은 다시 첫 점부터"); rerender(); return true;
   }
   function draftBackspace() {
@@ -308,13 +502,14 @@
   function deleteSelected() {
     if (mode !== "select" || !selectedId) return;
     const p = project(); p.working.patternLines = ensurePatternLines(p).filter(l => l.id !== selectedId);
+    invalidateParts(p);
     selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); syncCutStatus(); rerender();
   }
   // 선택한 선의 역할 지정(cut/boundary/guide). 표시만 바뀌고 outline 분할은 다음 단계.
   function setRole(role) {
     if (mode !== "select" || !selectedId || !ROLE_LABEL[role]) return;
     const line = findLine(selectedId); if (!line) return;
-    line.role = role; setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); syncCutStatus(); rerender();
+    line.role = role; invalidateParts(); setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); syncCutStatus(); rerender();
   }
   // 역할 버튼(design inspector): 선택 시 활성, 현재 역할 강조.
   function syncRoleButtons() {
@@ -340,12 +535,52 @@
   function syncCutStatus() {
     const el = document.getElementById("designCutStatus"); if (!el) return;
     const v = validateSelectedCut();
-    if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); return; }
+    if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); syncSplitButton(); return; }
     el.textContent = v.ok ? "분리 가능" : v.reason;
     el.setAttribute("data-ok", v.ok ? "1" : "0");
+    syncSplitButton();
   }
-  // geometry 재계산(엉덩이 길이 등) 후 외부(ui.js)에서 호출: 절개선 재검사.
-  function revalidate() { syncRoleButtons(); syncCutStatus(); }
+  // ── 파트 분리 DOM 연동 ──
+  function constrLinesOf(geom, keys) {
+    const out = [];
+    keys.forEach(k => { const b = geom[k]; if (!b) return; (b.construction || []).forEach(pr => { if (pr.kind === "line") out.push({ from: pr.from, to: pr.to }); }); });
+    return out;
+  }
+  // 현재 working geometry 로 piece(front/back)의 다트-닫힌 폐곡선 ring 구성.
+  function buildRingForPiece(p, piece) {
+    const keys = PIECE_GEOM_KEYS[piece] || [piece];
+    return buildPieceRing(outlineSegsOf(p.working.geometry, keys), constrLinesOf(p.working.geometry, keys));
+  }
+  // geometry·절개선 변경 시 기존 파트 즉시 무효화(원본 geometry/patternLines 는 안 건드림).
+  function invalidateParts(p) { p = p || project(); if (p && Array.isArray(p.working.parts) && p.working.parts.length) { p.working.parts = []; return true; } return false; }
+  // 파트 분리 버튼: 유효 절개선 선택 시에만 활성.
+  function syncSplitButton() {
+    const b = document.getElementById("btnDesignSplit"); if (!b) return;
+    const v = validateSelectedCut(); b.disabled = !(v && v.ok);
+  }
+  function setSplitNote(m) { const el = document.getElementById("designSplitNote"); if (el) el.textContent = m; }
+  // 선택된 유효 절개선 1개로 실제 분할 실행. 분할 직전 validateCut 재실행 → ring 구성 →
+  // splitRingByCut → 성공 시에만 working.parts 원자적 교체 → 미리보기 렌더.
+  function doSplit() {
+    if (mode !== "select" || !selectedId) return;
+    const line = findLine(selectedId); if (!line || line.role !== "cut") { setSplitNote("절개선을 선택하세요"); return; }
+    if (line.piece !== "front" && line.piece !== "back") { setSplitNote("front·back 만 지원(소매는 후속)"); return; }
+    const p = project(); if (!p) return;
+    const v = validateSelectedCut();                       // ★ 분할 직전 재검증
+    if (!v || !v.ok) { setSplitNote("분할 불가: " + (v ? v.reason : "절개선 아님")); return; }
+    const rb = buildRingForPiece(p, line.piece);
+    if (!rb.ok) { setSplitNote("분할 불가: " + rb.reason); return; }
+    const res = splitRingByCut(rb.ring, line.segments);
+    if (!res.ok) { setSplitNote("분할 불가: " + res.reason); return; }   // 실패 시 working.parts 불변
+    p.working.parts = [                                     // 성공 후에만 원자적 교체
+      { id: "part-1", sourcePiece: line.piece, sourceCutId: line.id, outline: res.parts[0] },
+      { id: "part-2", sourcePiece: line.piece, sourceCutId: line.id, outline: res.parts[1] }
+    ];
+    setSplitNote("분할 완료 · 두 파트(다른 색) 미리보기");
+    rerender();
+  }
+  // geometry 재계산(엉덩이 길이 등) 후 외부(ui.js)에서 호출: 절개선 재검사 + 파트 무효화.
+  function revalidate() { invalidateParts(); syncRoleButtons(); syncCutStatus(); syncSplitButton(); rerender(); }
   // 선택 모드 pointerdown: 선택 선의 핸들·anchor 히트 → 편집 시작. 아니면 선 선택/해제.
   function selectDown(e, piece, geo) {
     const rCm = NODE_HIT_PX * pxToCm(), lCm = LINE_HIT_PX * pxToCm();
@@ -441,6 +676,7 @@
         if (anchor && anchor.h && Math.hypot(anchor.h.x, anchor.h.y) < EPS) anchor.h = null;
         drawDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
       } else if (mode === "select" && editDrag) {
+        invalidateParts();   // anchor·핸들 편집으로 절개선 변경 → 파트 무효화
         editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
       }
     };
@@ -477,9 +713,12 @@
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
     validateSelectedCut, revalidate, validateCut, flattenLine, segCross, distPtToSegs,
+    doSplit, invalidateParts,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf,
-    chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment, constrainAngle45
+    chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment, constrainAngle45,
+    // 파트 분리(순수)
+    buildPieceRing, splitRingByCut, subSegment, reverseSeg, projectOntoRing, projectOntoSeg, walkConstruction
   });
 })();

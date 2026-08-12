@@ -95,6 +95,33 @@ function _appendPatternLinePreview(grp, draft){
   });
 }
 
+// 파트 분리 결과(working.parts) 미리보기: 각 파트를 닫힌 path 로, 서로 다른 색으로.
+// 파트 좌표는 형상 cm(원본 outline 과 동일 좌표계) → c2p, 소속 piece offset transform 동승.
+function _partPathD(segments){
+  if(!Array.isArray(segments) || segments.length===0) return null;
+  const [mx,my]=c2p(segments[0].from.x, segments[0].from.y);
+  let d="M"+mx+","+my;
+  segments.forEach(sg=>{
+    if(sg.kind==="line"){ const [x,y]=c2p(sg.to.x, sg.to.y); d+="L"+x+","+y; }
+    else if(sg.kind==="cubic"){
+      const [c1x,c1y]=c2p(sg.c1.x, sg.c1.y), [c2x,c2y]=c2p(sg.c2.x, sg.c2.y), [x,y]=c2p(sg.to.x, sg.to.y);
+      d+="C"+c1x+","+c1y+" "+c2x+","+c2y+" "+x+","+y;
+    }
+  });
+  return d+"Z";
+}
+function _appendParts(root, parts, L, scale){
+  if(!Array.isArray(parts)) return;
+  parts.forEach((prt, idx)=>{
+    if(!prt || !Array.isArray(prt.outline)) return;
+    const d=_partPathD(prt.outline); if(!d) return;
+    const off = (L && L[prt.sourcePiece]) ? L[prt.sourcePiece] : {dx:0,dy:0};
+    const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-part":prt.id });
+    g.appendChild(E("path",{ d, class:"design-part", "data-part-index":String(idx%2), "data-source-piece":prt.sourcePiece }));
+    root.appendChild(g);
+  });
+}
+
 function _appendDesignHitRect(root, geometry, pieceName, off, scale){
   if (!window.designLayout) return;
   const bb = window.designLayout.bboxOf(geometry, pieceName);
@@ -177,6 +204,13 @@ function render(){
       workRoot.appendChild(grp);
     });
     svg.appendChild(workRoot);
+
+    // 파트 분리 미리보기(있을 때만): working 위, hit layer 아래. 두 파트 다른 색.
+    if (Array.isArray(dp.working.parts) && dp.working.parts.length) {
+      const partsRoot = E("g"); partsRoot.setAttribute("data-design-root", "parts");
+      _appendParts(partsRoot, dp.working.parts, L, scale);
+      svg.appendChild(partsRoot);
+    }
 
     // 투명 hit layer(최상단): reference/working 은 pointer-events:none, hit rect 만 잡는다.
     const hitRoot = E("g"); hitRoot.setAttribute("data-design-root", "hit");

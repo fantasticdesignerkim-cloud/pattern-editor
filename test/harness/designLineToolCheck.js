@@ -238,6 +238,70 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   ok(T.validateCut(cut([{ kind: "cubic", from: { x: 5, y: 0 }, c1: { x: 3, y: 3 }, c2: { x: 3, y: 7 }, to: { x: 5, y: 10 } }]), sq, []).ok === true, "14: cubic 절개선 유효(adaptive flatten)");
 }
 
+// 15. 파트 분리(buildPieceRing / splitRingByCut / 곡선 보존 / 다트 거부 / 폐곡선 오차)
+{
+  ok(["buildPieceRing", "splitRingByCut", "subSegment", "reverseSeg", "projectOntoRing", "walkConstruction"].every(k => typeof T[k] === "function"), "15: 파트 분리 API");
+  const L = (a, b) => ({ kind: "line", from: a, to: b });
+  const evalC = (s, t) => { const l = (a, b) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }); const a = l(s.from, s.c1), b = l(s.c1, s.c2), c = l(s.c2, s.to), d = l(a, b), e = l(b, c); return l(d, e); };
+  // 10×10 사각형 outline + 위쪽 열린 다트(입구 (6,10)·(4,10), apex (5,6)).
+  const outline = [
+    L({ x: 0, y: 0 }, { x: 10, y: 0 }),      // 바닥
+    L({ x: 10, y: 0 }, { x: 10, y: 10 }),    // 우변
+    L({ x: 10, y: 10 }, { x: 6, y: 10 }),    // 위-우(다트 입구 right)
+    L({ x: 4, y: 10 }, { x: 0, y: 10 }),     // 위-좌(다트 입구 left)
+    L({ x: 0, y: 10 }, { x: 0, y: 0 })       // 좌변
+  ];
+  const constr = [{ from: { x: 4, y: 10 }, to: { x: 5, y: 6 } }, { from: { x: 5, y: 6 }, to: { x: 6, y: 10 } }];
+  const rb = T.buildPieceRing(outline, constr);
+  ok(rb.ok, "15: 링 구성 성공(다트로 닫음)");
+  ok(rb.ok && rb.ring.length === 7, "15: 링 = outline 5 + 다트다리 2");
+  ok(rb.ok && rb.ring.filter(r => r.source === "dartleg").length === 2, "15: 다트다리 2개 표식");
+  if (rb.ok) { const last = rb.ring[rb.ring.length - 1].seg, first = rb.ring[0].seg; ok(near(last.to.x, first.from.x, 1e-9) && near(last.to.y, first.from.y, 1e-9), "15: 폐곡선 정확 닫힘"); }
+  // 다트 안 건드리는 세로 절개선 (2,0)→(2,10)
+  const cut = [L({ x: 2, y: 0 }, { x: 2, y: 10 })];
+  const rs = T.splitRingByCut(rb.ring, cut);
+  ok(rs.ok, "15: 유효 절개선 분할 성공");
+  ok(rs.ok && rs.parts.length === 2, "15: 두 파트 생성");
+  if (rs.ok) {
+    // 각 파트 폐곡선 오차 ≤1e-4
+    let cmax = 0;
+    rs.parts.forEach(part => { const c = Math.hypot(part[part.length - 1].to.x - part[0].from.x, part[part.length - 1].to.y - part[0].from.y); if (c > cmax) cmax = c; });
+    ok(cmax <= 1e-4, "15: 두 파트 폐곡선 연결오차 ≤1e-4");
+    // 면적: 사각형 100 − 다트노치(½·4·4=8) = 92. 세로 절개 x=2 → 좌 strip 20 / 우 72.
+    const area = (part) => { let a = 0, pts = []; part.forEach(s => { pts.push(s.from); }); for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p.x * q.y - q.x * p.y; } return Math.abs(a / 2); };
+    const a0 = area(rs.parts[0]), a1 = area(rs.parts[1]);
+    ok(near(a0 + a1, 96, 1e-6), "15: 면적 합 = 96(사각형 100 − 다트노치 삼각형 4)");
+    ok(near(Math.min(a0, a1), 20, 1e-6) && near(Math.max(a0, a1), 76, 1e-6), "15: 좌 strip 20 / 우 76");
+  }
+  // 끝점이 같은 지점 → 거부
+  ok(!T.splitRingByCut(rb.ring, [L({ x: 2, y: 0 }, { x: 2, y: 0.0001 })]).ok, "15: 양끝 같은 지점 거부");
+  // 다트 다리를 가로지르는 절개선 → 후속 거부: (5,0)→(5,8) 은 apex(5,6) 부근 다리와 교차
+  const across = T.splitRingByCut(rb.ring, [L({ x: 5, y: 0 }, { x: 5, y: 8 })]);
+  ok(!across.ok, "15: 다트 가로지르는 절개선 거부");
+  // 곡선 보존: 바닥을 cubic 으로 바꿔 절개선이 그 위를 지나게 → 파트에 cubic 유지(폴리라인 아님)
+  const outlineC = outline.slice();
+  outlineC[0] = { kind: "cubic", from: { x: 0, y: 0 }, c1: { x: 3, y: -2 }, c2: { x: 7, y: -2 }, to: { x: 10, y: 0 } };
+  const rbC = T.buildPieceRing(outlineC, constr);
+  const cStart = evalC(outlineC[0], 0.35);   // 절개선 시작을 cubic 위 정확한 점으로
+  const rsC = rbC.ok ? T.splitRingByCut(rbC.ring, [L({ x: cStart.x, y: cStart.y }, { x: 2, y: 10 })]) : { ok: false };
+  ok(rsC.ok, "15: cubic outline 분할 성공");
+  if (rsC.ok) {
+    const hasCubic = rsC.parts.some(part => part.some(s => s.kind === "cubic"));
+    ok(hasCubic, "15: 파트에 cubic 유지(곡선 보존, 폴리라인 아님)");
+  }
+  // subSegment/_cubicBetween 정확도: cubic 을 [0.3,0.7] 로 잘라 끝점이 원 곡선 eval 과 일치
+  const cub = { kind: "cubic", from: { x: 0, y: 0 }, c1: { x: 0, y: 10 }, c2: { x: 10, y: 10 }, to: { x: 10, y: 0 } };
+  const sub = T.subSegment(cub, 0.3, 0.7);
+  const e03 = evalC(cub, 0.3), e07 = evalC(cub, 0.7);
+  ok(sub.kind === "cubic" && near(sub.from.x, e03.x, 1e-9) && near(sub.from.y, e03.y, 1e-9) && near(sub.to.x, e07.x, 1e-9) && near(sub.to.y, e07.y, 1e-9), "15: subSegment de Casteljau 정확(끝점 일치)");
+  // 중간점도 원 곡선 위: sub 의 t=0.5 = 원 곡선 t=0.5 지점
+  const subMid = evalC(sub, 0.5), origMid = evalC(cub, 0.5);
+  ok(near(subMid.x, origMid.x, 1e-9) && near(subMid.y, origMid.y, 1e-9), "15: subSegment 중간점도 원 곡선 위");
+  // reverseSeg: cubic 뒤집기
+  const rev = T.reverseSeg(cub);
+  ok(rev.from.x === cub.to.x && rev.c1.x === cub.c2.x && rev.c2.x === cub.c1.x && rev.to.x === cub.from.x, "15: reverseSeg cubic 제어점 반전");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

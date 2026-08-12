@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026081021">
+<link rel="stylesheet" href="css/style.css?v=2026081201">
 </head>
 <body>
 
@@ -194,8 +194,13 @@
           <button class="btn" id="btnRoleBoundary" aria-pressed="false" onclick="designLineTool.setRole('boundary')" disabled>외곽</button>
           <button class="btn" id="btnRoleGuide" aria-pressed="false" onclick="designLineTool.setRole('guide')" disabled>보조선</button>
         </div>
-        <!-- 절개선 유효성(분리 가능/실패 이유). geometry 무변경 UI 상태만. 실제 분할은 다음 단계. -->
+        <!-- 절개선 유효성(분리 가능/실패 이유). geometry 무변경 UI 상태만. -->
         <div class="row note" id="designCutStatus" aria-live="polite"></div>
+        <!-- 파트 분리: 유효 절개선 1개로 두 폐곡선 생성(원본 무변경, working.parts 저장). front/back 만. -->
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnDesignSplit" onclick="designLineTool.doSplit()" disabled>파트 분리</button>
+        </div>
+        <div class="row note" id="designSplitNote" aria-live="polite"></div>
         <div class="row note" id="designLineNote" aria-live="polite"></div>
       </div>
     </details>
@@ -211,7 +216,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026070731"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026081020"></script>
+<script src="js/render.js?v=2026081201"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -232,7 +237,7 @@
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026081011"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026081021"></script>
+<script src="js/designLineTool.js?v=2026081201"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
