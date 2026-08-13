@@ -3099,6 +3099,42 @@ geometry 를 대체하지 않는다(cut/parts 검증 기준으로만 사용).
 의존하는 이벤트)을 신뢰하면 안 된다.** 실제 마우스 실측 없이 합성 dispatch 로만 검증하면 이 계열
 회귀를 놓친다.
 
+## ✅ 도구 우선순위 게이트 (2026-08) — 선 도구 vs 배치 드래그 포인터 충돌 잠금
+
+**배경(사용자 확정)**: 선 도구(designLineTool)와 배치 드래그(designLayout)가 **같은 svg
+pointer 이벤트를 동시에** 받는다(둘 다 svg 에 pointerdown 리스너). 최상단 hit rect 는
+선 도구의 피스 판정에 필요하므로 **제거하면 안 되고**, 배치 핸들러만 **선 도구 off 일 때만**
+동작하도록 강한 게이트로 잠근다. (이벤트 등록 순서나 CSS `pointer-events:none` 의존 금지 —
+선 그리기까지 막힌다.)
+
+**계약(잠금)**
+- **`layoutDragAllowed()` = `!designLineTool || getMode()==="off"`**. designLayout pointerdown
+  시작점에서 이 게이트가 실패하면 즉시 return(배치 드래그 시작 안 함).
+  - `mode==="draw"` → 선 그리기만 / `mode==="select"` → 선·anchor·handle 편집만 /
+    `mode==="off"` → 앞판·뒤판·소매 배치 드래그.
+- **드래그 중 모드 전환 취소(기존 갭)**: off 에서 드래그를 시작한 뒤 선 도구를 켜면 예전엔
+  드래그가 계속됐다(pointermove 가 mode 를 안 봄). 이제 (1) `designLineTool.setMode` 가
+  `designLayout.cancelLayoutDrag()` 를 호출하고, (2) designLayout pointermove 도
+  `layoutDragAllowed()` 가 깨지면 `cancelLayoutDrag()` → **layout 좌표 변경 없이** 드래그
+  상태·pointer capture 만 정리. drag 에 `pointerId` 를 저장해 정확히 release.
+- **hit rect 유지**(제거 금지) — 선 도구의 front/back/sleeve 판정에 필요.
+
+**검증(실제 마우스, 로컬 2026081305)** — 사용자 7기준:
+1. 선 그리기 활성 → 앞판 click·drag 해도 `working.layout.front` **불변**(dx/dy 0, placement auto).
+2. 선택·편집 활성 → 드래그해도 layout **불변**.
+3. 도구 off → 배치 드래그 **정상**(dx/dy 변경, placement manual).
+4. 선 작성 중 피스 안 움직임(offset 불변) → **클릭 좌표=preview 위치 일치**.
+5. Enter 완료 → 선 유지·`patternLines +1`.
+6. **실제 더블클릭 완료도 동일**(+1, 2 segment, 화면 표시).
+7. 콘솔 오류 0.
+- 추가: off 드래그 중 draw 로 전환 → 전환 전 이동만 반영, **전환 후 이동 무시**(즉시 취소).
+- runAll 98 PASS(designLayout drag 핸들러는 `typeof svg` 가드로 하네스 미실행), shape/perf
+  골든 diff 0. 캐시 `?v=2026081305`(designLayout·designLineTool).
+
+**연결**: 이 충돌은 "더블클릭 완료 회귀"(위 섹션)와 별개지만, 배치가 함께 움직이면 offset 이
+바뀌어 완료선이 다른 위치로 가 "사라진 듯" 보일 수 있어 함께 잠갔다. 두 수정 후 실제 마우스로
+선 소멸 재현 안 됨.
+
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 
 사용자 계약대로 세 가지를 한 사이클로 처리(엔진 무변경, 시각/표시만).
