@@ -2698,8 +2698,10 @@ working.patternLines 에 커밋하지 않음**.
 - `draft = {piece, points[]}`(형상 cm, 미커밋). 완료 시 `segmentsFromPoints`(연속 점 → line
   segment 배열) → `makePatternLine(id,piece,points)` 하나로 커밋. `getDraft()` 가 render.js
   preview 에 draft 복사본 제공.
-- **더블클릭 중복 점 처리**: 더블클릭의 두 번째 pointerdown 이 만든 중복 점을 dblclick 에서
-  `points.pop()` 후 commit(그래서 "클릭 P1,P2 + 더블클릭 P3" = 3꼭짓점 2segment).
+- ~~**더블클릭 중복 점 처리**: 더블클릭의 두 번째 pointerdown 이 만든 중복 점을 dblclick 에서
+  `points.pop()` 후 commit~~ → **폐기(회귀 수정, 아래 "더블클릭 완료 회귀" 섹션)**: 네이티브
+  `dblclick` 은 매 pointerdown 의 rerender 로 DOM 이 재생성돼 **발화하지 않는다**. 이제 pointerdown
+  에서 수동 감지(시간·거리 임계)로 완료한다("클릭 P1,P2 + 더블클릭 P3" = 3꼭짓점 2segment 동일).
 - **preview**(render.js `_appendPatternLinePreview`): 점선(`.design-line-preview`) + 주황
   꼭짓점(`.design-line-vertex`), 그 피스 그룹 안이라 offset transform 동승. 커밋 0.
 - keydown(Enter/Backspace/Esc)은 **입력 필드(INPUT/TEXTAREA/SELECT) 포커스 시 무시**(엉덩이
@@ -3063,6 +3065,39 @@ boundary 1차 위에, 같은 피스의 **여러 유효 대체선을 합성**해 
 **미구현(다음)**: 다트 상호작용 대체선 / 소매 / designOutline 을 실제 재단 outline 으로 확정 /
 합성 결과 위에서 다트이동·추가 디자인. `working.designOutline` 은 여전히 **파생 데이터**이며 원본
 geometry 를 대체하지 않는다(cut/parts 검증 기준으로만 사용).
+
+## ✅ 더블클릭 완료 회귀 수정 (2026-08) — 네이티브 dblclick → pointerdown 수동 감지
+
+**증상(실제 Pages)**: 패턴선을 **더블클릭으로 완료**하면 작성 중 preview 는 그대로인데 완성선이
+`working.patternLines` 에 저장되지 않아 안 보였다. Enter 완료는 정상.
+
+**진단(합성 이벤트 아님, 실제 마우스로 Pages·로컬 재현)**: `computer` 실클릭 + 실제 더블클릭에서
+`dblclick` 이벤트가 **svg·document 모두 0회 발화**(capture phase 포함), draft 만 늘고 커밋 0.
+- **근본 원인**: draw 의 매 pointerdown 이 `rerender()` 로 **SVG DOM(hit rect 포함)을 전부 재생성**
+  한다. 브라우저 네이티브 더블클릭 감지는 "**같은 target 요소**를 두 번 클릭"을 요구하는데, 두
+  클릭 사이 rerender 가 target 을 새 요소로 바꿔 **`dblclick` 이 아예 발화하지 않는다**. Enter 는
+  document keydown 이라 DOM 재생성과 무관해 정상.
+- **왜 하네스·합성 이벤트로 안 잡혔나**: 하네스는 pointer 핸들러(`typeof svg !== "undefined"` 가드)
+  를 실행하지 않고, 합성 테스트는 `dblclick` 을 **직접 dispatch** 해 네이티브 감지를 우회했다
+  (그래서 "로컬 통과"만으로는 놓친다 — 실제 마우스 실측이 필수였다).
+
+**수정(`js/designLineTool.js`)**: 네이티브 `dblclick` 리스너 제거, **pointerdown 에서 수동 더블클릭
+감지**. `lastDown={t,x,y}` 를 기록하고, 새 pointerdown 이 `DBLCLICK_MS(400ms)` 이내 +
+`DBLCLICK_PX(6px)` 이내면 더블클릭 완료로 판정 → 이번(두 번째) 눌림은 중복점이라 추가하지 않고
+현재 draft 를 그대로 `commitDraft()`(≥2 anchors 필요). `lastDown` 은 commitDraft/setMode/Escape 에서
+리셋. **rerender 로 DOM 이 바뀌어도 pointerdown 자체는 계속 발화하므로 견고**하다.
+
+**검증(실제 마우스, 로컬 수정본 2026081304)**:
+- **실제 더블클릭 완료**: 2점 클릭 + 더블클릭 → `patternLines` **+1**(3꼭짓점 2segment)·preview 제거·
+  DOM `.design-line`·**화면 표시(주황, onScreen)**·draft 정리·오류 0.
+- Enter 2점/3점·곡선 click-drag 정상, **오검출 없음**(6px 초과로 떨어진 3점 연속 클릭 → 정상 3점선,
+  더블클릭 오완료 안 됨), 완료 후 render·엉덩이 길이·piece 이동에도 좌표·표시 유지.
+- runAll 전체 통과(pointer 핸들러는 가드로 하네스 미실행 → 무영향), shape/perf 골든 diff 0.
+  캐시 `?v=2026081304`(designLineTool).
+
+**교훈**: **매 입력마다 DOM 을 통째로 재생성하는 UI 에서는 네이티브 `dblclick`(및 요소 identity 에
+의존하는 이벤트)을 신뢰하면 안 된다.** 실제 마우스 실측 없이 합성 dispatch 로만 검증하면 이 계열
+회귀를 놓친다.
 
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 
