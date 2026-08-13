@@ -3016,6 +3016,54 @@ front/back outline 은 **열린 다트 입구 gap** 을 하나씩 갖는다(단�
 확정(현재는 파생 미리보기). `working.boundaryPreview` 도 parts 처럼 **파생 미리보기**이며 원본
 outline 을 대체하지 않는다.
 
+## ✅ Design 외곽 대체선 합성(designOutline) (2026-08) — 여러 대체선 → 디자인 외곽
+
+boundary 1차 위에, 같은 피스의 **여러 유효 대체선을 합성**해 하나의 디자인 외곽선
+`working.designOutline` 을 만든다(블라우스: 네크라인·옆선·밑단 동시 변경). 이게 생겨야 "그린
+디자인선으로 만든 실제 몸판 외곽" 이 되고, **cut/parts 가 이 합성 외곽 기준으로** 검증·분할된다.
+
+### 결정·계약 (잠금)
+- **원본 ring 기준 한 번에 합성 → 순서 무관**: 각 대체선의 짧은 arc 를 **원본 ring 의 position
+  구간**으로 표현, 유지 구간엔 원본 outline 서브세그먼트(dartleg 제거=입구 열림), 대체 구간엔
+  대체선을 삽입. 구간 집합으로 결정되므로 적용 순서와 무관하고, **정준 정렬**(`_canonKey`)로
+  반환 배열까지 순서 무관(실측: `[b1,b2]`==`[b2,b1]`).
+- **대체 구간 겹치면 거부**("대체 구간이 겹침", `_rangesOverlap` — 세그먼트별 [t0,t1] 양의 길이
+  교차). 개별 대체선이 무효(다트 포함·모호·끝점 이탈 등)면 그 사유로 거부.
+- **합성 결과 재검증**: 합성 outline + 원본 다트 다리로 `buildPieceRing` → 폐곡선 재연결·면적>0·
+  자기교차 0 확인. 통과해야 저장.
+- **cut/parts 재라우팅**: `currentOutlineSegs(p, piece)` = designOutline 있으면 그것, 없으면 원본.
+  `validateSelectedCut`·`buildRingForPiece`(cut·split 공용)가 이걸 쓴다. **boundary 합성은 원본
+  ring 기준**(대체선은 원본 arc 를 대체하므로), **cut/split 은 합성 outline 기준**으로 분리.
+- **원본 `working.geometry`·`patternLines` 불변**, 결과는 `working.designOutline={front,back}`
+  (`{outline, lineIds}`). front/back 만(소매 후속).
+- **무효화**: geometry·선 변경 시 `invalidateParts`(이제 parts·boundaryPreview·**designOutline**
+  셋 다 비움). 합성 성공 시 parts·boundaryPreview 는 정리(원본 기준이라 stale), designOutline 유지.
+
+### 순수·DOM (`js/designLineTool.js`)
+- `_boundaryPlan(ring, segs)`: 단일 대체선 계획(끝점 투영·짧은 arc·다트/모호/교차 검증 + 대체
+  arc position 구간 aPos/bPos + 방향·끝점 강제 bnd). `replaceArcOnRing`(단일)·`composeDesignOutline`
+  (다중)이 공유 → 동작 일치.
+- `composeDesignOutline(ring, boundaryList)`(순수): 위 계약 전부. `_intervalRanges`(position 구간→
+  세그먼트별 [t0,t1]) + `_rangesOverlap` + 세그먼트별 covered 빼기 + 대체선 삽입 + 재검증 + 정준 정렬.
+- `doComposeDesignOutline()`(버튼 `#btnDesignCompose`, boundary 존재 시 활성): front·back 각각
+  **원본 ring** 으로 `composeForPiece` → 한 피스라도 실패 시 전체 중단(저장 안 함) → 성공 시
+  `working.designOutline` 원자적 저장. 렌더(`render.js` `_appendDesignOutline`)는 에메랄드 #0E9F6E.
+
+### 검증 (격리 origin, storage 0, saves 0, console 0)
+- **실제 앞판 네크라인(직선)+밑단(굽은 cubic) 합성** → `designOutline.front`(9세그·lineIds
+  [line-1,line-2])·원본 geometry/patternLines **무변경**·에메랄드 path 1개·**스크린샷**(직선
+  네크라인+굽은 밑단, 다트 입구 열림, 뒤판·소매 무영향).
+- **cut 재라우팅(핵심)**: 합성 네크라인·밑단 위 점을 잇는 cut → **합성 기준 "분리 가능"(분할
+  성공 2파트)** vs **원본 기준 "연결 안 됨"**(같은 cut). cut/parts 가 합성 outline 위에서 검증됨.
+- **무효화**: 엉덩이 길이 적용 → designOutline 삭제.
+- 하네스 `designLineToolCheck` **98**(합성 9: 다중 합성·두 대체선 포함·다트 열림·**순서 무관**·
+  겹침 거부·개별 무효 거부·cubic 보존). runAll 전체 통과, shape/perf 골든 diff 0.
+  캐시 `?v=2026081303`.
+
+**미구현(다음)**: 다트 상호작용 대체선 / 소매 / designOutline 을 실제 재단 outline 으로 확정 /
+합성 결과 위에서 다트이동·추가 디자인. `working.designOutline` 은 여전히 **파생 데이터**이며 원본
+geometry 를 대체하지 않는다(cut/parts 검증 기준으로만 사용).
+
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 
 사용자 계약대로 세 가지를 한 사이클로 처리(엔진 무변경, 시각/표시만).
