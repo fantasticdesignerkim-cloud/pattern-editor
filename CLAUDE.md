@@ -2959,6 +2959,62 @@ front/back outline 은 **열린 다트 입구 gap** 을 하나씩 갖는다(단�
 
 **미구현(다음)**: 다트 상호작용 절개선(끝점 다리 위·다트 가로지름) 지원 / 소매 / 다중 절개 /
 파트명·수량·식서·시접·재단 UI / 파트를 실제 재단 조각으로 확정.
+> ⚠️ **`working.parts` 는 ⑤ 재단 단계의 최종 조각이 아니라 Design 단계의 파생 미리보기다**
+> (사용자 확정). 파트명·수량·식서·시접으로 확장하지 않는다.
+
+## ✅ Design 외곽 대체선(boundary) 1차 (2026-08) — 짧은 arc 교체 파생 미리보기
+
+파트 분리 인프라 위에, `boundary` 역할 선으로 outline 의 **짧은 arc(네크라인·옆선·밑단)를
+교체**한 파생 외곽선을 만든다. 원본 `working.geometry`·`patternLines` 불변, 결과는 별도
+파생 미리보기 `working.boundaryPreview` 로만 표시(다른 색). 대체선 자체는 outline 승격 안 함.
+
+### 결정·계약 (잠금)
+- **대체 arc = 짧은 arc**(사용자 확정): 두 끝점 사이 outline 호 길이가 짧은 쪽을 교체,
+  긴 쪽 유지. 네크라인(SNP↔FNP)·옆선(진동밑↔옆밑단)·밑단(중심↔옆)이 모두 짧은 feature arc.
+- **1차 거부**: 끝점이 다트 다리 위 → "끝점이 다트 다리 위 — 후속" / 대체 arc 가 다트 다리
+  포함 → "대체 arc 가 다트를 포함 — 후속" / 두 arc 길이 유사(비율>0.9) → "대체할 arc 가
+  모호함". (다트가 **유지 arc** 에 있으면 정상 — 네크라인 등 대부분.)
+- **파트 분리 인프라 재사용**: `buildPieceRing`(다트 다리로 닫은 폐곡선 ring)으로 면적·방향·
+  교차를 판정. `extractArcTagged`(source 태깅)로 짧은 arc 의 다트 포함 판정·유지 arc 의
+  dartleg 제거를 한다.
+- **★ 파생 outline 은 다트 입구를 열어둔다**: 유지 arc 에서 **dartleg 세그먼트를 제거**하고
+  outline 만 남겨(원본과 동일하게 다트 입구 open) 대체선과 이어 저장. 검증용 폐곡선(테스트
+  루프)은 dartleg 포함해 닫아 자기교차·면적·방향을 확인.
+- **곡선 보존**: 대체 arc 를 잘라내는 지점의 outline cubic 은 `subSegment`(de Casteljau)로 정확
+  분할, 유지 arc 의 cubic 은 그대로. flatten 은 교차·길이·검증에만.
+
+### 유효성·미리보기·무효화 (`js/designLineTool.js`)
+- **`replaceArcOnRing(ring, boundarySegs)`**(순수): 끝점 투영(outline 위·다트 아님) → 짧은 arc
+  선택 → 모호·다트·자기교차·유지경계 교차·결과 폐곡선(단순·면적>0·방향) 검증 → `{ok,
+  outline:[대체선+유지 outline]}`. 대체선 끝점은 유지 arc 끝점으로 강제(연결오차 0).
+- `validateSelectedBoundary()`: 선택 boundary 선을 현재 working outline 기준 검증(파생 outline
+  동반). `#designBoundaryStatus` "대체 가능"(녹색)/실패 이유(빨강), `#btnDesignBoundary` 활성.
+- `doBoundaryPreview()`(버튼): **직전 재검증** → 성공 시에만 `working.boundaryPreview =
+  {sourcePiece, sourceLineId, outline}` 원자적 저장 → 렌더.
+- **무효화**: geometry·선 변경 시 `invalidateParts`(이제 parts+boundaryPreview 둘 다 비움) —
+  commitDraft/deleteSelected/setRole/편집 드래그 종료/`revalidate`(엉덩이 길이).
+- 렌더(`render.js` `_appendBoundaryPreview`+`_openPathD`): 파생 outline 을 인디고 #6D28D9 로,
+  **불연속(다트 입구)에서 새 subpath(M)** → 가짜 연결선 없음. 소속 piece offset transform 동승.
+
+### 버그 수정 (이 사이클)
+`syncCutStatus` 의 `if(!v)` 조기반환(절개선 아님 = **boundary 선택 시**)에서 `syncBoundaryStatus()`
+를 안 불러, boundary 선을 선택해도 상태·버튼이 안 켜졌다. 두 분기 모두에서 호출하도록 수정
+(실측: 수정 전 status 빈칸·버튼 disabled → 수정 후 "대체 가능"·활성).
+
+### 검증 (격리 origin, storage 0, saves 0, console 0)
+- **실제 앞판**: 네크라인(FNP↔SNP) 직선 대체 → 파생 outline 9세그·**cubic 보존**. 진동선
+  전체(다트 포함) 대체 → **"대체 arc 가 다트를 포함" 거부**.
+- **UI 경로**: boundary 선 선택→"대체 가능"→버튼 활성→미리보기→`working.boundaryPreview`
+  저장(9세그)·원본 geometry/patternLines **무변경**·인디고 path 1개·스크린샷(원본 곡선 네크라인
+  위에 직선 파생, 다트 입구 열림 유지, 뒤판·소매 무영향).
+- **무효화**: 엉덩이 길이 적용 → boundaryPreview 삭제.
+- 하네스 `designLineToolCheck` **89**(외곽 대체 10: 짧은 arc 대체·파생 다트열림·대체선 포함·
+  끝점 미연결·다트 포함 거부·모호 거부·cubic 보존). runAll 전체 통과, shape/perf 골든 diff 0.
+  캐시 `?v=2026081301`(render·css)·`?v=2026081302`(designLineTool).
+
+**미구현(다음)**: 다트 상호작용 대체선 / 소매 / 다중 대체선 / 대체 결과를 실제 outline 으로
+확정(현재는 파생 미리보기). `working.boundaryPreview` 도 parts 처럼 **파생 미리보기**이며 원본
+outline 을 대체하지 않는다.
 
 ## ✅ 소규모 UI 교정 3종 (2026-08) — 다트버튼 색 · 소매 글씨 · 이세 카드
 
