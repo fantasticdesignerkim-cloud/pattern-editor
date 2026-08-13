@@ -22,6 +22,8 @@
   "use strict";
 
   const DRAG_PX = 4;          // draw: 이 픽셀 미만 이동은 클릭(모서리), 이상은 드래그(곡선 핸들)
+  const DBLCLICK_MS = 400;    // draw: 수동 더블클릭 감지 시간 임계(네이티브 dblclick 은 rerender 로 DOM 이
+  const DBLCLICK_PX = 6;      //       매 클릭 재생성돼 발화 안 함 → pointerdown 에서 직접 감지·완료)
   const LINE_HIT_PX = 7;      // select: 선 히트 반경(px)
   const NODE_HIT_PX = 9;      // select: anchor·handle 히트 반경(px)
   const SNAP_PX = 8;          // snap: 화면 8px 이내에서만 흡착(zoom→cm 환산)
@@ -32,7 +34,7 @@
   const ROLE_LABEL = { cut: "절개선", boundary: "외곽 대체선", guide: "보조선" };
 
   let mode = "off";
-  let draft = null, drawDrag = null;                 // draw 상태
+  let draft = null, drawDrag = null, lastDown = null;   // draw 상태(lastDown = 직전 pointerdown 시각·위치)
   let selectedId = null, editDrag = null;            // select 상태
   let snapHint = null;                               // {piece, point, type} — 흡착 표시(세션 UI)
   let lastHandleGeo = null;                           // 핸들 드래그 중 마지막 커서(형상 cm) — Shift 즉시 반영
@@ -555,7 +557,7 @@
 
   // ── 모드 전환(그리기/선택 상호배타) ──
   function setMode(m) {
-    mode = m; draft = null; drawDrag = null; editDrag = null; selectedId = null; snapHint = null;
+    mode = m; draft = null; drawDrag = null; lastDown = null; editDrag = null; selectedId = null; snapHint = null;
     setNote(m === "draw" ? "첫 점을 클릭(또는 드래그)하세요" : m === "select" ? SELECT_NOTE : "");
     syncButtons(); syncRoleButtons(); syncCutStatus(); rerender();
   }
@@ -593,7 +595,7 @@
     const p = project(); const ls = ensurePatternLines(p);
     ls.push(makePatternLine(nextId(ls), draft.piece, draft.anchors));
     invalidateParts(p);
-    draft = null; drawDrag = null; setNote("완료 · 새 선은 다시 첫 점부터"); rerender(); return true;
+    draft = null; drawDrag = null; lastDown = null; setNote("완료 · 새 선은 다시 첫 점부터"); rerender(); return true;
   }
   function draftBackspace() {
     if (!draft || !draft.anchors.length) return;
@@ -823,6 +825,14 @@
       if (mode === "off" || e.button !== 0 || !inDesign()) return;
       const piece = pieceAt(e.target);
       if (mode === "draw") {
+        const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        // 수동 더블클릭 = 완료(네이티브 dblclick 은 rerender 로 DOM 이 매 클릭 재생성돼 안 뜬다).
+        // 이번(두 번째) 눌림은 중복점이므로 추가하지 않고 현재 draft 를 그대로 커밋한다.
+        if (draft && lastDown && (now - lastDown.t) < DBLCLICK_MS && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < DBLCLICK_PX) {
+          lastDown = null; drawDrag = null; e.stopPropagation(); if (e.preventDefault) e.preventDefault();
+          commitDraft();   // ≥2 anchors 필요; 미만이면 무시(안내)
+          return;
+        }
         // 새 anchor 는 snap 적용(같은 피스 · working geometry 기준 · Alt 해제).
         const placeGeo = pc => { const g = geoAt(e, pc); const s = snapForCursor(g, pc, e.altKey, null); snapHint = s ? { piece: pc, point: s.point, type: s.type } : null; return s ? { x: s.point.x, y: s.point.y } : g; };
         if (!draft) {
@@ -830,6 +840,7 @@
           draft = { piece: piece, anchors: [{ p: placeGeo(piece), h: null }] }; setNote(DRAW_NOTE);
         } else if (piece !== draft.piece) { setNote("같은 피스 안에서 이어 그리세요"); return; }
         else { draft.anchors.push({ p: placeGeo(draft.piece), h: null }); setNote(DRAW_NOTE); }
+        lastDown = { t: now, x: e.clientX, y: e.clientY };
         drawDrag = { startX: e.clientX, startY: e.clientY };
       } else { // select
         if (!piece) { selectedId = null; editDrag = null; setNote(SELECT_NOTE); }
@@ -878,15 +889,13 @@
     }
     document.addEventListener("keydown", e => { if (e.key === "Shift") onShift(true); });
     document.addEventListener("keyup", e => { if (e.key === "Shift") onShift(false); });
-    svg.addEventListener("dblclick", e => {
-      if (mode !== "draw" || !draft) return;
-      draft.anchors.pop(); commitDraft(); e.preventDefault(); e.stopPropagation();
-    });
+    // 네이티브 dblclick 은 매 pointerdown 의 rerender 로 DOM 이 재생성돼 발화하지 않는다 →
+    // 완료(더블클릭)는 위 pointerdown 의 수동 감지(DBLCLICK_MS·DBLCLICK_PX)로 처리한다.
     document.addEventListener("keydown", e => {
       if (mode === "off" || !inDesign()) return;
       const t = e.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
       if (mode === "draw") {
-        if (e.key === "Escape") { draft = null; drawDrag = null; setNote("취소됨 · 첫 점을 다시 찍으세요"); rerender(); }
+        if (e.key === "Escape") { draft = null; drawDrag = null; lastDown = null; setNote("취소됨 · 첫 점을 다시 찍으세요"); rerender(); }
         else if (e.key === "Enter" && draft) { e.preventDefault(); commitDraft(); }
         else if (e.key === "Backspace" && draft) { e.preventDefault(); draftBackspace(); }
       } else { // select
