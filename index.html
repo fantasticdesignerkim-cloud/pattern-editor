@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026081301">
+<link rel="stylesheet" href="css/style.css?v=2026081303">
 </head>
 <body>
 
@@ -208,6 +208,12 @@
           <button class="btn" id="btnDesignBoundary" onclick="designLineTool.doBoundaryPreview()" disabled>외곽 대체 미리보기</button>
         </div>
         <div class="row note" id="designBoundaryNote" aria-live="polite"></div>
+        <!-- 여러 외곽 대체선을 합성해 디자인 외곽선(working.designOutline) 생성. cut 은 이 외곽 기준.
+             대체 구간이 겹치면 거부. 순서 무관. front/back·원본 geometry 불변. -->
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnDesignCompose" onclick="designLineTool.doComposeDesignOutline()" disabled>디자인 외곽 합성</button>
+        </div>
+        <div class="row note" id="designComposeNote" aria-live="polite"></div>
         <div class="row note" id="designLineNote" aria-live="polite"></div>
       </div>
     </details>
@@ -223,7 +229,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026070731"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026081301"></script>
+<script src="js/render.js?v=2026081303"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -244,7 +250,7 @@
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026081011"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026081302"></script>
+<script src="js/designLineTool.js?v=2026081303"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>

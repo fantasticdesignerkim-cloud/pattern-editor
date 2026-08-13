@@ -344,6 +344,48 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   if (rrC.ok) ok(rrC.outline.some(s => s.kind === "cubic"), "16: 파생 outline 에 cubic 바닥 보존(곡선 보존)");
 }
 
+// 17. 디자인 외곽 합성(composeDesignOutline): 다중 합성 / 겹침 거부 / 순서 무관 / 곡선 보존 / 다트 열림
+{
+  ok(typeof T.composeDesignOutline === "function", "17: composeDesignOutline API");
+  const L = (a, b) => ({ kind: "line", from: a, to: b });
+  const outline = [
+    L({ x: 0, y: 0 }, { x: 10, y: 0 }), L({ x: 10, y: 0 }, { x: 10, y: 10 }),
+    L({ x: 10, y: 10 }, { x: 6, y: 10 }), L({ x: 4, y: 10 }, { x: 0, y: 10 }), L({ x: 0, y: 10 }, { x: 0, y: 0 })
+  ];
+  const constr = [{ from: { x: 4, y: 10 }, to: { x: 5, y: 6 } }, { from: { x: 5, y: 6 }, to: { x: 6, y: 10 } }];
+  const rb = T.buildPieceRing(outline, constr);
+  const bl = { x: 0, y: 3 }, blb = { x: 3, y: 0 };   // 좌하 모서리 대체
+  const br = { x: 10, y: 3 }, brb = { x: 7, y: 0 };   // 우하 모서리 대체
+  const b1 = [L(bl, blb)], b2 = [L(br, brb)];
+  const comp = T.composeDesignOutline(rb.ring, [b1, b2]);
+  ok(comp.ok, "17: 두 대체선 합성 성공");
+  if (comp.ok) {
+    // 두 대체선(대각선)이 모두 포함
+    const hasB1 = comp.outline.some(s => (Math.abs(s.from.x - 0) < 1e-6 && Math.abs(s.from.y - 3) < 1e-6) || (Math.abs(s.to.x - 0) < 1e-6 && Math.abs(s.to.y - 3) < 1e-6));
+    const hasB2 = comp.outline.some(s => (Math.abs(s.from.x - 10) < 1e-6 && Math.abs(s.from.y - 3) < 1e-6) || (Math.abs(s.to.x - 10) < 1e-6 && Math.abs(s.to.y - 3) < 1e-6));
+    ok(hasB1 && hasB2, "17: 합성 결과에 두 대체선 모두 포함");
+    // 다트 apex(5,6) 없음(입구 열림 유지)
+    ok(!comp.outline.some(s => (Math.abs(s.from.x - 5) < 1e-6 && Math.abs(s.from.y - 6) < 1e-6) || (Math.abs(s.to.x - 5) < 1e-6 && Math.abs(s.to.y - 6) < 1e-6)), "17: 합성 결과 다트 입구 열림(다리 제거)");
+  }
+  // 순서 무관: [b1,b2] === [b2,b1] (정준 정렬)
+  const c12 = T.composeDesignOutline(rb.ring, [b1, b2]), c21 = T.composeDesignOutline(rb.ring, [b2, b1]);
+  ok(c12.ok && c21.ok && JSON.stringify(c12.outline) === JSON.stringify(c21.outline), "17: 순서 무관(적용 순서와 무관하게 같은 결과)");
+  // 겹치는 대체 구간 거부: b1(0,3)-(3,0) 와 b3(0,5)-(5,0) 둘 다 좌하 모서리
+  const b3 = [L({ x: 0, y: 5 }, { x: 5, y: 0 })];
+  ok(T.composeDesignOutline(rb.ring, [b1, b3]).reason === "대체 구간이 겹침", "17: 겹치는 대체 구간 거부");
+  // 개별 무효(다트 포함 arc) 포함 시 거부
+  ok(!T.composeDesignOutline(rb.ring, [b1, [L({ x: 8, y: 10 }, { x: 2, y: 10 })]]).ok, "17: 개별 무효 대체선 포함 시 거부");
+  // 곡선 보존: cubic 바닥. 좌하 모서리 대체 → 유지 arc 의 cubic 바닥 일부 보존
+  const outlineC = outline.slice();
+  outlineC[0] = { kind: "cubic", from: { x: 0, y: 0 }, c1: { x: 3, y: -2 }, c2: { x: 7, y: -2 }, to: { x: 10, y: 0 } };
+  const rbC = T.buildPieceRing(outlineC, constr);
+  const evalC = (s, t) => { const l = (a, b) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }); const a = l(s.from, s.c1), b = l(s.c1, s.c2), c = l(s.c2, s.to), d = l(a, b), e = l(b, c); return l(d, e); };
+  const cutPt = evalC(outlineC[0], 0.2);
+  const compC = rbC.ok ? T.composeDesignOutline(rbC.ring, [[L({ x: 0, y: 3 }, { x: cutPt.x, y: cutPt.y })]]) : { ok: false };
+  ok(compC.ok, "17: cubic 포함 합성 성공");
+  if (compC.ok) ok(compC.outline.some(s => s.kind === "cubic"), "17: 합성 결과 cubic 보존(곡선 보존)");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

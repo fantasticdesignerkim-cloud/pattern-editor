@@ -114,6 +114,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-boundary-preview{fill:none;stroke:#6D28D9;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
 #designBoundaryStatus[data-ok="1"]{color:#0F8A4A;font-weight:600}
 #designBoundaryStatus[data-ok="0"]{color:#cc3333;font-weight:600}
+#btnDesignCompose:not(:disabled){border-color:var(--navy)}
+/* 합성 디자인 외곽선: 여러 대체선 합성 결과, 원본 위 에메랄드로 굵게. */
+.design-outline-composed{fill:none;stroke:#0E9F6E;stroke-width:2.8;stroke-linejoin:round;stroke-linecap:round}
 
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */
 .brand{font-weight:600;color:var(--navy);font-size:15px;letter-spacing:.06em;white-space:nowrap;margin-right:8px}

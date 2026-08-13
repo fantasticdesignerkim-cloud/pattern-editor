@@ -144,6 +144,18 @@ function _appendBoundaryPreview(root, bp, L, scale){
   g.appendChild(E("path",{ d, class:"design-boundary-preview", fill:"none", "data-source-piece":bp.sourcePiece }));
   root.appendChild(g);
 }
+// 합성된 디자인 외곽선(working.designOutline={front,back}) 을 원본 위 다른 색으로.
+function _appendDesignOutline(root, designOutline, L, scale){
+  if(!designOutline) return;
+  ["front","back"].forEach(pc=>{
+    const d0=designOutline[pc]; if(!d0 || !Array.isArray(d0.outline) || !d0.outline.length) return;
+    const d=_openPathD(d0.outline); if(!d) return;
+    const off=(L && L[pc]) ? L[pc] : {dx:0,dy:0};
+    const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-outline":pc });
+    g.appendChild(E("path",{ d, class:"design-outline-composed", fill:"none", "data-source-piece":pc }));
+    root.appendChild(g);
+  });
+}
 
 function _appendDesignHitRect(root, geometry, pieceName, off, scale){
   if (!window.designLayout) return;
@@ -239,6 +251,12 @@ function render(){
       const bRoot = E("g"); bRoot.setAttribute("data-design-root", "boundary");
       _appendBoundaryPreview(bRoot, dp.working.boundaryPreview, L, scale);
       svg.appendChild(bRoot);
+    }
+    // 합성 디자인 외곽선(있을 때만): 여러 대체선 합성 결과. 원본 위 다른 색.
+    if (dp.working.designOutline) {
+      const dRoot = E("g"); dRoot.setAttribute("data-design-root", "design-outline");
+      _appendDesignOutline(dRoot, dp.working.designOutline, L, scale);
+      svg.appendChild(dRoot);
     }
 
     // 투명 hit layer(최상단): reference/working 은 pointer-events:none, hit rect 만 잡는다.
