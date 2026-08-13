@@ -122,6 +122,29 @@ function _appendParts(root, parts, L, scale){
   });
 }
 
+// 외곽 대체선 파생 미리보기(working.boundaryPreview): 파생 outline 을 한 색으로.
+// 세그먼트 연속이 끊기는 곳(다트 입구 열림)에서 새 subpath(M) → 가짜 연결선 없음.
+function _openPathD(segments){
+  if(!Array.isArray(segments) || segments.length===0) return null;
+  let d="", prev=null;
+  segments.forEach(sg=>{
+    const [fx,fy]=c2p(sg.from.x, sg.from.y);
+    if(!prev || Math.hypot(sg.from.x-prev.x, sg.from.y-prev.y)>1e-4){ d+=(d?" ":"")+"M"+fx+","+fy; }
+    if(sg.kind==="line"){ const [x,y]=c2p(sg.to.x, sg.to.y); d+="L"+x+","+y; }
+    else { const [c1x,c1y]=c2p(sg.c1.x, sg.c1.y), [c2x,c2y]=c2p(sg.c2.x, sg.c2.y), [x,y]=c2p(sg.to.x, sg.to.y); d+="C"+c1x+","+c1y+" "+c2x+","+c2y+" "+x+","+y; }
+    prev=sg.to;
+  });
+  return d;
+}
+function _appendBoundaryPreview(root, bp, L, scale){
+  if(!bp || !Array.isArray(bp.outline)) return;
+  const d=_openPathD(bp.outline); if(!d) return;
+  const off=(L && L[bp.sourcePiece]) ? L[bp.sourcePiece] : {dx:0,dy:0};
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-boundary":bp.sourceLineId });
+  g.appendChild(E("path",{ d, class:"design-boundary-preview", fill:"none", "data-source-piece":bp.sourcePiece }));
+  root.appendChild(g);
+}
+
 function _appendDesignHitRect(root, geometry, pieceName, off, scale){
   if (!window.designLayout) return;
   const bb = window.designLayout.bboxOf(geometry, pieceName);
@@ -210,6 +233,12 @@ function render(){
       const partsRoot = E("g"); partsRoot.setAttribute("data-design-root", "parts");
       _appendParts(partsRoot, dp.working.parts, L, scale);
       svg.appendChild(partsRoot);
+    }
+    // 외곽 대체선 파생 미리보기(있을 때만): 원본 유지한 채 파생 외곽선을 다른 색으로.
+    if (dp.working.boundaryPreview) {
+      const bRoot = E("g"); bRoot.setAttribute("data-design-root", "boundary");
+      _appendBoundaryPreview(bRoot, dp.working.boundaryPreview, L, scale);
+      svg.appendChild(bRoot);
     }
 
     // 투명 hit layer(최상단): reference/working 은 pointer-events:none, hit rect 만 잡는다.

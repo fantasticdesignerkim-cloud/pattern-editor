@@ -105,11 +105,15 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 절개선 유효성: 통과=녹색 / 실패=빨강. */
 #designCutStatus[data-ok="1"]{color:#0F8A4A;font-weight:600}
 #designCutStatus[data-ok="0"]{color:#cc3333;font-weight:600}
-#btnDesignSplit:not(:disabled){border-color:var(--navy)}
+#btnDesignSplit:not(:disabled),#btnDesignBoundary:not(:disabled){border-color:var(--navy)}
 /* 파트 분리 미리보기: 두 파트를 서로 다른 색(청록·자주)으로. */
 .design-part{fill:none;stroke-width:2.4;stroke-linejoin:round}
 .design-part[data-part-index="0"]{stroke:#0EA5A5;fill:color-mix(in srgb,#0EA5A5 12%,transparent)}
 .design-part[data-part-index="1"]{stroke:#C026A9;fill:color-mix(in srgb,#C026A9 12%,transparent)}
+/* 외곽 대체선 파생 미리보기: 원본 위 다른 색(인디고)으로. */
+.design-boundary-preview{fill:none;stroke:#6D28D9;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+#designBoundaryStatus[data-ok="1"]{color:#0F8A4A;font-weight:600}
+#designBoundaryStatus[data-ok="0"]{color:#cc3333;font-weight:600}
 
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */
 .brand{font-weight:600;color:var(--navy);font-size:15px;letter-spacing:.06em;white-space:nowrap;margin-right:8px}

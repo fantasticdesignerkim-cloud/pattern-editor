@@ -401,6 +401,58 @@
     return { ok: true, parts: [partA, partB] };
   }
 
+  // ── 외곽 대체선(boundary) — 순수 ──
+  // extractArc 의 source(outline/dartleg) 태깅 버전. 대체 arc 의 다트 포함 판정·유지 arc 의
+  // dartleg 제거(다트 입구 열림 유지)에 필요.
+  function extractArcTagged(ring, A, B) {
+    const n = ring.length, out = [];
+    if (A.i === B.i && A.t <= B.t) { const s = subSegment(ring[A.i].seg, A.t, B.t); if (_segLen(s) > 1e-9) out.push({ seg: s, source: ring[A.i].source }); return out; }
+    const tail = subSegment(ring[A.i].seg, A.t, 1); if (_segLen(tail) > 1e-9) out.push({ seg: tail, source: ring[A.i].source });
+    let k = (A.i + 1) % n;
+    while (k !== B.i) { out.push({ seg: cloneSeg(ring[k].seg), source: ring[k].source }); k = (k + 1) % n; }
+    const head = subSegment(ring[B.i].seg, 0, B.t); if (_segLen(head) > 1e-9) out.push({ seg: head, source: ring[B.i].source });
+    return out;
+  }
+  function _arcLen(tagged) { let L = 0; tagged.forEach(o => flattenSegment(o.seg).forEach(ab => { L += Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y); })); return L; }
+  // 대체선으로 ring 의 **짧은 arc** 를 교체한 파생 outline 반환. 원본 geometry 불변.
+  // 1차 제한: 끝점이 outline(다리 아님) 위, 대체 arc 가 다트를 포함하지 않음, 두 arc 길이가
+  // 모호하지 않음, 결과 폐곡선이 단순·면적>0·방향 일치. 반환 {ok, outline:[대체선+유지 outline], reason}.
+  function replaceArcOnRing(ring, boundarySegs, opts) {
+    opts = opts || {}; const onTol = opts.onTol != null ? opts.onTol : 0.05, ambRatio = opts.ambRatio != null ? opts.ambRatio : 0.9;
+    if (!boundarySegs || !boundarySegs.length) return { ok: false, reason: "대체선 없음" };
+    const B0 = boundarySegs[0].from, B1 = boundarySegs[boundarySegs.length - 1].to;
+    const pj0 = projectOntoRing(B0, ring), pj1 = projectOntoRing(B1, ring);
+    if (pj0.dist > onTol) return { ok: false, reason: "대체선 시작점이 경계에서 벗어남" };
+    if (pj1.dist > onTol) return { ok: false, reason: "대체선 끝점이 경계에서 벗어남" };
+    if (ring[pj0.i].source !== "outline" || ring[pj1.i].source !== "outline") return { ok: false, reason: "대체선 끝점이 다트 다리 위 — 후속 지원" };
+    if (pj0.i === pj1.i && Math.abs(pj0.t - pj1.t) < 1e-6) return { ok: false, reason: "대체선 양끝이 같은 지점" };
+    const arcA = extractArcTagged(ring, pj0, pj1), arcB = extractArcTagged(ring, pj1, pj0);
+    const lenA = _arcLen(arcA), lenB = _arcLen(arcB), mn = Math.min(lenA, lenB), mx = Math.max(lenA, lenB);
+    if (mx > 0 && mn / mx > ambRatio) return { ok: false, reason: "대체할 arc 가 모호함(양쪽 길이 유사)" };
+    const replaced = lenA <= lenB ? arcA : arcB, kept = lenA <= lenB ? arcB : arcA;   // 짧은 arc 대체
+    if (replaced.some(o => o.source === "dartleg")) return { ok: false, reason: "대체 arc 가 다트를 포함 — 후속 지원" };
+    // 대체선 자기교차 없음
+    const bFlat = flattenLine(boundarySegs);
+    for (let i = 0; i < bFlat.length; i++) for (let j = i + 2; j < bFlat.length; j++) if (segCross(bFlat[i][0], bFlat[i][1], bFlat[j][0], bFlat[j][1])) return { ok: false, reason: "대체선이 자기 자신과 교차" };
+    // 대체선이 유지 arc 와 끝점 외 교차 없음
+    for (const o of kept) for (const kb of flattenSegment(o.seg)) for (const bs of bFlat) { const p = segCross(bs[0], bs[1], kb[0], kb[1]); if (p && !nearAny(p, [B0, B1], onTol)) return { ok: false, reason: "대체선이 유지 경계와 교차" }; }
+    // 대체선을 유지 arc 끝(keptEnd→keptStart)에 맞춰 방향·끝점 강제
+    const keptStart = kept[0].seg.from, keptEnd = kept[kept.length - 1].seg.to;
+    let bnd = boundarySegs.map(cloneSeg);
+    const dFwd = Math.hypot(bnd[0].from.x - keptEnd.x, bnd[0].from.y - keptEnd.y) + Math.hypot(bnd[bnd.length - 1].to.x - keptStart.x, bnd[bnd.length - 1].to.y - keptStart.y);
+    const dRev = Math.hypot(bnd[0].from.x - keptStart.x, bnd[0].from.y - keptStart.y) + Math.hypot(bnd[bnd.length - 1].to.x - keptEnd.x, bnd[bnd.length - 1].to.y - keptEnd.y);
+    if (dRev < dFwd) bnd = bnd.slice().reverse().map(reverseSeg);
+    bnd[0].from = _pt(keptEnd); bnd[bnd.length - 1].to = _pt(keptStart);
+    // 결과 폐곡선 검증(다트 다리 포함해 닫은 테스트 루프)
+    const testLoop = kept.map(o => o.seg).concat(bnd);
+    const chk = _checkPart(testLoop); if (!chk.ok) return { ok: false, reason: "결과 폐곡선 무효: " + chk.reason };
+    const ringArea = _signedArea(_flattenPart(ring.map(r => r.seg)));
+    if (Math.sign(chk.area) !== Math.sign(ringArea)) return { ok: false, reason: "결과 방향 오류" };
+    // 파생 outline = 대체선 + 유지 arc 의 **outline 만**(dartleg 제거 → 다트 입구 열림 유지)
+    const keptOutline = kept.filter(o => o.source === "outline").map(o => o.seg);
+    return { ok: true, outline: bnd.concat(keptOutline) };
+  }
+
   // ── DOM 연동 ──
   function pieceOffset(piece) { const L = window.designLayout ? window.designLayout.ensureLayout(project()) : null; return (L && L[piece]) ? L[piece] : { dx: 0, dy: 0 }; }
   function pieceAt(target) { const h = target && target.closest && target.closest(".design-layout-hit"); return h ? h.getAttribute("data-layout-piece") : null; }
@@ -535,10 +587,11 @@
   function syncCutStatus() {
     const el = document.getElementById("designCutStatus"); if (!el) return;
     const v = validateSelectedCut();
-    if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); syncSplitButton(); return; }
+    if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); syncSplitButton(); syncBoundaryStatus(); return; }
     el.textContent = v.ok ? "분리 가능" : v.reason;
     el.setAttribute("data-ok", v.ok ? "1" : "0");
     syncSplitButton();
+    syncBoundaryStatus();
   }
   // ── 파트 분리 DOM 연동 ──
   function constrLinesOf(geom, keys) {
@@ -552,7 +605,7 @@
     return buildPieceRing(outlineSegsOf(p.working.geometry, keys), constrLinesOf(p.working.geometry, keys));
   }
   // geometry·절개선 변경 시 기존 파트 즉시 무효화(원본 geometry/patternLines 는 안 건드림).
-  function invalidateParts(p) { p = p || project(); if (p && Array.isArray(p.working.parts) && p.working.parts.length) { p.working.parts = []; return true; } return false; }
+  function invalidateParts(p) { p = p || project(); let ch = false; if (p && Array.isArray(p.working.parts) && p.working.parts.length) { p.working.parts = []; ch = true; } if (p && p.working.boundaryPreview) { p.working.boundaryPreview = null; ch = true; } return ch; }
   // 파트 분리 버튼: 유효 절개선 선택 시에만 활성.
   function syncSplitButton() {
     const b = document.getElementById("btnDesignSplit"); if (!b) return;
@@ -579,7 +632,41 @@
     setSplitNote("분할 완료 · 두 파트(다른 색) 미리보기");
     rerender();
   }
-  // geometry 재계산(엉덩이 길이 등) 후 외부(ui.js)에서 호출: 절개선 재검사 + 파트 무효화.
+  // ── 외곽 대체선(boundary) DOM 연동 ──
+  // 선택된 boundary 선을 현재 working outline 기준으로 검증 + 파생 outline 계산.
+  // 반환 {ok, reason, outline?} | null(boundary 아님/미선택). geometry 무변경.
+  function validateSelectedBoundary() {
+    const line = (mode === "select" && selectedId) ? findLine(selectedId) : null;
+    if (!line || line.role !== "boundary") return null;
+    if (line.piece !== "front" && line.piece !== "back") return { ok: false, reason: "front·back 만 지원(소매는 후속)" };
+    const p = project(); if (!p) return null;
+    const rb = buildRingForPiece(p, line.piece);
+    if (!rb.ok) return { ok: false, reason: rb.reason };
+    return replaceArcOnRing(rb.ring, line.segments);
+  }
+  function syncBoundaryStatus() {
+    const el = document.getElementById("designBoundaryStatus");
+    const v = validateSelectedBoundary();
+    if (el) {
+      if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); }
+      else { el.textContent = v.ok ? "대체 가능" : v.reason; el.setAttribute("data-ok", v.ok ? "1" : "0"); }
+    }
+    const b = document.getElementById("btnDesignBoundary"); if (b) b.disabled = !(v && v.ok);
+  }
+  function setBoundaryNote(m) { const el = document.getElementById("designBoundaryNote"); if (el) el.textContent = m; }
+  // 선택된 유효 대체선으로 파생 outline 미리보기 생성. 성공 시에만 working.boundaryPreview
+  // 원자적 교체. 원본 geometry·patternLines 불변, geometry·대체선 변경 시 무효화.
+  function doBoundaryPreview() {
+    if (mode !== "select" || !selectedId) return;
+    const line = findLine(selectedId); if (!line || line.role !== "boundary") { setBoundaryNote("외곽 대체선을 선택하세요"); return; }
+    const p = project(); if (!p) return;
+    const v = validateSelectedBoundary();                  // ★ 미리보기 직전 재검증
+    if (!v || !v.ok) { setBoundaryNote("대체 불가: " + (v ? v.reason : "대체선 아님")); return; }
+    p.working.boundaryPreview = { sourcePiece: line.piece, sourceLineId: line.id, outline: v.outline };
+    setBoundaryNote("대체 미리보기 · 파생 외곽선(다른 색)");
+    rerender();
+  }
+  // geometry 재계산(엉덩이 길이 등) 후 외부(ui.js)에서 호출: 절개선 재검사 + 파생 무효화.
   function revalidate() { invalidateParts(); syncRoleButtons(); syncCutStatus(); syncSplitButton(); rerender(); }
   // 선택 모드 pointerdown: 선택 선의 핸들·anchor 히트 → 편집 시작. 아니면 선 선택/해제.
   function selectDown(e, piece, geo) {
@@ -713,12 +800,13 @@
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
     validateSelectedCut, revalidate, validateCut, flattenLine, segCross, distPtToSegs,
-    doSplit, invalidateParts,
+    doSplit, invalidateParts, doBoundaryPreview, validateSelectedBoundary,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf,
     chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment, constrainAngle45,
-    // 파트 분리(순수)
-    buildPieceRing, splitRingByCut, subSegment, reverseSeg, projectOntoRing, projectOntoSeg, walkConstruction
+    // 파트 분리·외곽 대체(순수)
+    buildPieceRing, splitRingByCut, subSegment, reverseSeg, projectOntoRing, projectOntoSeg, walkConstruction,
+    replaceArcOnRing, extractArcTagged
   });
 })();

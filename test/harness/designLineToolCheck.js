@@ -302,6 +302,48 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   ok(rev.from.x === cub.to.x && rev.c1.x === cub.c2.x && rev.c2.x === cub.c1.x && rev.to.x === cub.from.x, "15: reverseSeg cubic 제어점 반전");
 }
 
+// 16. 외곽 대체선(replaceArcOnRing): 짧은 arc 대체 / 모호·다트 거부 / 파생 outline 다트 열림 / 곡선 보존
+{
+  ok(["replaceArcOnRing", "extractArcTagged", "validateSelectedBoundary", "doBoundaryPreview"].every(k => typeof T[k] === "function"), "16: 외곽 대체 API");
+  const L = (a, b) => ({ kind: "line", from: a, to: b });
+  const evalC = (s, t) => { const l = (a, b) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }); const a = l(s.from, s.c1), b = l(s.c1, s.c2), c = l(s.c2, s.to), d = l(a, b), e = l(b, c); return l(d, e); };
+  const outline = [
+    L({ x: 0, y: 0 }, { x: 10, y: 0 }), L({ x: 10, y: 0 }, { x: 10, y: 10 }),
+    L({ x: 10, y: 10 }, { x: 6, y: 10 }), L({ x: 4, y: 10 }, { x: 0, y: 10 }), L({ x: 0, y: 10 }, { x: 0, y: 0 })
+  ];
+  const constr = [{ from: { x: 4, y: 10 }, to: { x: 5, y: 6 } }, { from: { x: 5, y: 6 }, to: { x: 6, y: 10 } }];
+  const rb = T.buildPieceRing(outline, constr);
+  ok(rb.ok, "16: 링 구성");
+  // 바닥-좌 모서리(짧은 arc: (0,3)→(0,0)→(3,0)) 를 대각선 대체선으로 교체
+  const rr = T.replaceArcOnRing(rb.ring, [L({ x: 0, y: 3 }, { x: 3, y: 0 })]);
+  ok(rr.ok, "16: 짧은 arc(모서리) 대체 성공");
+  if (rr.ok) {
+    // 파생 outline 에 다트 apex(5,6)가 없어야(다트 다리 제거 → 입구 열림 유지)
+    const hasApex = rr.outline.some(s => (Math.abs(s.from.x - 5) < 1e-6 && Math.abs(s.from.y - 6) < 1e-6) || (Math.abs(s.to.x - 5) < 1e-6 && Math.abs(s.to.y - 6) < 1e-6));
+    ok(!hasApex, "16: 파생 outline 에 다트 다리 제거(입구 열림 유지)");
+    // 대체선(대각선)이 파생 outline 에 포함
+    const hasDiag = rr.outline.some(s => s.kind === "line" && ((Math.abs(s.from.x - 0) < 1e-6 && Math.abs(s.from.y - 3) < 1e-6) || (Math.abs(s.to.x - 0) < 1e-6 && Math.abs(s.to.y - 3) < 1e-6)));
+    ok(hasDiag, "16: 대체선이 파생 outline 에 포함");
+  }
+  // 끝점이 외곽선에서 벗어남 → 거부
+  ok(T.replaceArcOnRing(rb.ring, [L({ x: 3, y: 3 }, { x: 3, y: 0 })]).reason === "대체선 시작점이 경계에서 벗어남", "16: 끝점 미연결 거부");
+  // 다트를 포함한 짧은 arc(위쪽 (8,10)→(2,10)) → 거부
+  ok(T.replaceArcOnRing(rb.ring, [L({ x: 8, y: 10 }, { x: 2, y: 10 })]).reason === "대체 arc 가 다트를 포함 — 후속 지원", "16: 다트 포함 arc 거부");
+  // 모호(두 arc 길이 유사): 다트 없는 정사각형 ring 에서 (0,5)→(10,5) = 20 vs 20
+  const sqRing = [
+    { seg: L({ x: 0, y: 0 }, { x: 10, y: 0 }), source: "outline" }, { seg: L({ x: 10, y: 0 }, { x: 10, y: 10 }), source: "outline" },
+    { seg: L({ x: 10, y: 10 }, { x: 0, y: 10 }), source: "outline" }, { seg: L({ x: 0, y: 10 }, { x: 0, y: 0 }), source: "outline" }
+  ];
+  ok(T.replaceArcOnRing(sqRing, [L({ x: 0, y: 5 }, { x: 10, y: 5 })]).reason === "대체할 arc 가 모호함(양쪽 길이 유사)", "16: 모호한 arc 거부");
+  // 곡선 보존: 바닥을 cubic 으로. 대체선이 짧은 우-하 모서리를 교체, 유지 arc 의 cubic 바닥 보존
+  const outlineC = outline.slice();
+  outlineC[0] = { kind: "cubic", from: { x: 0, y: 0 }, c1: { x: 3, y: -2 }, c2: { x: 7, y: -2 }, to: { x: 10, y: 0 } };
+  const rbC = T.buildPieceRing(outlineC, constr);
+  const rrC = rbC.ok ? T.replaceArcOnRing(rbC.ring, [L({ x: 10, y: 4 }, { x: 8, y: 10 })]) : { ok: false };
+  ok(rrC.ok, "16: cubic 포함 대체 성공");
+  if (rrC.ok) ok(rrC.outline.some(s => s.kind === "cubic"), "16: 파생 outline 에 cubic 바닥 보존(곡선 보존)");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);
