@@ -193,6 +193,18 @@
 
   // ── 드래그: 앞판/뒤판/소매 각각 투명 hit rect 만 잡는다. Space+drag 는 pan 우선 ──
   let drag = null, spaceHeld = false, _userArranged = false, _resizeRaf = null;
+  // 도구 우선순위 게이트: 배치 드래그는 **선 도구가 off 일 때만** 허용한다.
+  //   designLineTool.mode==="draw"  → 선 그리기만 / "select" → 선·anchor·handle 편집만 / "off" → 배치 드래그.
+  // 이벤트 등록 순서나 CSS pointer-events 에 의존하지 않는 강한 게이트(선 그리기까지 막지 않음).
+  function layoutDragAllowed() {
+    return !window.designLineTool || window.designLineTool.getMode() === "off";
+  }
+  // 진행 중인 배치 드래그 취소: 좌표 변경 없이 상태·pointer capture 만 정리(모드 전환 시 호출).
+  function cancelLayoutDrag() {
+    if (!drag) return;
+    try { if (drag.pointerId != null && svg.releasePointerCapture) svg.releasePointerCapture(drag.pointerId); } catch (_) {}
+    drag = null;
+  }
   function initDrag() {
     window.addEventListener("resize", () => {
       if (_resizeRaf) return;
@@ -207,19 +219,19 @@
     document.addEventListener("keyup", e => { if (e.code === "Space") spaceHeld = false; });
     svg.addEventListener("pointerdown", e => {
       if (e.button !== 0 || spaceHeld || !inDesign()) return;
-      // 패턴선 도구 활성 중엔 드래그 대신 선 그리기 → 드래그 건너뜀(designLineTool 이 처리).
-      if (window.designLineTool && window.designLineTool.isActive()) return;
+      if (!layoutDragAllowed()) return;   // ★ 선 도구가 off 일 때만 배치 드래그 시작(강한 게이트)
       const hit = e.target && e.target.closest && e.target.closest(".design-layout-hit");
       if (!hit) return;
       const piece = hit.getAttribute("data-layout-piece");
       const p = currentProject(); if (!p || PIECES.indexOf(piece) < 0) return;
       const L = ensureLayout(p);
-      drag = { piece, x: e.clientX, y: e.clientY, dx0: L[piece].dx, dy0: L[piece].dy };
+      drag = { piece, pointerId: e.pointerId, x: e.clientX, y: e.clientY, dx0: L[piece].dx, dy0: L[piece].dy };
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       e.stopPropagation();
     });
     svg.addEventListener("pointermove", e => {
       if (!drag) return;
+      if (!layoutDragAllowed()) { cancelLayoutDrag(); return; }   // 드래그 중 도구가 켜지면 즉시 취소(layout 불변)
       const p = currentProject(); if (!p) { drag = null; return; }
       const scale = SC * viewZ; if (!(scale > 0)) return;
       const L = ensureLayout(p);
@@ -240,6 +252,7 @@
     // 순수(harness)
     bboxOf, outlineBBoxOf, autoLayout, ensureLayout,
     // DOM 연동
-    enterDesign, centerBody, placeSleeveRight, resetLayout, refreshAutoLayout, afterBodyLength, resetViewForDesign
+    enterDesign, centerBody, placeSleeveRight, resetLayout, refreshAutoLayout, afterBodyLength, resetViewForDesign,
+    cancelLayoutDrag   // 모드 전환 시 진행 중 배치 드래그 취소(designLineTool.setMode 에서 호출)
   });
 })();

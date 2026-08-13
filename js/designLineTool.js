@@ -558,6 +558,7 @@
   // ── 모드 전환(그리기/선택 상호배타) ──
   function setMode(m) {
     mode = m; draft = null; drawDrag = null; lastDown = null; editDrag = null; selectedId = null; snapHint = null;
+    if (window.designLayout && window.designLayout.cancelLayoutDrag) window.designLayout.cancelLayoutDrag();   // 진행 중 배치 드래그 취소
     setNote(m === "draw" ? "첫 점을 클릭(또는 드래그)하세요" : m === "select" ? SELECT_NOTE : "");
     syncButtons(); syncRoleButtons(); syncCutStatus(); rerender();
   }
