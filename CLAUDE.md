@@ -2484,11 +2484,62 @@ grain(중심선) 방향으로 몸판을 직선 연장한다. 순수 변환(DB1a)
   inline handler 37 유지, MutationObserver 2 유지.
 
 ### 미구현(경계 준수)
-side kink 보정(옆선 실루엣 디자인 단계 책임) / 여유량·완성길이·옆선·네크라인·앞여밈 /
-허리다트 재배분 / working hit-test·핸들 / 저장·복원 / 다중 designProject —
+side kink 보정(옆선 실루엣 디자인 단계 책임) / ~~여유량~~(✅ 아래 "품·여유량" 구현)·완성길이·
+옆선·네크라인·앞여밈 / 허리다트 재배분 / working hit-test·핸들 / 저장·복원 / 다중 designProject —
 전부 별도 사양·승인 후.
 (참고: 이 항목의 "working hit-test·핸들 없음"은 아래 Design piece layout 에서 **배치
 드래그 한정으로** 도입됐다 — 형상 편집 핸들은 여전히 없음.)
+
+## Design 3단계 작업 순서 (2026-08, 사용자 확정) — 몸판 → 소매 → 카라
+
+**지배 결정**: Design 단계 **안의 작업 순서**를 `몸판 → 소매 → 카라` 로 둔다. **상단 큰 UI
+stage 를 늘리지 않는다**(기존 4 stage 원형/디자인/재단/출력 유지). 각 단계는 **앞 단계 결과를
+복사해 쓰되 이전 결과를 임의로 바꾸지 않는다**(원형 완료본→designProject 복사 원칙의 연장).
+
+1. **몸판 모양**: 블라우스 길이 · 품과 여유량 · 옆선 실루엣 · 밑단 · 앞·뒤 네크라인 · 다트/절개.
+   앞중심 여밈은 **몸판 형태 확정 후**.
+2. **소매 모양**: 몸판 진동선 확정 후 시작. 소매 길이·폭·소매산·소매통·밑단·퍼프/셔링/다트.
+3. **카라 모양**: 몸판 목둘레 확정 후 시작. 카라 종류·폭·스탠드/라펠·외곽·목둘레 봉제길이 검증.
+
+**현재 = 몸판 모양 단계.** 앞중심 여밈·카라로 넘어가지 않는다. 기존 도구 매핑: 블라우스 길이=
+DB1 hem 연장 / 옆선·밑단·네크라인=boundary 대체선 / 다트·절개=cut+파트분리 / 합성=designOutline.
+**빠진 매개변수 컨트롤은 품·여유량뿐 → 아래에서 구현.**
+
+## ✅ Design 품·여유량(ease) (2026-08) — 옆선 바깥 평행 이동
+
+몸판 모양 단계 첫 구현. DB1(hem 길이)과 같은 파라메트릭 패턴으로 `designBodice.computeGeometry`
+에 **`body.bustEaseCm`** 추가. 원본 블록(referenceGeometry) 불변, 결과는 파생 working.geometry.
+
+**결정(사용자 확정)**: **전체 가슴둘레 여유량 E → 각 옆선 E/4 바깥**(앞반쪽+뒤반쪽 ×2측 = E) /
+**옆선 전체 평행 이동(박스형, 1차)**. front 바깥=−x(center 반대), back 바깥=+x.
+
+**구현 (`js/designBodice.js`)**
+- `pieceFrame(outline)` 추출(C=center∩waist, S=side∩waist, g=grain, p=center→side) — hem·ease 공용.
+- `applyEase(piece, delta)`: 옆선을 `p×delta` 만큼 이동. **U(underarm)·S(waist-side)** 와 그 공유
+  끝점(armhole·waist)만 이동, **construction(다트)은 불변** — 여유분은 옆선에만 붙고 다트는
+  fit 유지(옆선 ease 의 정의). cubic 은 인접 제어점(들어오는 c2·나가는 c1)도 함께 이동해 접선 보존.
+- ★ **거리 기반 매칭(`JOIN_TOL=0.02cm`)**: source 기하가 옆선·진동 접점에 **~0.0004cm 드리프트**
+  가 있어(원본부터 존재) exact key 매칭은 armhole underarm 을 놓쳐 outline 이 δ 만큼 끊긴다(실측).
+  거리 tol 로 드리프트는 잇고 별개 설계점(≥0.08cm)은 안 합친다.
+- `computeGeometry`: **두 파라미터 모두 선택적**(bustEaseCm·hemExtensionBelowWaistCm, 미지정=0).
+  **둘 다 0 이 정확히 no-op**(clone). 순서 **ease → hem**(넓힌 옆선에서 hem 이 내려감). E<0·NaN·
+  Infinity·비수치=`invalid-body-ease`. (기존 "hemExt 필수" 계약 폐기 — designBodiceCheck test 4 갱신.)
+
+**UI (`js/ui.js`·`index.html`)**: design body 패널에 `#inpBodyBustEase`(품·여유량) 입력 추가,
+**기존 적용/초기화 버튼이 여유량+길이 둘 다** 적용(`onApplyBodyLength` 이 body={bustEaseCm,
+hemExtensionBelowWaistCm} 재계산). 원자적 커밋·referenceGeometry 기준·실패 시 화면 변화 0 유지.
+committedBody 가 둘 다 읽어 표시, note 는 "여유량 Ecm · 엉덩이 길이 Lcm 적용 중". DOM id **49→50**.
+
+**검증(격리 origin, storage 0, console 0)**: 하네스 `designBodiceCheck`(4b 신설: E=0 no-op·
+invalid-body-ease·front −δ/back +δ 평행 이동·construction 불변·여유량+길이 결합), runAll 전체
+통과, shape/perf 골든 diff 0. 실브라우저(여유량 8)—front 옆선 23.05→21.05·back →25.05(각 δ=2),
+**referenceGeometry 불변·construction(다트) 불변·파생(parts 등) 무효화**, armhole underarm·waist
+가 옆선과 함께 이동해 **outline 연결(gap 0.0004=기존 드리프트)**, 여유량+길이 결합·초기화 복원,
+스크린샷(넓어진 앞·뒤 몸판, 깨끗한 외곽·다트 불변). 캐시 `?v=2026081402`(designBodice)·
+`?v=2026081401`(ui).
+
+**미구현(경계)**: 옆선 taper(가슴~허리 구간별) / 진동 깊이 조정 / dart 재truing(현재 여유분은
+옆선에만, 다트 불변) / 앞뒤 다른 분배 — 전부 별도 사양·승인 후.
 
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
