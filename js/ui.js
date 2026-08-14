@@ -322,60 +322,70 @@
     const project = dw && dw.current();
     return (uiState.stage === "design" && project) ? project : null;
   }
-  function committedBodyL(project) {
+  function committedBody(project) {
     const b = project && project.working && project.working.parameters && project.working.parameters.body;
-    return (b && typeof b.hemExtensionBelowWaistCm === "number") ? b.hemExtensionBelowWaistCm : 0;
+    return {
+      L: (b && typeof b.hemExtensionBelowWaistCm === "number") ? b.hemExtensionBelowWaistCm : 0,
+      E: (b && typeof b.bustEaseCm === "number") ? b.bustEaseCm : 0
+    };
   }
   function setBodyNote(txt) { const n = document.getElementById("designBodyNote"); if (n) n.textContent = txt; }
-  function bodyStatusNote(L) {
-    return L > 0 ? "엉덩이 길이 " + fmtL(L) + "cm 적용 중 · 세션 전용"
-      : "허리선에서 엉덩이선까지 · 중심선 기준";
+  // 적용 중 상태 문구(여유량 E · 엉덩이 길이 L). 둘 다 0이면 기본 안내.
+  function bodyStatusNote(E, L) {
+    const parts = [];
+    if (E > 0) parts.push("여유량 " + fmtL(E) + "cm");
+    if (L > 0) parts.push("엉덩이 길이 " + fmtL(L) + "cm");
+    return parts.length ? parts.join(" · ") + " 적용 중 · 세션 전용" : "여유량·길이로 몸판 실루엣을 조정합니다";
   }
   function noteForReason(reason) {
-    if (reason === "extension-intersection") return "연장선이 기존 패턴과 겹칩니다 · 길이를 조정하세요";
+    if (reason === "extension-intersection") return "연장선이 기존 패턴과 겹칩니다 · 값을 조정하세요";
     if (reason === "invalid-side-extension") return "이 길이로는 옆선을 연장할 수 없습니다";
-    if (reason === "invalid-body-length") return "0–100 사이의 숫자를 입력하세요";
+    if (reason === "invalid-body-length" || reason === "invalid-body-ease") return "0–100 사이의 숫자를 입력하세요";
     return "적용할 수 없습니다 · 값을 조정하세요";
   }
-  // 입력 유효성(0–100 유한 숫자)만 판정 — commit 은 하지 않는다.
-  function readBodyInput() {
-    const input = document.getElementById("inpBodyHemExtension");
+  // 한 입력의 유효성(빈 값=0, 그 외 0–100 유한 숫자).
+  function readNum(id) {
+    const input = document.getElementById(id);
     const raw = input ? String(input.value).trim() : "";
-    const L = Number(raw);
-    const valid = raw !== "" && isFinite(L) && L >= 0 && L <= 100;
-    return { input: input, raw: raw, L: L, valid: valid };
+    if (raw === "") return { input: input, v: 0, valid: true };
+    const v = Number(raw);
+    return { input: input, v: v, valid: isFinite(v) && v >= 0 && v <= 100 };
+  }
+  function readBodyInputs() {
+    const ease = readNum("inpBodyBustEase"), len = readNum("inpBodyHemExtension");
+    return { ease: ease, len: len, valid: ease.valid && len.valid };
   }
   // apply/reset 버튼 활성 상태만 갱신(값·note 미변경 — 성공/오류 문구 보존).
   function syncBodyButtons() {
     const project = designProjectNow();
     const apply = document.getElementById("btnApplyBodyLength");
     const reset = document.getElementById("btnResetBodyLength");
-    const st = readBodyInput();
-    if (apply) apply.disabled = !(project && st.valid);
+    if (apply) apply.disabled = !(project && readBodyInputs().valid);
     if (reset) reset.disabled = !project;
   }
-  // refresh 훅: design 진입/재진입 시 committed L 을 표시(포커스 중이면 덮지 않음) +
-  // 버튼 상태 + committed 기준 note. 성공/오류 문구는 onApply/onReset 이 직접 관리하며
-  // refresh 를 부르지 않아 여기서 덮이지 않는다.
+  // refresh 훅: design 진입/재진입 시 committed 값(여유량·길이)을 표시(포커스 중 입력은 안 덮음) +
+  // 버튼 상태 + committed 기준 note. 성공/오류 문구는 onApply/onReset 이 직접 관리(refresh 미호출).
   function updateDesignBodyPanel() {
     const project = designProjectNow();
-    const input = document.getElementById("inpBodyHemExtension");
-    if (input && project && document.activeElement !== input) {
-      input.value = fmtL(committedBodyL(project));
-    }
-    if (project) setBodyNote(bodyStatusNote(committedBodyL(project)));
+    if (!project) { syncBodyButtons(); return; }
+    const cb = committedBody(project);
+    const ei = document.getElementById("inpBodyBustEase");
+    const li = document.getElementById("inpBodyHemExtension");
+    if (ei && document.activeElement !== ei) ei.value = fmtL(cb.E);
+    if (li && document.activeElement !== li) li.value = fmtL(cb.L);
+    setBodyNote(bodyStatusNote(cb.E, cb.L));
     syncBodyButtons();
   }
-  // 원자적 적용: 검증 → referenceGeometry 에서 재계산 → 성공 후에만 parameters·geometry
-  // 동시 갱신 → render(). 실패 시 커밋·화면 변화 0, note 에만 사유 표시.
+  // 원자적 적용: 검증 → referenceGeometry 에서 재계산(여유량+길이) → 성공 후에만 parameters·
+  // geometry 동시 갱신 → render(). 실패 시 커밋·화면 변화 0, note 에만 사유 표시.
   function onApplyBodyLength() {
     const project = designProjectNow();
     if (!project || !window.designBodice) return;
-    const st = readBodyInput();
+    const st = readBodyInputs();
     if (!st.valid) { setBodyNote("0–100 사이의 숫자를 입력하세요"); syncBodyButtons(); return; }
-    const L = st.L;
+    const E = st.ease.v, L = st.len.v;
     const nextParameters = structuredClone(project.working.parameters);
-    nextParameters.body = Object.assign({}, nextParameters.body || {}, { hemExtensionBelowWaistCm: L });
+    nextParameters.body = Object.assign({}, nextParameters.body || {}, { bustEaseCm: E, hemExtensionBelowWaistCm: L });
     let nextGeometry = null, reason = null;
     try { nextGeometry = window.designBodice.computeGeometry(project.referenceGeometry, nextParameters); }
     catch (e) { reason = (e && e.reason) || "compute-failed"; }
@@ -383,19 +393,22 @@
     // ── 유일한 commit 지점 ──
     project.working.parameters = nextParameters;
     project.working.geometry = nextGeometry;
-    // 엉덩이 길이 변경: auto 면 소매 재배치+fit, manual 이면 카메라·offset 유지(자동 이동 안 함).
+    // 몸판 형상 변경: auto 면 소매 재배치+fit, manual 이면 카메라·offset 유지(자동 이동 안 함).
     if (window.designLayout) window.designLayout.afterBodyLength();
-    // geometry 재계산됨 → 선택된 절개선 유효성 재검사(현재 working outline 기준).
+    // geometry 재계산됨 → 선택된 절개선 유효성 재검사(현재 working outline 기준) + 파생 무효화.
     if (window.designLineTool && window.designLineTool.revalidate) window.designLineTool.revalidate();
     if (typeof render === "function") render();
-    if (st.input && document.activeElement !== st.input) st.input.value = fmtL(L);
-    setBodyNote(L === 0 ? "원형 길이로 복원됨 · 세션 전용" : "엉덩이 길이 " + fmtL(L) + "cm 적용 중 · 세션 전용");
+    if (st.ease.input && document.activeElement !== st.ease.input) st.ease.input.value = fmtL(E);
+    if (st.len.input && document.activeElement !== st.len.input) st.len.input.value = fmtL(L);
+    setBodyNote((E === 0 && L === 0) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L));
     syncBodyButtons();
   }
   function onResetBodyLength() {
-    const input = document.getElementById("inpBodyHemExtension");
-    if (input) input.value = "0";
-    onApplyBodyLength();   // L=0 적용(원형 길이 복원)
+    const ei = document.getElementById("inpBodyBustEase");
+    const li = document.getElementById("inpBodyHemExtension");
+    if (ei) ei.value = "0";
+    if (li) li.value = "0";
+    onApplyBodyLength();   // E=0·L=0 적용(원형 복원)
   }
 
   // ── 다트 inspector 표시 ───────────────────────
@@ -475,12 +488,13 @@
     if (applyBody) applyBody.addEventListener("click", () => { if (!applyBody.disabled) onApplyBodyLength(); });
     const resetBody = document.getElementById("btnResetBodyLength");
     if (resetBody) resetBody.addEventListener("click", () => { if (!resetBody.disabled) onResetBodyLength(); });
-    const bodyInput = document.getElementById("inpBodyHemExtension");
-    if (bodyInput) {
-      // 입력 중에는 apply 버튼 활성만 갱신(값·note 미변경). Enter 로 적용.
-      bodyInput.addEventListener("input", syncBodyButtons);
-      bodyInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyBodyLength(); } });
-    }
+    // 여유량·길이 두 입력 모두: 입력 중엔 버튼 활성만 갱신, Enter 로 적용.
+    ["inpBodyBustEase", "inpBodyHemExtension"].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("input", syncBodyButtons);
+      el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyBodyLength(); } });
+    });
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");

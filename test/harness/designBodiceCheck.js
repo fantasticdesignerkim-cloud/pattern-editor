@@ -171,7 +171,47 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
   throws(() => DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: NaN } }), "invalid-body-length", "4: NaN");
   throws(() => DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: Infinity } }), "invalid-body-length", "4: Infinity");
   throws(() => DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: "5" } }), "invalid-body-length", "4: 문자열");
-  throws(() => DB.computeGeometry(ref, { body: {} }), "invalid-body-length", "4: undefined");
+  // 두 파라미터 모두 선택적: 둘 다 없음(또는 둘 다 0) = no-op(clone). (여유량 추가로 hemExt 필수 계약 폐기)
+  { const r = DB.computeGeometry(ref, { body: {} }); ok(eq(r, ref) && !sharesRef(r, ref), "4: 둘 다 없음 = no-op clone"); }
+}
+
+// 4b. 여유량(bustEaseCm): E=0 no-op / 음수·NaN·비수치 실패 / E>0 옆선 E/4 바깥 평행 이동
+{
+  const ref = STATES["1-미적용"];
+  // E=0 정확히만 no-op
+  { const r = DB.computeGeometry(ref, { body: { bustEaseCm: 0 } }); ok(eq(r, ref) && !sharesRef(r, ref), "4b: E=0 no-op clone"); }
+  throws(() => DB.computeGeometry(ref, { body: { bustEaseCm: -1 } }), "invalid-body-ease", "4b: E 음수");
+  throws(() => DB.computeGeometry(ref, { body: { bustEaseCm: NaN } }), "invalid-body-ease", "4b: E NaN");
+  throws(() => DB.computeGeometry(ref, { body: { bustEaseCm: Infinity } }), "invalid-body-ease", "4b: E Infinity");
+  throws(() => DB.computeGeometry(ref, { body: { bustEaseCm: "3" } }), "invalid-body-ease", "4b: E 문자열");
+  // E=8 → δ=2. front 옆선 −2(x 23.0531→21.0531), back 옆선 +2(→25.0531). waist S 함께 이동. construction 불변.
+  {
+    const r = DB.computeGeometry(ref, { body: { bustEaseCm: 8 } });
+    const delta = 2;
+    // front side-seam: 원본 23.0531 → 21.0531(바깥=−x)
+    const fss = edgePrims(r.front.outline, "side-seam")[0];
+    ok(near(fss.from.x, 23.0531 - delta) && near(fss.to.x, 23.0531 - delta), "4b: front 옆선 −δ 평행 이동");
+    // front waist 의 side 끝(S) 도 −δ 이동, center 끝(C)은 불변
+    const fw = edgePrims(r.front.outline, "waist")[0];
+    const fwSide = near(fw.from.x, 47.5) ? fw.to : fw.from;
+    ok(near(fwSide.x, 23.0531 - delta) && near(fwSide.y, 38), "4b: front waist S 끝 −δ 이동");
+    // back side-seam: 바깥=+x → 25.0531
+    const bss = edgePrims(r.back.outline, "side-seam")[0];
+    ok(near(bss.from.x, 23.0531 + delta) && near(bss.to.x, 23.0531 + delta), "4b: back 옆선 +δ 평행 이동");
+    // construction(다트) 불변
+    ok(eq(r.front.construction, ref.front.construction) && eq(r.back.construction, ref.back.construction), "4b: construction(다트) 불변");
+    // sleeve/shared 불변, 입력 비변형
+    ok(eq(r.sleeve, ref.sleeve) && eq(r.shared, ref.shared), "4b: sleeve/shared 불변");
+    ok(!sharesRef(r, ref), "4b: 참조 공유 0(입력 비변형)");
+  }
+  // 여유량 + 길이 동시: 둘 다 반영(옆선 넓어진 뒤 hem 내려감)
+  {
+    const r = DB.computeGeometry(ref, { body: { bustEaseCm: 8, hemExtensionBelowWaistCm: 10 } });
+    ok(edgePrims(r.front.outline, "hem").length === 1, "4b: 여유량+길이 → hem 생성");
+    // 새 side-seam 연장은 넓어진 S(x≈21.0531) 에서 시작 — 여유량이 hem 보다 먼저 반영됨
+    const fss = edgePrims(r.front.outline, "side-seam");
+    ok(fss.some(p => near(p.from.x, 23.0531 - 2) || near(p.to.x, 23.0531 - 2)), "4b: hem 연장이 넓어진 옆선(−δ) 기준");
+  }
 }
 
 // 5. topology / 수치 실패 계약

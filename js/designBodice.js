@@ -158,9 +158,9 @@
   }
 
   // 한 조각(front/back) 을 L>0 로 변환한다. 입력 piece(=clone) 를 읽고 새 버킷을 반환.
-  function transformPiece(piece, L) {
-    var outline = piece.outline, construction = piece.construction;
-    // 1. coverage + junction
+  // 조각 좌표계(공용): C=center∩waist, S=side∩waist, g=아래쪽 grain(center 접선),
+  // p=cross-grain(center→side). transformPiece(hem)·applyEase(여유량) 공유.
+  function pieceFrame(outline) {
     ["center", "waist", "side-seam"].forEach(function (e) { if (!hasEdge(outline, e)) fail("missing-required-edge", e); });
     var jcw = junction(outline, "center", "waist");
     var jsw = junction(outline, "side-seam", "waist");
@@ -169,17 +169,73 @@
     if (jsw.count === 0) fail("missing-topology-junction", "side∩waist");
     if (jsw.count > 1) fail("ambiguous-topology-junction", "side∩waist");
     var C = jcw.pt, S = jsw.pt;
-    // 2. center segment 유일 선택
     var cs = centerSegsAt(outline, C);
     if (cs.length !== 1) fail("ambiguous-center-tangent", cs.length);
-    // 3. grain g
     var up = sub(cs[0].other, C);
     if (len(up) < EPS) fail("zero-center-tangent");
     var g = norm(mul(up, -1));
-    // 4. cross-grain p (center→side)
     var p = { x: -g.y, y: g.x };
+    if (dot(sub(S, C), p) < 0) p = mul(p, -1);
+    return { C: C, S: S, g: g, p: p };
+  }
+
+  // side-seam edge 의 비-waist 끝점(underarm) 찾기. 정확히 1개여야 함.
+  function underarmPoint(outline, S) {
+    var ep = {};
+    outline.forEach(function (pr) { if (pr.edge === "side-seam") endpts(pr).forEach(function (q) { ep[key(q)] = q; }); });
+    var us = Object.keys(ep).filter(function (k) { return k !== key(S); }).map(function (k) { return ep[k]; });
+    if (us.length !== 1) fail("ambiguous-side-underarm", us.length);
+    return us[0];
+  }
+
+  // 프리미티브의 on-curve 끝점(line from/to · path M/각 C end)이 target(들) 과 **거리 tol 이내**면
+  // d 만큼 이동. exact key 매칭은 source 기하의 ~0.0004cm 드리프트(옆선·진동 접점)를 놓친다.
+  // cubic 은 인접 제어점(들어오는 c2·나가는 c1)도 함께 이동해 접선을 보존한다. clone 반환.
+  var JOIN_TOL = 0.02;   // 드리프트(0.0004) 는 잇고, 별개 설계점(≥0.08cm) 은 안 합침
+  function movePrimPoints(prim, targets, d) {
+    var near = function (q) { for (var t = 0; t < targets.length; t++) if (Math.hypot(q.x - targets[t].x, q.y - targets[t].y) < JOIN_TOL) return true; return false; };
+    if (prim.kind === "line") {
+      var ln = { kind: "line", from: near(prim.from) ? add(prim.from, d) : { x: prim.from.x, y: prim.from.y },
+        to: near(prim.to) ? add(prim.to, d) : { x: prim.to.x, y: prim.to.y } };
+      if ("edge" in prim) ln.edge = prim.edge;   // edge 없는 세그먼트에 own-property 추가 금지(SV2)
+      return ln;
+    }
+    // path: 명령 복제 후 on-curve 이동 + 인접 제어점 보정
+    var cmds = prim.commands.map(function (c) { return { type: c.type, points: c.points.map(function (q) { return { x: q.x, y: q.y }; }) }; });
+    for (var i = 0; i < cmds.length; i++) {
+      var c = cmds[i];
+      if (c.type === "M") {
+        if (near(c.points[0])) { c.points[0] = add(c.points[0], d); var nx = cmds[i + 1]; if (nx && nx.type === "C") nx.points[0] = add(nx.points[0], d); }  // M + 나가는 c1
+      } else if (c.type === "C") {
+        var end = c.points[2];
+        if (near(end)) { c.points[2] = add(end, d); c.points[1] = add(c.points[1], d);  // end + 들어오는 c2
+          var nx2 = cmds[i + 1]; if (nx2 && nx2.type === "C") nx2.points[0] = add(nx2.points[0], d); }  // 나가는 c1
+      }
+    }
+    var out = { kind: "path", commands: cmds };
+    if ("edge" in prim) out.edge = prim.edge;
+    return out;
+  }
+
+  // 여유량: 옆선을 바깥(center→side=+p)으로 delta 만큼 **평행 이동**(박스형). U(underarm)·S(waist-side)
+  // 와 그 공유 끝점(armhole·waist)만 이동, **construction(다트)은 불변**(여유분은 옆선에만 붙음).
+  function applyEase(piece, delta) {
+    var outline = piece.outline;
+    var fr = pieceFrame(outline);
+    var S = fr.S, U = underarmPoint(outline, S);
+    var d = mul(fr.p, delta);
+    var targets = [U, S];
+    return {
+      outline: outline.map(function (pr) { return movePrimPoints(pr, targets, d); }),
+      construction: piece.construction.map(function (pr) { return deepClone(pr); })   // 다트 등 불변
+    };
+  }
+
+  function transformPiece(piece, L) {
+    var outline = piece.outline, construction = piece.construction;
+    var fr = pieceFrame(outline);
+    var C = fr.C, S = fr.S, g = fr.g, p = fr.p;
     var SC = sub(S, C);
-    if (dot(SC, p) < 0) p = mul(p, -1);
     // 5. offset / width
     var longitudinalOffset = dot(SC, g);
     var width = dot(SC, p);
@@ -241,14 +297,26 @@
     if (!validGeometry(referenceGeometry)) fail("invalid-geometry");
     var body = (opts && opts.body) || {};
     var L = body.hemExtensionBelowWaistCm;
+    if (L == null) L = 0;   // 미지정 = 0(하위호환)
+    var E = body.bustEaseCm;
+    if (E == null) E = 0;
     // 입력 정규화 경계: 정확한 0 만 no-op. 음수·NaN·Infinity·비수치는 실패.
     if (typeof L !== "number" || !isFinite(L) || L < 0) fail("invalid-body-length", L);
-    if (L === 0) return deepClone(referenceGeometry);
-    // L>0 : referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
+    if (typeof E !== "number" || !isFinite(E) || E < 0) fail("invalid-body-ease", E);
+    if (L === 0 && E === 0) return deepClone(referenceGeometry);
+    // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
+    // 순서: 여유량(옆선 바깥 이동) → hem(허리 아래 연장). 여유량이 넓힌 옆선에서 hem 이 내려간다.
+    var delta = E / 4;   // 전체 가슴둘레 여유량 → 각 옆선 E/4 (앞반쪽 + 뒤반쪽, ×2측 = E)
+    function shape(piece) {
+      var pc = piece;
+      if (E > 0) pc = applyEase(pc, delta);
+      if (L > 0) pc = transformPiece(pc, L);
+      return pc;
+    }
     var src = deepClone(referenceGeometry);
     return {
-      front: transformPiece(src.front, L),
-      back: transformPiece(src.back, L),
+      front: shape(src.front),
+      back: shape(src.back),
       shared: src.shared,   // 값·순서 유지(비대상)
       sleeve: src.sleeve
     };
