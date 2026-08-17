@@ -2538,8 +2538,46 @@ invalid-body-ease·front −δ/back +δ 평행 이동·construction 불변·여�
 스크린샷(넓어진 앞·뒤 몸판, 깨끗한 외곽·다트 불변). 캐시 `?v=2026081402`(designBodice)·
 `?v=2026081401`(ui).
 
-**미구현(경계)**: 옆선 taper(가슴~허리 구간별) / 진동 깊이 조정 / dart 재truing(현재 여유분은
-옆선에만, 다트 불변) / 앞뒤 다른 분배 — 전부 별도 사양·승인 후.
+**미구현(경계)**: ~~옆선 실루엣~~(✅ 아래 "옆선 실루엣" 구현) / dart 재truing(여유분은 옆선에만,
+다트 불변) / 앞뒤 다른 분배 — 별도 사양·승인 후.
+
+## ✅ Design 옆선 실루엣 (2026-08) — 허리·밑단 옆선 이동(underarm 고정)
+
+몸판 모양 단계 2번째. 박스형으로 넓어진 옆선을 실제 블라우스 모양으로 다듬는다.
+`designBodice.computeGeometry` 에 **`body.waistSideOffsetCm`(허리)·`body.hemSideOffsetCm`(밑단)**
+추가. **첫 블라우스 = 허리 들어간 형**(사용자 확정: 허리<0 안쪽, 밑단≈0).
+
+**결정(사용자 확정)**: 진동밑점(underarm)은 **여유량 결과로 고정**(실루엣이 안 건드림). **허리 옆선·
+밑단 옆선만 별도 이동**. 부호: **음수=안쪽(center 방향, 허리 들어감), 양수=바깥(+p, A라인)**.
+네 실루엣 = 일자(0/0) · 허리들어감(<0/0) · A라인(0/>0) · 혼합(<0/>0).
+
+**구현 (`js/designBodice.js` — `shapePiece` 로 통합)**
+- 프레임(C·S·g·p·widthOrig)을 **변환 전 한 번** 계산. 순서 **여유량 → 길이(hem) → 허리 이동 →
+  밑단 이동**. hem 후에도 목표점(Se=ease 허리, sideHemE=ease 밑단)을 **거리 매칭**으로 이동.
+- **허리·밑단은 ease 폭 기준 독립**: sideHemE 는 `centerHem + p·(widthOrig+delta)`(ease 폭)라
+  허리를 안쪽으로 당겨도 밑단은 안 따라온다(별도 조절). 허리 이동 → 허리에서 꺾인 옆선.
+- underarm 은 여유량(delta)만 이동, 실루엣 오프셋은 U 를 안 건드림 → 진동밑 고정.
+- **outline + construction 함께 이동**(허리/밑단 오프셋만): hem 이 construction 으로 옮긴 **waist
+  참고선이 옆선을 따라오도록**. 다트는 Se/sideHemE 에서 멀어 **불변**(실측: 원본 다트 6개 보존).
+- `movePrimPoints` 를 **per-target delta**(`moves=[{pt,d}]`)로 일반화(U·S 를 다른 양으로 이동 가능).
+- 네 파라미터 모두 선택적, **정확한 0(넷 다)만 no-op**. 옆선 오프셋은 부호 허용(안/밖), 비수치·
+  무한대=`invalid-body-side-offset`. 밑단 오프셋은 **hem 있을 때만** 유효(없으면 무효).
+
+**UI (`js/ui.js`·`index.html`)**: design body 패널에 `#inpBodyWaistOffset`·`#inpBodyHemOffset`
+(−30–30, 부호 허용) 추가. **기존 적용/초기화가 네 값 모두** 재계산(`onApplyBodyLength` body=
+{bustEaseCm,hemExtensionBelowWaistCm,waistSideOffsetCm,hemSideOffsetCm}). note 에 "허리 안쪽 Ncm"
+등 부호 표시. DOM id **50→52**.
+
+**검증(격리 origin, storage 0, console 0)**: 하네스 `designBodiceCheck` 4c 신설(허리 안쪽 −3
+→ front S +3·underarm 불변·다트 불변 / 여유량+허리 결합 / 밑단 A라인 ease 폭 독립 / hem 없으면
+밑단 무효 / invalid-body-side-offset), runAll 전체 통과, shape/perf 골든 diff 0. 실브라우저(허리
+들어간 형: 여유량 8·길이 10·허리 −3): 앞판 옆선 **underarm 21.05(ease) → 허리 24.05(안쪽 −3) →
+밑단 21.05(ease)**, 뒤판 대칭, **referenceGeometry 불변·원본 다트 6개 보존·waist 참고선이 옆선과
+일치(24.05)**, 스크린샷(허리에서 들어가 밑단으로 벌어진 깨끗한 실루엣). 캐시 `?v=2026081702`
+(designBodice)·`?v=2026081701`(ui).
+
+**미구현(경계)**: 옆선 taper(가슴~허리 구간별 곡선) / 진동 깊이 조정 / dart 재truing / 앞뒤 다른
+분배 / 옆선 곡선화(현재 허리에서 직선 꺾임) — 전부 별도 사양·승인 후.
 
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
