@@ -2577,7 +2577,42 @@ invalid-body-ease·front −δ/back +δ 평행 이동·construction 불변·여�
 (designBodice)·`?v=2026081701`(ui).
 
 **미구현(경계)**: 옆선 taper(가슴~허리 구간별 곡선) / 진동 깊이 조정 / dart 재truing / 앞뒤 다른
-분배 / 옆선 곡선화(현재 허리에서 직선 꺾임) — 전부 별도 사양·승인 후.
+분배 / ~~옆선 곡선화~~(✅ 아래 "옆선 곡선화" 구현) — 전부 별도 사양·승인 후.
+
+## ✅ Design 옆선 곡선화 (2026-08) — 허리 꺾임을 두 cubic 으로 매끄럽게
+
+몸판 모양 단계 3번째. 실루엣(진동밑→허리→밑단)의 **허리 직선 꺾임**을 실제 봉제선으로 쓰기 전
+부드럽게 연결한다. `designBodice.computeGeometry` 에 **`body.sideSeamCurve`(0=직선, 0–1)** 추가.
+사용자 확정 계약: **첫 구현은 자동 곡률 하나**(앞·뒤 별도 곡률은 착용 검증 후).
+
+**계약(잠금)**
+- **진동밑 U·허리 Sp·밑단 H 는 shapePiece 계산값 그대로 고정**, 곡선이 세 점을 **정확히 통과**.
+- `진동밑→허리`, `허리→밑단` **두 cubic**. 허리 Sp 에서 두 핸들을 chord(U→H') 접선 방향 ±T 로
+  두어 **일직선(접선 연속 G1)**. 끝 접선은 각 구간 방향. **handle ≤ len×(1/3)** 로 **overshoot 방지**
+  (fitted 에서 허리 안쪽 한계 Sp.x 초과 안 함 — 실측 maxX=Sp.x).
+- **곡률 0 = 직선 두 구간과 정확히 동일한 no-op**(curveSideSeam 미호출). side-seam edge line 이
+  정확히 2개(hem 있을 때)일 때만 곡선화 — hem 없으면 1세그먼트라 그대로.
+- **cubic 은 geometry outline 계약 형식 `{kind:"path", commands:[M,C]}`** 으로 출력(★ `{kind:"cubic",
+  from/c1/c2/to}` 로 내면 renderer·designLayout.pointsOfPrim·outlineSegsOf 가 `commands` 를 못 읽어
+  깨진다 — 실측으로 확인하고 path 형식으로 교정).
+- **reference·다트·진동선·허리 참고선 불변**(곡선화는 side-seam edge 만 교체).
+
+**UI (`js/ui.js`·`index.html`)**: `#inpBodySideCurve`(0–1) 추가, 적용/초기화가 다섯 값 모두 재계산.
+**앞·뒤 옆선 봉제 길이 + 차이 표시**(`#designSideLenNote`, `sideSeamLen` 가 side-seam edge 평탄화
+합) — 차이 ≤1cm=녹색/초과=주황(봉제 정합 검증). DOM id **52→53**.
+
+**검증(격리 origin, storage 0, console 0)**: 하네스 `designBodiceCheck` 4d 신설(곡률 0 no-op·2 cubic
+path·세 점 통과·**허리 핸들 일직선(접선 연속)**·overshoot 없음·hem 없으면 곡선화 안 함·범위 밖
+`invalid-body-curve`), runAll 전체 통과, shape/perf 골든 diff 0. 실브라우저(허리 들어간 형+곡선 1):
+side-seam **2 path cubic**·접선 연속·overshoot 없음(maxX=Sp.x)·**앞옆선 28.2cm=뒤옆선 28.2cm 차이
+0**·reference side-seam 여전히 line·다트 불변, 스크린샷(허리 꺾임 사라진 매끄러운 S곡선). 캐시
+`?v=2026081704`(designBodice·ui)·`?v=2026081703`(css).
+> ⚠️ 디버깅 기록: broken(cubic 형식) 실행 후 탭 콘솔에 남은 `designLayout.pointsOfPrim` 에러는
+>   **탭 콘솔 버퍼 잔여**였다(fresh 탭에선 0). path 형식 교정 후 재현 안 됨. 캐시·콘솔 잔여를
+>   현재 에러로 오판하지 말 것 — fresh 탭/재현으로 구분.
+
+**미구현(경계)**: 앞·뒤 별도 곡률 / 옆선 taper(가슴~허리 구간별) / 진동 깊이 / dart 재truing —
+별도 사양·승인 후.
 
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
