@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026081303">
+<link rel="stylesheet" href="css/style.css?v=2026081703">
 </head>
 <body>
 
@@ -173,11 +173,15 @@
         <!-- 옆선 실루엣: underarm 고정, 허리·밑단 옆선만 이동(음수=안쪽/허리 들어감, 양수=바깥/A라인). -->
         <div class="row"><label for="inpBodyWaistOffset">허리 옆선 이동 (cm)</label><input id="inpBodyWaistOffset" type="number" min="-30" max="30" step="0.1"></div>
         <div class="row"><label for="inpBodyHemOffset">밑단 옆선 이동 (cm)</label><input id="inpBodyHemOffset" type="number" min="-30" max="30" step="0.1"></div>
+        <!-- 옆선 곡선화: 진동밑→허리→밑단 꺾임을 두 cubic 으로 부드럽게(0=직선, 1=자동 곡률). hem 있을 때만. -->
+        <div class="row"><label for="inpBodySideCurve">옆선 곡선화 (0–1)</label><input id="inpBodySideCurve" type="number" min="0" max="1" step="0.05"></div>
         <div class="row" style="gap:4px">
           <button class="btn action-primary" id="btnApplyBodyLength">적용</button>
           <button class="btn" id="btnResetBodyLength">0으로 초기화</button>
         </div>
         <div class="row note" id="designBodyNote" aria-live="polite">허리선에서 엉덩이선까지 · 중심선 기준</div>
+        <!-- 앞·뒤 옆선 봉제 길이 + 차이(봉제 정합 검증). 곡선화 반영 실측. -->
+        <div class="row note" id="designSideLenNote" aria-live="polite"></div>
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
         <div class="row" style="margin-top:8px"><label>배치</label></div>
         <div class="row" style="gap:4px">
@@ -251,7 +255,7 @@
 <!-- 디자인 geometry renderer D2(builder만): window.designRenderer. render.js hook·append 없음. -->
 <script src="js/designRenderer.js?v=2026080401"></script>
 <!-- DB1a 몸판 grain-기준 길이 연장 순수 변환: window.designBodice.computeGeometry. UI·render hook·working 대입 없음. -->
-<script src="js/designBodice.js?v=2026081702"></script>
+<script src="js/designBodice.js?v=2026081704"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026081305"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
@@ -260,7 +264,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026081701"></script>
+<script src="js/ui.js?v=2026081704"></script>
 
 </body>
 </html>

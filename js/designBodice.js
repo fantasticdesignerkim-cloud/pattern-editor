@@ -219,11 +219,42 @@
     return out;
   }
 
+  // 옆선 곡선화: 진동밑→허리→밑단 두 직선(허리 꺾임)을 두 cubic 으로 매끄럽게 연결.
+  //   세 기준점(U·Sp·H)은 정확히 통과(cubic 끝점), 허리 Sp 에서 두 핸들을 chord(U→H') 접선
+  //   방향 ±T 로 두어 **일직선(접선 연속)**. 끝 접선은 각 구간 방향. handle ≤ len×1/3 로 overshoot 방지.
+  //   curve∈(0,1], k=curve/3. side-seam edge line 이 정확히 2개(hem 있는 경우)일 때만 곡선화.
+  function curveSideSeam(outline, curve) {
+    var idxs = []; for (var i = 0; i < outline.length; i++) if (outline[i].edge === "side-seam" && outline[i].kind === "line") idxs.push(i);
+    if (idxs.length !== 2) return outline;   // 2세그먼트(진동밑→허리→밑단) 아니면 그대로(hem 없음 등)
+    var s1 = outline[idxs[0]], s2 = outline[idxs[1]];
+    var isSame = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y) < 1e-4; };
+    var share = null;
+    [s1.from, s1.to].forEach(function (a) { [s2.from, s2.to].forEach(function (b) { if (isSame(a, b)) share = a; }); });
+    if (!share) return outline;              // 두 세그먼트가 안 이어지면 그대로
+    var isShare = function (q) { return isSame(q, share); };
+    var e1 = isShare(s1.from) ? s1.to : s1.from;   // s1 비공유 끝
+    var e2 = isShare(s2.from) ? s2.to : s2.from;   // s2 비공유 끝
+    var U = e1.y < e2.y ? e1 : e2, H = e1.y < e2.y ? e2 : e1, Sp = share;   // 위=진동밑, 아래=밑단
+    var T = norm(sub(H, U)), tU = norm(sub(Sp, U)), tH = norm(sub(H, Sp));
+    var len1 = len(sub(Sp, U)), len2 = len(sub(H, Sp)), k = curve / 3;
+    // geometry outline 은 {kind:"path", commands:[M,C]} 형식(렌더러·outlineSegsOf 계약).
+    var pathCubic = function (from, c1, c2, to) {
+      return { kind: "path", commands: [{ type: "M", points: [{ x: from.x, y: from.y }] }, { type: "C", points: [{ x: c1.x, y: c1.y }, { x: c2.x, y: c2.y }, { x: to.x, y: to.y }] }], edge: "side-seam" };
+    };
+    var cub1 = pathCubic(U, add(U, mul(tU, len1 * k)), sub(Sp, mul(T, len1 * k)), Sp);   // 진동밑→허리
+    var cub2 = pathCubic(Sp, add(Sp, mul(T, len2 * k)), sub(H, mul(tH, len2 * k)), H);   // 허리→밑단
+    var s1Upper = isSame(e1, U);             // s1 비공유 끝이 U 면 s1=진동밑→허리
+    var out = outline.slice();
+    out[idxs[0]] = s1Upper ? cub1 : cub2;
+    out[idxs[1]] = s1Upper ? cub2 : cub1;
+    return out;
+  }
+
   // 몸판 형상: 여유량(옆선 바깥 이동) → 길이(hem) → 옆선 실루엣(허리·밑단 옆선 이동).
   //   underarm(U) 은 여유량 결과로 **고정**(실루엣이 안 건드림). 허리·밑단은 ease 폭 기준 독립 이동.
   //   프레임(C·S·g·p·widthOrig)을 **변환 전 한 번** 계산 → hem 후에도 목표점(Se·sideHemE)을 거리
   //   매칭으로 이동. outline 만 이동(construction=다트·waist 참고선 불변, 여유·실루엣은 옆선에만).
-  function shapePiece(piece, delta, waistOff, L, hemOff) {
+  function shapePiece(piece, delta, waistOff, L, hemOff, curve) {
     var fr = pieceFrame(piece.outline);
     var C = fr.C, S = fr.S, g = fr.g, p = fr.p;
     var U = underarmPoint(piece.outline, S);
@@ -243,6 +274,8 @@
     if (waistOff !== 0) { var mw = [{ pt: Se, d: mul(p, waistOff) }]; out2 = out2.map(function (pr) { return movePrimPoints(pr, mw); }); con2 = con2.map(function (pr) { return movePrimPoints(pr, mw); }); }
     // 4. 밑단 옆선 이동(A라인=양수·바깥). hem 이 있을 때만. ease 폭 기준이라 허리 이동과 독립.
     if (hemOff !== 0 && sideHemE) { var mh = [{ pt: sideHemE, d: mul(p, hemOff) }]; out2 = out2.map(function (pr) { return movePrimPoints(pr, mh); }); con2 = con2.map(function (pr) { return movePrimPoints(pr, mh); }); }
+    // 5. 옆선 곡선화(curve>0, side-seam 2세그먼트=hem 있을 때). 세 점 통과·허리 접선 연속.
+    if (curve > 0) out2 = curveSideSeam(out2, curve);
     return { outline: out2, construction: con2 };
   }
 
@@ -315,18 +348,20 @@
     var E = body.bustEaseCm; if (E == null) E = 0;
     var wOff = body.waistSideOffsetCm; if (wOff == null) wOff = 0;     // 허리 옆선 이동(음수=안쪽)
     var hOff = body.hemSideOffsetCm; if (hOff == null) hOff = 0;       // 밑단 옆선 이동(양수=바깥)
-    // 입력 정규화 경계: 정확한 0(넷 다) 만 no-op. 길이·여유량 음수 실패. 옆선 오프셋은 부호 허용(안/밖).
+    var curve = body.sideSeamCurve; if (curve == null) curve = 0;     // 옆선 곡선화(0=직선, 0–1)
+    // 입력 정규화 경계: 정확한 0(전부) 만 no-op. 길이·여유량 음수 실패. 옆선 오프셋은 부호 허용(안/밖).
     if (typeof L !== "number" || !isFinite(L) || L < 0) fail("invalid-body-length", L);
     if (typeof E !== "number" || !isFinite(E) || E < 0) fail("invalid-body-ease", E);
     if (typeof wOff !== "number" || !isFinite(wOff)) fail("invalid-body-side-offset", wOff);
     if (typeof hOff !== "number" || !isFinite(hOff)) fail("invalid-body-side-offset", hOff);
-    if (L === 0 && E === 0 && wOff === 0 && hOff === 0) return deepClone(referenceGeometry);
+    if (typeof curve !== "number" || !isFinite(curve) || curve < 0 || curve > 1) fail("invalid-body-curve", curve);
+    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0) return deepClone(referenceGeometry);
     // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
     var delta = E / 4;   // 전체 가슴둘레 여유량 → 각 옆선 E/4 (앞반쪽 + 뒤반쪽, ×2측 = E)
     var src = deepClone(referenceGeometry);
     return {
-      front: shapePiece(src.front, delta, wOff, L, hOff),
-      back: shapePiece(src.back, delta, wOff, L, hOff),
+      front: shapePiece(src.front, delta, wOff, L, hOff, curve),
+      back: shapePiece(src.back, delta, wOff, L, hOff, curve),
       shared: src.shared,   // 값·순서 유지(비대상)
       sleeve: src.sleeve
     };

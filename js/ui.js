@@ -325,24 +325,56 @@
   function committedBody(project) {
     const b = project && project.working && project.working.parameters && project.working.parameters.body;
     const num = (k) => (b && typeof b[k] === "number") ? b[k] : 0;
-    return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm") };
+    return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm"), Cv: num("sideSeamCurve") };
+  }
+  // 한 piece 의 side-seam edge(곡선화 반영) 봉제 길이(cubic 은 평탄화 합).
+  function sideSeamLen(geometry, piece) {
+    const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
+    const d = (a, c) => Math.hypot(c.x - a.x, c.y - a.y);
+    let total = 0;
+    b.outline.forEach(pr => {
+      if (pr.edge !== "side-seam") return;
+      if (pr.kind === "line") { total += d(pr.from, pr.to); return; }
+      // path {kind:"path", commands:[M, C, ...]} — 각 C(cubic) 평탄화 합
+      if (!Array.isArray(pr.commands)) return;
+      let cur = pr.commands[0] && pr.commands[0].points[0];
+      pr.commands.forEach(cmd => {
+        if (cmd.type === "M") { cur = cmd.points[0]; return; }
+        if (cmd.type !== "C" || !cur) return;
+        const p0 = cur, p1 = cmd.points[0], p2 = cmd.points[1], p3 = cmd.points[2];
+        let prev = p0; for (let i = 1; i <= 24; i++) { const t = i / 24, u = 1 - t; const q = { x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x, y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y }; total += d(prev, q); prev = q; }
+        cur = p3;
+      });
+    });
+    return total;
+  }
+  // 앞·뒤 옆선 봉제 길이 + 차이(정합 검증) 문구. 차이 > 1cm 이면 주의.
+  function sideLenNote(project) {
+    const g = project && project.working && project.working.geometry;
+    const el = document.getElementById("designSideLenNote"); if (!el) return;
+    if (!g) { el.textContent = ""; el.removeAttribute("data-ok"); return; }
+    const f = sideSeamLen(g, "front"), b = sideSeamLen(g, "back"), diff = Math.abs(f - b);
+    el.textContent = "앞옆선 " + fmtL(f) + "cm · 뒤옆선 " + fmtL(b) + "cm · 차이 " + fmtL(diff) + "cm";
+    el.setAttribute("data-ok", diff <= 1 ? "1" : "0");
   }
   function setBodyNote(txt) { const n = document.getElementById("designBodyNote"); if (n) n.textContent = txt; }
   // 적용 중 상태 문구(여유량·길이·허리/밑단 옆선). 전부 0이면 기본 안내. 옆선은 부호 표시(안/밖).
   function offStr(v, inLabel, outLabel) { return (v < 0 ? inLabel + " " + fmtL(-v) : outLabel + " " + fmtL(v)) + "cm"; }
-  function bodyStatusNote(E, L, W, H) {
+  function bodyStatusNote(E, L, W, H, Cv) {
     const parts = [];
     if (E > 0) parts.push("여유량 " + fmtL(E) + "cm");
     if (L > 0) parts.push("길이 " + fmtL(L) + "cm");
     if (W !== 0) parts.push("허리 " + offStr(W, "안쪽", "바깥"));
     if (H !== 0) parts.push("밑단 " + offStr(H, "안쪽", "바깥"));
-    return parts.length ? parts.join(" · ") + " · 세션 전용" : "여유량·길이·옆선 실루엣으로 몸판을 조정합니다";
+    if (Cv > 0) parts.push("옆선 곡선 " + fmtL(Cv));
+    return parts.length ? parts.join(" · ") + " · 세션 전용" : "여유량·길이·옆선 실루엣·곡선으로 몸판을 조정합니다";
   }
   function noteForReason(reason) {
     if (reason === "extension-intersection") return "연장선이 기존 패턴과 겹칩니다 · 값을 조정하세요";
     if (reason === "invalid-side-extension") return "이 길이로는 옆선을 연장할 수 없습니다";
     if (reason === "invalid-body-length" || reason === "invalid-body-ease") return "여유량·길이는 0–100 사이여야 합니다";
     if (reason === "invalid-body-side-offset") return "옆선 이동은 −30–30 사이여야 합니다";
+    if (reason === "invalid-body-curve") return "옆선 곡선화는 0–1 사이여야 합니다";
     return "적용할 수 없습니다 · 값을 조정하세요";
   }
   // 한 입력의 유효성(빈 값=0, 그 외 [min,max] 유한 숫자).
@@ -356,7 +388,8 @@
   function readBodyInputs() {
     const ease = readNum("inpBodyBustEase", 0, 100), len = readNum("inpBodyHemExtension", 0, 100);
     const waist = readNum("inpBodyWaistOffset", -30, 30), hem = readNum("inpBodyHemOffset", -30, 30);
-    return { ease: ease, len: len, waist: waist, hem: hem, valid: ease.valid && len.valid && waist.valid && hem.valid };
+    const curve = readNum("inpBodySideCurve", 0, 1);
+    return { ease: ease, len: len, waist: waist, hem: hem, curve: curve, valid: ease.valid && len.valid && waist.valid && hem.valid && curve.valid };
   }
   // apply/reset 버튼 활성 상태만 갱신(값·note 미변경 — 성공/오류 문구 보존).
   function syncBodyButtons() {
@@ -374,8 +407,9 @@
     const cb = committedBody(project);
     const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
     setIf("inpBodyBustEase", cb.E); setIf("inpBodyHemExtension", cb.L);
-    setIf("inpBodyWaistOffset", cb.W); setIf("inpBodyHemOffset", cb.H);
-    setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H));
+    setIf("inpBodyWaistOffset", cb.W); setIf("inpBodyHemOffset", cb.H); setIf("inpBodySideCurve", cb.Cv);
+    setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv));
+    sideLenNote(project);
     syncBodyButtons();
   }
   // 원자적 적용: 검증 → referenceGeometry 에서 재계산(여유량·길이·옆선 실루엣) → 성공 후에만
@@ -385,9 +419,9 @@
     if (!project || !window.designBodice) return;
     const st = readBodyInputs();
     if (!st.valid) { setBodyNote("입력값 범위를 확인하세요(여유량·길이 0–100, 옆선 −30–30)"); syncBodyButtons(); return; }
-    const E = st.ease.v, L = st.len.v, W = st.waist.v, H = st.hem.v;
+    const E = st.ease.v, L = st.len.v, W = st.waist.v, H = st.hem.v, Cv = st.curve.v;
     const nextParameters = structuredClone(project.working.parameters);
-    nextParameters.body = Object.assign({}, nextParameters.body || {}, { bustEaseCm: E, hemExtensionBelowWaistCm: L, waistSideOffsetCm: W, hemSideOffsetCm: H });
+    nextParameters.body = Object.assign({}, nextParameters.body || {}, { bustEaseCm: E, hemExtensionBelowWaistCm: L, waistSideOffsetCm: W, hemSideOffsetCm: H, sideSeamCurve: Cv });
     let nextGeometry = null, reason = null;
     try { nextGeometry = window.designBodice.computeGeometry(project.referenceGeometry, nextParameters); }
     catch (e) { reason = (e && e.reason) || "compute-failed"; }
@@ -401,12 +435,13 @@
     if (window.designLineTool && window.designLineTool.revalidate) window.designLineTool.revalidate();
     if (typeof render === "function") render();
     const setBack = (st2, v) => { if (st2.input && document.activeElement !== st2.input) st2.input.value = fmtL(v); };
-    setBack(st.ease, E); setBack(st.len, L); setBack(st.waist, W); setBack(st.hem, H);
-    setBodyNote((E === 0 && L === 0 && W === 0 && H === 0) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H));
+    setBack(st.ease, E); setBack(st.len, L); setBack(st.waist, W); setBack(st.hem, H); setBack(st.curve, Cv);
+    setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv));
+    sideLenNote(project);
     syncBodyButtons();
   }
   function onResetBodyLength() {
-    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
+    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
     onApplyBodyLength();   // 전부 0 적용(원형 복원)
   }
 
@@ -488,7 +523,7 @@
     const resetBody = document.getElementById("btnResetBodyLength");
     if (resetBody) resetBody.addEventListener("click", () => { if (!resetBody.disabled) onResetBodyLength(); });
     // 몸판 입력 넷 모두(여유량·길이·허리/밑단 옆선): 입력 중엔 버튼 활성만 갱신, Enter 로 적용.
-    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset"].forEach(id => {
+    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve"].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.addEventListener("input", syncBodyButtons);

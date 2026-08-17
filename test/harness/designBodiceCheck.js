@@ -254,6 +254,52 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
   }
 }
 
+// 4d. 옆선 곡선화(sideSeamCurve): 곡률 0 no-op / 2 cubic / 세 점 통과 / 허리 접선 연속 / overshoot 없음
+{
+  const ref = STATES["1-미적용"];
+  throws(() => DB.computeGeometry(ref, { body: { sideSeamCurve: -0.1 } }), "invalid-body-curve", "4d: curve <0");
+  throws(() => DB.computeGeometry(ref, { body: { sideSeamCurve: 1.5 } }), "invalid-body-curve", "4d: curve >1");
+  throws(() => DB.computeGeometry(ref, { body: { sideSeamCurve: NaN } }), "invalid-body-curve", "4d: curve NaN");
+  const base = { bustEaseCm: 8, hemExtensionBelowWaistCm: 10, waistSideOffsetCm: -3 };
+  // 곡률 0 = 직선 2세그먼트 그대로(정확 no-op)
+  {
+    const r0 = DB.computeGeometry(ref, { body: base });
+    const rc0 = DB.computeGeometry(ref, { body: Object.assign({}, base, { sideSeamCurve: 0 }) });
+    ok(eq(rc0.front.outline, r0.front.outline) && eq(rc0.back.outline, r0.back.outline), "4d: 곡률 0 = 직선 no-op");
+  }
+  // 곡률 1: side-seam 2 cubic(path 형식), 세 점(U 21.0531,30 · Sp 24.0531,38 · H 21.0531,48) 통과, 접선 연속, overshoot 없음
+  {
+    const r = DB.computeGeometry(ref, { body: Object.assign({}, base, { sideSeamCurve: 1 }) });
+    const ss = edgePrims(r.front.outline, "side-seam");
+    // path {M,C} → {from,c1,c2,to}
+    const cb = (pr) => ({ from: pr.commands[0].points[0], c1: pr.commands[1].points[0], c2: pr.commands[1].points[1], to: pr.commands[1].points[2] });
+    ok(ss.length === 2 && ss.every(s => s.kind === "path" && s.commands.length === 2 && s.commands[1].type === "C"), "4d: side-seam 2 cubic(path)");
+    const segs = ss.map(cb);
+    const pts = []; segs.forEach(s => { pts.push([s.from.x, s.from.y]); pts.push([s.to.x, s.to.y]); });
+    const has = (x, y) => pts.some(q => near(q[0], x, 1e-3) && near(q[1], y, 1e-3));
+    const SpX = 21.0531 + 3;   // 여유량 −2(21.0531) + 허리 안쪽 3
+    ok(has(21.0531, 30) && has(SpX, 38) && has(21.0531, 48), "4d: 세 기준점 정확 통과(U·Sp·H)");
+    // 허리 Sp 에서 두 핸들 일직선(접선 연속): cub1.c2−Sp 와 cub2.c1−Sp 공선·반대방향
+    const cub1 = segs.find(s => near(s.to.x, SpX, 1e-3) && near(s.to.y, 38, 1e-3));    // →Sp
+    const cub2 = segs.find(s => near(s.from.x, SpX, 1e-3) && near(s.from.y, 38, 1e-3)); // Sp→
+    const v1 = { x: cub1.c2.x - SpX, y: cub1.c2.y - 38 }, v2 = { x: cub2.c1.x - SpX, y: cub2.c1.y - 38 };
+    ok(Math.abs(v1.x * v2.y - v1.y * v2.x) < 1e-6 && (v1.x * v2.x + v1.y * v2.y) < 0, "4d: 허리 핸들 일직선(접선 연속)");
+    // overshoot 없음: 평탄화 x 최대 ≤ Sp.x(허리 안쪽 한계, front 안쪽=+x)
+    const flatX = (s) => { const out = []; for (let i = 0; i <= 24; i++) { const t = i / 24, u = 1 - t; out.push(u*u*u*s.from.x + 3*u*u*t*s.c1.x + 3*u*t*t*s.c2.x + t*t*t*s.to.x); } return out; };
+    let maxX = -Infinity; segs.forEach(s => flatX(s).forEach(x => { if (x > maxX) maxX = x; }));
+    ok(maxX <= SpX + 1e-4, "4d: overshoot 없음(허리 안쪽 한계 초과 안 함)");
+    // 다트·reference 불변(곡선화는 side-seam 만)
+    ok(ref.front.construction.map(x => JSON.stringify(x)).every(s => r.front.construction.map(y => JSON.stringify(y)).indexOf(s) >= 0), "4d: 다트 불변");
+    ok(!sharesRef(r, ref), "4d: reference 참조 분리");
+  }
+  // 곡선화는 hem 이 있어 side-seam 2세그먼트일 때만(hem 없으면 1세그먼트 → 그대로)
+  {
+    const r = DB.computeGeometry(ref, { body: { waistSideOffsetCm: -3, sideSeamCurve: 1 } });
+    const ss = edgePrims(r.front.outline, "side-seam");
+    ok(ss.length === 1 && ss[0].kind === "line", "4d: hem 없으면 곡선화 안 함(1 line)");
+  }
+}
+
 // 5. topology / 수치 실패 계약
 {
   const L = { body: { hemExtensionBelowWaistCm: 10 } };

@@ -316,3 +316,6 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 }
 .context-strip .btn{padding:6px 10px}
 .context-strip #dartMoveHint{min-width:0;font-size:11px;color:var(--muted);white-space:normal}
+/* 앞·뒤 옆선 봉제 길이 정합: 차이 ≤1cm=녹색 / 초과=주황(주의). */
+#designSideLenNote[data-ok="1"]{color:#0F8A4A}
+#designSideLenNote[data-ok="0"]{color:var(--orange);font-weight:600}
