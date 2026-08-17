@@ -188,15 +188,16 @@
     return us[0];
   }
 
-  // 프리미티브의 on-curve 끝점(line from/to · path M/각 C end)이 target(들) 과 **거리 tol 이내**면
-  // d 만큼 이동. exact key 매칭은 source 기하의 ~0.0004cm 드리프트(옆선·진동 접점)를 놓친다.
-  // cubic 은 인접 제어점(들어오는 c2·나가는 c1)도 함께 이동해 접선을 보존한다. clone 반환.
+  // 프리미티브의 on-curve 끝점(line from/to · path M/각 C end)이 어느 move.pt 와 **거리 tol 이내**면
+  // 그 move.d 만큼 이동(per-target delta). exact key 매칭은 source 기하의 ~0.0004cm 드리프트
+  // (옆선·진동 접점)를 놓친다. cubic 은 인접 제어점(들어오는 c2·나가는 c1)도 함께 이동해 접선 보존.
   var JOIN_TOL = 0.02;   // 드리프트(0.0004) 는 잇고, 별개 설계점(≥0.08cm) 은 안 합침
-  function movePrimPoints(prim, targets, d) {
-    var near = function (q) { for (var t = 0; t < targets.length; t++) if (Math.hypot(q.x - targets[t].x, q.y - targets[t].y) < JOIN_TOL) return true; return false; };
+  function movePrimPoints(prim, moves) {
+    var matchD = function (q) { for (var t = 0; t < moves.length; t++) if (Math.hypot(q.x - moves[t].pt.x, q.y - moves[t].pt.y) < JOIN_TOL) return moves[t].d; return null; };
     if (prim.kind === "line") {
-      var ln = { kind: "line", from: near(prim.from) ? add(prim.from, d) : { x: prim.from.x, y: prim.from.y },
-        to: near(prim.to) ? add(prim.to, d) : { x: prim.to.x, y: prim.to.y } };
+      var df = matchD(prim.from), dt = matchD(prim.to);
+      var ln = { kind: "line", from: df ? add(prim.from, df) : { x: prim.from.x, y: prim.from.y },
+        to: dt ? add(prim.to, dt) : { x: prim.to.x, y: prim.to.y } };
       if ("edge" in prim) ln.edge = prim.edge;   // edge 없는 세그먼트에 own-property 추가 금지(SV2)
       return ln;
     }
@@ -205,11 +206,12 @@
     for (var i = 0; i < cmds.length; i++) {
       var c = cmds[i];
       if (c.type === "M") {
-        if (near(c.points[0])) { c.points[0] = add(c.points[0], d); var nx = cmds[i + 1]; if (nx && nx.type === "C") nx.points[0] = add(nx.points[0], d); }  // M + 나가는 c1
+        var dm = matchD(c.points[0]);
+        if (dm) { c.points[0] = add(c.points[0], dm); var nx = cmds[i + 1]; if (nx && nx.type === "C") nx.points[0] = add(nx.points[0], dm); }  // M + 나가는 c1
       } else if (c.type === "C") {
-        var end = c.points[2];
-        if (near(end)) { c.points[2] = add(end, d); c.points[1] = add(c.points[1], d);  // end + 들어오는 c2
-          var nx2 = cmds[i + 1]; if (nx2 && nx2.type === "C") nx2.points[0] = add(nx2.points[0], d); }  // 나가는 c1
+        var de = matchD(c.points[2]);
+        if (de) { c.points[2] = add(c.points[2], de); c.points[1] = add(c.points[1], de);  // end + 들어오는 c2
+          var nx2 = cmds[i + 1]; if (nx2 && nx2.type === "C") nx2.points[0] = add(nx2.points[0], de); }  // 나가는 c1
       }
     }
     var out = { kind: "path", commands: cmds };
@@ -217,18 +219,31 @@
     return out;
   }
 
-  // 여유량: 옆선을 바깥(center→side=+p)으로 delta 만큼 **평행 이동**(박스형). U(underarm)·S(waist-side)
-  // 와 그 공유 끝점(armhole·waist)만 이동, **construction(다트)은 불변**(여유분은 옆선에만 붙음).
-  function applyEase(piece, delta) {
-    var outline = piece.outline;
-    var fr = pieceFrame(outline);
-    var S = fr.S, U = underarmPoint(outline, S);
-    var d = mul(fr.p, delta);
-    var targets = [U, S];
-    return {
-      outline: outline.map(function (pr) { return movePrimPoints(pr, targets, d); }),
-      construction: piece.construction.map(function (pr) { return deepClone(pr); })   // 다트 등 불변
-    };
+  // 몸판 형상: 여유량(옆선 바깥 이동) → 길이(hem) → 옆선 실루엣(허리·밑단 옆선 이동).
+  //   underarm(U) 은 여유량 결과로 **고정**(실루엣이 안 건드림). 허리·밑단은 ease 폭 기준 독립 이동.
+  //   프레임(C·S·g·p·widthOrig)을 **변환 전 한 번** 계산 → hem 후에도 목표점(Se·sideHemE)을 거리
+  //   매칭으로 이동. outline 만 이동(construction=다트·waist 참고선 불변, 여유·실루엣은 옆선에만).
+  function shapePiece(piece, delta, waistOff, L, hemOff) {
+    var fr = pieceFrame(piece.outline);
+    var C = fr.C, S = fr.S, g = fr.g, p = fr.p;
+    var U = underarmPoint(piece.outline, S);
+    var widthOrig = dot(sub(S, C), p);
+    var outline = piece.outline.map(deepClone), construction = piece.construction.map(deepClone);
+    // 1. 여유량(ease): U·S 를 delta·p (박스형 평행). 다트 불변.
+    if (delta !== 0) { var dE = mul(p, delta); outline = outline.map(function (pr) { return movePrimPoints(pr, [{ pt: U, d: dE }, { pt: S, d: dE }]); }); }
+    var Se = add(S, mul(p, delta));                              // 여유량 반영 waist-side
+    var piece1 = { outline: outline, construction: construction };
+    var sideHemE = null;
+    // 2. 길이(hem): ease 폭 옆선에서 hem 내려감(transformPiece 가 Se 기준 side-ext·hem 생성)
+    if (L > 0) { piece1 = transformPiece(piece1, L); sideHemE = add(add(C, mul(g, L)), mul(p, widthOrig + delta)); }  // ease 폭 hem-side
+    var out2 = piece1.outline, con2 = piece1.construction;
+    // 3. 허리 옆선 이동(허리 들어간 형=음수·안쪽). Se(=side-ext 위·side-seam 아래) 만 이동 → 허리 꺾임.
+    //    construction 도 함께(hem 후 construction 으로 옮겨진 waist 참고선이 옆선을 따라오도록;
+    //    다트는 Se 에서 멀어 불변).
+    if (waistOff !== 0) { var mw = [{ pt: Se, d: mul(p, waistOff) }]; out2 = out2.map(function (pr) { return movePrimPoints(pr, mw); }); con2 = con2.map(function (pr) { return movePrimPoints(pr, mw); }); }
+    // 4. 밑단 옆선 이동(A라인=양수·바깥). hem 이 있을 때만. ease 폭 기준이라 허리 이동과 독립.
+    if (hemOff !== 0 && sideHemE) { var mh = [{ pt: sideHemE, d: mul(p, hemOff) }]; out2 = out2.map(function (pr) { return movePrimPoints(pr, mh); }); con2 = con2.map(function (pr) { return movePrimPoints(pr, mh); }); }
+    return { outline: out2, construction: con2 };
   }
 
   function transformPiece(piece, L) {
@@ -296,27 +311,22 @@
   function computeGeometry(referenceGeometry, opts) {
     if (!validGeometry(referenceGeometry)) fail("invalid-geometry");
     var body = (opts && opts.body) || {};
-    var L = body.hemExtensionBelowWaistCm;
-    if (L == null) L = 0;   // 미지정 = 0(하위호환)
-    var E = body.bustEaseCm;
-    if (E == null) E = 0;
-    // 입력 정규화 경계: 정확한 0 만 no-op. 음수·NaN·Infinity·비수치는 실패.
+    var L = body.hemExtensionBelowWaistCm; if (L == null) L = 0;       // 미지정 = 0(하위호환)
+    var E = body.bustEaseCm; if (E == null) E = 0;
+    var wOff = body.waistSideOffsetCm; if (wOff == null) wOff = 0;     // 허리 옆선 이동(음수=안쪽)
+    var hOff = body.hemSideOffsetCm; if (hOff == null) hOff = 0;       // 밑단 옆선 이동(양수=바깥)
+    // 입력 정규화 경계: 정확한 0(넷 다) 만 no-op. 길이·여유량 음수 실패. 옆선 오프셋은 부호 허용(안/밖).
     if (typeof L !== "number" || !isFinite(L) || L < 0) fail("invalid-body-length", L);
     if (typeof E !== "number" || !isFinite(E) || E < 0) fail("invalid-body-ease", E);
-    if (L === 0 && E === 0) return deepClone(referenceGeometry);
+    if (typeof wOff !== "number" || !isFinite(wOff)) fail("invalid-body-side-offset", wOff);
+    if (typeof hOff !== "number" || !isFinite(hOff)) fail("invalid-body-side-offset", hOff);
+    if (L === 0 && E === 0 && wOff === 0 && hOff === 0) return deepClone(referenceGeometry);
     // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
-    // 순서: 여유량(옆선 바깥 이동) → hem(허리 아래 연장). 여유량이 넓힌 옆선에서 hem 이 내려간다.
     var delta = E / 4;   // 전체 가슴둘레 여유량 → 각 옆선 E/4 (앞반쪽 + 뒤반쪽, ×2측 = E)
-    function shape(piece) {
-      var pc = piece;
-      if (E > 0) pc = applyEase(pc, delta);
-      if (L > 0) pc = transformPiece(pc, L);
-      return pc;
-    }
     var src = deepClone(referenceGeometry);
     return {
-      front: shape(src.front),
-      back: shape(src.back),
+      front: shapePiece(src.front, delta, wOff, L, hOff),
+      back: shapePiece(src.back, delta, wOff, L, hOff),
       shared: src.shared,   // 값·순서 유지(비대상)
       sleeve: src.sleeve
     };

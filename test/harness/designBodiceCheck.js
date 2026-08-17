@@ -214,6 +214,46 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
   }
 }
 
+// 4c. 옆선 실루엣: 허리 옆선 이동(waistSideOffsetCm, 음수=안쪽) / 밑단 옆선 이동(hemSideOffsetCm, 양수=바깥)
+{
+  const ref = STATES["1-미적용"];
+  const sideEnds = (outline) => { const s = edgePrims(outline, "side-seam")[0]; const U = near(s.from.y, 38) ? s.to : s.from; const S = near(s.from.y, 38) ? s.from : s.to; return { U, S }; };
+  // 부호 허용(안/밖)이지만 비수치·무한대는 실패
+  throws(() => DB.computeGeometry(ref, { body: { waistSideOffsetCm: NaN } }), "invalid-body-side-offset", "4c: waist NaN");
+  throws(() => DB.computeGeometry(ref, { body: { hemSideOffsetCm: Infinity } }), "invalid-body-side-offset", "4c: hem Infinity");
+  // 허리 안쪽(-3): front 허리 S +3 inward(23.0531→26.0531), underarm U 불변. back S -3 inward(→20.0531). 다트 불변.
+  {
+    const r = DB.computeGeometry(ref, { body: { waistSideOffsetCm: -3 } });
+    const f = sideEnds(r.front.outline);
+    ok(near(f.U.x, 23.0531) && near(f.S.x, 23.0531 + 3), "4c: front 허리 안쪽 +3 · underarm 불변(꺾임)");
+    const b = sideEnds(r.back.outline);
+    ok(near(b.S.x, 23.0531 - 3), "4c: back 허리 안쪽 -3");
+    ok(eq(r.front.construction, ref.front.construction), "4c: construction(다트) 불변");
+    ok(!sharesRef(r, ref), "4c: 참조 공유 0");
+  }
+  // 여유량+허리(허리 들어간 형): underarm=ease 폭(-δ=21.0531), 허리=ease+waistOff(21.0531+3=24.0531 inward)
+  {
+    const r = DB.computeGeometry(ref, { body: { bustEaseCm: 8, waistSideOffsetCm: -3 } });
+    const f = sideEnds(r.front.outline);
+    ok(near(f.U.x, 23.0531 - 2), "4c: 여유량+허리 → underarm ease 폭(−δ) 고정");
+    ok(near(f.S.x, 23.0531 - 2 + 3), "4c: 여유량+허리 → 허리 ease+waistOff(안쪽)");
+  }
+  // 밑단 옆선(A라인, hemSideOffsetCm=+3 바깥) — hem 있을 때만, ease 폭 기준 독립(허리 이동과 무관)
+  {
+    const r = DB.computeGeometry(ref, { body: { bustEaseCm: 8, hemExtensionBelowWaistCm: 10, hemSideOffsetCm: 3 } });
+    const hem = edgePrims(r.front.outline, "hem")[0];
+    const hemSideX = near(hem.from.x, 47.5) ? hem.to.x : hem.from.x;   // centerHem=47.5 반대편=hem-side
+    // ease 폭 hem-side = 47.5-(24.4469+2)=21.0531, hemOff=+3 바깥(front 바깥=−x) → 18.0531
+    ok(hem && near(hemSideX, 23.0531 - 2 - 3, 1e-3), "4c: 밑단 옆선 바깥 3(A라인) · ease 폭 기준 독립");
+  }
+  // hem 없으면 밑단 오프셋 무효(no-op 대비 side-seam 변화 없음)
+  {
+    const r0 = DB.computeGeometry(ref, { body: { bustEaseCm: 8 } });
+    const r1 = DB.computeGeometry(ref, { body: { bustEaseCm: 8, hemSideOffsetCm: 5 } });
+    ok(eq(r1.front.outline, r0.front.outline), "4c: hem 없으면 밑단 오프셋 무효");
+  }
+}
+
 // 5. topology / 수치 실패 계약
 {
   const L = { body: { hemExtensionBelowWaistCm: 10 } };

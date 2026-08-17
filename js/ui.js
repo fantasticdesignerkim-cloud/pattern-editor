@@ -324,36 +324,39 @@
   }
   function committedBody(project) {
     const b = project && project.working && project.working.parameters && project.working.parameters.body;
-    return {
-      L: (b && typeof b.hemExtensionBelowWaistCm === "number") ? b.hemExtensionBelowWaistCm : 0,
-      E: (b && typeof b.bustEaseCm === "number") ? b.bustEaseCm : 0
-    };
+    const num = (k) => (b && typeof b[k] === "number") ? b[k] : 0;
+    return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm") };
   }
   function setBodyNote(txt) { const n = document.getElementById("designBodyNote"); if (n) n.textContent = txt; }
-  // 적용 중 상태 문구(여유량 E · 엉덩이 길이 L). 둘 다 0이면 기본 안내.
-  function bodyStatusNote(E, L) {
+  // 적용 중 상태 문구(여유량·길이·허리/밑단 옆선). 전부 0이면 기본 안내. 옆선은 부호 표시(안/밖).
+  function offStr(v, inLabel, outLabel) { return (v < 0 ? inLabel + " " + fmtL(-v) : outLabel + " " + fmtL(v)) + "cm"; }
+  function bodyStatusNote(E, L, W, H) {
     const parts = [];
     if (E > 0) parts.push("여유량 " + fmtL(E) + "cm");
-    if (L > 0) parts.push("엉덩이 길이 " + fmtL(L) + "cm");
-    return parts.length ? parts.join(" · ") + " 적용 중 · 세션 전용" : "여유량·길이로 몸판 실루엣을 조정합니다";
+    if (L > 0) parts.push("길이 " + fmtL(L) + "cm");
+    if (W !== 0) parts.push("허리 " + offStr(W, "안쪽", "바깥"));
+    if (H !== 0) parts.push("밑단 " + offStr(H, "안쪽", "바깥"));
+    return parts.length ? parts.join(" · ") + " · 세션 전용" : "여유량·길이·옆선 실루엣으로 몸판을 조정합니다";
   }
   function noteForReason(reason) {
     if (reason === "extension-intersection") return "연장선이 기존 패턴과 겹칩니다 · 값을 조정하세요";
     if (reason === "invalid-side-extension") return "이 길이로는 옆선을 연장할 수 없습니다";
-    if (reason === "invalid-body-length" || reason === "invalid-body-ease") return "0–100 사이의 숫자를 입력하세요";
+    if (reason === "invalid-body-length" || reason === "invalid-body-ease") return "여유량·길이는 0–100 사이여야 합니다";
+    if (reason === "invalid-body-side-offset") return "옆선 이동은 −30–30 사이여야 합니다";
     return "적용할 수 없습니다 · 값을 조정하세요";
   }
-  // 한 입력의 유효성(빈 값=0, 그 외 0–100 유한 숫자).
-  function readNum(id) {
+  // 한 입력의 유효성(빈 값=0, 그 외 [min,max] 유한 숫자).
+  function readNum(id, min, max) {
     const input = document.getElementById(id);
     const raw = input ? String(input.value).trim() : "";
     if (raw === "") return { input: input, v: 0, valid: true };
     const v = Number(raw);
-    return { input: input, v: v, valid: isFinite(v) && v >= 0 && v <= 100 };
+    return { input: input, v: v, valid: isFinite(v) && v >= min && v <= max };
   }
   function readBodyInputs() {
-    const ease = readNum("inpBodyBustEase"), len = readNum("inpBodyHemExtension");
-    return { ease: ease, len: len, valid: ease.valid && len.valid };
+    const ease = readNum("inpBodyBustEase", 0, 100), len = readNum("inpBodyHemExtension", 0, 100);
+    const waist = readNum("inpBodyWaistOffset", -30, 30), hem = readNum("inpBodyHemOffset", -30, 30);
+    return { ease: ease, len: len, waist: waist, hem: hem, valid: ease.valid && len.valid && waist.valid && hem.valid };
   }
   // apply/reset 버튼 활성 상태만 갱신(값·note 미변경 — 성공/오류 문구 보존).
   function syncBodyButtons() {
@@ -363,29 +366,28 @@
     if (apply) apply.disabled = !(project && readBodyInputs().valid);
     if (reset) reset.disabled = !project;
   }
-  // refresh 훅: design 진입/재진입 시 committed 값(여유량·길이)을 표시(포커스 중 입력은 안 덮음) +
-  // 버튼 상태 + committed 기준 note. 성공/오류 문구는 onApply/onReset 이 직접 관리(refresh 미호출).
+  // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
+  // committed 기준 note. 성공/오류 문구는 onApply/onReset 이 직접 관리(refresh 미호출).
   function updateDesignBodyPanel() {
     const project = designProjectNow();
     if (!project) { syncBodyButtons(); return; }
     const cb = committedBody(project);
-    const ei = document.getElementById("inpBodyBustEase");
-    const li = document.getElementById("inpBodyHemExtension");
-    if (ei && document.activeElement !== ei) ei.value = fmtL(cb.E);
-    if (li && document.activeElement !== li) li.value = fmtL(cb.L);
-    setBodyNote(bodyStatusNote(cb.E, cb.L));
+    const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
+    setIf("inpBodyBustEase", cb.E); setIf("inpBodyHemExtension", cb.L);
+    setIf("inpBodyWaistOffset", cb.W); setIf("inpBodyHemOffset", cb.H);
+    setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H));
     syncBodyButtons();
   }
-  // 원자적 적용: 검증 → referenceGeometry 에서 재계산(여유량+길이) → 성공 후에만 parameters·
-  // geometry 동시 갱신 → render(). 실패 시 커밋·화면 변화 0, note 에만 사유 표시.
+  // 원자적 적용: 검증 → referenceGeometry 에서 재계산(여유량·길이·옆선 실루엣) → 성공 후에만
+  // parameters·geometry 동시 갱신 → render(). 실패 시 커밋·화면 변화 0, note 에만 사유 표시.
   function onApplyBodyLength() {
     const project = designProjectNow();
     if (!project || !window.designBodice) return;
     const st = readBodyInputs();
-    if (!st.valid) { setBodyNote("0–100 사이의 숫자를 입력하세요"); syncBodyButtons(); return; }
-    const E = st.ease.v, L = st.len.v;
+    if (!st.valid) { setBodyNote("입력값 범위를 확인하세요(여유량·길이 0–100, 옆선 −30–30)"); syncBodyButtons(); return; }
+    const E = st.ease.v, L = st.len.v, W = st.waist.v, H = st.hem.v;
     const nextParameters = structuredClone(project.working.parameters);
-    nextParameters.body = Object.assign({}, nextParameters.body || {}, { bustEaseCm: E, hemExtensionBelowWaistCm: L });
+    nextParameters.body = Object.assign({}, nextParameters.body || {}, { bustEaseCm: E, hemExtensionBelowWaistCm: L, waistSideOffsetCm: W, hemSideOffsetCm: H });
     let nextGeometry = null, reason = null;
     try { nextGeometry = window.designBodice.computeGeometry(project.referenceGeometry, nextParameters); }
     catch (e) { reason = (e && e.reason) || "compute-failed"; }
@@ -398,17 +400,14 @@
     // geometry 재계산됨 → 선택된 절개선 유효성 재검사(현재 working outline 기준) + 파생 무효화.
     if (window.designLineTool && window.designLineTool.revalidate) window.designLineTool.revalidate();
     if (typeof render === "function") render();
-    if (st.ease.input && document.activeElement !== st.ease.input) st.ease.input.value = fmtL(E);
-    if (st.len.input && document.activeElement !== st.len.input) st.len.input.value = fmtL(L);
-    setBodyNote((E === 0 && L === 0) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L));
+    const setBack = (st2, v) => { if (st2.input && document.activeElement !== st2.input) st2.input.value = fmtL(v); };
+    setBack(st.ease, E); setBack(st.len, L); setBack(st.waist, W); setBack(st.hem, H);
+    setBodyNote((E === 0 && L === 0 && W === 0 && H === 0) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H));
     syncBodyButtons();
   }
   function onResetBodyLength() {
-    const ei = document.getElementById("inpBodyBustEase");
-    const li = document.getElementById("inpBodyHemExtension");
-    if (ei) ei.value = "0";
-    if (li) li.value = "0";
-    onApplyBodyLength();   // E=0·L=0 적용(원형 복원)
+    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
+    onApplyBodyLength();   // 전부 0 적용(원형 복원)
   }
 
   // ── 다트 inspector 표시 ───────────────────────
@@ -488,8 +487,8 @@
     if (applyBody) applyBody.addEventListener("click", () => { if (!applyBody.disabled) onApplyBodyLength(); });
     const resetBody = document.getElementById("btnResetBodyLength");
     if (resetBody) resetBody.addEventListener("click", () => { if (!resetBody.disabled) onResetBodyLength(); });
-    // 여유량·길이 두 입력 모두: 입력 중엔 버튼 활성만 갱신, Enter 로 적용.
-    ["inpBodyBustEase", "inpBodyHemExtension"].forEach(id => {
+    // 몸판 입력 넷 모두(여유량·길이·허리/밑단 옆선): 입력 중엔 버튼 활성만 갱신, Enter 로 적용.
+    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset"].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.addEventListener("input", syncBodyButtons);
