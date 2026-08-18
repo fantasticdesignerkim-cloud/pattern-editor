@@ -361,8 +361,10 @@
     const g = project && project.working && project.working.geometry;
     const el = document.getElementById("designNeckLenNote"); if (!el) return;
     if (!g) { el.textContent = ""; return; }
-    const f = necklineLen(g, "front"), b = necklineLen(g, "back");
-    el.textContent = "앞목 " + fmtL(f) + "cm · 뒤목 " + fmtL(b) + "cm · 합계 " + fmtL(f + b) + "cm";
+    // 앞·뒤판은 반쪽 패턴. 반패턴 합계 = 앞반+뒤반. 완성 목둘레 = 2×(반패턴 합계).
+    // 카라: 전체 카라=완성 목둘레 / 중심 접어재단 반쪽 카라=반패턴 합계.
+    const f = necklineLen(g, "front"), b = necklineLen(g, "back"), half = f + b;
+    el.textContent = "앞목선(반쪽) " + fmtL(f) + "cm · 뒤목선(반쪽) " + fmtL(b) + "cm · 반패턴 합계 " + fmtL(half) + "cm · 완성 목둘레 " + fmtL(2 * half) + "cm";
   }
   function committedNeckline(project) {
     const n = project && project.working && project.working.parameters && project.working.parameters.neckline;

@@ -2650,8 +2650,13 @@ neckline: { mode: "parametric" | "manual", type: "original"|"round"|"v"|"square"
 
 **UI (`js/ui.js`·`index.html`)**: design body 패널에 `#selNecklineType`(원형유지/라운드넥)·
 `#inpNeckWidth`·`#inpNeckFrontDepth`·`#inpNeckBackDepth` 추가. **기존 적용/초기화가 몸판+네크라인
-모두** 재계산(`onApplyBodyLength` 이 nextParameters.neckline 도 세팅). `#designNeckLenNote` 에
-**앞목·뒤목·합계 길이**(카라 기준, `necklineLen` 이 목선 호 평탄화). note 에 "라운드넥" 표시. DOM id **52→56**.
+모두** 재계산(`onApplyBodyLength` 이 nextParameters.neckline 도 세팅). note 에 "라운드넥" 표시. DOM id **52→56**.
+
+**★ 목둘레 표기 계약(사용자 확정, 카라 전 필수)**: 앞·뒤판은 **반쪽 패턴**이다. `#designNeckLenNote`
+는 네 값을 **구분 표기**한다 — **앞목선(반쪽)** / **뒤목선(반쪽)** / **반패턴 합계**(앞반+뒤반) /
+**완성 목둘레 = 2×반패턴 합계**. 카라 설계: **전체 카라=완성 목둘레**, **중심 접어재단 반쪽 카라=
+반패턴 합계**. 24.5 를 단순 "합계/전체"로 소비하면 카라가 절반이 되므로 금지. (`necklineLen` 이
+목선 호 평탄화, `neckLenNote` 가 half=앞반+뒤반·full=2×half.)
 
 **검증(격리 origin, storage 0, console 0)**: 하네스 `designBodiceCheck` 4e 신설(네크라인 fixture:
 원형유지 no-op·목너비 SNP 이동·앞/뒤목 깊이 FNP 이동·라운드 path·다트 불변·invalid-neckline-param),
