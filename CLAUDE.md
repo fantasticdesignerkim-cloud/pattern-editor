@@ -2614,6 +2614,55 @@ side-seam **2 path cubic**·접선 연속·overshoot 없음(maxX=Sp.x)·**앞옆
 **미구현(경계)**: 앞·뒤 별도 곡률 / 옆선 taper(가슴~허리 구간별) / 진동 깊이 / dart 재truing —
 별도 사양·승인 후.
 
+## Design 네크라인 3단계 (2026-08, 사용자 확정) — 기본형 선택 → 수치 조정 → 직접 편집
+
+**지배 결정**: 네크라인 디자인을 **① 기본 형태 선택(원형유지·라운드·V·스퀘어·보트) → ② 형태별
+수치 조정 → ③ 세부 수정(boundary 패턴선 변환)** 3단계로 둔다. 상태 계약:
+```
+neckline: { mode: "parametric" | "manual", type: "original"|"round"|"v"|"square"|"boat", parameters: {...} }
+```
+- **parametric**: `designBodice.computeGeometry` 가 형태를 working.geometry 에 반영(원본 reference
+  불변, 비누적). 미리보기·목둘레 길이 여기서.
+- **manual**(증분 3): `세부 수정` 시 현재 네크라인을 **boundary 패턴선으로 변환**(front/back piece
+  소유권) → computeGeometry 는 원본 목선 유지, boundary 가 designOutline 합성으로 교체. anchor·
+  핸들·snap·선택 기존 시스템 재사용. **모드 잠금**: manual 후 파라미터 입력 잠금(슬라이더가
+  수정선 안 덮음), **`기본형으로 돌아가기`** 명시적 클릭에서만 boundary 제거+parametric 복귀.
+- 카라 단계는 **최종 합성 목둘레 길이** 사용.
+
+**증분**: ① 라운드넥+공통입력(✅ 아래) → ② 나머지 형태+형태별 입력+카드 UI → ③ 세부 수정+모드 잠금.
+
+## ✅ Design 네크라인 증분 1 (2026-08) — 라운드넥 + 공통 입력
+
+**결정(사용자 확정)**: 첫 증분 = 라운드넥 하나 + 공통 입력(목너비·앞목·뒤목 깊이) + 비누적
+미리보기 + 앞·뒤 목둘레 길이·합계. parametric 모드만(카드 UI·직접편집은 증분 2·3).
+
+**구현 (`js/designBodice.js`)**
+- `computeGeometry` opts 에 **`neckline`** 추가. `mode==="parametric" && type==="round"` 일 때만
+  적용, 그 외(original·manual·없음)는 **원본 목선 유지**. body 전부 0 + 네크라인 미적용이면 no-op.
+- **순서: 네크라인(위, 원본에서) → 몸판 shapePiece(아래)**. 서로 disjoint 지만 네크라인을 먼저 해
+  pieceFrame(center/waist/side)이 hem 전 단일 center edge 에서 동작하게 한다.
+- `necklineInfo(outline)`: center edge 목점(top=FNP/BNP) → 그에 닿는 edge 없는 outline seg=neckline
+  → 반대끝 SNP → SNP 에 닿는(neckline 아닌) shoulder → 방향. (topology 로 식별, edge 라벨 안 씀)
+- `applyNeckline(piece, side, params)`: **목너비**=SNP 를 shoulder 방향(+=넓힘), **앞/뒤목 깊이**
+  =FNP 를 grain 아래(+=깊게). 라운드=**사분타원 scoop**(FNP' 수평 접선·SNP' 수직 접선, K=0.5523).
+  네크라인 seg 를 라운드 path `{kind:"path",commands:[M,C]}` 로 교체 + center·shoulder 의 FNP/SNP
+  끝점 함께 이동(movePrimPoints). **construction(다트) 불변.**
+
+**UI (`js/ui.js`·`index.html`)**: design body 패널에 `#selNecklineType`(원형유지/라운드넥)·
+`#inpNeckWidth`·`#inpNeckFrontDepth`·`#inpNeckBackDepth` 추가. **기존 적용/초기화가 몸판+네크라인
+모두** 재계산(`onApplyBodyLength` 이 nextParameters.neckline 도 세팅). `#designNeckLenNote` 에
+**앞목·뒤목·합계 길이**(카라 기준, `necklineLen` 이 목선 호 평탄화). note 에 "라운드넥" 표시. DOM id **52→56**.
+
+**검증(격리 origin, storage 0, console 0)**: 하네스 `designBodiceCheck` 4e 신설(네크라인 fixture:
+원형유지 no-op·목너비 SNP 이동·앞/뒤목 깊이 FNP 이동·라운드 path·다트 불변·invalid-neckline-param),
+runAll 전체 통과, shape/perf 골든 diff 0. 실브라우저: 라운드넥(목너비2·앞목5·뒤목2) → 앞 FNP
+3.075→8.075·목선 라운드 scoop·**referenceGeometry 불변·비누적(재적용 동일)**·원형유지 재적용 시
+원본 목선 복귀, 몸판(허리 들어간 형)+라운드넥 **통합 적용**·목둘레 앞15·뒤9.5·합계24.5 실시간,
+스크린샷(깊어진 라운드 네크라인). 캐시 `?v=2026081801`(designBodice)·`?v=2026081802`(ui·css).
+
+**미구현(다음 증분)**: 형태(원형유지 카드/V/스퀘어/보트) + 형태별 입력(곡선정도·V끝점·모서리) +
+선택 카드 UI(증분 2) / 세부 수정(boundary 변환)·모드 잠금·기본형 복귀(증분 3).
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
