@@ -341,6 +341,44 @@
     };
   }
 
+  // ── 네크라인(parametric) ──
+  var num0 = function (v) { return (typeof v === "number" && isFinite(v)) ? v : 0; };
+  var near2 = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y) < 0.02; };
+  // outline 에서 목선 위상: FNP/BNP(center 목점=top) · neckline seg · SNP · shoulder 방향.
+  function necklineInfo(outline) {
+    var center = null; outline.forEach(function (pr) { if (pr.edge === "center") center = pr; });
+    if (!center) fail("missing-required-edge", "center");
+    var ce = endpts(center);
+    var FNP = ce[0].y < ce[1].y ? ce[0] : ce[1];   // 목점 = y 작은 끝(위)
+    var neckSeg = null, SNP = null;
+    outline.forEach(function (pr) { if ("edge" in pr) return; var e = endpts(pr); if (near2(e[0], FNP)) { neckSeg = pr; SNP = e[1]; } else if (near2(e[1], FNP)) { neckSeg = pr; SNP = e[0]; } });
+    if (!neckSeg) fail("neckline-not-found");
+    var shoulderTip = null;
+    outline.forEach(function (pr) { if ("edge" in pr || pr === neckSeg) return; var e = endpts(pr); if (near2(e[0], SNP)) shoulderTip = e[1]; else if (near2(e[1], SNP)) shoulderTip = e[0]; });
+    if (!shoulderTip) fail("shoulder-not-found");
+    return { FNP: FNP, neckSeg: neckSeg, SNP: SNP, shoulderDir: norm(sub(shoulderTip, SNP)) };
+  }
+  // 라운드넥: 목너비(SNP 를 shoulder 방향)·앞/뒤목 깊이(FNP 를 grain 아래) 이동 후, FNP'(수평 접선)→
+  // SNP'(수직 접선) 사분타원 scoop 으로 네크라인 교체. center/shoulder 의 FNP/SNP 끝점도 함께 이동.
+  // 원본 geometry outline 계약 {kind:"path",commands:[M,C]}. construction(다트) 불변.
+  function applyNeckline(piece, side, params) {
+    var neckW = num0(params.neckWidthCm), depth = num0(side === "front" ? params.frontDepthCm : params.backDepthCm);
+    var g = pieceFrame(piece.outline).g;             // 아래 grain
+    var info = necklineInfo(piece.outline);
+    var FNP = info.FNP, SNP = info.SNP;
+    var SNPn = add(SNP, mul(info.shoulderDir, neckW));   // 목너비(양수=어깨쪽=넓힘)
+    var FNPn = add(FNP, mul(g, depth));                  // 앞/뒤목 깊이(양수=아래=깊게)
+    var K = 0.5523;                                       // 사분타원 bezier 상수
+    var c1 = { x: FNPn.x + K * (SNPn.x - FNPn.x), y: FNPn.y };   // FNP' 에서 수평
+    var c2 = { x: SNPn.x, y: SNPn.y + K * (FNPn.y - SNPn.y) };   // SNP' 에서 수직
+    var round = { kind: "path", commands: [{ type: "M", points: [{ x: FNPn.x, y: FNPn.y }] }, { type: "C", points: [{ x: c1.x, y: c1.y }, { x: c2.x, y: c2.y }, { x: SNPn.x, y: SNPn.y }] }] };
+    var moves = [{ pt: FNP, d: sub(FNPn, FNP) }, { pt: SNP, d: sub(SNPn, SNP) }];
+    return {
+      outline: piece.outline.map(function (pr) { return pr === info.neckSeg ? round : movePrimPoints(pr, moves); }),
+      construction: piece.construction.map(function (pr) { return deepClone(pr); })
+    };
+  }
+
   function computeGeometry(referenceGeometry, opts) {
     if (!validGeometry(referenceGeometry)) fail("invalid-geometry");
     var body = (opts && opts.body) || {};
@@ -355,13 +393,24 @@
     if (typeof wOff !== "number" || !isFinite(wOff)) fail("invalid-body-side-offset", wOff);
     if (typeof hOff !== "number" || !isFinite(hOff)) fail("invalid-body-side-offset", hOff);
     if (typeof curve !== "number" || !isFinite(curve) || curve < 0 || curve > 1) fail("invalid-body-curve", curve);
-    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0) return deepClone(referenceGeometry);
+    // 네크라인(parametric round). mode==="manual" / type==="original" / 없음이면 미적용(원본 목선 유지).
+    var neckline = (opts && opts.neckline) || null;
+    var applyNeck = !!(neckline && neckline.mode === "parametric" && neckline.type === "round");
+    if (applyNeck) {
+      var np = neckline.parameters || {};
+      ["neckWidthCm", "frontDepthCm", "backDepthCm"].forEach(function (k) { var v = np[k]; if (v != null && (typeof v !== "number" || !isFinite(v))) fail("invalid-neckline-param", k); });
+    }
+    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck) return deepClone(referenceGeometry);
     // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
     var delta = E / 4;   // 전체 가슴둘레 여유량 → 각 옆선 E/4 (앞반쪽 + 뒤반쪽, ×2측 = E)
     var src = deepClone(referenceGeometry);
+    var front = src.front, back = src.back;
+    // 순서: 네크라인(위, 원본에서) → 몸판 형상(아래). 서로 disjoint 라 순서 무관하지만 네크라인을
+    // 먼저 해 pieceFrame(center/waist/side)이 hem 전 단일 center edge 에서 동작하게 한다.
+    if (applyNeck) { front = applyNeckline(front, "front", neckline.parameters || {}); back = applyNeckline(back, "back", neckline.parameters || {}); }
     return {
-      front: shapePiece(src.front, delta, wOff, L, hOff, curve),
-      back: shapePiece(src.back, delta, wOff, L, hOff, curve),
+      front: shapePiece(front, delta, wOff, L, hOff, curve),
+      back: shapePiece(back, delta, wOff, L, hOff, curve),
       shared: src.shared,   // 값·순서 유지(비대상)
       sleeve: src.sleeve
     };

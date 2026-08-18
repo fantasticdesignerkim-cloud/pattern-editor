@@ -300,6 +300,47 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
   }
 }
 
+// 4e. 네크라인(parametric round): 목너비(SNP 이동)·앞/뒤목 깊이(FNP 이동)·라운드 path / 원형유지 no-op
+{
+  // 네크라인 위상을 가진 fixture(center 목점→neckline→shoulder). pieceFrame 용 waist/side 포함.
+  const npath = (a, c1, c2, b) => ({ kind: "path", commands: [{ type: "M", points: [{ x: a[0], y: a[1] }] }, { type: "C", points: [{ x: c1[0], y: c1[1] }, { x: c2[0], y: c2[1] }, { x: b[0], y: b[1] }] }] });
+  function neckPiece(Cx, sgn, W) {
+    const S = { x: Cx + sgn * W, y: 38 };
+    return {
+      outline: [
+        npath([Cx, 5], [Cx + sgn * 2, 2], [Cx + sgn * 5, 0], [Cx + sgn * 7, 0]),   // neckline FNP(Cx,5)→SNP(Cx+7sgn,0)
+        line(Cx + sgn * 7, 0, Cx + sgn * 15, 3),                                     // shoulder SNP→tip
+        line(Cx, 5, Cx, 38, "center"), line(Cx, 38, S.x, S.y, "waist"), line(S.x, 30, S.x, 38, "side-seam")
+      ],
+      construction: [line(Cx - 3, 20, Cx - 1, 38)]   // 더미 다트(불변 확인용)
+    };
+  }
+  const neckGeom = () => ({ front: neckPiece(47.5, -1, 24.4469), back: neckPiece(0, +1, 23.0531), shared: { outline: [], construction: [] }, sleeve: { outline: [], construction: [] } });
+  const ref = neckGeom();
+  const nl = (params) => ({ neckline: { mode: "parametric", type: "round", parameters: params } });
+  // 원형 유지(type original) = no-op
+  { const r = DB.computeGeometry(ref, { neckline: { mode: "parametric", type: "original", parameters: {} } }); ok(eq(r, ref) && !sharesRef(r, ref), "4e: 원형 유지 = no-op clone"); }
+  // 라운드 · 목너비 2 · 앞목 4: FNP y 5→9(깊이), SNP shoulder 방향 이동, neckline = path
+  {
+    const r = DB.computeGeometry(ref, nl({ neckWidthCm: 2, frontDepthCm: 4, backDepthCm: 1 }));
+    const center = edgePrims(r.front.outline, "center")[0];
+    const FNP = near(center.from.y, 38) ? center.to : center.from;   // 목점=waist 아닌 끝
+    ok(near(FNP.x, 47.5) && near(FNP.y, 5 + 4), "4e: 앞 FNP grain 아래 +깊이(5→9)");
+    // neckline = edge 없는 path, FNP' 를 M 시작으로
+    const neck = r.front.outline.find(pr => !("edge" in pr) && pr.kind === "path" && near(pr.commands[0].points[0].x, FNP.x, 1e-3) && near(pr.commands[0].points[0].y, FNP.y, 1e-3));
+    ok(!!neck, "4e: 네크라인 = 라운드 path(FNP' 시작)");
+    // SNP' = SNP + shoulderDir×2. 원본 SNP=(40.5,0), tip=(32.5,3) → dir=norm((-8,3))
+    const SNP = neck.commands[neck.commands.length - 1].points.slice(-1)[0];
+    const dir = (() => { const dx = 32.5 - 40.5, dy = 3 - 0, l = Math.hypot(dx, dy); return { x: dx / l, y: dy / l }; })();
+    ok(near(SNP.x, 40.5 + dir.x * 2, 1e-2) && near(SNP.y, 0 + dir.y * 2, 1e-2), "4e: SNP shoulder 방향 목너비 이동");
+    // 다트(construction) 불변, reference 분리
+    ok(eq(r.front.construction, ref.front.construction), "4e: 다트 불변");
+    ok(!sharesRef(r, ref), "4e: reference 참조 분리");
+  }
+  // 비수치 목너비 → invalid-neckline-param
+  throws(() => DB.computeGeometry(ref, nl({ neckWidthCm: NaN })), "invalid-neckline-param", "4e: 비수치 파라미터 거부");
+}
+
 // 5. topology / 수치 실패 계약
 {
   const L = { body: { hemExtensionBelowWaistCm: 10 } };

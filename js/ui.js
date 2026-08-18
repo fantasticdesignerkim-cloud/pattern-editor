@@ -327,26 +327,48 @@
     const num = (k) => (b && typeof b[k] === "number") ? b[k] : 0;
     return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm"), Cv: num("sideSeamCurve") };
   }
-  // 한 piece 의 side-seam edge(곡선화 반영) 봉제 길이(cubic 은 평탄화 합).
-  function sideSeamLen(geometry, piece) {
-    const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
+  // 프리미티브(line/path) 호 길이(cubic 은 평탄화 합).
+  function primArcLen(pr) {
     const d = (a, c) => Math.hypot(c.x - a.x, c.y - a.y);
-    let total = 0;
-    b.outline.forEach(pr => {
-      if (pr.edge !== "side-seam") return;
-      if (pr.kind === "line") { total += d(pr.from, pr.to); return; }
-      // path {kind:"path", commands:[M, C, ...]} — 각 C(cubic) 평탄화 합
-      if (!Array.isArray(pr.commands)) return;
-      let cur = pr.commands[0] && pr.commands[0].points[0];
-      pr.commands.forEach(cmd => {
-        if (cmd.type === "M") { cur = cmd.points[0]; return; }
-        if (cmd.type !== "C" || !cur) return;
-        const p0 = cur, p1 = cmd.points[0], p2 = cmd.points[1], p3 = cmd.points[2];
-        let prev = p0; for (let i = 1; i <= 24; i++) { const t = i / 24, u = 1 - t; const q = { x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x, y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y }; total += d(prev, q); prev = q; }
-        cur = p3;
-      });
+    if (pr.kind === "line") return d(pr.from, pr.to);
+    if (!Array.isArray(pr.commands)) return 0;
+    let total = 0, cur = pr.commands[0] && pr.commands[0].points[0];
+    pr.commands.forEach(cmd => {
+      if (cmd.type === "M") { cur = cmd.points[0]; return; }
+      if (cmd.type !== "C" || !cur) return;
+      const p0 = cur, p1 = cmd.points[0], p2 = cmd.points[1], p3 = cmd.points[2];
+      let prev = p0; for (let i = 1; i <= 24; i++) { const t = i / 24, u = 1 - t; const q = { x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x, y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y }; total += d(prev, q); prev = q; }
+      cur = p3;
     });
     return total;
+  }
+  const primEnds = (pr) => pr.kind === "line" ? [pr.from, pr.to] : [pr.commands[0].points[0], pr.commands[pr.commands.length - 1].points.slice(-1)[0]];
+  // 한 piece 의 side-seam edge(곡선화 반영) 봉제 길이.
+  function sideSeamLen(geometry, piece) {
+    const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
+    return b.outline.filter(pr => pr.edge === "side-seam").reduce((s, pr) => s + primArcLen(pr), 0);
+  }
+  // 한 piece 의 네크라인 호 길이: center 목점(top=FNP/BNP)에 닿는 edge 없는 outline seg.
+  function necklineLen(geometry, piece) {
+    const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
+    const center = b.outline.find(pr => pr.edge === "center"); if (!center) return 0;
+    const ce = primEnds(center); const FNP = ce[0].y < ce[1].y ? ce[0] : ce[1];
+    const near = (a, c) => Math.hypot(a.x - c.x, a.y - c.y) < 0.02;
+    const seg = b.outline.find(pr => !("edge" in pr) && (() => { const e = primEnds(pr); return near(e[0], FNP) || near(e[1], FNP); })());
+    return seg ? primArcLen(seg) : 0;
+  }
+  function neckLenNote(project) {
+    const g = project && project.working && project.working.geometry;
+    const el = document.getElementById("designNeckLenNote"); if (!el) return;
+    if (!g) { el.textContent = ""; return; }
+    const f = necklineLen(g, "front"), b = necklineLen(g, "back");
+    el.textContent = "앞목 " + fmtL(f) + "cm · 뒤목 " + fmtL(b) + "cm · 합계 " + fmtL(f + b) + "cm";
+  }
+  function committedNeckline(project) {
+    const n = project && project.working && project.working.parameters && project.working.parameters.neckline;
+    const np = (n && n.parameters) || {};
+    const num = (k) => typeof np[k] === "number" ? np[k] : 0;
+    return { type: (n && n.type) || "original", W: num("neckWidthCm"), F: num("frontDepthCm"), B: num("backDepthCm") };
   }
   // 앞·뒤 옆선 봉제 길이 + 차이(정합 검증) 문구. 차이 > 1cm 이면 주의.
   function sideLenNote(project) {
@@ -360,14 +382,15 @@
   function setBodyNote(txt) { const n = document.getElementById("designBodyNote"); if (n) n.textContent = txt; }
   // 적용 중 상태 문구(여유량·길이·허리/밑단 옆선). 전부 0이면 기본 안내. 옆선은 부호 표시(안/밖).
   function offStr(v, inLabel, outLabel) { return (v < 0 ? inLabel + " " + fmtL(-v) : outLabel + " " + fmtL(v)) + "cm"; }
-  function bodyStatusNote(E, L, W, H, Cv) {
+  function bodyStatusNote(E, L, W, H, Cv, neckType) {
     const parts = [];
     if (E > 0) parts.push("여유량 " + fmtL(E) + "cm");
     if (L > 0) parts.push("길이 " + fmtL(L) + "cm");
     if (W !== 0) parts.push("허리 " + offStr(W, "안쪽", "바깥"));
     if (H !== 0) parts.push("밑단 " + offStr(H, "안쪽", "바깥"));
     if (Cv > 0) parts.push("옆선 곡선 " + fmtL(Cv));
-    return parts.length ? parts.join(" · ") + " · 세션 전용" : "여유량·길이·옆선 실루엣·곡선으로 몸판을 조정합니다";
+    if (neckType === "round") parts.push("라운드넥");
+    return parts.length ? parts.join(" · ") + " · 세션 전용" : "여유량·길이·옆선 실루엣·네크라인으로 몸판을 조정합니다";
   }
   function noteForReason(reason) {
     if (reason === "extension-intersection") return "연장선이 기존 패턴과 겹칩니다 · 값을 조정하세요";
@@ -375,6 +398,8 @@
     if (reason === "invalid-body-length" || reason === "invalid-body-ease") return "여유량·길이는 0–100 사이여야 합니다";
     if (reason === "invalid-body-side-offset") return "옆선 이동은 −30–30 사이여야 합니다";
     if (reason === "invalid-body-curve") return "옆선 곡선화는 0–1 사이여야 합니다";
+    if (reason === "invalid-neckline-param") return "네크라인 입력값을 확인하세요";
+    if (reason === "neckline-not-found" || reason === "shoulder-not-found") return "이 형태로는 네크라인을 계산할 수 없습니다";
     return "적용할 수 없습니다 · 값을 조정하세요";
   }
   // 한 입력의 유효성(빈 값=0, 그 외 [min,max] 유한 숫자).
@@ -389,7 +414,13 @@
     const ease = readNum("inpBodyBustEase", 0, 100), len = readNum("inpBodyHemExtension", 0, 100);
     const waist = readNum("inpBodyWaistOffset", -30, 30), hem = readNum("inpBodyHemOffset", -30, 30);
     const curve = readNum("inpBodySideCurve", 0, 1);
-    return { ease: ease, len: len, waist: waist, hem: hem, curve: curve, valid: ease.valid && len.valid && waist.valid && hem.valid && curve.valid };
+    const nSel = document.getElementById("selNecklineType");
+    const neckType = nSel ? nSel.value : "original";
+    const nW = readNum("inpNeckWidth", -15, 15), nF = readNum("inpNeckFrontDepth", -10, 20), nB = readNum("inpNeckBackDepth", -10, 20);
+    return {
+      ease, len, waist, hem, curve, neckType, nW, nF, nB,
+      valid: ease.valid && len.valid && waist.valid && hem.valid && curve.valid && nW.valid && nF.valid && nB.valid
+    };
   }
   // apply/reset 버튼 활성 상태만 갱신(값·note 미변경 — 성공/오류 문구 보존).
   function syncBodyButtons() {
@@ -408,8 +439,13 @@
     const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
     setIf("inpBodyBustEase", cb.E); setIf("inpBodyHemExtension", cb.L);
     setIf("inpBodyWaistOffset", cb.W); setIf("inpBodyHemOffset", cb.H); setIf("inpBodySideCurve", cb.Cv);
-    setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv));
-    sideLenNote(project);
+    // 네크라인 입력·형태 복원(포커스 중 안 덮음)
+    const cn = committedNeckline(project);
+    const nSel = document.getElementById("selNecklineType");
+    if (nSel && document.activeElement !== nSel) nSel.value = cn.type;
+    setIf("inpNeckWidth", cn.W); setIf("inpNeckFrontDepth", cn.F); setIf("inpNeckBackDepth", cn.B);
+    setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv, cn.type));
+    sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
   }
   // 원자적 적용: 검증 → referenceGeometry 에서 재계산(여유량·길이·옆선 실루엣) → 성공 후에만
@@ -422,6 +458,8 @@
     const E = st.ease.v, L = st.len.v, W = st.waist.v, H = st.hem.v, Cv = st.curve.v;
     const nextParameters = structuredClone(project.working.parameters);
     nextParameters.body = Object.assign({}, nextParameters.body || {}, { bustEaseCm: E, hemExtensionBelowWaistCm: L, waistSideOffsetCm: W, hemSideOffsetCm: H, sideSeamCurve: Cv });
+    // 네크라인(parametric): 형태 + 공통 입력. manual 모드는 증분 3에서.
+    nextParameters.neckline = { mode: "parametric", type: st.neckType, parameters: { neckWidthCm: st.nW.v, frontDepthCm: st.nF.v, backDepthCm: st.nB.v } };
     let nextGeometry = null, reason = null;
     try { nextGeometry = window.designBodice.computeGeometry(project.referenceGeometry, nextParameters); }
     catch (e) { reason = (e && e.reason) || "compute-failed"; }
@@ -436,13 +474,16 @@
     if (typeof render === "function") render();
     const setBack = (st2, v) => { if (st2.input && document.activeElement !== st2.input) st2.input.value = fmtL(v); };
     setBack(st.ease, E); setBack(st.len, L); setBack(st.waist, W); setBack(st.hem, H); setBack(st.curve, Cv);
-    setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv));
-    sideLenNote(project);
+    setBack(st.nW, st.nW.v); setBack(st.nF, st.nF.v); setBack(st.nB, st.nB.v);
+    const necked = st.neckType === "round";
+    setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0 && !necked) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv, st.neckType));
+    sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
   }
   function onResetBodyLength() {
-    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
-    onApplyBodyLength();   // 전부 0 적용(원형 복원)
+    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve", "inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
+    const nSel = document.getElementById("selNecklineType"); if (nSel) nSel.value = "original";
+    onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }
 
   // ── 다트 inspector 표시 ───────────────────────
@@ -523,12 +564,14 @@
     const resetBody = document.getElementById("btnResetBodyLength");
     if (resetBody) resetBody.addEventListener("click", () => { if (!resetBody.disabled) onResetBodyLength(); });
     // 몸판 입력 넷 모두(여유량·길이·허리/밑단 옆선): 입력 중엔 버튼 활성만 갱신, Enter 로 적용.
-    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve"].forEach(id => {
+    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve", "inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth"].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.addEventListener("input", syncBodyButtons);
       el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyBodyLength(); } });
     });
+    const neckSel = document.getElementById("selNecklineType");
+    if (neckSel) neckSel.addEventListener("change", syncBodyButtons);
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");

@@ -319,3 +319,6 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 앞·뒤 옆선 봉제 길이 정합: 차이 ≤1cm=녹색 / 초과=주황(주의). */
 #designSideLenNote[data-ok="1"]{color:#0F8A4A}
 #designSideLenNote[data-ok="0"]{color:var(--orange);font-weight:600}
+/* 네크라인 형태 select · 목둘레 길이 표시. */
+.row select{padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--navy)}
+.row select:focus{outline:none;border-color:var(--cyan)}
