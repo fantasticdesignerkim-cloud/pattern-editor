@@ -2668,6 +2668,64 @@ runAll 전체 통과, shape/perf 골든 diff 0. 실브라우저: 라운드넥(�
 **미구현(다음 증분)**: 형태(원형유지 카드/V/스퀘어/보트) + 형태별 입력(곡선정도·V끝점·모서리) +
 선택 카드 UI(증분 2) / 세부 수정(boundary 변환)·모드 잠금·기본형 복귀(증분 3).
 
+## ✅ Design 네크라인 증분 2 (2026-08) — V넥·스퀘어·보트 + 기본형 카드 UI
+
+증분 1(라운드넥) 위에, **기본형 5종(원형유지/라운드/V넥/스퀘어/보트) 카드 선택 + 형태별
+입력**. parametric 모드만(직접편집은 증분 3). 저장 모델·reference 불변 계약은 증분 1 그대로.
+
+**결정(사용자 확정)**: 형태별 입력 결합 = **"공통 적용 + 형태별 추가"** — 공통(목너비·앞목·
+뒤목 깊이)은 모든 형태에 적용해 SNP'·CF 깊이를 정의하고, 형태별 입력은 그 위에 성격을 더한다.
+
+**형상 계산 (`js/designBodice.js`, `buildNecklineShape(type, FNPn, SNPn, g, p, params)`)** — g=아래
+grain, p=cross(center→side). 공통(FNPn=CF 깊이, SNPn=목너비)은 `applyNeckline` 이 이미 반영,
+형태별 seg 만 형태 함수가 만든다. `cfPt`(center 끝점이 이동할 CF 접점) + `segs` 반환:
+- **round**(기존): 사분타원 scoop. `curveAmountNorm`(0–1, 미지정=1)이 K=0.5523 스케일. **증분 1과
+  동일 결과**(curveAmountNorm 미지정 시 K 그대로).
+- **v**: `cfPt = FNPn + g·vPointDepthCm`(앞목 깊이에서 추가 하강한 V 꼭지), neckline = **직선 1개**
+  (SNP'→V끝점).
+- **square**: `corner = FNPn + p·squareWidthCm`(바닥-바깥 모서리), `cornerRadiusCm` 라운드
+  (`r = min(radius, width, lenUp/2)` overshoot 방지). neckline = **바닥 수평 line + 라운드 corner
+  path + 옆 수직 line**(최대 3 세그먼트, r=0 이면 2).
+- **boat**: 얕은 하강 bow. `curveAmountNorm`(미지정=0.5)이 dip 스케일, `Q = mid + g·(ca·|W|·0.3)`
+  를 지나는 **cubic path 1개**(quadratic→cubic 승격).
+- **★ cubic 은 항상 `{kind:"path",commands:[M,C]}`**(NOT `{kind:"cubic"}` — renderer/designLayout
+  `pointsOfPrim` 이 `.commands` 를 읽어 깨진다, 증분 이전 교훈).
+
+**네크라인 길이 합산 — `_neck` 표식**: 스퀘어는 네크라인이 **다세그먼트**라 `necklineLen`(center
+목점에 닿는 단일 seg 추적)이 undercount 한다. FNP·SNP 둘 다 일반 체인 점처럼 보여 위상만으로는
+경계를 못 나눈다 → `applyNeckline` 이 결과 네크라인 seg 마다 **내부 표식 `_neck=true`**(렌더·SV2
+무관 — designRenderer 는 edge/kind/commands/from/to 만 읽음, working.geometry 는 blockMaster
+snapshot 대상 아님)를 달고, `necklineLen` 은 표식 seg 합을 우선(없으면 원본 단일 추적 fallback).
+
+**UI (`js/ui.js`·`index.html`·`css`)**:
+- **기본형 카드**(`#necklineCards` role=radiogroup, `.neck-card[data-neck]` 5개) — `<select>` 대체.
+  선택 = `aria-pressed="true"`(cyan 강조), 값 진실은 DOM(카드 + 입력). `currentNeckType()`(pressed
+  카드 읽기)·`setNeckType(type)`(pressed 설정 + 행 표시).
+- **형태별 입력 행 표시/숨김**(`syncNecklineRows`): `data-neck-for`(common / "round boat" / v / square)로
+  현재 형태에 맞는 행만 표시, original 이면 전부 숨김. **곡선정도 행 최초 표시 시 빈 값이면 형태
+  기본값(round 1 / boat 0.5) 채움** — 빈 값=0=평평 방지(`readNumD` 도 같은 기본값으로 읽음).
+- `readBodyInputs` 가 형태별 입력(curveAmountNorm·vPointDepthCm·squareWidthCm·cornerRadiusCm)까지
+  읽어 `onApplyBodyLength` 이 `neckline.parameters` 에 전부 담는다. `committedNeckline`·
+  `updateDesignBodyPanel` 이 카드 pressed + 모든 형태별 입력 복원. `bodyStatusNote` 가 4형태 라벨.
+- DOM: `selNecklineType` 제거, `necklineCards`(1) + 형태별 입력 4개(inpNeckCurveAmount·inpNeckVDepth·
+  inpNeckSquareWidth·inpNeckCornerRadius) 추가. **id 56→60**.
+
+**검증(격리 origin 127.0.0.1:8420, storage 0, saves 0, console 0)** — 실브라우저 완주(원형 생성→
+완료→디자인 시작):
+- **V넥**: neckline 직선 1개, CF 접점=앞목+V끝점 깊이, reference·다트 불변, v 행만 표시. 스크린샷
+  (남색 working 이 회색 reference 위에 깊은 V).
+- **스퀘어**: neckline 3세그(line/path/line), `_neck` 합산으로 목선 길이 정확(14.9cm), **비누적
+  (재적용 동일)**, reference·다트 불변. 스크린샷(수평 바닥+라운드 모서리 스퀘어 네크라인).
+- **보트**: cubic path 1개 / **라운드**: path 1개(curveAmountNorm) / **원형 유지 초기화**: `_neck`
+  표식 0·형태별 행 전부 숨김·카드 original 복귀·"원형으로 복원됨". 전 형태 reference 불변.
+- 반응형(375px): 카드 5개 1행(351px)·가로 overflow 0·패널 밀도(입력 28px)와 일치(카드 27px).
+- 하네스 `designBodiceCheck` **171**(4f 신설 10: V/스퀘어/보트 형태별 입력·CF 접점 이동·세그먼트
+  종류·다트 불변). runAll 전체 통과, shape/perf 골든 diff 0. 캐시 `?v=2026081810`(designBodice·ui·css).
+
+**미구현(증분 3)**: 세부 수정(현재 parametric 네크라인을 boundary 패턴선으로 변환→designOutline
+재합성) + 모드 잠금(manual 후 파라미터 입력 잠금) + `기본형으로 돌아가기`(boundary 제거·parametric
+복귀). 스퀘어 top(SNP 근처) 모서리 라운드 / 보트·V 앞·뒤 별도 곡률은 실사용 검증 후 별도.
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
