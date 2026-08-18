@@ -360,23 +360,58 @@
   }
   // 라운드넥: 목너비(SNP 를 shoulder 방향)·앞/뒤목 깊이(FNP 를 grain 아래) 이동 후, FNP'(수평 접선)→
   // SNP'(수직 접선) 사분타원 scoop 으로 네크라인 교체. center/shoulder 의 FNP/SNP 끝점도 함께 이동.
-  // 원본 geometry outline 계약 {kind:"path",commands:[M,C]}. construction(다트) 불변.
-  function applyNeckline(piece, side, params) {
+  // 원본 geometry outline 계약 {kind:"path",commands:[M,C]}.
+  var _pathC = function (a, c1, c2, b) { return { kind: "path", commands: [{ type: "M", points: [{ x: a.x, y: a.y }] }, { type: "C", points: [{ x: c1.x, y: c1.y }, { x: c2.x, y: c2.y }, { x: b.x, y: b.y }] }] }; };
+  var _line = function (a, b) { return { kind: "line", from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } }; };
+  // 형태별 네크라인 세그먼트 + CF 접점(cfPt, center 끝점이 여기로 이동) 반환. g=아래 grain, p=cross(→side).
+  //   공통(FNPn=CF 깊이, SNPn=목너비)은 이미 반영. 형태별 입력은 그 위에 추가.
+  function buildNecklineShape(type, FNPn, SNPn, g, p, params) {
+    var W = dot(sub(SNPn, FNPn), p), D = dot(sub(FNPn, SNPn), g);   // cross·down 거리
+    var K = 0.5523;
+    if (type === "v") {
+      var vDepth = num0(params.vPointDepthCm);
+      var vTip = add(FNPn, mul(g, vDepth));                        // 앞목 깊이에서 추가 하강한 V 꼭지
+      return { cfPt: vTip, segs: [_line(vTip, SNPn)] };            // SNP'→V끝점 직선
+    }
+    if (type === "square") {
+      var width = num0(params.squareWidthCm), r = num0(params.cornerRadiusCm);
+      var corner = add(FNPn, mul(p, width));                       // 바닥-바깥 모서리
+      var toSNP = sub(SNPn, corner), lenUp = len(toSNP), up = norm(toSNP);
+      r = Math.max(0, Math.min(r, width, lenUp / 2));              // overshoot 방지
+      var A = add(corner, mul(p, -r)), B = add(corner, mul(up, r));   // 모서리 라운드 시작/끝
+      var segs = [];
+      if (len(sub(FNPn, A)) > EPS) segs.push(_line(FNPn, A));      // 바닥 수평
+      if (r > EPS) segs.push(_pathC(A, add(A, mul(p, r * K)), add(B, mul(sub(corner, B), K)), B));   // 라운드 모서리
+      else segs.push(_line(A, B));
+      if (len(sub(B, SNPn)) > EPS) segs.push(_line(B, SNPn));      // 옆 수직(→SNP')
+      return { cfPt: FNPn, segs: segs };
+    }
+    if (type === "boat") {
+      var caB = params.curveAmountNorm != null ? num0(params.curveAmountNorm) : 0.5;
+      var mid = mul(add(FNPn, SNPn), 0.5), Q = add(mid, mul(g, caB * Math.abs(W) * 0.3));   // 얕은 하강 bow
+      return { cfPt: FNPn, segs: [_pathC(FNPn, add(FNPn, mul(sub(Q, FNPn), 2 / 3)), add(SNPn, mul(sub(Q, SNPn), 2 / 3)), SNPn)] };
+    }
+    // round(기본): 사분타원 scoop. FNP' 수평 접선 · SNP' 수직 접선. curveAmountNorm(0–1)이 K 스케일.
+    var caR = params.curveAmountNorm != null ? num0(params.curveAmountNorm) : 1;
+    var kk = K * caR;
+    var c1 = add(FNPn, mul(p, kk * W)), c2 = add(SNPn, mul(g, kk * D));
+    return { cfPt: FNPn, segs: [_pathC(FNPn, c1, c2, SNPn)] };
+  }
+  // 네크라인 적용: 공통(목너비·깊이) 이동 후 형태별 seg 로 네크라인 교체. center/shoulder 끝점 함께
+  // 이동(FNP→cfPt, SNP→SNP'). construction(다트) 불변. 원본 geometry 불변(clone 작업본).
+  function applyNeckline(piece, side, type, params) {
     var neckW = num0(params.neckWidthCm), depth = num0(side === "front" ? params.frontDepthCm : params.backDepthCm);
-    var g = pieceFrame(piece.outline).g;             // 아래 grain
+    var fr = pieceFrame(piece.outline), g = fr.g, p = fr.p;
     var info = necklineInfo(piece.outline);
     var FNP = info.FNP, SNP = info.SNP;
-    var SNPn = add(SNP, mul(info.shoulderDir, neckW));   // 목너비(양수=어깨쪽=넓힘)
-    var FNPn = add(FNP, mul(g, depth));                  // 앞/뒤목 깊이(양수=아래=깊게)
-    var K = 0.5523;                                       // 사분타원 bezier 상수
-    var c1 = { x: FNPn.x + K * (SNPn.x - FNPn.x), y: FNPn.y };   // FNP' 에서 수평
-    var c2 = { x: SNPn.x, y: SNPn.y + K * (FNPn.y - SNPn.y) };   // SNP' 에서 수직
-    var round = { kind: "path", commands: [{ type: "M", points: [{ x: FNPn.x, y: FNPn.y }] }, { type: "C", points: [{ x: c1.x, y: c1.y }, { x: c2.x, y: c2.y }, { x: SNPn.x, y: SNPn.y }] }] };
-    var moves = [{ pt: FNP, d: sub(FNPn, FNP) }, { pt: SNP, d: sub(SNPn, SNP) }];
-    return {
-      outline: piece.outline.map(function (pr) { return pr === info.neckSeg ? round : movePrimPoints(pr, moves); }),
-      construction: piece.construction.map(function (pr) { return deepClone(pr); })
-    };
+    var SNPn = add(SNP, mul(info.shoulderDir, neckW));
+    var FNPn = add(FNP, mul(g, depth));
+    var shape = buildNecklineShape(type, FNPn, SNPn, g, p, params);
+    var moves = [{ pt: FNP, d: sub(shape.cfPt, FNP) }, { pt: SNP, d: sub(SNPn, SNP) }];
+    var outline = [];
+    // _neck: 결과 네크라인 세그먼트 표식(다세그먼트 스퀘어 길이 합산용). 렌더·SV2 무관(edge 아님).
+    piece.outline.forEach(function (pr) { if (pr === info.neckSeg) shape.segs.forEach(function (s) { s._neck = true; outline.push(s); }); else outline.push(movePrimPoints(pr, moves)); });
+    return { outline: outline, construction: piece.construction.map(function (pr) { return deepClone(pr); }) };
   }
 
   function computeGeometry(referenceGeometry, opts) {
@@ -393,12 +428,13 @@
     if (typeof wOff !== "number" || !isFinite(wOff)) fail("invalid-body-side-offset", wOff);
     if (typeof hOff !== "number" || !isFinite(hOff)) fail("invalid-body-side-offset", hOff);
     if (typeof curve !== "number" || !isFinite(curve) || curve < 0 || curve > 1) fail("invalid-body-curve", curve);
-    // 네크라인(parametric round). mode==="manual" / type==="original" / 없음이면 미적용(원본 목선 유지).
+    // 네크라인(parametric). mode==="manual" / type==="original" / 없음이면 미적용(원본 목선 유지).
     var neckline = (opts && opts.neckline) || null;
-    var applyNeck = !!(neckline && neckline.mode === "parametric" && neckline.type === "round");
+    var NECK_TYPES = { round: 1, v: 1, square: 1, boat: 1 };
+    var applyNeck = !!(neckline && neckline.mode === "parametric" && NECK_TYPES[neckline.type]);
     if (applyNeck) {
       var np = neckline.parameters || {};
-      ["neckWidthCm", "frontDepthCm", "backDepthCm"].forEach(function (k) { var v = np[k]; if (v != null && (typeof v !== "number" || !isFinite(v))) fail("invalid-neckline-param", k); });
+      ["neckWidthCm", "frontDepthCm", "backDepthCm", "vPointDepthCm", "squareWidthCm", "cornerRadiusCm", "curveAmountNorm"].forEach(function (k) { var v = np[k]; if (v != null && (typeof v !== "number" || !isFinite(v))) fail("invalid-neckline-param", k); });
     }
     if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck) return deepClone(referenceGeometry);
     // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
@@ -407,7 +443,7 @@
     var front = src.front, back = src.back;
     // 순서: 네크라인(위, 원본에서) → 몸판 형상(아래). 서로 disjoint 라 순서 무관하지만 네크라인을
     // 먼저 해 pieceFrame(center/waist/side)이 hem 전 단일 center edge 에서 동작하게 한다.
-    if (applyNeck) { front = applyNeckline(front, "front", neckline.parameters || {}); back = applyNeckline(back, "back", neckline.parameters || {}); }
+    if (applyNeck) { front = applyNeckline(front, "front", neckline.type, neckline.parameters || {}); back = applyNeckline(back, "back", neckline.type, neckline.parameters || {}); }
     return {
       front: shapePiece(front, delta, wOff, L, hOff, curve),
       back: shapePiece(back, delta, wOff, L, hOff, curve),

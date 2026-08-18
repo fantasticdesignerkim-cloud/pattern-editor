@@ -351,6 +351,9 @@
   // 한 piece 의 네크라인 호 길이: center 목점(top=FNP/BNP)에 닿는 edge 없는 outline seg.
   function necklineLen(geometry, piece) {
     const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
+    // parametric 결과: _neck 표식 세그먼트 합(스퀘어 등 다세그먼트). 없으면 원본 단일 네크라인 추적.
+    const marked = b.outline.filter(pr => pr._neck);
+    if (marked.length) return marked.reduce((s, pr) => s + primArcLen(pr), 0);
     const center = b.outline.find(pr => pr.edge === "center"); if (!center) return 0;
     const ce = primEnds(center); const FNP = ce[0].y < ce[1].y ? ce[0] : ce[1];
     const near = (a, c) => Math.hypot(a.x - c.x, a.y - c.y) < 0.02;
@@ -369,8 +372,43 @@
   function committedNeckline(project) {
     const n = project && project.working && project.working.parameters && project.working.parameters.neckline;
     const np = (n && n.parameters) || {};
-    const num = (k) => typeof np[k] === "number" ? np[k] : 0;
-    return { type: (n && n.type) || "original", W: num("neckWidthCm"), F: num("frontDepthCm"), B: num("backDepthCm") };
+    const type = (n && n.type) || "original";
+    const num = (k, d) => typeof np[k] === "number" ? np[k] : d;
+    return {
+      type: type, W: num("neckWidthCm", 0), F: num("frontDepthCm", 0), B: num("backDepthCm", 0),
+      // 곡선 정도(round/boat): 미저장이면 형태 기본값(round=1, boat=0.5)
+      CA: num("curveAmountNorm", type === "boat" ? 0.5 : 1),
+      VD: num("vPointDepthCm", 0), SW: num("squareWidthCm", 0), CR: num("cornerRadiusCm", 0)
+    };
+  }
+  // ── 네크라인 카드(기본형) ── aria-pressed 로 현재 형태 저장. 값의 진실은 DOM(카드+입력).
+  function currentNeckType() {
+    const cards = document.getElementById("necklineCards");
+    if (!cards) return "original";
+    const on = cards.querySelector('.neck-card[aria-pressed="true"]');
+    return on ? on.getAttribute("data-neck") : "original";
+  }
+  function setNeckType(type) {
+    const cards = document.getElementById("necklineCards");
+    if (!cards) return;
+    cards.querySelectorAll(".neck-card").forEach(c => c.setAttribute("aria-pressed", c.getAttribute("data-neck") === type ? "true" : "false"));
+    syncNecklineRows(type);
+  }
+  // 형태별 입력 행 표시/숨김. original 이면 전부 숨김. round/boat=곡선정도, v=V끝점, square=가로폭·모서리.
+  function syncNecklineRows(type) {
+    const cards = document.getElementById("necklineCards");
+    const panel = cards && cards.closest(".insp-body");
+    if (!panel) return;
+    panel.querySelectorAll("[data-neck-for]").forEach(r => {
+      const forTypes = r.getAttribute("data-neck-for").split(/\s+/);
+      const show = type !== "original" && (forTypes.indexOf("common") >= 0 || forTypes.indexOf(type) >= 0);
+      r.hidden = !show;
+      // 곡선 정도 행을 처음 표시할 때 비어 있으면 형태 기본값 채움(빈 값=0=평평 방지)
+      if (show && r.getAttribute("data-neck-for") === "round boat") {
+        const inp = document.getElementById("inpNeckCurveAmount");
+        if (inp && String(inp.value).trim() === "") inp.value = fmtL(type === "boat" ? 0.5 : 1);
+      }
+    });
   }
   // 앞·뒤 옆선 봉제 길이 + 차이(정합 검증) 문구. 차이 > 1cm 이면 주의.
   function sideLenNote(project) {
@@ -391,7 +429,8 @@
     if (W !== 0) parts.push("허리 " + offStr(W, "안쪽", "바깥"));
     if (H !== 0) parts.push("밑단 " + offStr(H, "안쪽", "바깥"));
     if (Cv > 0) parts.push("옆선 곡선 " + fmtL(Cv));
-    if (neckType === "round") parts.push("라운드넥");
+    const NECK_LABEL = { round: "라운드넥", v: "V넥", square: "스퀘어넥", boat: "보트넥" };
+    if (NECK_LABEL[neckType]) parts.push(NECK_LABEL[neckType]);
     return parts.length ? parts.join(" · ") + " · 세션 전용" : "여유량·길이·옆선 실루엣·네크라인으로 몸판을 조정합니다";
   }
   function noteForReason(reason) {
@@ -412,16 +451,27 @@
     const v = Number(raw);
     return { input: input, v: v, valid: isFinite(v) && v >= min && v <= max };
   }
+  // 빈 값이면 dflt(형태별 기본값). 그 외 [min,max] 유한.
+  function readNumD(id, min, max, dflt) {
+    const el = document.getElementById(id);
+    const raw = el ? String(el.value).trim() : "";
+    if (raw === "") return { input: el, v: dflt, valid: true };
+    const v = Number(raw);
+    return { input: el, v: v, valid: isFinite(v) && v >= min && v <= max };
+  }
   function readBodyInputs() {
     const ease = readNum("inpBodyBustEase", 0, 100), len = readNum("inpBodyHemExtension", 0, 100);
     const waist = readNum("inpBodyWaistOffset", -30, 30), hem = readNum("inpBodyHemOffset", -30, 30);
     const curve = readNum("inpBodySideCurve", 0, 1);
-    const nSel = document.getElementById("selNecklineType");
-    const neckType = nSel ? nSel.value : "original";
+    const neckType = currentNeckType();
     const nW = readNum("inpNeckWidth", -15, 15), nF = readNum("inpNeckFrontDepth", -10, 20), nB = readNum("inpNeckBackDepth", -10, 20);
+    // 형태별: 곡선정도 빈 값=형태 기본(round 1 / boat 0.5), V끝점·가로폭·모서리 빈 값=0
+    const nCA = readNumD("inpNeckCurveAmount", 0, 1, neckType === "boat" ? 0.5 : 1);
+    const nVD = readNum("inpNeckVDepth", 0, 20), nSW = readNum("inpNeckSquareWidth", 0, 20), nCR = readNum("inpNeckCornerRadius", 0, 10);
     return {
-      ease, len, waist, hem, curve, neckType, nW, nF, nB,
-      valid: ease.valid && len.valid && waist.valid && hem.valid && curve.valid && nW.valid && nF.valid && nB.valid
+      ease, len, waist, hem, curve, neckType, nW, nF, nB, nCA, nVD, nSW, nCR,
+      valid: ease.valid && len.valid && waist.valid && hem.valid && curve.valid &&
+        nW.valid && nF.valid && nB.valid && nCA.valid && nVD.valid && nSW.valid && nCR.valid
     };
   }
   // apply/reset 버튼 활성 상태만 갱신(값·note 미변경 — 성공/오류 문구 보존).
@@ -441,11 +491,12 @@
     const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
     setIf("inpBodyBustEase", cb.E); setIf("inpBodyHemExtension", cb.L);
     setIf("inpBodyWaistOffset", cb.W); setIf("inpBodyHemOffset", cb.H); setIf("inpBodySideCurve", cb.Cv);
-    // 네크라인 입력·형태 복원(포커스 중 안 덮음)
+    // 네크라인 형태(카드)·입력 복원(포커스 중 안 덮음)
     const cn = committedNeckline(project);
-    const nSel = document.getElementById("selNecklineType");
-    if (nSel && document.activeElement !== nSel) nSel.value = cn.type;
+    setNeckType(cn.type);
     setIf("inpNeckWidth", cn.W); setIf("inpNeckFrontDepth", cn.F); setIf("inpNeckBackDepth", cn.B);
+    setIf("inpNeckCurveAmount", cn.CA); setIf("inpNeckVDepth", cn.VD);
+    setIf("inpNeckSquareWidth", cn.SW); setIf("inpNeckCornerRadius", cn.CR);
     setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv, cn.type));
     sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
@@ -460,8 +511,11 @@
     const E = st.ease.v, L = st.len.v, W = st.waist.v, H = st.hem.v, Cv = st.curve.v;
     const nextParameters = structuredClone(project.working.parameters);
     nextParameters.body = Object.assign({}, nextParameters.body || {}, { bustEaseCm: E, hemExtensionBelowWaistCm: L, waistSideOffsetCm: W, hemSideOffsetCm: H, sideSeamCurve: Cv });
-    // 네크라인(parametric): 형태 + 공통 입력. manual 모드는 증분 3에서.
-    nextParameters.neckline = { mode: "parametric", type: st.neckType, parameters: { neckWidthCm: st.nW.v, frontDepthCm: st.nF.v, backDepthCm: st.nB.v } };
+    // 네크라인(parametric): 형태 + 공통 입력 + 형태별 입력. manual 모드는 증분 3에서.
+    nextParameters.neckline = { mode: "parametric", type: st.neckType, parameters: {
+      neckWidthCm: st.nW.v, frontDepthCm: st.nF.v, backDepthCm: st.nB.v,
+      curveAmountNorm: st.nCA.v, vPointDepthCm: st.nVD.v, squareWidthCm: st.nSW.v, cornerRadiusCm: st.nCR.v
+    } };
     let nextGeometry = null, reason = null;
     try { nextGeometry = window.designBodice.computeGeometry(project.referenceGeometry, nextParameters); }
     catch (e) { reason = (e && e.reason) || "compute-failed"; }
@@ -477,14 +531,17 @@
     const setBack = (st2, v) => { if (st2.input && document.activeElement !== st2.input) st2.input.value = fmtL(v); };
     setBack(st.ease, E); setBack(st.len, L); setBack(st.waist, W); setBack(st.hem, H); setBack(st.curve, Cv);
     setBack(st.nW, st.nW.v); setBack(st.nF, st.nF.v); setBack(st.nB, st.nB.v);
-    const necked = st.neckType === "round";
+    setBack(st.nCA, st.nCA.v); setBack(st.nVD, st.nVD.v); setBack(st.nSW, st.nSW.v); setBack(st.nCR, st.nCR.v);
+    const necked = st.neckType !== "original";
     setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0 && !necked) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv, st.neckType));
     sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
   }
   function onResetBodyLength() {
-    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve", "inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
-    const nSel = document.getElementById("selNecklineType"); if (nSel) nSel.value = "original";
+    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve",
+      "inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth", "inpNeckCurveAmount", "inpNeckVDepth", "inpNeckSquareWidth", "inpNeckCornerRadius"]
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
+    setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }
 
@@ -566,14 +623,17 @@
     const resetBody = document.getElementById("btnResetBodyLength");
     if (resetBody) resetBody.addEventListener("click", () => { if (!resetBody.disabled) onResetBodyLength(); });
     // 몸판 입력 넷 모두(여유량·길이·허리/밑단 옆선): 입력 중엔 버튼 활성만 갱신, Enter 로 적용.
-    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve", "inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth"].forEach(id => {
+    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve",
+      "inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth", "inpNeckCurveAmount", "inpNeckVDepth", "inpNeckSquareWidth", "inpNeckCornerRadius"].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.addEventListener("input", syncBodyButtons);
       el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyBodyLength(); } });
     });
-    const neckSel = document.getElementById("selNecklineType");
-    if (neckSel) neckSel.addEventListener("change", syncBodyButtons);
+    // 네크라인 기본형 카드: 클릭 = 형태 선택(+형태별 입력 행 표시). 값은 적용 버튼에서 커밋.
+    const neckCards = document.getElementById("necklineCards");
+    if (neckCards) neckCards.querySelectorAll(".neck-card").forEach(c =>
+      c.addEventListener("click", () => { setNeckType(c.getAttribute("data-neck")); syncBodyButtons(); }));
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");

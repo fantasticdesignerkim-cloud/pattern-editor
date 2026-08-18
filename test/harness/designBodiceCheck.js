@@ -339,6 +339,40 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
   }
   // 비수치 목너비 → invalid-neckline-param
   throws(() => DB.computeGeometry(ref, nl({ neckWidthCm: NaN })), "invalid-neckline-param", "4e: 비수치 파라미터 거부");
+
+  // 4f. 형태별(V / 스퀘어 / 보트): 공통 입력(목너비·앞목깊이) + 형태별 입력. 다트 불변·reference 분리.
+  const nlT = (type, params) => ({ neckline: { mode: "parametric", type, parameters: params } });
+  const frontCenterNeck = (r) => { const c = edgePrims(r.front.outline, "center")[0]; return near(c.from.y, 38) ? c.to : c.from; };
+  const neckSegs = (r) => r.front.outline.filter(pr => !("edge" in pr));   // edge 없는 = neckline/shoulder
+  // V넥: 앞목 깊이 2 + V끝점 깊이 4 → CF 접점 = FNP' 에서 4 더 내려간 (47.5, 5+2+4=11). neckline = 직선 1개.
+  {
+    const r = DB.computeGeometry(ref, nlT("v", { neckWidthCm: 0, frontDepthCm: 2, backDepthCm: 1, vPointDepthCm: 4 }));
+    const cf = frontCenterNeck(r);
+    ok(near(cf.x, 47.5) && near(cf.y, 5 + 2 + 4), "4f: V넥 CF 접점 = 앞목+V끝점 깊이(11)");
+    const vLine = neckSegs(r).find(pr => pr.kind === "line" && (near(pr.from.y, 11) || near(pr.to.y, 11)));
+    ok(!!vLine, "4f: V넥 neckline = 직선(V끝점→SNP')");
+    ok(eq(r.front.construction, ref.front.construction), "4f: V넥 다트 불변");
+    ok(!sharesRef(r, ref), "4f: V넥 reference 분리");
+  }
+  // 스퀘어: 앞목 깊이 2, 가로폭 5, 모서리 1 → 바닥 수평선(y=7) + 라운드 + 옆선. neckline seg ≥ 2.
+  {
+    const r = DB.computeGeometry(ref, nlT("square", { neckWidthCm: 0, frontDepthCm: 2, backDepthCm: 1, squareWidthCm: 5, cornerRadiusCm: 1 }));
+    const cf = frontCenterNeck(r);
+    ok(near(cf.x, 47.5) && near(cf.y, 7), "4f: 스퀘어 CF 접점 = FNP'(앞목 깊이, 7)");
+    const segs = neckSegs(r);
+    const flat = segs.find(pr => pr.kind === "line" && near(pr.from.y, 7) && near(pr.to.y, 7));   // 바닥 수평
+    ok(!!flat && segs.length >= 3, "4f: 스퀘어 = 바닥 수평선 + 세그먼트 다수");
+    ok(eq(r.front.construction, ref.front.construction), "4f: 스퀘어 다트 불변");
+  }
+  // 보트: 얕은 bow(cubic path 1개), CF 접점 = FNP'.
+  {
+    const r = DB.computeGeometry(ref, nlT("boat", { neckWidthCm: 0, frontDepthCm: 2, backDepthCm: 1, curveAmountNorm: 0.5 }));
+    const cf = frontCenterNeck(r);
+    ok(near(cf.x, 47.5) && near(cf.y, 7), "4f: 보트 CF 접점 = FNP'(7)");
+    const bow = neckSegs(r).find(pr => pr.kind === "path" && near(pr.commands[0].points[0].y, 7, 1e-3));
+    ok(!!bow, "4f: 보트 neckline = cubic path");
+    ok(eq(r.front.construction, ref.front.construction), "4f: 보트 다트 불변");
+  }
 }
 
 // 5. topology / 수치 실패 계약

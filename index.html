@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026081802">
+<link rel="stylesheet" href="css/style.css?v=2026081810">
 </head>
 <body>
 
@@ -175,14 +175,23 @@
         <div class="row"><label for="inpBodyHemOffset">밑단 옆선 이동 (cm)</label><input id="inpBodyHemOffset" type="number" min="-30" max="30" step="0.1"></div>
         <!-- 옆선 곡선화: 진동밑→허리→밑단 꺾임을 두 cubic 으로 부드럽게(0=직선, 1=자동 곡률). hem 있을 때만. -->
         <div class="row"><label for="inpBodySideCurve">옆선 곡선화 (0–1)</label><input id="inpBodySideCurve" type="number" min="0" max="1" step="0.05"></div>
-        <!-- 네크라인(parametric): 형태 선택 + 공통 입력(목너비·앞목·뒤목 깊이). 원본 reference 에서 비누적
-             재계산. 증분 1은 라운드넥. 형태별 입력·카드 UI·직접편집은 증분 2·3. -->
+        <!-- 네크라인(parametric): 기본형 카드 선택 + 공통 입력(목너비·앞목·뒤목 깊이) + 형태별 입력.
+             원본 reference 에서 비누적 재계산. 형태: 원형유지/라운드/V넥/스퀘어/보트. 직접편집은 증분 3. -->
         <div class="row" style="margin-top:8px"><label>네크라인</label></div>
-        <div class="row"><label for="selNecklineType">형태</label>
-          <select id="selNecklineType"><option value="original">원형 유지</option><option value="round">라운드넥</option></select></div>
-        <div class="row"><label for="inpNeckWidth">목너비 (cm)</label><input id="inpNeckWidth" type="number" min="-15" max="15" step="0.1"></div>
-        <div class="row"><label for="inpNeckFrontDepth">앞목 깊이 (cm)</label><input id="inpNeckFrontDepth" type="number" min="-10" max="20" step="0.1"></div>
-        <div class="row"><label for="inpNeckBackDepth">뒤목 깊이 (cm)</label><input id="inpNeckBackDepth" type="number" min="-10" max="20" step="0.1"></div>
+        <div class="neck-cards" id="necklineCards" role="radiogroup" aria-label="네크라인 형태">
+          <button type="button" class="neck-card" data-neck="original" aria-pressed="true">원형 유지</button>
+          <button type="button" class="neck-card" data-neck="round" aria-pressed="false">라운드</button>
+          <button type="button" class="neck-card" data-neck="v" aria-pressed="false">V넥</button>
+          <button type="button" class="neck-card" data-neck="square" aria-pressed="false">스퀘어</button>
+          <button type="button" class="neck-card" data-neck="boat" aria-pressed="false">보트</button>
+        </div>
+        <div class="row" data-neck-for="common" hidden><label for="inpNeckWidth">목너비 (cm)</label><input id="inpNeckWidth" type="number" min="-15" max="15" step="0.1"></div>
+        <div class="row" data-neck-for="common" hidden><label for="inpNeckFrontDepth">앞목 깊이 (cm)</label><input id="inpNeckFrontDepth" type="number" min="-10" max="20" step="0.1"></div>
+        <div class="row" data-neck-for="common" hidden><label for="inpNeckBackDepth">뒤목 깊이 (cm)</label><input id="inpNeckBackDepth" type="number" min="-10" max="20" step="0.1"></div>
+        <div class="row" data-neck-for="round boat" hidden><label for="inpNeckCurveAmount">곡선 정도 (0–1)</label><input id="inpNeckCurveAmount" type="number" min="0" max="1" step="0.05"></div>
+        <div class="row" data-neck-for="v" hidden><label for="inpNeckVDepth">V끝점 깊이 (cm)</label><input id="inpNeckVDepth" type="number" min="0" max="20" step="0.1"></div>
+        <div class="row" data-neck-for="square" hidden><label for="inpNeckSquareWidth">가로폭 (cm)</label><input id="inpNeckSquareWidth" type="number" min="0" max="20" step="0.1"></div>
+        <div class="row" data-neck-for="square" hidden><label for="inpNeckCornerRadius">모서리 둥글기 (cm)</label><input id="inpNeckCornerRadius" type="number" min="0" max="10" step="0.1"></div>
         <div class="row" style="gap:4px">
           <button class="btn action-primary" id="btnApplyBodyLength">적용</button>
           <button class="btn" id="btnResetBodyLength">0으로 초기화</button>
@@ -265,7 +274,7 @@
 <!-- 디자인 geometry renderer D2(builder만): window.designRenderer. render.js hook·append 없음. -->
 <script src="js/designRenderer.js?v=2026080401"></script>
 <!-- DB1a 몸판 grain-기준 길이 연장 순수 변환: window.designBodice.computeGeometry. UI·render hook·working 대입 없음. -->
-<script src="js/designBodice.js?v=2026081801"></script>
+<script src="js/designBodice.js?v=2026081810"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026081305"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
@@ -274,7 +283,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026081803"></script>
+<script src="js/ui.js?v=2026081810"></script>
 
 </body>
 </html>
