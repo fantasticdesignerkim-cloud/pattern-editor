@@ -2737,6 +2737,59 @@ parametric·원본 fallback 모두 같은 표기. 카라: 전체 카라=완성 �
 **미구현(증분 3)**: 세부 수정(현재 parametric 네크라인을 boundary 패턴선으로 변환→designOutline
 재합성) + 모드 잠금(manual 후 파라미터 입력 잠금) + `기본형으로 돌아가기`(boundary 제거·parametric
 복귀). 스퀘어 top(SNP 근처) 모서리 라운드 / 보트·V 앞·뒤 별도 곡률은 실사용 검증 후 별도.
+→ **✅ 증분 3 완료(2026-08, 아래 섹션).**
+
+## ✅ Design 네크라인 증분 3 (2026-08) — parametric → manual 원자적 전환(세부 수정)
+
+증분 2 위에, **현재 parametric 네크라인을 편집 가능한 boundary patternLine 으로 변환(manual)**
+하고, 카드·수치 입력을 잠그며, `기본형으로 돌아가기`로 복귀한다. render.js·엔진 무변경(사용자
+확정: **기존 designOutline 오버레이 모델 유지** — working.geometry 는 원본 목선, designOutline 이
+변환된 목선을 에메랄드로 오버레이, 사용자 boundary 와 동일 방식).
+
+**변환 (`세부 수정`, `designLineTool.convertNecklineToBoundary(neckline)`)**
+- `designBodice.necklineSegments(ref, neckline)`(신설 순수 export) → 앞·뒤 네크라인 세그먼트(geometry
+  포맷). `geomToPatternSegments`(신설, export)로 geometry `{kind:"path"}` → patternLine
+  `{kind:"cubic"}` (★ 포맷 다름 — 증분 이전 교훈), `{kind:"line"}` 유지.
+- **manual candidate geometry**: `neckline.mode="manual"` 로 재계산 → **원본 목선 복귀**(boundary 가
+  원본 arc 를 대체하게). parametric 목선을 그대로 두면 boundary 끝점이 목선 위라 퇴화한다.
+- **원자적 dry-run**: 앞·뒤 각각 candidate 원본 ring 에 `replaceArcOnRing` 검증 → **둘 다 유효할
+  때만** 진행(하나라도 실패 시 `{ok:false, reason}`, **patternLines·geometry·mode·designOutline 전부
+  불변** — 실측: `frontDepth=-9` 극단값 → `"대체선 시작점이 경계에서 벗어남"`, 상태 완전 불변).
+- **커밋(로컬 조립 → 일괄 대입, 진짜 원자적)**: patternLines += 자동 boundary 2개(role:"boundary") ·
+  geometry=candidate(manual) · parameters.neckline={mode:"manual", type, parameters,
+  **boundaryLineIds:{front,back}**} · designOutline=`composeWith(candGeom, newLines)`(기존 사용자
+  boundary 와 겹치면 여기서도 실패→중단).
+
+**복귀 (`기본형으로 돌아가기`, `revertNecklineToParametric`)**: `boundaryLineIds` 의 두 선만 제거
+(**다른 사용자 선 보존** — 실측: user guide line-99 유지) → mode="parametric"(type/params 복원) →
+geometry 재계산 → 남은 사용자 boundary 재합성(없으면 designOutline=null). 원자적.
+
+**잠금·상태 (ui.js `syncNecklineModeUI`)**: manual 이면 `.neck-card` 5개 + 네크라인 수치 입력 7개
+`disabled`, `기본형으로 돌아가기` 노출·`세부 수정` 숨김, **몸판 리셋 버튼 disabled**(먼저 복귀 후
+리셋). parametric 이면 역(세부 수정은 **적용된 형태**=`committed.type!=="original"` 일 때만 활성).
+
+**manual 목둘레 (`necklineBoundaryLen`)**: 파라미터가 아니라 **자동 네크라인 boundary 선 세그먼트**
+(=designOutline 에 스플라이스된 목선)를 `flattenLine` 으로 측정 → **anchor·핸들 편집이 반영**
+(실측: V끝점 +3cm → 16.07→18.71cm). `neckLenNote` 가 mode 로 분기. 표기는 증분 2의 4값 계약 유지.
+
+**몸판 형상 적용(manual 유지)**: `onApplyBodyLength` 이 committed mode==="manual" 이면 neckline 을
+입력에서 재구성하지 않고 **기존 manual 네크라인 보존** + 적용 후 `recomposeDesignOutline`(무효화
+대신 재합성). 실측: 엉덩이 길이 10 적용 → 여전히 manual·boundaryLineIds 유지·designOutline 재합성.
+
+**anchor·핸들·snap**: boundary 는 일반 patternLine 이라 **기존 선택·편집 도구(증분 4·5·6)를 그대로
+재사용**(별도 편집 UI 없음).
+
+**검증(격리 origin, storage 0, saves 0, console 0)**: 위 9개 계약 실측 — 변환(mode·2 boundary·
+designOutline·잠금·length 보존 28/56cm) / 원자적 실패(상태 불변) / manual body-apply(유지+재합성) /
+boundary 편집→length 반영 / 복귀(자동만 제거·user line 보존·parametric 복원). 스크린샷(원본 round
+목선 위 에메랄드 V designOutline 오버레이). reference frozen 전 구간 불변. 하네스
+`designLineToolCheck` **103**(18 신설 5: geomToPatternSegments line→line·path C→cubic·다중 C).
+runAll 전체 통과, shape/perf 골든 diff 0. **DOM id 60→63**(btnNeckManual·btnNeckRevert·
+designNeckModeNote). 캐시 `?v=2026081920`(designBodice·designLineTool·ui).
+
+**미구현/경계**: 스퀘어 top 모서리 라운드 / 보트·V 앞뒤 별도 곡률 / 소매 네크라인 / manual 편집
+결과를 실제 재단 outline 으로 확정 — 별도 사양·승인 후. `working.designOutline` 은 여전히 파생
+미리보기(원본 geometry 미대체).
 
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
