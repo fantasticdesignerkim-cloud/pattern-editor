@@ -351,9 +351,9 @@
   // 한 piece 의 네크라인 호 길이: center 목점(top=FNP/BNP)에 닿는 edge 없는 outline seg.
   function necklineLen(geometry, piece) {
     const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
-    // parametric 결과: _neck 표식 세그먼트 합(스퀘어 등 다세그먼트). 없으면 원본 단일 네크라인 추적.
-    const marked = b.outline.filter(pr => pr._neck);
-    if (marked.length) return marked.reduce((s, pr) => s + primArcLen(pr), 0);
+    // parametric 결과: computeGeometry 가 designBodice.measureNeckline 으로 측정해 실은 piece 스칼라
+    // (다세그먼트 스퀘어 포함, primitive 표식 없음). 없으면(원본/미적용) center 목점 단일 seg 추적.
+    if (typeof b.necklineLenCm === "number") return b.necklineLenCm;
     const center = b.outline.find(pr => pr.edge === "center"); if (!center) return 0;
     const ce = primEnds(center); const FNP = ce[0].y < ce[1].y ? ce[0] : ce[1];
     const near = (a, c) => Math.hypot(a.x - c.x, a.y - c.y) < 0.02;

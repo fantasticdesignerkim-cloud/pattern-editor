@@ -373,6 +373,21 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
     ok(!!bow, "4f: 보트 neckline = cubic path");
     ok(eq(r.front.construction, ref.front.construction), "4f: 보트 다트 불변");
   }
+
+  // 4g. 네크라인 길이 = piece 스칼라(measureNeckline). primitive 에 _neck 표식 안 남김.
+  {
+    // 스퀘어(다세그먼트) — 표식 누출 없이 정확한 합
+    const r = DB.computeGeometry(ref, nlT("square", { neckWidthCm: 1, frontDepthCm: 3, backDepthCm: 1.5, squareWidthCm: 5, cornerRadiusCm: 1.5 }));
+    const anyMark = ["front", "back"].some(pc => r[pc].outline.some(pr => "_neck" in pr));
+    ok(!anyMark, "4g: primitive 에 _neck 표식 없음(누출 방지)");
+    ok(typeof r.front.necklineLenCm === "number" && r.front.necklineLenCm > 0, "4g: front 네크라인 길이 = piece 스칼라");
+    ok(typeof r.back.necklineLenCm === "number" && r.back.necklineLenCm > 0, "4g: back 네크라인 길이 = piece 스칼라");
+    // measureNeckline 순수 헬퍼 export + 값 일치(라운드 단일 seg 로 직접 대조)
+    ok(typeof DB.measureNeckline === "function", "4g: measureNeckline 순수 헬퍼 export");
+    // 원형 유지(미적용) = 스칼라 없음 → UI 는 원본 단일 seg 추적으로 fallback
+    const r0 = DB.computeGeometry(ref, { neckline: { mode: "parametric", type: "original", parameters: {} } });
+    ok(r0.front.necklineLenCm == null, "4g: 미적용 시 necklineLenCm 없음(원본 fallback)");
+  }
 }
 
 // 5. topology / 수치 실패 계약

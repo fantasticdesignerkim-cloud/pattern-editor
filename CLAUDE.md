@@ -2691,11 +2691,22 @@ grain, p=cross(center→side). 공통(FNPn=CF 깊이, SNPn=목너비)은 `applyN
 - **★ cubic 은 항상 `{kind:"path",commands:[M,C]}`**(NOT `{kind:"cubic"}` — renderer/designLayout
   `pointsOfPrim` 이 `.commands` 를 읽어 깨진다, 증분 이전 교훈).
 
-**네크라인 길이 합산 — `_neck` 표식**: 스퀘어는 네크라인이 **다세그먼트**라 `necklineLen`(center
-목점에 닿는 단일 seg 추적)이 undercount 한다. FNP·SNP 둘 다 일반 체인 점처럼 보여 위상만으로는
-경계를 못 나눈다 → `applyNeckline` 이 결과 네크라인 seg 마다 **내부 표식 `_neck=true`**(렌더·SV2
-무관 — designRenderer 는 edge/kind/commands/from/to 만 읽음, working.geometry 는 blockMaster
-snapshot 대상 아님)를 달고, `necklineLen` 은 표식 seg 합을 우선(없으면 원본 단일 추적 fallback).
+**네크라인 길이 합산 — piece 스칼라(`measureNeckline`, 2026-08 정리)**: 스퀘어는 네크라인이
+**다세그먼트**라 `necklineLen`(center 목점 단일 seg 추적)이 undercount 한다. FNP·SNP 둘 다 일반
+체인 점처럼 보여 위상만으로 경계를 못 나눈다. **★ 초기 구현은 primitive 에 `_neck=true` 표식을
+달았으나 폐기** — boundary/designOutline 복제 시 내부 표식이 파생 geometry 로 누출될 수 있다
+(사용자 지적). 대신 **`buildNecklineShape` 가 만든 세그먼트를 `applyNeckline` 이 순수 헬퍼
+`designBodice.measureNeckline(segs)`(공용 `flattenPrim` adaptive de Casteljau 로 line·cubic 측정)
+으로 바로 재고, 그 길이를 최종 piece 의 스칼라 필드 `piece.necklineLenCm` 로 싣는다** — primitive
+가 아니라 piece 레벨이라 boundary/designOutline 은 `piece.outline` 배열만 복제하므로 안 샌다.
+몸판 shapePiece 는 네크라인을 안 건드리므로 측정은 shapePiece 전에 확보해 후 attach.
+`necklineLen`(UI)은 `typeof piece.necklineLenCm === "number"` 면 그 값, 없으면(원본/미적용) 원본
+단일 seg 추적 fallback. **최종 working.geometry primitive 에 `_neck` 없음(하네스 4g 로 고정).**
+
+**목둘레 표시(반쪽 패턴 계약)**: `#designNeckLenNote` 는 4값을 구분 표기 —
+**앞목선(반쪽)** / **뒤목선(반쪽)** / **반패턴 합계**(=앞반+뒤반) / **완성 목둘레**(=반패턴 합계×2).
+parametric·원본 fallback 모두 같은 표기. 카라: 전체 카라=완성 목둘레 / 중심 접어재단 반쪽 카라
+=반패턴 합계.
 
 **UI (`js/ui.js`·`index.html`·`css`)**:
 - **기본형 카드**(`#necklineCards` role=radiogroup, `.neck-card[data-neck]` 5개) — `<select>` 대체.
@@ -2719,8 +2730,9 @@ snapshot 대상 아님)를 달고, `necklineLen` 은 표식 seg 합을 우선(�
 - **보트**: cubic path 1개 / **라운드**: path 1개(curveAmountNorm) / **원형 유지 초기화**: `_neck`
   표식 0·형태별 행 전부 숨김·카드 original 복귀·"원형으로 복원됨". 전 형태 reference 불변.
 - 반응형(375px): 카드 5개 1행(351px)·가로 overflow 0·패널 밀도(입력 28px)와 일치(카드 27px).
-- 하네스 `designBodiceCheck` **171**(4f 신설 10: V/스퀘어/보트 형태별 입력·CF 접점 이동·세그먼트
-  종류·다트 불변). runAll 전체 통과, shape/perf 골든 diff 0. 캐시 `?v=2026081810`(designBodice·ui·css).
+- 하네스 `designBodiceCheck` **176**(4f 10: V/스퀘어/보트 형태별 입력·CF 접점·세그먼트 종류·다트
+  불변 / 4g 5: `_neck` 미누출·piece 스칼라 길이·measureNeckline export·미적용 fallback). runAll 전체
+  통과, shape/perf 골든 diff 0. 캐시 `?v=2026081810`(css)·`?v=2026081910`(designBodice·ui).
 
 **미구현(증분 3)**: 세부 수정(현재 parametric 네크라인을 boundary 패턴선으로 변환→designOutline
 재합성) + 모드 잠금(manual 후 파라미터 입력 잠금) + `기본형으로 돌아가기`(boundary 제거·parametric

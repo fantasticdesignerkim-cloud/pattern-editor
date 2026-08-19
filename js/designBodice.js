@@ -409,9 +409,17 @@
     var shape = buildNecklineShape(type, FNPn, SNPn, g, p, params);
     var moves = [{ pt: FNP, d: sub(shape.cfPt, FNP) }, { pt: SNP, d: sub(SNPn, SNP) }];
     var outline = [];
-    // _neck: 결과 네크라인 세그먼트 표식(다세그먼트 스퀘어 길이 합산용). 렌더·SV2 무관(edge 아님).
-    piece.outline.forEach(function (pr) { if (pr === info.neckSeg) shape.segs.forEach(function (s) { s._neck = true; outline.push(s); }); else outline.push(movePrimPoints(pr, moves)); });
-    return { outline: outline, construction: piece.construction.map(function (pr) { return deepClone(pr); }) };
+    piece.outline.forEach(function (pr) { if (pr === info.neckSeg) shape.segs.forEach(function (s) { outline.push(s); }); else outline.push(movePrimPoints(pr, moves)); });
+    // 네크라인 길이는 방금 만든 세그먼트를 바로 측정(순수). primitive 에 표식을 남기지 않는다 —
+    // 남기면 boundary/designOutline 복제 시 파생 geometry 로 내부 표식이 누출된다.
+    return { outline: outline, construction: piece.construction.map(function (pr) { return deepClone(pr); }), necklineLenCm: measureNeckline(shape.segs) };
+  }
+  // buildNecklineShape 가 만든 네크라인 세그먼트의 봉제 호 길이(순수). flattenPrim(공용 adaptive
+  // de Casteljau)으로 line·cubic 모두 측정.
+  function measureNeckline(segs) {
+    var total = 0;
+    segs.forEach(function (pr) { flattenPrim(pr).forEach(function (e) { total += len(sub(e[1], e[0])); }); });
+    return total;
   }
 
   function computeGeometry(referenceGeometry, opts) {
@@ -444,13 +452,19 @@
     // 순서: 네크라인(위, 원본에서) → 몸판 형상(아래). 서로 disjoint 라 순서 무관하지만 네크라인을
     // 먼저 해 pieceFrame(center/waist/side)이 hem 전 단일 center edge 에서 동작하게 한다.
     if (applyNeck) { front = applyNeckline(front, "front", neckline.type, neckline.parameters || {}); back = applyNeckline(back, "back", neckline.type, neckline.parameters || {}); }
+    // 네크라인 길이(측정값)는 shapePiece(몸판 변형은 네크라인을 안 건드림) 전에 확보해 최종 piece 의
+    // 스칼라 필드로 싣는다 — primitive 가 아니라 piece 레벨이라 boundary/designOutline 복제로 안 샌다.
+    var fLen = front.necklineLenCm, bLen = back.necklineLenCm;
+    var fPiece = shapePiece(front, delta, wOff, L, hOff, curve);
+    var bPiece = shapePiece(back, delta, wOff, L, hOff, curve);
+    if (fLen != null) fPiece.necklineLenCm = fLen;
+    if (bLen != null) bPiece.necklineLenCm = bLen;
     return {
-      front: shapePiece(front, delta, wOff, L, hOff, curve),
-      back: shapePiece(back, delta, wOff, L, hOff, curve),
+      front: fPiece, back: bPiece,
       shared: src.shared,   // 값·순서 유지(비대상)
       sleeve: src.sleeve
     };
   }
 
-  window.designBodice = Object.freeze({ computeGeometry: computeGeometry });
+  window.designBodice = Object.freeze({ computeGeometry: computeGeometry, measureNeckline: measureNeckline });
 })();
