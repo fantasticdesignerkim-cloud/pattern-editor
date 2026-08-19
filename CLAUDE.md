@@ -2845,6 +2845,61 @@ saves/console 0. 캐시 `?v=2026081931`(designLineTool)·`?v=2026081930`(ui). ex
 
 **첫 블라우스가 앞여밈 디자인인지 확정된 뒤** 다음 구현에 착수한다. 그 전까지 코드·shape 골든·엔진
 무변경.
+> **✅ 사용자 확정: 앞이 열리는 블라우스** → 앞중심 여밈(placket) 먼저(아래 섹션), 이후 몸판 확정.
+
+## ✅ Design 앞중심 여밈(front placket) v1 (2026-08) — computeGeometry 밖의 별도 파생
+
+앞이 열리는 블라우스 확정 → 앞판 CF 에 컷온 안단 여밈을 붙인다. **핵심 아키텍처(사용자 확정)**:
+여밈을 `computeGeometry` **안에서 만들지 않는다** — manual 네크라인은 `working.geometry` 가 아니라
+`designOutline` 에 있으므로, 여밈 위쪽 시작점은 **현재 유효 앞판 외곽**을 기준으로 해야 한다:
+```
+effectiveFrontOutline = working.designOutline?.front?.outline ?? working.geometry.front.outline
+```
+따라서 여밈은 **몸판 계산 뒤 별도 파생 단계**이고 결과는 `working.frontPlacket` 에 저장 —
+원본 geometry·designOutline 불변.
+
+**확정 사양**: 여밈분 기본 `1.75cm`(각 앞판이 CF 바깥으로), 컷온 안단, 안단 폭 기본 `4cm`,
+목~밑단 전체 길이, **단추·단춧구멍 배치는 후속**. 앞중심 기준선:
+```
+기존 CF  ─ +overlap →  완성 앞단선·접힘선  ─ +facing →  안단 바깥 재단선
+(단추 중심)          (foldX, construction)          (cutX, outline 끝 — 최종 외곽은 안단까지 확장)
+```
+
+**순수 모듈 `js/designPlacket.js`** (`window.designPlacket.compute(effectiveFrontOutline, params)`):
+- CF 앞단 = **앞판 max x 의 수직 모서리**(품·여유량이 옆선을 −x 로 넓히므로 CF 가 항상 max x).
+  그 x 의 점들 중 T=neck-CF(min y)·B=hem-CF(max y). `endpointsOf` 가 line/cubic(designOutline)/
+  path(working.geometry) **세 포맷 모두** on-curve 끝점 추출(유효 외곽 두 포맷 공용).
+- 폐곡선 스트립 outline(상단 수평 T→cutX / 안단 바깥 세로 / 밑단 수평 / CF 복귀) +
+  construction(접힘선 foldX·CF cfX). 입력 불변. `no-outline/invalid-overlap/invalid-facing/
+  no-placket(0/0)/no-cf-edge/degenerate-cf-edge/unsupported-length-mode` 실패 계약.
+
+**파생 파이프라인 (ui.js)**: `computeFrontPlacket(project, params)` 이 effectiveFrontOutline →
+`designPlacket.compute` → 성공 시 `working.frontPlacket={parameters,outline,construction}`,
+**실패 시 null(stale 유지 금지)**. `refreshFrontPlacket` 이 저장 파라미터로 **유효 외곽 변경 때마다
+재파생**: `onApplyBodyLength`(몸판)·`onNeckManual`/`onNeckRevert`(네크라인 mode)·designLineTool
+`recomposeAfterBoundaryEdit`(경계 편집, `window.refreshFrontPlacket` 훅) 후. `여밈 적용`·`여밈 제거`
+버튼. 잘못된 입력(범위 밖)은 compute 전 차단(이전 여밈 유지), compute 실패는 clear.
+
+**★ 목둘레 길이 계약**: 여밈 상단 수평·안단은 **목둘레에 미포함**. `neckLenNote` 는 여전히 의복
+네크라인(parametric=`necklineLenCm` / manual=boundary)만 재고, 여밈은 `working.frontPlacket`(별도)
+이라 자동 제외. 카라에서 카라 끝점을 앞단까지 연장할지는 별도 결정(오염 없음).
+
+**렌더 (render.js `_appendPlacket`)**: design 분기에서 designOutline 다음에, 앞판 offset transform
+동승. outline=앰버 실선(`.design-placket-outline` #B45309), construction=앰버 점선. 라이브 원형
+경로·shape/perf 골든 무변경.
+
+**검증(격리 origin, storage/saves/console 0)**: 파생 성공(cutX=CF+1.75+4=53.25·outline 4·
+construction 2)·**목둘레 미포함**·geometry·reference 불변·스크린샷(CF 앰버 스트립). 재파생: 엉덩이
+길이 12 → 밑단 따라 botY 38→50 / 네크라인 manual 변환 → **designOutline 기준 재파생**(cutX 53.25) /
+revert → geometry 기준 재파생 / **경계 편집(CF 점 +3) → 여밈 topY 6.07→9.07**(refreshFrontPlacket
+훅). clear·범위 밖 입력 차단(이전 유지). 하네스 `designPlacketCheck` **19**(두 포맷·실패 계약·입력
+불변·여밈만/안단만). runAll 전체 통과, shape/perf 골든 diff 0. **DOM id 63→68**(inpPlacketOverlap·
+inpPlacketFacing·btnApplyPlacket·btnClearPlacket·designPlacketNote). 캐시 `?v=2026082001`
+(designPlacket·render·ui·css).
+
+**미구현/경계**: 단추·단춧구멍 배치(개수·간격·위치) / 별도 단추단 / 부분 여밈(플래킷 오프닝) /
+`working.frontPlacket` 을 실제 재단 조각으로 확정 — 전부 별도 사양·승인 후. 카라는 몸판 네크라인
+최종 확정 뒤. `working.frontPlacket` 은 파생 미리보기(원본 geometry 미대체).
 
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
