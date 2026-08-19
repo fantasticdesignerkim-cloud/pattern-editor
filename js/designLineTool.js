@@ -608,6 +608,7 @@
   // ── select 동작 ──
   function deleteSelected() {
     if (mode !== "select" || !selectedId) return;
+    if (isNeckAutoLine(selectedId)) { setNote("네크라인 전용선은 삭제할 수 없습니다 · 기본형으로 돌아가기로만 제거"); return; }   // 자동 네크라인 보호
     const p = project(); p.working.patternLines = ensurePatternLines(p).filter(l => l.id !== selectedId);
     invalidateParts(p);
     selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); syncCutStatus(); rerender();
@@ -615,16 +616,18 @@
   // 선택한 선의 역할 지정(cut/boundary/guide). 표시만 바뀌고 outline 분할은 다음 단계.
   function setRole(role) {
     if (mode !== "select" || !selectedId || !ROLE_LABEL[role]) return;
+    if (isNeckAutoLine(selectedId)) { setNote("네크라인 전용선은 역할을 바꿀 수 없습니다"); return; }   // 자동 네크라인 보호
     const line = findLine(selectedId); if (!line) return;
     line.role = role; invalidateParts(); setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); syncCutStatus(); rerender();
   }
-  // 역할 버튼(design inspector): 선택 시 활성, 현재 역할 강조.
+  // 역할 버튼(design inspector): 선택 시 활성, 현재 역할 강조. 자동 네크라인 전용선이면 잠금(역할 변경 금지).
   function syncRoleButtons() {
     const sel = (mode === "select" && selectedId) ? findLine(selectedId) : null;
     const role = sel ? (sel.role || "guide") : null;
+    const locked = sel && isNeckAutoLine(sel.id);
     [["btnRoleCut", "cut"], ["btnRoleBoundary", "boundary"], ["btnRoleGuide", "guide"]].forEach(pair => {
       const b = document.getElementById(pair[0]); if (!b) return;
-      b.disabled = !sel; b.setAttribute("aria-pressed", role === pair[1] ? "true" : "false");
+      b.disabled = !sel || locked; b.setAttribute("aria-pressed", role === pair[1] ? "true" : "false");
     });
   }
   // 선택한 절개선을 **현재 working outline** 기준으로 재검사(snapHint 아님). geometry 무변경.
@@ -790,7 +793,8 @@
     let best = null, bestD = lCm;
     lines().forEach(l => { if (l.piece !== piece) return; const d = distToLine(geo, l); if (d < bestD) { bestD = d; best = l; } });
     selectedId = best ? best.id : null;
-    setNote(best ? "선택됨 · Delete 삭제 · anchor/핸들 드래그 · Esc 해제" : SELECT_NOTE);
+    setNote(best ? (isNeckAutoLine(selectedId) ? "네크라인 전용선 · 역할 변경·삭제 금지(기본형으로 돌아가기로만) · anchor/핸들만 편집"
+      : "선택됨 · Delete 삭제 · anchor/핸들 드래그 · Esc 해제") : SELECT_NOTE);
   }
   // draw 곡선 핸들: 커서 g(형상 cm) → 마지막 anchor.h. Shift=45° 고정(길이 유지).
   function applyDrawHandle(g, shift) {
@@ -875,7 +879,9 @@
         if (anchor && anchor.h && Math.hypot(anchor.h.x, anchor.h.y) < EPS) anchor.h = null;
         drawDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
       } else if (mode === "select" && editDrag) {
-        invalidateParts();   // anchor·핸들 편집으로 절개선 변경 → 파트 무효화
+        const edited = findLine(selectedId);
+        if (edited && edited.role === "boundary") recomposeAfterBoundaryEdit();   // 대체선 편집 → designOutline 재합성
+        else invalidateParts();                                                   // 그 외(cut/guide) → 파생 무효화
         editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
       }
     };
@@ -1005,10 +1011,23 @@
   function recomposeDesignOutline() {
     const p = project(); if (!p) return { ok: false, reason: "no-project" };
     const comp = composeWith(p.working.geometry, p.working.patternLines);
-    if (!comp.ok) return { ok: false, reason: comp.reason };
     p.working.parts = []; p.working.boundaryPreview = null;
-    p.working.designOutline = comp.designOutline;
-    return { ok: true };
+    p.working.designOutline = comp.ok ? comp.designOutline : null;   // 실패 시 stale 유지 금지(null)
+    return comp.ok ? { ok: true } : { ok: false, reason: comp.reason };
+  }
+  // 자동 생성된 네크라인 전용선(boundaryLineIds) 여부. 역할 변경·개별 삭제 금지(제거는 기본형으로
+  // 돌아가기로만). anchor·핸들 형상 편집은 허용.
+  function isNeckAutoLine(id) {
+    const p = project(); const nk = p && p.working.parameters && p.working.parameters.neckline;
+    if (!nk || nk.mode !== "manual" || !nk.boundaryLineIds) return false;
+    return id === nk.boundaryLineIds.front || id === nk.boundaryLineIds.back;
+  }
+  // boundary(anchor·핸들) 편집 pointerup 후: designOutline 재합성(에메랄드가 편집 위치로 즉시 이동).
+  // 유효하지 않으면 designOutline 무효화 + 오류(이전 stale 유지 금지). 목둘레·상태는 ui 로 갱신.
+  function recomposeAfterBoundaryEdit() {
+    const r = recomposeDesignOutline();   // 성공 시 재합성, 실패 시 designOutline=null(stale 유지 금지)
+    setBoundaryNote(r.ok ? "대체선 편집 반영 · 외곽 재합성" : "대체 불가: " + r.reason);
+    if (window.refreshDesignBodyPanel) window.refreshDesignBodyPanel();   // 목둘레·상태 갱신
   }
   // manual 상태의 네크라인 봉제 길이: 자동 네크라인 boundary 선(=designOutline 에 스플라이스된 목선)
   // 세그먼트를 flatten 해 측정. 편집(anchor/핸들)하면 반영.
@@ -1023,7 +1042,7 @@
 
   window.designLineTool = Object.freeze({
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
-    convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen,
+    convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen, isNeckAutoLine,
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
     validateSelectedCut, revalidate, validateCut, flattenLine, segCross, distPtToSegs,
     doSplit, invalidateParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,

@@ -749,4 +749,5 @@
   window.updateContextInspector = updateContextInspector;
   window.updateContextActions   = updateContextActions;
   window.isDesignStageActive    = isDesignStageActive;   // render.js 등이 읽는 읽기 전용 신호
+  window.refreshDesignBodyPanel = updateDesignBodyPanel;  // designLineTool 이 boundary 편집 후 목둘레·상태 갱신
 })();
