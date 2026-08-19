@@ -366,7 +366,12 @@
     if (!g) { el.textContent = ""; return; }
     // 앞·뒤판은 반쪽 패턴. 반패턴 합계 = 앞반+뒤반. 완성 목둘레 = 2×(반패턴 합계).
     // 카라: 전체 카라=완성 목둘레 / 중심 접어재단 반쪽 카라=반패턴 합계.
-    const f = necklineLen(g, "front"), b = necklineLen(g, "back"), half = f + b;
+    // manual(세부 수정) 상태는 파라미터가 아니라 designOutline 에 스플라이스된 네크라인 boundary 에서 측정.
+    const nk = project.working && project.working.parameters && project.working.parameters.neckline;
+    const manual = nk && nk.mode === "manual" && window.designLineTool && window.designLineTool.necklineBoundaryLen;
+    const f = manual ? window.designLineTool.necklineBoundaryLen("front") : necklineLen(g, "front");
+    const b = manual ? window.designLineTool.necklineBoundaryLen("back") : necklineLen(g, "back");
+    const half = f + b;
     el.textContent = "앞목선(반쪽) " + fmtL(f) + "cm · 뒤목선(반쪽) " + fmtL(b) + "cm · 반패턴 합계 " + fmtL(half) + "cm · 완성 목둘레 " + fmtL(2 * half) + "cm";
   }
   function committedNeckline(project) {
@@ -375,7 +380,8 @@
     const type = (n && n.type) || "original";
     const num = (k, d) => typeof np[k] === "number" ? np[k] : d;
     return {
-      type: type, W: num("neckWidthCm", 0), F: num("frontDepthCm", 0), B: num("backDepthCm", 0),
+      type: type, mode: (n && n.mode) || "parametric",
+      W: num("neckWidthCm", 0), F: num("frontDepthCm", 0), B: num("backDepthCm", 0),
       // 곡선 정도(round/boat): 미저장이면 형태 기본값(round=1, boat=0.5)
       CA: num("curveAmountNorm", type === "boat" ? 0.5 : 1),
       VD: num("vPointDepthCm", 0), SW: num("squareWidthCm", 0), CR: num("cornerRadiusCm", 0)
@@ -477,10 +483,49 @@
   // apply/reset 버튼 활성 상태만 갱신(값·note 미변경 — 성공/오류 문구 보존).
   function syncBodyButtons() {
     const project = designProjectNow();
+    const manual = !!(project && committedNeckline(project).mode === "manual");
     const apply = document.getElementById("btnApplyBodyLength");
     const reset = document.getElementById("btnResetBodyLength");
     if (apply) apply.disabled = !(project && readBodyInputs().valid);
-    if (reset) reset.disabled = !project;
+    if (reset) reset.disabled = !project || manual;   // manual 은 기본형으로 돌아가기로 먼저 나간 뒤 리셋
+  }
+  // 네크라인 mode 잠금 표시: manual 이면 카드·수치 입력 disabled + 기본형으로 돌아가기 노출,
+  // parametric 이면 카드·입력 활성 + (적용된 형태일 때만) 세부 수정 활성. 표시 제어만(엔진 미호출).
+  function syncNecklineModeUI(project) {
+    const cn = project ? committedNeckline(project) : { mode: "parametric", type: "original" };
+    const manual = cn.mode === "manual";
+    const cards = document.getElementById("necklineCards");
+    if (cards) cards.querySelectorAll(".neck-card").forEach(c => { c.disabled = manual; });
+    ["inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth", "inpNeckCurveAmount", "inpNeckVDepth", "inpNeckSquareWidth", "inpNeckCornerRadius"]
+      .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = manual; });
+    const bM = document.getElementById("btnNeckManual"), bR = document.getElementById("btnNeckRevert");
+    if (bM) { bM.hidden = manual; bM.disabled = !(project && !manual && cn.type !== "original"); }
+    if (bR) bR.hidden = !manual;
+    const note = document.getElementById("designNeckModeNote");
+    if (note) note.textContent = manual ? "세부 수정 중 · 카드·수치 잠금 · anchor·핸들·snap 으로 편집"
+      : (cn.type !== "original" ? "세부 수정으로 네크라인을 직접 편집할 수 있습니다" : "");
+  }
+  // 세부 수정: 현재 committed parametric 네크라인을 앞·뒤 boundary patternLine 으로 변환(manual).
+  function onNeckManual() {
+    const project = designProjectNow();
+    if (!project || !window.designLineTool) return;
+    const cn = committedNeckline(project);
+    if (cn.mode !== "parametric" || cn.type === "original") return;
+    const r = window.designLineTool.convertNecklineToBoundary(project.working.parameters.neckline);
+    const note = document.getElementById("designNeckModeNote");
+    if (!r.ok) { if (note) note.textContent = "세부 수정 불가: " + r.reason; return; }   // 변경 없음
+    if (typeof render === "function") render();
+    refresh();
+  }
+  // 기본형으로 돌아가기: 자동 네크라인 boundary 만 제거하고 parametric 복귀(다른 사용자 선 보존).
+  function onNeckRevert() {
+    const project = designProjectNow();
+    if (!project || !window.designLineTool) return;
+    const r = window.designLineTool.revertNecklineToParametric();
+    const note = document.getElementById("designNeckModeNote");
+    if (!r.ok) { if (note) note.textContent = "기본형 복귀 불가: " + r.reason; return; }
+    if (typeof render === "function") render();
+    refresh();
   }
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
   // committed 기준 note. 성공/오류 문구는 onApply/onReset 이 직접 관리(refresh 미호출).
@@ -500,6 +545,7 @@
     setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv, cn.type));
     sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
+    syncNecklineModeUI(project);
   }
   // 원자적 적용: 검증 → referenceGeometry 에서 재계산(여유량·길이·옆선 실루엣) → 성공 후에만
   // parameters·geometry 동시 갱신 → render(). 실패 시 커밋·화면 변화 0, note 에만 사유 표시.
@@ -511,8 +557,12 @@
     const E = st.ease.v, L = st.len.v, W = st.waist.v, H = st.hem.v, Cv = st.curve.v;
     const nextParameters = structuredClone(project.working.parameters);
     nextParameters.body = Object.assign({}, nextParameters.body || {}, { bustEaseCm: E, hemExtensionBelowWaistCm: L, waistSideOffsetCm: W, hemSideOffsetCm: H, sideSeamCurve: Cv });
-    // 네크라인(parametric): 형태 + 공통 입력 + 형태별 입력. manual 모드는 증분 3에서.
-    nextParameters.neckline = { mode: "parametric", type: st.neckType, parameters: {
+    // 네크라인: manual(세부 수정) 이면 기존 manual 네크라인 보존(입력 잠금 — 인풋에서 재구성하지
+    // 않는다). parametric 이면 카드·입력에서 재구성. manual 은 아래에서 designOutline 재합성.
+    const committedNk = committedNeckline(project);
+    const manualNeck = committedNk.mode === "manual";
+    if (manualNeck) nextParameters.neckline = structuredClone(project.working.parameters.neckline);
+    else nextParameters.neckline = { mode: "parametric", type: st.neckType, parameters: {
       neckWidthCm: st.nW.v, frontDepthCm: st.nF.v, backDepthCm: st.nB.v,
       curveAmountNorm: st.nCA.v, vPointDepthCm: st.nVD.v, squareWidthCm: st.nSW.v, cornerRadiusCm: st.nCR.v
     } };
@@ -525,8 +575,12 @@
     project.working.geometry = nextGeometry;
     // 몸판 형상 변경: auto 면 소매 재배치+fit, manual 이면 카메라·offset 유지(자동 이동 안 함).
     if (window.designLayout) window.designLayout.afterBodyLength();
-    // geometry 재계산됨 → 선택된 절개선 유효성 재검사(현재 working outline 기준) + 파생 무효화.
-    if (window.designLineTool && window.designLineTool.revalidate) window.designLineTool.revalidate();
+    // geometry 재계산됨. manual 네크라인이면 boundary 를 새 geometry 로 재합성(designOutline 유지),
+    // 아니면 기존대로 파생 무효화 + 절개선 재검사.
+    if (window.designLineTool) {
+      if (manualNeck && window.designLineTool.recomposeDesignOutline) window.designLineTool.recomposeDesignOutline();
+      else if (window.designLineTool.revalidate) window.designLineTool.revalidate();
+    }
     if (typeof render === "function") render();
     const setBack = (st2, v) => { if (st2.input && document.activeElement !== st2.input) st2.input.value = fmtL(v); };
     setBack(st.ease, E); setBack(st.len, L); setBack(st.waist, W); setBack(st.hem, H); setBack(st.curve, Cv);
@@ -536,6 +590,7 @@
     setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0 && !necked) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv, st.neckType));
     sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
+    syncNecklineModeUI(project);
   }
   function onResetBodyLength() {
     ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve",
@@ -633,7 +688,12 @@
     // 네크라인 기본형 카드: 클릭 = 형태 선택(+형태별 입력 행 표시). 값은 적용 버튼에서 커밋.
     const neckCards = document.getElementById("necklineCards");
     if (neckCards) neckCards.querySelectorAll(".neck-card").forEach(c =>
-      c.addEventListener("click", () => { setNeckType(c.getAttribute("data-neck")); syncBodyButtons(); }));
+      c.addEventListener("click", () => { if (c.disabled) return; setNeckType(c.getAttribute("data-neck")); syncBodyButtons(); }));
+    // 세부 수정(→manual boundary 변환) · 기본형으로 돌아가기(→parametric 복귀).
+    const neckManual = document.getElementById("btnNeckManual");
+    if (neckManual) neckManual.addEventListener("click", () => { if (!neckManual.disabled) onNeckManual(); });
+    const neckRevert = document.getElementById("btnNeckRevert");
+    if (neckRevert) neckRevert.addEventListener("click", () => { if (!neckRevert.hidden) onNeckRevert(); });
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");

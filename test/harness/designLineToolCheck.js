@@ -386,6 +386,23 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   if (compC.ok) ok(compC.outline.some(s => s.kind === "cubic"), "17: 합성 결과 cubic 보존(곡선 보존)");
 }
 
+// 18. geomToPatternSegments: geometry({kind:"line"|"path"}) → patternLine({kind:"line"|"cubic"})
+{
+  ok(typeof T.geomToPatternSegments === "function", "18: geomToPatternSegments export");
+  const geomPrims = [
+    { kind: "line", from: { x: 1, y: 2 }, to: { x: 3, y: 4 } },
+    { kind: "path", commands: [{ type: "M", points: [{ x: 3, y: 4 }] }, { type: "C", points: [{ x: 5, y: 6 }, { x: 7, y: 8 }, { x: 9, y: 10 }] }] }
+  ];
+  const segs = T.geomToPatternSegments(geomPrims);
+  ok(segs.length === 2 && segs[0].kind === "line" && segs[1].kind === "cubic", "18: line→line, path C→cubic");
+  ok(near(segs[0].from.x, 1) && near(segs[0].to.y, 4), "18: line 좌표 보존");
+  ok(near(segs[1].from.x, 3) && near(segs[1].c1.x, 5) && near(segs[1].c2.x, 7) && near(segs[1].to.x, 9), "18: cubic from/c1/c2/to = M/C 점");
+  // 다중 C(멀티세그먼트 스퀘어형) path → cubic 여러 개
+  const multi = [{ kind: "path", commands: [{ type: "M", points: [{ x: 0, y: 0 }] }, { type: "C", points: [{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }] }, { type: "C", points: [{ x: 4, y: 0 }, { x: 5, y: 0 }, { x: 6, y: 0 }] }] }];
+  const ms = T.geomToPatternSegments(multi);
+  ok(ms.length === 2 && ms[0].kind === "cubic" && near(ms[1].from.x, 3), "18: 다중 C → cubic 여러 개(연속 cur)");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

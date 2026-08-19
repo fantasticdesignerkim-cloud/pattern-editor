@@ -906,8 +906,124 @@
     });
   }
 
+  // ── 네크라인 parametric → manual 변환(증분 3) ──
+  // geometry primitive({kind:"line"|"path"}) → patternLine 세그먼트({kind:"line"|"cubic"}).
+  function geomToPatternSegments(prims) {
+    const out = [];
+    (prims || []).forEach(pr => {
+      if (pr.kind === "line") out.push({ kind: "line", from: _pt(pr.from), to: _pt(pr.to) });
+      else if (pr.kind === "path") { let cur = null; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { out.push({ kind: "cubic", from: _pt(cur), c1: _pt(c.points[0]), c2: _pt(c.points[1]), to: _pt(c.points[2]) }); cur = c.points[2]; } }); }
+    });
+    return out;
+  }
+  // 주어진 geometry·patternLines 로 front/back boundary 를 합성(순수, p 미변경). {ok, designOutline|null, reason?}.
+  function composeWith(geometry, patternLines) {
+    const result = {};
+    for (const pc of ["front", "back"]) {
+      const bl = (patternLines || []).filter(l => l.piece === pc && l.role === "boundary");
+      if (!bl.length) continue;
+      const keys = PIECE_GEOM_KEYS[pc] || [pc];
+      const rb = buildPieceRing(outlineSegsOf(geometry, keys), constrLinesOf(geometry, keys));
+      if (!rb.ok) return { ok: false, reason: rb.reason };
+      const res = composeDesignOutline(rb.ring, bl.map(l => l.segments));
+      if (!res.ok) return { ok: false, reason: res.reason };
+      result[pc] = { outline: res.outline, lineIds: bl.map(l => l.id) };
+    }
+    return { ok: true, designOutline: Object.keys(result).length ? result : null };
+  }
+  // 세부 수정: 현재 parametric 앞·뒤 네크라인을 각각 role:"boundary" patternLine 으로 변환하고
+  // mode:"manual" 로 원자적 전환. 앞 또는 뒤 하나라도 실패하면 patternLines·geometry·mode·
+  // designOutline 전부 불변. neckline(현재 committed parametric) 을 인자로 받는다.
+  function convertNecklineToBoundary(neckline) {
+    const p = project(); if (!p || !window.designBodice) return { ok: false, reason: "no-project" };
+    if (!neckline || neckline.mode !== "parametric" || neckline.type === "original") return { ok: false, reason: "no-parametric-neckline" };
+    let segsByPiece;
+    try { segsByPiece = window.designBodice.necklineSegments(p.referenceGeometry, neckline); }
+    catch (e) { return { ok: false, reason: (e && e.reason) || "neckline-failed" }; }
+    if (!segsByPiece) return { ok: false, reason: "no-parametric-neckline" };
+    // manual 로 되돌린 candidate geometry(원본 목선 복귀) — boundary 가 원본 arc 를 대체하게.
+    const geomParams = structuredClone(p.working.parameters);
+    geomParams.neckline = { mode: "manual", type: neckline.type, parameters: neckline.parameters };
+    let candGeom;
+    try { candGeom = window.designBodice.computeGeometry(p.referenceGeometry, geomParams); }
+    catch (e) { return { ok: false, reason: (e && e.reason) || "geometry-failed" }; }
+    // 앞·뒤 boundary 후보 + candidate 원본 ring 에 dry-run 검증(둘 다 유효해야 진행).
+    const cand = {};
+    for (const pc of ["front", "back"]) {
+      const segs = geomToPatternSegments(segsByPiece[pc]);
+      if (!segs.length) return { ok: false, reason: "empty-neckline-" + pc };
+      const keys = PIECE_GEOM_KEYS[pc] || [pc];
+      const rb = buildPieceRing(outlineSegsOf(candGeom, keys), constrLinesOf(candGeom, keys));
+      if (!rb.ok) return { ok: false, reason: rb.reason };
+      const v = replaceArcOnRing(rb.ring, segs);
+      if (!v.ok) return { ok: false, reason: v.reason };
+      cand[pc] = segs;
+    }
+    // 새 patternLines(기존 + 자동 네크라인 boundary 2개) — 커밋 전 로컬로만.
+    const base = ensurePatternLines(p).slice();
+    const fId = nextId(base); const withF = base.concat([{ id: fId, piece: "front", role: "boundary", segments: cand.front }]);
+    const bId = nextId(withF); const newLines = withF.concat([{ id: bId, piece: "back", role: "boundary", segments: cand.back }]);
+    const comp = composeWith(candGeom, newLines);   // 기존 사용자 boundary 와 겹치면 여기서 실패
+    if (!comp.ok) return { ok: false, reason: comp.reason };
+    // ── 원자적 커밋 ──
+    const storeParams = structuredClone(p.working.parameters);
+    storeParams.neckline = { mode: "manual", type: neckline.type, parameters: neckline.parameters, boundaryLineIds: { front: fId, back: bId } };
+    p.working.patternLines = newLines;
+    p.working.geometry = candGeom;
+    p.working.parameters = storeParams;
+    p.working.parts = []; p.working.boundaryPreview = null;
+    p.working.designOutline = comp.designOutline;
+    rerender();
+    return { ok: true, frontId: fId, backId: bId };
+  }
+  // 기본형으로 돌아가기: 자동 생성된 네크라인 boundary 2개만 제거(다른 사용자 선 보존) →
+  // mode:"parametric" 복귀 → geometry 재계산 → 남은 사용자 boundary 재합성. 원자적.
+  function revertNecklineToParametric() {
+    const p = project(); if (!p || !window.designBodice) return { ok: false, reason: "no-project" };
+    const nk = p.working.parameters && p.working.parameters.neckline;
+    if (!nk || nk.mode !== "manual") return { ok: false, reason: "not-manual" };
+    const ids = nk.boundaryLineIds || {};
+    const removeIds = [ids.front, ids.back].filter(Boolean);
+    const newLines = (p.working.patternLines || []).filter(l => removeIds.indexOf(l.id) < 0);
+    const params = structuredClone(p.working.parameters);
+    params.neckline = { mode: "parametric", type: nk.type, parameters: nk.parameters };
+    let geom;
+    try { geom = window.designBodice.computeGeometry(p.referenceGeometry, params); }
+    catch (e) { return { ok: false, reason: (e && e.reason) || "geometry-failed" }; }
+    const comp = composeWith(geom, newLines);
+    if (!comp.ok) return { ok: false, reason: comp.reason };
+    p.working.patternLines = newLines;
+    p.working.geometry = geom;
+    p.working.parameters = params;
+    p.working.parts = []; p.working.boundaryPreview = null;
+    p.working.designOutline = comp.designOutline;
+    rerender();
+    return { ok: true };
+  }
+  // 몸판 형상 적용(엉덩이 길이 등)으로 geometry 가 바뀐 뒤 manual 네크라인 유지용: 기존 patternLines 를
+  // 현재 geometry 로 재합성. 실패하면 designOutline 을 건드리지 않고 사유 반환(호출부가 판단).
+  function recomposeDesignOutline() {
+    const p = project(); if (!p) return { ok: false, reason: "no-project" };
+    const comp = composeWith(p.working.geometry, p.working.patternLines);
+    if (!comp.ok) return { ok: false, reason: comp.reason };
+    p.working.parts = []; p.working.boundaryPreview = null;
+    p.working.designOutline = comp.designOutline;
+    return { ok: true };
+  }
+  // manual 상태의 네크라인 봉제 길이: 자동 네크라인 boundary 선(=designOutline 에 스플라이스된 목선)
+  // 세그먼트를 flatten 해 측정. 편집(anchor/핸들)하면 반영.
+  function necklineBoundaryLen(piece) {
+    const p = project(); if (!p) return 0;
+    const nk = p.working.parameters && p.working.parameters.neckline;
+    if (!nk || nk.mode !== "manual" || !nk.boundaryLineIds) return 0;
+    const line = (p.working.patternLines || []).find(l => l.id === nk.boundaryLineIds[piece]);
+    if (!line) return 0;
+    return flattenLine(line.segments).reduce((s, ab) => s + Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y), 0);
+  }
+
   window.designLineTool = Object.freeze({
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
+    convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen,
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
     validateSelectedCut, revalidate, validateCut, flattenLine, segCross, distPtToSegs,
     doSplit, invalidateParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,
@@ -917,6 +1033,6 @@
     chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment, constrainAngle45,
     // 파트 분리·외곽 대체(순수)
     buildPieceRing, splitRingByCut, subSegment, reverseSeg, projectOntoRing, projectOntoSeg, walkConstruction,
-    replaceArcOnRing, extractArcTagged, composeDesignOutline
+    replaceArcOnRing, extractArcTagged, composeDesignOutline, geomToPatternSegments
   });
 })();

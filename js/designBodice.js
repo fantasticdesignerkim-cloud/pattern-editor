@@ -412,7 +412,17 @@
     piece.outline.forEach(function (pr) { if (pr === info.neckSeg) shape.segs.forEach(function (s) { outline.push(s); }); else outline.push(movePrimPoints(pr, moves)); });
     // 네크라인 길이는 방금 만든 세그먼트를 바로 측정(순수). primitive 에 표식을 남기지 않는다 —
     // 남기면 boundary/designOutline 복제 시 파생 geometry 로 내부 표식이 누출된다.
-    return { outline: outline, construction: piece.construction.map(function (pr) { return deepClone(pr); }), necklineLenCm: measureNeckline(shape.segs) };
+    return { outline: outline, construction: piece.construction.map(function (pr) { return deepClone(pr); }), necklineLenCm: measureNeckline(shape.segs), necklineSegs: shape.segs };
+  }
+  // parametric 네크라인 세그먼트만(geometry 포맷, referenceGeometry 좌표)을 앞·뒤로 반환 — 증분 3
+  // 세부 수정(→boundary patternLine 변환)이 소비. computeGeometry 와 같은 검증. 입력 불변.
+  function necklineSegments(referenceGeometry, neckline) {
+    if (!validGeometry(referenceGeometry)) fail("invalid-geometry");
+    if (!neckline || !NECK_TYPES[neckline.type]) return null;   // original/none = 세그먼트 없음
+    var params = neckline.parameters || {};
+    ["neckWidthCm", "frontDepthCm", "backDepthCm", "vPointDepthCm", "squareWidthCm", "cornerRadiusCm", "curveAmountNorm"].forEach(function (k) { var v = params[k]; if (v != null && (typeof v !== "number" || !isFinite(v))) fail("invalid-neckline-param", k); });
+    var src = deepClone(referenceGeometry);
+    return { front: applyNeckline(src.front, "front", neckline.type, params).necklineSegs, back: applyNeckline(src.back, "back", neckline.type, params).necklineSegs };
   }
   // buildNecklineShape 가 만든 네크라인 세그먼트의 봉제 호 길이(순수). flattenPrim(공용 adaptive
   // de Casteljau)으로 line·cubic 모두 측정.
@@ -421,6 +431,7 @@
     segs.forEach(function (pr) { flattenPrim(pr).forEach(function (e) { total += len(sub(e[1], e[0])); }); });
     return total;
   }
+  var NECK_TYPES = { round: 1, v: 1, square: 1, boat: 1 };
 
   function computeGeometry(referenceGeometry, opts) {
     if (!validGeometry(referenceGeometry)) fail("invalid-geometry");
@@ -438,7 +449,6 @@
     if (typeof curve !== "number" || !isFinite(curve) || curve < 0 || curve > 1) fail("invalid-body-curve", curve);
     // 네크라인(parametric). mode==="manual" / type==="original" / 없음이면 미적용(원본 목선 유지).
     var neckline = (opts && opts.neckline) || null;
-    var NECK_TYPES = { round: 1, v: 1, square: 1, boat: 1 };
     var applyNeck = !!(neckline && neckline.mode === "parametric" && NECK_TYPES[neckline.type]);
     if (applyNeck) {
       var np = neckline.parameters || {};
@@ -466,5 +476,5 @@
     };
   }
 
-  window.designBodice = Object.freeze({ computeGeometry: computeGeometry, measureNeckline: measureNeckline });
+  window.designBodice = Object.freeze({ computeGeometry: computeGeometry, measureNeckline: measureNeckline, necklineSegments: necklineSegments });
 })();
