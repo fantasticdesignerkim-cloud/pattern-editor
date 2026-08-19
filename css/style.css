@@ -117,6 +117,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 #btnDesignCompose:not(:disabled){border-color:var(--navy)}
 /* 합성 디자인 외곽선: 여러 대체선 합성 결과, 원본 위 에메랄드로 굵게. */
 .design-outline-composed{fill:none;stroke:#0E9F6E;stroke-width:2.8;stroke-linejoin:round;stroke-linecap:round}
+/* 앞중심 여밈: 안단 바깥 재단선(실선 앰버) + 접힘/CF construction(점선). */
+.design-placket-outline{fill:none;stroke:#B45309;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.design-placket-construction{fill:none;stroke:#B45309;stroke-width:1.2;stroke-dasharray:4 3;opacity:.75}
 
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */
 .brand{font-weight:600;color:var(--navy);font-size:15px;letter-spacing:.06em;white-space:nowrap;margin-right:8px}

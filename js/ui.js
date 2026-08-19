@@ -514,6 +514,7 @@
     const r = window.designLineTool.convertNecklineToBoundary(project.working.parameters.neckline);
     const note = document.getElementById("designNeckModeNote");
     if (!r.ok) { if (note) note.textContent = "세부 수정 불가: " + r.reason; return; }   // 변경 없음
+    refreshFrontPlacket(project);   // 네크라인 → designOutline 변경 → 여밈 재파생
     if (typeof render === "function") render();
     refresh();
   }
@@ -524,9 +525,78 @@
     const r = window.designLineTool.revertNecklineToParametric();
     const note = document.getElementById("designNeckModeNote");
     if (!r.ok) { if (note) note.textContent = "기본형 복귀 불가: " + r.reason; return; }
+    refreshFrontPlacket(project);   // 네크라인 변경 → 유효 외곽 변경 → 여밈 재파생
     if (typeof render === "function") render();
     refresh();
   }
+
+  // ── 앞중심 여밈(front placket) ── computeGeometry 밖의 별도 파생. 현재 유효 앞판 외곽에서 파생.
+  function readPlacketInputs() {
+    const overlap = readNum("inpPlacketOverlap", 0, 10), facing = readNum("inpPlacketFacing", 0, 15);
+    return { overlap, facing, valid: overlap.valid && facing.valid };
+  }
+  function committedPlacket(project) {
+    const pk = project && project.working && project.working.frontPlacket;
+    const pr = (pk && pk.parameters) || {};
+    return { has: !!pk, overlap: typeof pr.overlapCm === "number" ? pr.overlapCm : 0, facing: typeof pr.facingWidthCm === "number" ? pr.facingWidthCm : 0 };
+  }
+  // 현재 유효 앞판 외곽: manual 네크라인은 designOutline 에 있으므로 그것을 우선.
+  function effectiveFrontOutline(project) {
+    const dO = project.working.designOutline && project.working.designOutline.front;
+    if (dO && Array.isArray(dO.outline) && dO.outline.length) return dO.outline;
+    const g = project.working.geometry && project.working.geometry.front;
+    return (g && Array.isArray(g.outline)) ? g.outline : null;
+  }
+  function setPlacketNote(txt) { const n = document.getElementById("designPlacketNote"); if (n) n.textContent = txt; }
+  // params 로 여밈 재파생(원자적). 성공 시 working.frontPlacket 교체, 실패 시 제거(stale 금지) + 사유.
+  function computeFrontPlacket(project, params) {
+    if (!window.designPlacket) return { ok: false, reason: "no-module" };
+    const outline = effectiveFrontOutline(project);
+    if (!outline) { project.working.frontPlacket = null; return { ok: false, reason: "no-outline" }; }
+    const r = window.designPlacket.compute(outline, params);
+    if (!r.ok) { project.working.frontPlacket = null; return r; }   // 실패 시 stale 유지 금지
+    project.working.frontPlacket = { parameters: { overlapCm: params.overlapCm, facingWidthCm: params.facingWidthCm, lengthMode: "full" }, outline: r.outline, construction: r.construction };
+    return { ok: true };
+  }
+  // 유효 외곽이 바뀐 뒤(몸판·네크라인 변경) 저장된 여밈 파라미터로 재파생. 여밈 없으면 무동작.
+  function refreshFrontPlacket(project) {
+    project = project || designProjectNow(); if (!project) return;
+    const cp = committedPlacket(project);
+    if (!cp.has) return;
+    computeFrontPlacket(project, { overlapCm: cp.overlap, facingWidthCm: cp.facing, lengthMode: "full" });
+  }
+  function placketNoteFor(reason) {
+    if (reason === "invalid-overlap" || reason === "invalid-facing") return "여밈분·안단 폭은 0 이상이어야 합니다";
+    if (reason === "no-placket") return "여밈분·안단 폭을 입력하세요";
+    if (reason === "no-outline" || reason === "no-cf-edge" || reason === "degenerate-cf-edge") return "앞판 외곽에서 여밈을 만들 수 없습니다";
+    return "여밈을 적용할 수 없습니다 · 값을 확인하세요";
+  }
+  function onApplyPlacket() {
+    const project = designProjectNow();
+    if (!project || !window.designPlacket) return;
+    const st = readPlacketInputs();
+    if (!st.valid) { setPlacketNote("여밈분 0–10 · 안단 폭 0–15 범위를 확인하세요"); return; }
+    const r = computeFrontPlacket(project, { overlapCm: st.overlap.v, facingWidthCm: st.facing.v, lengthMode: "full" });
+    if (!r.ok) { setPlacketNote(placketNoteFor(r.reason)); if (typeof render === "function") render(); return; }
+    if (typeof render === "function") render();
+    setPlacketNote("여밈 " + fmtL(st.overlap.v) + "cm · 안단 " + fmtL(st.facing.v) + "cm(컷온) · 세션 전용");
+    syncPlacketButtons();
+  }
+  function onClearPlacket() {
+    const project = designProjectNow();
+    if (!project) return;
+    project.working.frontPlacket = null;
+    ["inpPlacketOverlap", "inpPlacketFacing"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
+    if (typeof render === "function") render();
+    setPlacketNote("여밈 제거됨"); syncPlacketButtons();
+  }
+  function syncPlacketButtons() {
+    const project = designProjectNow();
+    const apply = document.getElementById("btnApplyPlacket"), clear = document.getElementById("btnClearPlacket");
+    if (apply) apply.disabled = !(project && readPlacketInputs().valid);
+    if (clear) clear.disabled = !(project && committedPlacket(project).has);
+  }
+
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
   // committed 기준 note. 성공/오류 문구는 onApply/onReset 이 직접 관리(refresh 미호출).
   function updateDesignBodyPanel() {
@@ -546,6 +616,11 @@
     sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
+    // 앞중심 여밈 입력·상태 복원(포커스 중 안 덮음)
+    const cp = committedPlacket(project);
+    setIf("inpPlacketOverlap", cp.overlap); setIf("inpPlacketFacing", cp.facing);
+    setPlacketNote(cp.has ? "여밈 " + fmtL(cp.overlap) + "cm · 안단 " + fmtL(cp.facing) + "cm(컷온) · 세션 전용" : "");
+    syncPlacketButtons();
   }
   // 원자적 적용: 검증 → referenceGeometry 에서 재계산(여유량·길이·옆선 실루엣) → 성공 후에만
   // parameters·geometry 동시 갱신 → render(). 실패 시 커밋·화면 변화 0, note 에만 사유 표시.
@@ -581,6 +656,7 @@
       if (manualNeck && window.designLineTool.recomposeDesignOutline) window.designLineTool.recomposeDesignOutline();
       else if (window.designLineTool.revalidate) window.designLineTool.revalidate();
     }
+    refreshFrontPlacket(project);   // 유효 앞판 외곽 변경 → 여밈 재파생(있을 때만)
     if (typeof render === "function") render();
     const setBack = (st2, v) => { if (st2.input && document.activeElement !== st2.input) st2.input.value = fmtL(v); };
     setBack(st.ease, E); setBack(st.len, L); setBack(st.waist, W); setBack(st.hem, H); setBack(st.curve, Cv);
@@ -694,6 +770,16 @@
     if (neckManual) neckManual.addEventListener("click", () => { if (!neckManual.disabled) onNeckManual(); });
     const neckRevert = document.getElementById("btnNeckRevert");
     if (neckRevert) neckRevert.addEventListener("click", () => { if (!neckRevert.hidden) onNeckRevert(); });
+    // 앞중심 여밈: 입력 중엔 버튼 활성만 갱신·Enter 로 적용, 적용/제거 버튼.
+    ["inpPlacketOverlap", "inpPlacketFacing"].forEach(id => {
+      const el = document.getElementById(id); if (!el) return;
+      el.addEventListener("input", syncPlacketButtons);
+      el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyPlacket(); } });
+    });
+    const applyPk = document.getElementById("btnApplyPlacket");
+    if (applyPk) applyPk.addEventListener("click", () => { if (!applyPk.disabled) onApplyPlacket(); });
+    const clearPk = document.getElementById("btnClearPlacket");
+    if (clearPk) clearPk.addEventListener("click", () => { if (!clearPk.disabled) onClearPlacket(); });
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");
@@ -750,4 +836,5 @@
   window.updateContextActions   = updateContextActions;
   window.isDesignStageActive    = isDesignStageActive;   // render.js 등이 읽는 읽기 전용 신호
   window.refreshDesignBodyPanel = updateDesignBodyPanel;  // designLineTool 이 boundary 편집 후 목둘레·상태 갱신
+  window.refreshFrontPlacket = () => refreshFrontPlacket();  // boundary 편집으로 유효 외곽 변경 시 여밈 재파생
 })();

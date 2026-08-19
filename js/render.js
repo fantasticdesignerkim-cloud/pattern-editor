@@ -157,6 +157,19 @@ function _appendDesignOutline(root, designOutline, L, scale){
   });
 }
 
+// 앞중심 여밈 파생(working.frontPlacket): 안단 바깥 재단선까지의 스트립 outline + 접힘·CF construction.
+// 앞판 offset transform 동승(designOutline 과 동일). 목둘레 길이엔 미포함(별도 플래킷 경계).
+function _appendPlacket(root, placket, L, scale){
+  if(!placket || !Array.isArray(placket.outline)) return;
+  const off=(L && L.front) ? L.front : {dx:0,dy:0};
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-placket":"front" });
+  const od=_openPathD(placket.outline);
+  if(od) g.appendChild(E("path",{ d:od, class:"design-placket-outline", fill:"none" }));
+  const cd=_openPathD(placket.construction||[]);
+  if(cd) g.appendChild(E("path",{ d:cd, class:"design-placket-construction", fill:"none" }));
+  root.appendChild(g);
+}
+
 function _appendDesignHitRect(root, geometry, pieceName, off, scale){
   if (!window.designLayout) return;
   const bb = window.designLayout.bboxOf(geometry, pieceName);
@@ -257,6 +270,12 @@ function render(){
       const dRoot = E("g"); dRoot.setAttribute("data-design-root", "design-outline");
       _appendDesignOutline(dRoot, dp.working.designOutline, L, scale);
       svg.appendChild(dRoot);
+    }
+    // 앞중심 여밈 파생(있을 때만): 현재 유효 앞판 외곽에서 파생한 여밈 스트립.
+    if (dp.working.frontPlacket) {
+      const pRoot = E("g"); pRoot.setAttribute("data-design-root", "placket");
+      _appendPlacket(pRoot, dp.working.frontPlacket, L, scale);
+      svg.appendChild(pRoot);
     }
 
     // 투명 hit layer(최상단): reference/working 은 pointer-events:none, hit rect 만 잡는다.

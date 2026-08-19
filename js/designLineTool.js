@@ -1027,6 +1027,7 @@
   function recomposeAfterBoundaryEdit() {
     const r = recomposeDesignOutline();   // 성공 시 재합성, 실패 시 designOutline=null(stale 유지 금지)
     setBoundaryNote(r.ok ? "대체선 편집 반영 · 외곽 재합성" : "대체 불가: " + r.reason);
+    if (window.refreshFrontPlacket) window.refreshFrontPlacket();   // 유효 앞판 외곽 변경 → 여밈 재파생
     if (window.refreshDesignBodyPanel) window.refreshDesignBodyPanel();   // 목둘레·상태 갱신
   }
   // manual 상태의 네크라인 봉제 길이: 자동 네크라인 boundary 선(=designOutline 에 스플라이스된 목선)
