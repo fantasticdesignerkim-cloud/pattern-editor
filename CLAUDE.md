@@ -2972,6 +2972,39 @@ preview 무효·deepFrozen spec·스테일·placket 스냅샷). runAll 전체 �
 edge 없이 추가되면 재검토). 자기교차("단순") 별도 검사는 buildPieceRing 연결성으로 대체(v1). 소매
 스테일 무효화의 실제 소비자(소매 단계)는 아직 없음 — 판정·문서 계약만 준비.
 
+### 소매산 봉제선 정합 확인 (2026-08, 읽기 전용) — sleeveMeasure
+
+소매 단계 진입 **전** 봉제선 정합만 읽기 전용으로 잠근다(사용자 확정). **시접 작업 아님, 소매
+형상 미변경, sleeve.js 무변경.** 완료 몸판 진동 ↔ 소매산 봉제선 ↔ 이세를 **수치만** 표시.
+
+**순수 모듈 `js/sleeveMeasure.js`** (`window.sleeveMeasure.measureSleeveCap(sleeveGeometry)`):
+- `=> Object.freeze({ frontLength, backLength, totalLength }) | null`. render·state·storage 미접근,
+  자동 재계산 없음, 입력 불변.
+- **입력은 live draft 가 아니라 완료본에 고정된 소매 geometry**(`referenceGeometry.sleeve`,
+  frozen, `sourceBlock.version` 고정).
+- 소매산 봉제선 = outline 의 **곡선(path/cubic) 세그먼트**(옆선·밑단 직선·construction·라벨 제외).
+  **SP = cap 곡선 apex(min y)**, 앞/뒤 규약은 sleeve.js 와 동일(뒤=낮은 x `sx_B`, 앞=높은 x `sx_F`) —
+  cap 을 조밀 샘플(60/cubic)해 apex 에서 뒤(낮은 x 끝→apex)/앞(apex→높은 x 끝) 호길이로 분할.
+  apex 가 끝점(단조)이면 퇴화 → null. 방향 무관(끝점 x 로 앞/뒤 배정).
+
+**UI 오케스트레이션 (ui.js `sleeveEaseRelation`/`updateSleeveEaseUI`, `#designSleeveEaseNote`)**:
+- **차단 계약**: 완료본 없음(`no-bodice`) / 스테일(`bodice-stale`, `isCurrentBodiceChanged`) /
+  **소매 출처 version ≠ 몸판 완료본**(`source-mismatch`, `sourceBlock.version !== bodiceResult.sourceVersion`)
+  이면 측정 차단·사유 표시.
+- 통과 시: `앞 이세 = 소매산 앞 − 몸판 앞 진동` / `뒤 이세 = 소매산 뒤 − 몸판 뒤 진동` /
+  `총 = 앞+뒤`. **수치만**(적정 이세량 합격/불합격 판정 없음), **음수 이세도 부호 그대로 노출**
+  (data-warn 등 색 판정 제거 — "수치만 표시" 계약). `updateBodiceCheckpointUI` 끝에서 갱신.
+
+**검증(격리 origin, storage/console 0)**: 완료 전 "몸판 완료 후 …" 차단 → 완료 시
+`소매산 앞 21.8·뒤 23.6cm · 이세 앞 +1.2·뒤 +2·총 +3.2cm`(measureSleeveCap 직접 대조 일치) →
+여유량 변경 시 "몸판 변경됨" 차단 → **재완료(진동 커짐) 시 이세 재계산·음수 그대로**
+(`이세 앞 -0.6·총 -0.5cm`). frozen·reference 불변. 하네스 `sleeveMeasureCheck` **13**(대칭/비대칭/
+역순/single path/실패 계약/입력 불변). runAll 전체 통과, shape/perf 골든 diff 0. **DOM id 71→72**
+(designSleeveEaseNote). 캐시 `?v=2026082011`(sleeveMeasure)·`?v=2026082013`(ui).
+
+**★ 다음(소매 모양 단계)**: 실제 이세 배분·소매산 수정. 이 읽기 전용 관계 위에서 별도 사양·승인 후.
+`edge:"armhole"` SV2 도입도 그 전 하드닝 후보(현 휴리스틱 유효).
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
