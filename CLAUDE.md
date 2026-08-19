@@ -2901,6 +2901,56 @@ inpPlacketFacing·btnApplyPlacket·btnClearPlacket·designPlacketNote). 캐시 `
 `working.frontPlacket` 을 실제 재단 조각으로 확정 — 전부 별도 사양·승인 후. 카라는 몸판 네크라인
 최종 확정 뒤. `working.frontPlacket` 은 파생 미리보기(원본 geometry 미대체).
 
+## ✅ Design 몸판 모양 완료 체크포인트 (2026-08) — bodiceCheckpoint
+
+앞중심 여밈까지로 **몸판 모양 도구가 갖춰졌다**(품·여유량/길이/옆선/곡선/네크라인/다트·절개·외곽
+대체/designOutline/여밈). 이제 **재단 패턴 확정이 아니라 '몸판 모양 완료' 체크포인트** — 소매 단계가
+안정적으로 몸판 결과를 참조하도록 잠근다(원형 완료 `blockWorkflow` 와 같은 결의 세션 스냅샷).
+
+**단계 계약(사용자 확정, 위반 금지)**:
+- 이것은 **Design 몸판 결과**이며 **아직 시접·너치·재단선이 아니다**.
+- 소매 단계는 `working.bodiceResult` 의 **확정 진동선만** 참조한다.
+- 몸판을 다시 수정하면 소매 결과를 **조용히 갱신하지 말고 "몸판 변경됨"으로 무효화** → 사용자가
+  다시 완료한 뒤 소매를 **명시적으로 재생성**. (소매 단계는 아직 없어 스테일 판정·문서 계약만 준비.)
+- reference·원본 block 불변.
+
+**완료 게이트(사용자 확정)**: 옆선 봉제 길이 차 **>0.3cm(불일치)면 완료 차단**. **0.1~0.3(확인)·
+≤0.1(정합)은 허용**. 외곽 미연결 / 진동·목둘레 미측정 / 무효 preview(manual 인데 designOutline
+null)도 차단. (옆선 truing 자체는 이후 패턴 확정 단계 — 여기선 게이트만.)
+
+**모듈 `js/bodiceCheckpoint.js`** (`window.bodiceCheckpoint`):
+- `check(project)` → `{ok, fails[], connectivity{front,back}, sideSeam{front,back,diff,status}, armhole
+  {front,back,ok}, neckline{front,back,half,finished,ok}, previews}`.
+- **진동둘레 측정(신규)**: **edge 없는 곡선(path/cubic) 중 center-top(목점)에 닿지 않는** 세그먼트 합.
+  어깨는 항상 직선·네크라인은 목점 접 → 남는 곡선이 진동(앞은 가슴다트로 2조각, 뒤는 1조각).
+  **네크라인/여밈 무관하게 `working.geometry` 로 측정**(designOutline 아님 — 진동은 목선/여밈 미영향).
+- 옆선=geometry `side-seam` edge 합, 목둘레=manual(boundary)/parametric(`necklineLenCm`)/원본(topological),
+  연결성=designLineTool `buildPieceRing`(유효 외곽 designOutline 우선).
+- `complete(project)` → 검사 통과 시 **`working.bodiceResult`**(deepFrozen) 생성, 실패 시 변경 0:
+  `{sourceVersion, front:{outline,construction}, back:{…}, armholeLengths, necklineLengths, placket,
+  completedAt}`. 유효 외곽(designOutline 우선) deep clone. **세션 전용(reload 소멸).**
+- `isCurrentBodiceChanged(project)` → 완료본 없으면 true, 있으면 현재 signature(유효 외곽+진동+목둘레
+  +여밈 파라미터) vs 스냅샷 signature 비교. **몸판 변경 시 bodiceResult 를 조용히 갱신하지 않는다.**
+
+**UI(ui.js, design body 패널 맨 아래)**: `몸판 모양 완료` 버튼(검사 통과 시에만 활성) + 검사 요약
+(`옆선 차 …(정합/확인/불일치) · 진동 앞·뒤 · 반패턴 목둘레`) + 상태(`완료 가능`/`몸판 완료됨(원형 v_)`/
+`몸판 변경됨 · 다시 완료 필요`). `updateBodiceCheckpointUI` 는 refresh·몸판/여밈 적용 후 읽기 전용 갱신.
+
+**검증(격리 origin, storage/saves/console 0)**: 진동둘레 실측(앞 20.6·뒤 21.6cm)·옆선 정합·목둘레
+반패턴 18.8/완성 37.6 · 완료 → deepFrozen bodiceResult(sourceVersion·armhole·neckline·completedAt) ·
+**여유량 6 적용 → "몸판 변경됨" + 이전 스냅샷 조용히 미갱신** · 재완료 → 새 스냅샷 · reference 불변 ·
+스크린샷(완료 UI). 하네스 `bodiceCheckpointCheck` **18**(정합/확인/불일치 차단·외곽 미연결·manual
+preview 무효·deepFrozen spec·스테일·placket 스냅샷). runAll 전체 통과, shape/perf 골든 diff 0.
+**DOM id 68→71**(btnCompleteBodice·designBodiceCheckNote·designBodiceStatusNote). 캐시
+`?v=2026082010`(bodiceCheckpoint·ui).
+
+**★ 몸판 모양 단계 종료. 다음 = 소매 모양 단계**(소매산·진동둘레 정합 — bodiceResult 의 확정 진동선
+참조). 별도 사양·승인 후 착수.
+
+**미구현/경계**: 진동둘레 측정은 "edge 없는 곡선=진동" 가정(현 도안 기하 정확 — 미래에 다른 곡선이
+edge 없이 추가되면 재검토). 자기교차("단순") 별도 검사는 buildPieceRing 연결성으로 대체(v1). 소매
+스테일 무효화의 실제 소비자(소매 단계)는 아직 없음 — 판정·문서 계약만 준비.
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
