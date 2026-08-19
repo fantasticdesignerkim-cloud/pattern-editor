@@ -2947,6 +2947,27 @@ preview 무효·deepFrozen spec·스테일·placket 스냅샷). runAll 전체 �
 **★ 몸판 모양 단계 종료. 다음 = 소매 모양 단계**(소매산·진동둘레 정합 — bodiceResult 의 확정 진동선
 참조). 별도 사양·승인 후 착수.
 
+### bodiceResult 하드닝 (2026-08, 소매 단계 전 잠금) — 항목 1·2·3
+
+소매 단계 전 사용자 지시 3건을 bodiceResult 에 잠갔다(항목 4 edge:"armhole" SV2 는 별도):
+- **① 진동선 primitive 자체 저장**: `bodiceResult.armhole = {front:[segs], back:[segs]}` — 소매가
+  길이값이 아니라 **고정된 진동 곡선 primitive** 를 참조한다(앞은 가슴다트로 2조각, 뒤 1조각).
+  `armholeLen` 이 `{ok,len,segs}` 반환하도록 확장, complete 가 deep clone 저장.
+- **② `bodiceResult.hash`**: 형상 signature 의 32bit 해시. 소매 결과가 **`sourceBodiceHash`** 로
+  어떤 몸판 완료본에서 생성됐는지 고정하는 앵커(소매 결과는 아직 없음 — 앵커만 준비).
+- **③ 스테일 판정 형상 전용**: signature = 유효 외곽(designOutline 우선)+진동+목둘레+여밈 파라미터
+  **만**. **배치 offset(working.layout)·선택 상태(selectedId)·guide 선(role guide, 외곽 미포함)은
+  제외** — 실측: layout offset 변경·guide 추가·선택 변경 모두 `isCurrentBodiceChanged=false`.
+  boundary(role boundary)는 designOutline 에 합성되므로 형상으로 포함(정상).
+
+검증: 실브라우저 — armhole front 2 segs(path)·back 1·hash `435afbcb`·layout offset 변경 시 stale
+아님·deepFrozen. 하네스 `bodiceCheckpointCheck` **25**(6: armhole primitive·hash / 7b: 형상 전용
+스테일). runAll 통과, 골든 diff 0. 캐시 `?v=2026082011`.
+
+**남은 항목 4 (별도)**: 진동선 semantic 표식 `edge:"armhole"` 도입(현 "edge 없는 곡선=진동" 휴리스틱
+대체) — SV2 스키마 확장(render.js gen-0 tagging + blockMaster 검증 + designBodice edge 보존)이라
+별도 사이클. 현 휴리스틱은 유효(사용자 확인)하나 향후 진동 디자인 안전성을 위해 권고됨.
+
 **미구현/경계**: 진동둘레 측정은 "edge 없는 곡선=진동" 가정(현 도안 기하 정확 — 미래에 다른 곡선이
 edge 없이 추가되면 재검토). 자기교차("단순") 별도 검사는 buildPieceRing 연결성으로 대체(v1). 소매
 스테일 무효화의 실제 소비자(소매 단계)는 아직 없음 — 판정·문서 계약만 준비.

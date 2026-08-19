@@ -83,16 +83,16 @@
   //   어깨는 항상 직선·네크라인은 목점에 닿음 → 남는 곡선이 진동(앞은 다트로 2조각, 뒤는 1조각).
   //   네크라인/여밈에 무관하도록 geometry 로 측정(designOutline 아님).
   function armholeLen(geometry, piece) {
-    var b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return { ok: false, len: 0 };
-    var top = centerTop(geometry, piece); if (!top) return { ok: false, len: 0 };
+    var b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return { ok: false, len: 0, segs: [] };
+    var top = centerTop(geometry, piece); if (!top) return { ok: false, len: 0, segs: [] };
     var touchesTop = function (s) { return endpointsOf(s).some(function (p) { return dist(p, top) < 0.05; }); };
     var arcs = b.outline.filter(function (s) {
       if ("edge" in s) return false;                    // center/waist/side-seam/hem 제외
       var curve = (s.kind === "cubic") || (s.kind === "path");
       return curve && !touchesTop(s);                   // 네크라인(목점 접) 제외, 직선 어깨는 curve 아님
     });
-    if (!arcs.length) return { ok: false, len: 0 };
-    return { ok: true, len: arcs.reduce(function (t, s) { return t + segLen(s); }, 0) };
+    if (!arcs.length) return { ok: false, len: 0, segs: [] };
+    return { ok: true, len: arcs.reduce(function (t, s) { return t + segLen(s); }, 0), segs: arcs };
   }
 
   // 네크라인 반쪽 길이: manual = 자동 boundary 선 / parametric = geometry.necklineLenCm / 원본 = 단일 추적.
@@ -180,6 +180,8 @@
     return o;
   }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  // 32bit 해시(문자열) — 소매 결과가 sourceBodiceHash 로 어떤 완료본에서 나왔는지 고정하는 용도.
+  function hashStr(s) { var h = 0; for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(16); }
 
   // ── 완료 ── 검사 통과 시 working.bodiceResult 불변 스냅샷 생성. 실패 시 변경 없음.
   function complete(proj) {
@@ -188,10 +190,18 @@
     var c = check(proj);
     if (!c.ok) return { ok: false, reason: c.fails[0], check: c };
     var effF = effectiveOutline(proj, "front"), effB = effectiveOutline(proj, "back");
+    var g = proj.working.geometry;
+    var ahF = armholeLen(g, "front"), ahB = armholeLen(g, "back");
+    // 소매가 참조할 형상 hash(형상 전용: 유효 외곽·진동·목둘레·여밈. 배치·선택·guide 제외).
+    var placketParams = proj.working.frontPlacket ? proj.working.frontPlacket.parameters : null;
+    var sig = signature(canonOutline(effF), canonOutline(effB), c.armhole, c.neckline, placketParams);
     var result = deepFreeze({
       sourceVersion: proj.sourceBlock ? proj.sourceBlock.version : null,
-      front: { outline: clone(effF), construction: clone(proj.working.geometry.front.construction || []) },
-      back: { outline: clone(effB), construction: clone(proj.working.geometry.back.construction || []) },
+      hash: hashStr(sig),                                     // 소매 결과의 sourceBodiceHash 앵커
+      front: { outline: clone(effF), construction: clone(g.front.construction || []) },
+      back: { outline: clone(effB), construction: clone(g.back.construction || []) },
+      // ★ 진동선 primitive 자체(소매는 길이값이 아니라 이 곡선을 참조). 앞은 다트로 2조각.
+      armhole: { front: clone(ahF.segs), back: clone(ahB.segs) },
       armholeLengths: { front: round4(c.armhole.front), back: round4(c.armhole.back) },
       necklineLengths: { front: round4(c.neckline.front), back: round4(c.neckline.back), half: round4(c.neckline.half), finished: round4(c.neckline.finished) },
       placket: proj.working.frontPlacket ? clone(proj.working.frontPlacket) : null,

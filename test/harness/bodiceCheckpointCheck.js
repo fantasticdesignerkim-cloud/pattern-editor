@@ -87,25 +87,41 @@ function fakeProject(backSideTopY, opts) {
   const c = BC.check();
   ok(!c.ok && c.fails.indexOf("neckline-preview-invalid") >= 0, "5: manual+designOutline null → 차단");
 }
-// 6. 완료 → 불변 스냅샷(spec 필드) + reference 무관
+// 6. 완료 → 불변 스냅샷(spec 필드 + 진동 primitive + hash) + reference 무관
 {
   RING_OK = true; PROJECT = fakeProject(20);
   const r = BC.complete();
   ok(r.ok, "6: 완료 성공");
   const res = PROJECT.working.bodiceResult;
   ok(res && res.sourceVersion === 2 && res.front && res.back && res.armholeLengths && res.necklineLengths && typeof res.completedAt === "number", "6: bodiceResult spec 필드");
-  ok(Object.isFrozen(res) && Object.isFrozen(res.front) && Object.isFrozen(res.armholeLengths), "6: deepFrozen");
+  ok(Object.isFrozen(res) && Object.isFrozen(res.front) && Object.isFrozen(res.armholeLengths) && Object.isFrozen(res.armhole), "6: deepFrozen");
   ok(res.placket === null, "6: placket 없으면 null");
   ok(BC.latest() === res, "6: latest = bodiceResult");
+  // 항목 1: 진동선 primitive 자체 저장(길이값 아님). 앞 곡선 ≥1개.
+  ok(res.armhole && Array.isArray(res.armhole.front) && res.armhole.front.length >= 1 && res.armhole.back.length >= 1, "6: armhole primitive 저장(front/back segs)");
+  ok(res.armhole.front[0].kind === "cubic" || res.armhole.front[0].kind === "path", "6: armhole = 곡선 primitive");
+  // 항목 2: 소매가 참조할 hash 기록
+  ok(typeof res.hash === "string" && res.hash.length > 0, "6: sourceBodiceHash 앵커(hash)");
 }
-// 7. 스테일: 완료 직후 unchanged, 몸판 변경 시 changed
+// 7. 스테일: 완료 직후 unchanged, 몸판 형상 변경 시 changed
 {
   PROJECT = fakeProject(20);
   BC.complete();
   ok(BC.isCurrentBodiceChanged() === false, "7: 완료 직후 unchanged");
-  // 옆선 이동(외곽 변경) → changed
-  PROJECT.working.geometry.front.outline[1].to.y = 40;
+  PROJECT.working.geometry.front.outline[1].to.y = 40;   // 옆선 이동(외곽 변경)
   ok(BC.isCurrentBodiceChanged() === true, "7: 외곽 변경 → changed");
+}
+// 7b. 항목 3: 스테일은 형상 전용 — 배치 offset·선택 상태·guide 선은 제외
+{
+  PROJECT = fakeProject(20);
+  BC.complete();
+  ok(BC.isCurrentBodiceChanged() === false, "7b: 기준 unchanged");
+  PROJECT.working.layout = { front: { dx: 99, dy: -40 }, back: { dx: 12, dy: 5 } };   // 배치 offset
+  ok(BC.isCurrentBodiceChanged() === false, "7b: 배치 offset 변경 → 여전히 unchanged(형상 무관)");
+  PROJECT.working.patternLines.push({ id: "g1", piece: "front", role: "guide", segments: [{ kind: "line", from: { x: 5, y: 5 }, to: { x: 8, y: 9 } }] });
+  ok(BC.isCurrentBodiceChanged() === false, "7b: guide 선 추가 → 여전히 unchanged(외곽 무관)");
+  PROJECT.working.selectedId = "g1";   // 선택 상태(세션 UI)
+  ok(BC.isCurrentBodiceChanged() === false, "7b: 선택 상태 변경 → 여전히 unchanged");
 }
 // 8. 완료본 없으면 isCurrentBodiceChanged=true
 {
