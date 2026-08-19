@@ -2791,6 +2791,37 @@ designNeckModeNote). 캐시 `?v=2026081920`(designBodice·designLineTool·ui).
 결과를 실제 재단 outline 으로 확정 — 별도 사양·승인 후. `working.designOutline` 은 여전히 파생
 미리보기(원본 geometry 미대체).
 
+### 증분 3 수명주기 보강 (2026-08) — 편집 재합성·전용선 보호·사용자 boundary 보존
+
+parametric→manual→parametric 왕복을 안전하게 닫는 3건(사용자 지시).
+
+**1. 직접 편집 후 designOutline 재합성**: boundary(anchor·핸들) 편집 pointerup 시 designOutline 을
+재합성해 **에메랄드가 편집 위치로 즉시 이동**(목둘레 숫자만 바뀌던 것 → 형상도 반영). select
+editDrag endDrag 에서 편집 선의 role 이 "boundary" 면 `recomposeAfterBoundaryEdit`(= 공용
+`recomposeDesignOutline` + note + `window.refreshDesignBodyPanel`), 그 외(cut/guide)는 기존
+`invalidateParts`. **유효하지 않으면 designOutline=null(이전 stale 유지 금지) + 구체 사유**
+(`recomposeDesignOutline` 을 실패 시에도 `designOutline=null` 로 통일 — body-apply 경로와 공용).
+ui.js 가 `window.refreshDesignBodyPanel = updateDesignBodyPanel` 노출(designLineTool→ui 목둘레·
+상태 갱신 훅). 실측: 편집 → 앞목선 16.1→18.3cm·완성 56→60.4cm·designOutline 변화, 끝점 off-ring
+→ `"대체선 시작점이 경계에서 벗어남"`·designOutline 제거.
+
+**2. 자동 생성 네크라인 전용선 보호(`isNeckAutoLine`)**: `boundaryLineIds.front/back` 의 두 선은
+**역할 변경 금지**(`setRole` 가드) · **개별 Delete/Backspace 금지**(`deleteSelected` 가드) · 역할
+버튼 disabled(`syncRoleButtons`) · 선택 시 안내 `"네크라인 전용선 · 역할 변경·삭제 금지(기본형으로
+돌아가기로만) · anchor/핸들만 편집"`. **제거는 `기본형으로 돌아가기`로만**, **anchor·핸들 형상
+편집은 허용**. 실측(실 pointer 선택): 삭제 차단·역할 cut 변경 차단·역할버튼 disabled·guide 선은
+비보호(over-block 없음).
+
+**3. 사용자 boundary 보존·재합성**: `기본형으로 돌아가기`를 **별도 사용자 boundary 가 있는 상태**
+에서도 검증. `revertNecklineToParametric` 이 `boundaryLineIds` 두 선만 제거 → 남은 사용자 boundary
+로 `composeWith` 재합성(남은 boundary 없을 때만 designOutline=null). 실측: convert(user line-50 +
+auto 51/52) → revert → **line-50 보존·auto 제거·designOutline front 재합성**(guide 였을 때는 null,
+boundary 면 재합성 — 둘 다 확인).
+
+**검증**: runAll 전체 통과(designLineToolCheck 103), shape/perf 골든 diff 0, 격리 origin storage/
+saves/console 0. 캐시 `?v=2026081931`(designLineTool)·`?v=2026081930`(ui). export 추가:
+`isNeckAutoLine`. **DOM id 63 유지**(신규 요소 없음, 로직만).
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
