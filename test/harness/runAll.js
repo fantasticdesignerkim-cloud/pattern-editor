@@ -44,6 +44,8 @@ const suites = [
   { file: "designBodiceCheck.js",       golden: false },
   // 앞중심 여밈 파생(designPlacket): 현재 유효 앞판 외곽 → 여밈 스트립 순수 변환.
   { file: "designPlacketCheck.js",      golden: false },
+  // 몸판 모양 완료 체크포인트: 검사·완료 게이트·불변 스냅샷·스테일 판정(스텁 project).
+  { file: "bodiceCheckpointCheck.js",   golden: false },
   // Design 배치(piece layout): designLayout.js 의 순수 기하(bbox/auto 배치) 검증.
   { file: "designLayoutCheck.js",       golden: false },
   { file: "draftLayoutCheck.js",        golden: false },

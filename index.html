@@ -218,6 +218,14 @@
           <button class="btn" id="btnClearPlacket">여밈 제거</button>
         </div>
         <div class="row note" id="designPlacketNote" aria-live="polite"></div>
+        <!-- 몸판 모양 완료(bodiceCheckpoint): 검사 통과 시 working.bodiceResult 세션 스냅샷.
+             소매 단계가 확정 진동선을 참조. 아직 시접·너치·재단선 아님. -->
+        <div class="row" style="margin-top:8px"><label>몸판 완료</label></div>
+        <div class="row note" id="designBodiceCheckNote" aria-live="polite"></div>
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnCompleteBodice">몸판 모양 완료</button>
+        </div>
+        <div class="row note" id="designBodiceStatusNote" aria-live="polite">몸판 미완료 · 세션 전용</div>
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
         <div class="row" style="margin-top:8px"><label>배치</label></div>
         <div class="row" style="gap:4px">
@@ -298,11 +306,13 @@
 <script src="js/designLayout.js?v=2026081305"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026081931"></script>
+<!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
+<script src="js/bodiceCheckpoint.js?v=2026082010"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026082001"></script>
+<script src="js/ui.js?v=2026082010"></script>
 
 </body>
 </html>

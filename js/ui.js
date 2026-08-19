@@ -581,6 +581,7 @@
     if (typeof render === "function") render();
     setPlacketNote("여밈 " + fmtL(st.overlap.v) + "cm · 안단 " + fmtL(st.facing.v) + "cm(컷온) · 세션 전용");
     syncPlacketButtons();
+    updateBodiceCheckpointUI(project);
   }
   function onClearPlacket() {
     const project = designProjectNow();
@@ -589,12 +590,55 @@
     ["inpPlacketOverlap", "inpPlacketFacing"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
     if (typeof render === "function") render();
     setPlacketNote("여밈 제거됨"); syncPlacketButtons();
+    updateBodiceCheckpointUI(project);
   }
   function syncPlacketButtons() {
     const project = designProjectNow();
     const apply = document.getElementById("btnApplyPlacket"), clear = document.getElementById("btnClearPlacket");
     if (apply) apply.disabled = !(project && readPlacketInputs().valid);
     if (clear) clear.disabled = !(project && committedPlacket(project).has);
+  }
+
+  // ── 몸판 모양 완료 체크포인트(bodiceCheckpoint) ──
+  function bodiceStatusStr(s) { return s === "match" ? "정합" : s === "check" ? "확인" : "불일치"; }
+  function bodiceFailStr(reason) {
+    const m = {
+      "front-outline-not-connected": "앞판 외곽이 연결되지 않음", "back-outline-not-connected": "뒤판 외곽이 연결되지 않음",
+      "side-seam-mismatch": "옆선 봉제 길이 불일치(>0.3cm)", "front-armhole-unmeasured": "앞 진동둘레 측정 불가",
+      "back-armhole-unmeasured": "뒤 진동둘레 측정 불가", "neckline-unmeasured": "목둘레 측정 불가",
+      "neckline-preview-invalid": "네크라인 미리보기 무효", "no-project": "프로젝트 없음"
+    };
+    return m[reason] || reason;
+  }
+  // refresh 에서 읽기 전용 — check() 실행해 검사 요약·완료 버튼·상태(미완료/완료/변경됨) 갱신.
+  function updateBodiceCheckpointUI(project) {
+    const checkNote = document.getElementById("designBodiceCheckNote");
+    const statusNote = document.getElementById("designBodiceStatusNote");
+    const btn = document.getElementById("btnCompleteBodice");
+    if (!project || !window.bodiceCheckpoint) {
+      if (btn) btn.disabled = true;
+      if (checkNote) checkNote.textContent = "";
+      if (statusNote) statusNote.textContent = "몸판 미완료 · 세션 전용";
+      return;
+    }
+    const c = window.bodiceCheckpoint.check(project);
+    if (checkNote) checkNote.textContent = "옆선 차 " + fmtL(c.sideSeam.diff) + "cm(" + bodiceStatusStr(c.sideSeam.status) + ") · 진동 앞 " + fmtL(c.armhole.front) + "·뒤 " + fmtL(c.armhole.back) + "cm · 반패턴 목둘레 " + fmtL(c.neckline.half) + "cm";
+    if (btn) btn.disabled = !c.ok;
+    const latest = window.bodiceCheckpoint.latest(project);
+    if (statusNote) {
+      if (!latest) statusNote.textContent = c.ok ? "완료 가능 · 세션 전용" : "완료 전 검사: " + bodiceFailStr(c.fails[0]);
+      else if (window.bodiceCheckpoint.isCurrentBodiceChanged(project)) statusNote.textContent = "몸판 변경됨 · 다시 완료 필요 · 세션 전용";
+      else statusNote.textContent = "몸판 완료됨(원형 v" + latest.sourceVersion + ") · 세션 전용";
+    }
+  }
+  function onCompleteBodice() {
+    const project = designProjectNow();
+    if (!project || !window.bodiceCheckpoint) return;
+    const r = window.bodiceCheckpoint.complete(project);
+    const statusNote = document.getElementById("designBodiceStatusNote");
+    if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + bodiceFailStr(r.reason); updateBodiceCheckpointUI(project); return; }
+    updateBodiceCheckpointUI(project);
+    if (statusNote) statusNote.textContent = "몸판 완료됨(원형 v" + r.result.sourceVersion + ") · 세션 전용";
   }
 
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
@@ -621,6 +665,7 @@
     setIf("inpPlacketOverlap", cp.overlap); setIf("inpPlacketFacing", cp.facing);
     setPlacketNote(cp.has ? "여밈 " + fmtL(cp.overlap) + "cm · 안단 " + fmtL(cp.facing) + "cm(컷온) · 세션 전용" : "");
     syncPlacketButtons();
+    updateBodiceCheckpointUI(project);
   }
   // 원자적 적용: 검증 → referenceGeometry 에서 재계산(여유량·길이·옆선 실루엣) → 성공 후에만
   // parameters·geometry 동시 갱신 → render(). 실패 시 커밋·화면 변화 0, note 에만 사유 표시.
@@ -667,6 +712,7 @@
     sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
+    updateBodiceCheckpointUI(project);   // 몸판 변경 → 검사 요약·완료 상태(변경됨) 갱신
   }
   function onResetBodyLength() {
     ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve",
@@ -780,6 +826,9 @@
     if (applyPk) applyPk.addEventListener("click", () => { if (!applyPk.disabled) onApplyPlacket(); });
     const clearPk = document.getElementById("btnClearPlacket");
     if (clearPk) clearPk.addEventListener("click", () => { if (!clearPk.disabled) onClearPlacket(); });
+    // 몸판 모양 완료(bodiceCheckpoint): 검사 통과 시에만 활성(updateBodiceCheckpointUI 가 disabled 관리).
+    const completeBodice = document.getElementById("btnCompleteBodice");
+    if (completeBodice) completeBodice.addEventListener("click", () => { if (!completeBodice.disabled) onCompleteBodice(); });
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");
