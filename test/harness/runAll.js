@@ -46,6 +46,8 @@ const suites = [
   { file: "designPlacketCheck.js",      golden: false },
   // 몸판 모양 완료 체크포인트: 검사·완료 게이트·불변 스냅샷·스테일 판정(스텁 project).
   { file: "bodiceCheckpointCheck.js",   golden: false },
+  // 소매산 봉제선 순수 측정(읽기 전용): cap 곡선 apex 분할·앞/뒤 호길이·실패 계약.
+  { file: "sleeveMeasureCheck.js",      golden: false },
   // Design 배치(piece layout): designLayout.js 의 순수 기하(bbox/auto 배치) 검증.
   { file: "designLayoutCheck.js",       golden: false },
   { file: "draftLayoutCheck.js",        golden: false },

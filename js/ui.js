@@ -630,6 +630,7 @@
       else if (window.bodiceCheckpoint.isCurrentBodiceChanged(project)) statusNote.textContent = "몸판 변경됨 · 다시 완료 필요 · 세션 전용";
       else statusNote.textContent = "몸판 완료됨(원형 v" + latest.sourceVersion + ") · 세션 전용";
     }
+    updateSleeveEaseUI(project);   // 소매산 봉제선 정합(읽기 전용) 갱신
   }
   function onCompleteBodice() {
     const project = designProjectNow();
@@ -639,6 +640,35 @@
     if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + bodiceFailStr(r.reason); updateBodiceCheckpointUI(project); return; }
     updateBodiceCheckpointUI(project);
     if (statusNote) statusNote.textContent = "몸판 완료됨(원형 v" + r.result.sourceVersion + ") · 세션 전용";
+  }
+
+  // ── 소매산 봉제선 정합 확인(읽기 전용) ── 완료 몸판 진동 ↔ 소매산 ↔ 이세. 소매 형상·시접 미변경.
+  // 완료본 없음/스테일/출처 불일치면 측정 차단. 수치만 표시(합격/불합격 판정 없음, 음수 이세도 그대로).
+  function sleeveEaseRelation(project) {
+    if (!window.bodiceCheckpoint) return { ok: false, reason: "no-module" };
+    const bodice = window.bodiceCheckpoint.latest(project);
+    if (!bodice) return { ok: false, reason: "no-bodice" };
+    if (window.bodiceCheckpoint.isCurrentBodiceChanged(project)) return { ok: false, reason: "bodice-stale" };
+    // 소매 geometry = 완료본과 같은 sourceBlock 에 고정된 referenceGeometry.sleeve.
+    if (!project.sourceBlock || project.sourceBlock.version !== bodice.sourceVersion) return { ok: false, reason: "source-mismatch" };
+    if (!window.sleeveMeasure) return { ok: false, reason: "no-module" };
+    const cap = window.sleeveMeasure.measureSleeveCap(project.referenceGeometry && project.referenceGeometry.sleeve);
+    if (!cap) return { ok: false, reason: "cap-unmeasured" };
+    const frontEase = cap.frontLength - bodice.armholeLengths.front;
+    const backEase = cap.backLength - bodice.armholeLengths.back;
+    return { ok: true, bodice: bodice.armholeLengths, cap: cap, ease: { front: frontEase, back: backEase, total: frontEase + backEase } };
+  }
+  function updateSleeveEaseUI(project) {
+    const el = document.getElementById("designSleeveEaseNote"); if (!el) return;
+    if (!project) { el.textContent = ""; return; }
+    const r = sleeveEaseRelation(project);
+    if (!r.ok) {
+      const m = { "no-bodice": "몸판 완료 후 소매산 이세 확인", "bodice-stale": "몸판 변경됨 · 다시 완료 후 이세 확인", "source-mismatch": "소매 출처가 몸판 완료본과 다름(source-mismatch)", "cap-unmeasured": "소매산 봉제선 측정 불가", "no-module": "" };
+      el.textContent = m[r.reason] || ""; return;
+    }
+    // 수치만 표시(합격/불합격 판정 없음). 음수 이세는 fmtL 이 부호를 그대로 노출.
+    const sgn = v => v >= 0 ? "+" : "";
+    el.textContent = "소매산 앞 " + fmtL(r.cap.frontLength) + "·뒤 " + fmtL(r.cap.backLength) + "cm · 이세 앞 " + sgn(r.ease.front) + fmtL(r.ease.front) + "·뒤 " + sgn(r.ease.back) + fmtL(r.ease.back) + "·총 " + sgn(r.ease.total) + fmtL(r.ease.total) + "cm";
   }
 
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
