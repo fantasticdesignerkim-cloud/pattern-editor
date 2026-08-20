@@ -3159,8 +3159,35 @@ anchor 상승 편집→재합성·이세 재측정 → 무효 편집(cap-order)�
 편집·위상/안전 실패). runAll 전체 통과, shape/perf 골든 diff 0. **DOM id 82→84**(btnSleeveCapManual·
 btnSleeveCapRevert). 캐시 `?v=2026082030`(designSleeve·designLineTool·render)·`?v=2026082033`(ui).
 
-**남은 것(S3b·S5)**: snap 후보 제한·무효선 빨강 표시+사유 안내(S3b) / S5 완료 게이트가 `capInvalid===false`
-+ `sourceBodiceHash` 일치를 읽음. sleeve.js·bodiceResult·referenceGeometry·몸판 geometry 무변경 유지.
+### ✅ S3b 구현 완료 (2026-08) — 소매산 편집 snap 제한 + 무효 표시
+
+**Snap 제한(designLineTool editMove, isSleeveCapLine 분기)**: 관리형 소매산은 일반 디자인선 snap
+(다른 patternLine·outline·격자 캐스케이드)을 **적용하지 않는다**.
+- **양 진동밑 endpoint**: 이동·snap 금지(S3a anchor drag 시작 차단 그대로).
+- **SP(splitAnchorIndex)**: **grain 중심축 x 고정**(`t.x = oa.x`) · **y 만 0.5cm 격자**(Alt 해제).
+  실측: SP 드래그 시 x 23.75 불변·y 53→59(격자). x 고정으로 소매 중심·앞뒤 분할 의미 보존.
+- **중간 anchor**: x·y **0.5cm 격자만**(다른 선 snap 없음, Alt 해제).
+- **핸들**: 위치 snap 없음(기존), Shift 45°만 유지.
+
+**무효 표시**: `sleeveDraft.capInvalidReason` 에 오류 코드 저장(recomposeSleeveCap). **무효 관리형
+cap 만 빨강 점선**(`.sleeve-cap-invalid`, #cc3333, render._appendPatternLines 가 capInvalid 일 때만
+그림 — **선택 무관·해제 후에도 표시**). **마지막 유효 navy `working.geometry.sleeve` 유지.** 상태
+문구에 구체 사유(`capInvalidReasonStr`): `소매산 순서가 잘못됨`(cap-order) / `소매산이 자기 교차함`
+(self-intersection) / `진동밑 연결이 끊김`(no-cap-line) / `SP 분할을 측정할 수 없음`(cap-split·
+cap-unmeasured). 다시 유효 → 빨강 제거·navy 갱신·이세 복원.
+- ★ CSS 특이성: `.sleeve-cap-invalid`(0,1,0)는 `.design-working path`(0,1,1)에 짐 → **`.design-working
+  .sleeve-cap-invalid`(0,2,0)로 스코프**해야 빨강 적용(실측 rgb(204,51,51)).
+
+**검증(격리 origin, storage/console 0)**: SP 드래그 x 고정·y 격자 / 무효 편집(cap-order·self-intersection)
+→ 빨강 점선·구체 사유 note·이세 "유효하지 않음"·선택 해제 후 빨강 유지·navy 유지 → 복구 시 빨강 제거·
+이세 복원. 하네스 무변경(35, editMove 는 `typeof svg` 가드로 미실행), runAll 전체 통과, shape/perf 골든
+diff 0. **DOM id 84 유지**(신규 요소 없음). 캐시 `?v=2026082031`(designLineTool·render)·`?v=2026082035`
+(ui)·`?v=2026082032`(css).
+
+**남은 것(S5)**: **`sleeveResult` 완료 스냅샷** — `sourceBodiceHash`·최종 sleeve geometry·앞·뒤 cap
+primitives/길이·이세·lower/cap parameters·`capMode`·manual cap source 를 deep-freeze + 자체 hash.
+완료 게이트가 **`capInvalid===false` + `sourceBodiceHash` 일치**를 읽는다. sleeve.js·bodiceResult·
+referenceGeometry·몸판 geometry 무변경 유지.
 
 ### S2 계약 (2026-08, 사용자 확정)
 
