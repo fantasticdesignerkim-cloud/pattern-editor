@@ -640,7 +640,9 @@
     const r = window.bodiceCheckpoint.complete(project);
     const statusNote = document.getElementById("designBodiceStatusNote");
     if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + bodiceFailStr(r.reason); updateBodiceCheckpointUI(project); return; }
+    refreshSleeve(project);   // 재완료 → sleeveDraft.sourceBodiceHash 를 새 완료본으로 갱신(S1 하부 설정 재사용)
     updateBodiceCheckpointUI(project);
+    if (typeof render === "function") render();
     if (statusNote) statusNote.textContent = "몸판 완료됨(원형 v" + r.result.sourceVersion + ") · 세션 전용";
   }
 
@@ -701,8 +703,13 @@
     return { len, cuff, side: sideEl ? sideEl.value : "straight", valid: len.valid && cuff.valid };
   }
   function committedSleeve(project) {
-    const s = project && project.working && project.working.parameters && project.working.parameters.sleeve;
+    const d = project && project.working && project.working.sleeveDraft;
+    const s = d && d.parameters;
     return s ? { has: true, len: s.sleeveLengthCm, cuff: s.cuffCircumferenceCm, side: s.sideShape || "straight" } : { has: false };
+  }
+  function bodiceHashOf(project) {
+    const b = project && window.bodiceCheckpoint && window.bodiceCheckpoint.latest(project);
+    return b ? b.hash : null;
   }
   function refSleeveVals(project) {
     const ref = window.designSleeve && window.designSleeve.referenceSilhouette(project.referenceGeometry && project.referenceGeometry.sleeve);
@@ -713,16 +720,23 @@
     const m = { "no-sleeve": "소매 외곽을 찾을 수 없음", "invalid-length": "소매길이 값 확인", "invalid-cuff": "소매부리 완성둘레 값 확인", "invalid-side-shape": "옆선 형태 확인", "no-module": "" };
     return m[reason] || "소매를 적용할 수 없습니다";
   }
-  // 파생: computeSilhouette → working.geometry.sleeve 덮음 + params 저장. 실패 시 이전 유지(호출부 판단).
+  // 파생: computeSilhouette → working.sleeveDraft(sourceBodiceHash·parameters·geometry) + render 미러
+  // working.geometry.sleeve. 실패 시 이전 유지(호출부 판단). ★ sourceBodiceHash 로 어떤 몸판 완료본에서
+  // 나왔는지 기록 — S2 소매산 파라미터가 붙으면 hash 불일치 시 stale 처리(S1 하부 설정은 재사용 가능).
   function computeSleeve(project, params) {
     if (!window.designSleeve) return { ok: false, reason: "no-module" };
     const r = window.designSleeve.computeSilhouette(project.referenceGeometry && project.referenceGeometry.sleeve, params);
     if (!r.ok) return r;
-    project.working.parameters.sleeve = { sleeveLengthCm: params.sleeveLengthCm, cuffCircumferenceCm: params.cuffCircumferenceCm, sideShape: params.sideShape };
-    project.working.geometry.sleeve = r.geometry;   // 파생 소매(render/layout 그대로 사용). body apply 후 재파생.
+    project.working.sleeveDraft = {
+      sourceBodiceHash: bodiceHashOf(project),
+      parameters: { sleeveLengthCm: params.sleeveLengthCm, cuffCircumferenceCm: params.cuffCircumferenceCm, sideShape: params.sideShape },
+      geometry: r.geometry
+    };
+    project.working.geometry.sleeve = r.geometry;   // render/layout 미러(render.js 무변경). body apply 후 재파생.
     return { ok: true, result: r };
   }
-  // body apply 로 working.geometry.sleeve 가 블록으로 덮인 뒤 소매 파라미터 있으면 재파생(형상 동일).
+  // body apply / 재완료 후: working.geometry.sleeve 가 블록으로 덮이거나 hash 가 바뀐 뒤 하부 설정 재파생.
+  // S1 은 cap 이 원형(블록)이라 형상 동일 — sourceBodiceHash 만 최신 완료본으로 갱신(하부 설정 재사용).
   function refreshSleeve(project) {
     project = project || designProjectNow(); if (!project) return;
     const c = committedSleeve(project); if (!c.has) return;
@@ -743,7 +757,8 @@
     const r = computeSleeve(project, { sleeveLengthCm: st.len.v, cuffCircumferenceCm: st.cuff.v, sideShape: st.side });
     if (!r.ok) { setSleeveNote(sleeveFailStr(r.reason)); return; }   // 이전 유지
     if (typeof render === "function") render();
-    const warn = r.result.warnings.indexOf("narrow-cuff") >= 0 ? " · ⚠ 원형보다 좁음(트임 없는 긴팔 착용 주의)" : "";
+    // narrow-cuff = "착용 불가"가 아니라 "원형보다 좁음 · 트임/커프스 필요 가능"(손둘레 없어 경고 이상 불가).
+    const warn = r.result.warnings.indexOf("narrow-cuff") >= 0 ? " · ⚠ 원형보다 좁음 · 트임/커프스 필요 가능" : "";
     setSleeveNote("소매길이 " + fmtL(st.len.v) + "cm · 소매부리 " + fmtL(st.cuff.v) + "cm(" + (st.side === "gentle" ? "완만 곡선" : "직선") + ")" + warn + " · 세션 전용");
     syncSleeveButtons(); updateSleeveEaseUI(project);
   }
@@ -753,8 +768,8 @@
     const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = fmtL(v); };
     setV("inpSleeveLength", rv.len); setV("inpSleeveCuff", rv.cuff);
     const sideEl = document.getElementById("selSleeveSide"); if (sideEl) sideEl.value = "straight";
-    // 원형 소매로 복원: 파생 제거 + working.geometry.sleeve 를 원형 clone.
-    project.working.parameters.sleeve = null;
+    // 원형 소매로 복원: 파생 제거(sleeveDraft null) + working.geometry.sleeve 를 원형 clone.
+    project.working.sleeveDraft = null;
     project.working.geometry.sleeve = JSON.parse(JSON.stringify(project.referenceGeometry.sleeve));
     if (typeof render === "function") render();
     setSleeveNote("원형 소매로 복원됨 · 세션 전용");

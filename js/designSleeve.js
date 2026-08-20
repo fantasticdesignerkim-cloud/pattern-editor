@@ -93,7 +93,7 @@
     var frontSide = sideSeg(ref.frontUnderarm, frontHem, side, +1); // 앞(오른쪽): 안쪽 = -x
     var outline = capSegs.map(cloneSeg).concat([backSide, frontSide, L(backHem, frontHem)]);
     var warnings = [];
-    if (cuff < ref.cuffCircumferenceCm - EPS) warnings.push("narrow-cuff");   // 원형보다 좁음(트임 없는 긴팔 착용 주의)
+    if (cuff < ref.cuffCircumferenceCm - EPS) warnings.push("narrow-cuff");   // 원형보다 좁음 · 트임/커프스 필요 가능(착용 불가 아님)
     return { ok: true, geometry: { outline: outline, construction: (refSleeve.construction || []).map(cloneSeg) },
       cuffCircumferenceCm: cuff, referenceCuffCm: ref.cuffCircumferenceCm, sleeveLengthCm: len, warnings: warnings };
   }
