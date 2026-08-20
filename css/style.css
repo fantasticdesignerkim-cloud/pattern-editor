@@ -119,6 +119,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-outline-composed{fill:none;stroke:#0E9F6E;stroke-width:2.8;stroke-linejoin:round;stroke-linecap:round}
 /* 앞중심 여밈: 안단 바깥 재단선(실선 앰버) + 접힘/CF construction(점선). */
 .design-placket-outline{fill:none;stroke:#B45309;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+/* 무효 소매산 편집: 빨강 점선(마지막 유효 navy geometry 는 유지, 선택 무관 표시).
+   .design-working path(0,1,1) 를 이기도록 working 스코프(0,2,0). */
+.design-working .sleeve-cap-invalid{fill:none;stroke:#cc3333;stroke-width:2;stroke-dasharray:5 3;stroke-linejoin:round;stroke-linecap:round}
 .design-placket-construction{fill:none;stroke:#B45309;stroke-width:1.2;stroke-dasharray:4 3;opacity:.75}
 
 /* ── 블루프린트 캔버스 중심 레이아웃 ── */

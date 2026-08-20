@@ -35,7 +35,15 @@ function _appendPatternLines(grp, patternLines, pc){
   const selId=(window.designLineTool && window.designLineTool.getSelectedId) ? window.designLineTool.getSelectedId() : null;
   patternLines.forEach(pl=>{
     if(!pl || pl.piece !== pc || !Array.isArray(pl.segments)) return;
-    if(pl.managedBy === "sleeve-cap") return;   // 관리형 소매산 선: navy 봉제선(working.geometry.sleeve)만 담당, 중복 렌더 금지(선택 overlay 는 별도)
+    if(pl.managedBy === "sleeve-cap"){
+      // 유효: navy 봉제선(working.geometry.sleeve)만 담당, 중복 렌더 금지. 무효: 빨강 점선(선택 무관 표시).
+      const _p=(window.designWorkflow && window.designWorkflow.current());
+      const _inv=_p && _p.working.sleeveDraft && _p.working.sleeveDraft.capInvalid;
+      if(!_inv) return;
+      const di=_patternPathD(pl.segments); if(!di) return;
+      grp.appendChild(E("path",{ d:di, fill:"none", class:"sleeve-cap-invalid", "data-piece":pc, "data-line-id":pl.id }));
+      return;
+    }
     const d=_patternPathD(pl.segments);   // line·cubic 혼합 → 하나의 연속 path
     if(!d) return;
     const cls="design-line"+(pl.id===selId?" selected":"");

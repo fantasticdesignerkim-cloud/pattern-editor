@@ -748,6 +748,11 @@
   }
   function sleeveManual(project) { const d = project && project.working && project.working.sleeveDraft; return !!(d && d.mode === "manual"); }
   function sleeveCapInvalid(project) { const d = project && project.working && project.working.sleeveDraft; return !!(d && d.capInvalid); }
+  // 무효 사유(사용자 확정 문구).
+  function capInvalidReasonStr(reason) {
+    const m = { "cap-order": "소매산 순서가 잘못됨", "self-intersection": "소매산이 자기 교차함", "no-cap-line": "진동밑 연결이 끊김", "cap-split": "SP 분할을 측정할 수 없음", "cap-unmeasured": "SP 분할을 측정할 수 없음" };
+    return m[reason] || "소매산 편집이 유효하지 않음";
+  }
   // body apply / 재완료 후 재파생. ★ 조건부 hash 규칙(사용자 확정): lower 는 재사용, cap 은 완료본
   // hash 가 달라지면 stale → 폐기하고 reference cap(+lower) 로 복원(사용자가 S2 재적용해야 새 cap).
   function refreshSleeve(project) {
@@ -775,10 +780,10 @@
     if (!line) return;
     const r = window.designSleeve.computeFromCapLine(project.referenceGeometry && project.referenceGeometry.sleeve, line.segments, line.splitAnchorIndex, d.parameters.lower);
     if (!r.ok) {
-      d.capInvalid = true;   // 무효: 마지막 유효 geometry 유지, 이세·완료 차단
-      setSleeveNote("소매산 편집 무효(" + sleeveFailStr(r.reason) + ") · 편집 복구 또는 기본 소매산으로 돌아가기");
+      d.capInvalid = true; d.capInvalidReason = r.reason;   // 무효: 마지막 유효 geometry 유지, 이세·완료 차단
+      setSleeveNote("소매산 편집 무효 · " + capInvalidReasonStr(r.reason) + " · 편집 복구 또는 기본 소매산으로 돌아가기");
     } else {
-      d.capInvalid = false;
+      d.capInvalid = false; d.capInvalidReason = null;
       project.working.geometry.sleeve = r.geometry; d.geometry = r.geometry; d.capLengths = r.capLengths;
       setSleeveNote("소매산 직접 수정 중 · 재합성됨 · 진동밑 고정");
     }
@@ -900,7 +905,7 @@
     if (sideEl && document.activeElement !== sideEl) sideEl.value = lw ? (lw.sideShape || "straight") : "straight";
     const cap = c.has ? c.cap : null;
     setIf("inpSleeveBicep", cap ? cap.bicepCircumferenceCm : rv.bicep); setIf("inpSleeveCapHeight", cap ? cap.capHeightCm : rv.capH);
-    if (sleeveCapInvalid(project)) setSleeveNote("소매산 편집 무효 · 편집 복구 또는 기본 소매산으로 돌아가기");
+    if (sleeveCapInvalid(project)) setSleeveNote("소매산 편집 무효 · " + capInvalidReasonStr(project.working.sleeveDraft.capInvalidReason) + " · 편집 복구 또는 기본 소매산으로 돌아가기");
     else if (sleeveManual(project)) setSleeveNote("소매산 직접 수정 중 · 진동밑 고정 · SP·핸들 편집");
     else if (!c.has) setSleeveNote(sleeveGateOk(project) ? "원형 소매 기준값 · 소매/소매산 적용으로 변형" : "몸판 완료 후 소매를 편집할 수 있습니다");
     else if (!cap) setSleeveNote("소매산은 원형 · 소매산 적용으로 위팔·높이 변형");

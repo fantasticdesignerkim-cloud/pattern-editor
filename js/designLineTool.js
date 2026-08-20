@@ -819,12 +819,21 @@
     } else {                                                                  // anchor: 총 delta + snap
       const oa = editDrag.origAnchor;
       const nx = oa.x + (geo.x - editDrag.startGeo.x), ny = oa.y + (geo.y - editDrag.startGeo.y);
-      const snap = snapForCursor({ x: nx, y: ny }, line.piece, altKey, oa);   // 자기 자신 anchor 제외
-      const t = snap ? snap.point : { x: nx, y: ny };
-      snapHint = snap ? { piece: line.piece, point: snap.point, type: snap.type } : null;
+      let t;
+      if (isSleeveCapLine(line)) {
+        // 관리형 소매산 snap 제한: SP=grain x 고정·y 0.5 격자 / 중간=x·y 0.5 격자 / 다른 선 snap 금지 / Alt 해제.
+        const isSP = editDrag.k === line.splitAnchorIndex, grid = v => Math.round(v / 0.5) * 0.5;
+        t = { x: isSP ? oa.x : (altKey ? nx : grid(nx)), y: altKey ? ny : grid(ny) };
+        snapHint = altKey ? null : { piece: line.piece, point: { x: t.x, y: t.y }, type: "grid" };
+        setNote(isSP ? "SP · x 고정(grain) · y 0.5cm 격자(Alt 해제)" : "소매산 anchor · 0.5cm 격자(Alt 해제)");
+      } else {
+        const snap = snapForCursor({ x: nx, y: ny }, line.piece, altKey, oa);   // 자기 자신 anchor 제외
+        t = snap ? snap.point : { x: nx, y: ny };
+        snapHint = snap ? { piece: line.piece, point: snap.point, type: snap.type } : null;
+        setNote(snapHint ? ("흡착 → " + (SNAP_LABEL[snapHint.type] || snapHint.type)) : "anchor 이동 · Esc 해제");
+      }
       line.segments = JSON.parse(JSON.stringify(editDrag.orig));
       moveAnchor(line, editDrag.k, t.x - oa.x, t.y - oa.y);
-      setNote(snapHint ? ("흡착 → " + (SNAP_LABEL[snapHint.type] || snapHint.type)) : "anchor 이동 · Esc 해제");
     }
     rerender();
   }
