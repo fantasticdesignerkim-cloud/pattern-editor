@@ -3029,6 +3029,52 @@ edge 없이 추가되면 재검토). 자기교차("단순") 별도 검사는 bui
 **착수 전 결정 필요(사용자)**: 첫 블라우스의 **기본 소매 형태**와 **소매 길이**. 확정 후 1번부터
 착수한다.
 
+### 첫 소매 확정안(2026-08, 사용자) + S1 구현 완료
+
+**확정**: 셋인 1피스 · 긴팔 · 약간 테이퍼드 · 단순 마감(커프스·트임·단추 후속) · 기본형 카드 `기본
+셋인` 하나 · **기준값 = 완료 원형 소매 초기값**. **착용 보완**: 입력명은 **`소매부리 완성둘레`**(폭
+아님) — 손둘레 측정 있으면 `손둘레+여유` 미만 차단, 없으면 원형 소매부리보다 좁을 때 **경고**(v1 은
+트임 필요한 좁은 손목형 미생성). UI 는 **몸판/소매 서브탭 분리**(소매 탭은 몸판 완료·비스테일 후 활성).
+
+**✅ S1 — 기본 긴팔 하부 실루엣 구현 완료**
+
+**순수 모듈 `js/designSleeve.js`** (`window.designSleeve`):
+- `computeSilhouette(refSleeve, {sleeveLengthCm, cuffCircumferenceCm, sideShape})` → **cap(곡선) +
+  진동밑점 고정**, 아래쪽(옆선·밑단)만 재생성. SP=cap apex(min y), 뒤=낮은 x·앞=높은 x. 밑단 y=
+  SP.y+길이, 폭=완성둘레(원형 밑단 중심 기준 좌우 분배), 옆선=진동밑(고정)→밑단(`straight` line /
+  `gentle` cubic). **소매산·앞뒤 이세 관계 불변**(몸판 진동 정합 안 깨짐). 입력 불변.
+- `referenceSilhouette(refSleeve)` → 원형 기준값(초기 UI): `{sleeveLengthCm, cuffCircumferenceCm,
+  hemCenterX, spY, bicepCm, backUnderarm, frontUnderarm}`. **초기값이 원형 소매를 정확 재현**(실측:
+  SP y53·cuff 30·length 52·bicep 33.76).
+- **착용 경고**: `cuffCircumferenceCm < 원형 소매부리`면 `warnings:["narrow-cuff"]`(차단 아님).
+  손둘레 입력은 현재 없음 → 경고만.
+
+**데이터 모델·UI (ui.js, index.html)**:
+- `working.parameters.sleeve` + **파생 소매를 `working.geometry.sleeve` 로 덮어씀**(render·designLayout
+  그대로 사용, render.js/designLayout **무변경**). **body apply 가 sleeve 를 블록으로 덮으면
+  `refreshSleeve` 가 referenceGeometry.sleeve(불변) 기준 재파생** → 파생 소매 유지.
+- **몸판/소매 서브탭**(`#designSubtabs`, `.subtab`): 소매 탭 **게이트 = bodiceResult 존재 + 비스테일**
+  (`syncDesignSubtabGate`). 게이트 실패 시 소매 탭 disabled·소매 탭이었으면 몸판으로 되돌림. S1 편집도
+  `sleeveGateOk` 로 차단(몸판 stale 이면 편집 금지 — 사용자 계약).
+- 소매 입력(소매길이·소매부리 완성둘레·옆선 직선/완만) + `소매 적용`/`원형 소매로`. 초기값=committed
+  또는 원형 기준값. 실패 시 이전 소매 유지. 소매산 이세 정합(sleeveMeasure)은 소매 탭으로 이동
+  (S1 은 cap 불변이라 그대로 유효).
+- **bodiceResult·referenceGeometry·몸판 geometry 불변. sleeve.js 무변경.**
+
+**검증(격리 origin, storage/console 0)**: 몸판 미완료 시 소매 탭 disabled → 완료 시 활성 → 소매 탭
+전환(초기값 52/30) → 적용(길이 58·cuff 24: hemY 111·폭 24·**cap 불변**·narrow-cuff 경고) → body apply
+(여유량 4) 후 **소매 유지(재파생)** → 몸판 stale 시 **소매 탭 disabled·몸판으로 전환** → 재완료 시
+재활성 → 원형 소매로(원형 재현·params null). 스크린샷(파생 소매=긴·좁은 navy, 원형=gray, cap 공유).
+하네스 `designSleeveCheck` **20**(ref 기준값·초기값 재현·cap 불변·진동밑 고정·narrow-cuff·직선/완만·
+실패/불변). runAll 전체 통과, shape/perf 골든 diff 0. **DOM id 72→79**(designSubtabs·inpSleeveLength·
+inpSleeveCuff·selSleeveSide·btnApplySleeve·btnResetSleeve·designSleeveNote). 캐시 `?v=2026082010`
+(designSleeve)·`?v=2026082020`(ui·css).
+
+**남은 것**: **S2(위팔·소매산 결합 조정)** — 위팔품 변경 시 진동밑점·소매산 길이·이세·앞뒤 배분을
+원자적 재계산(별도 사이클). **S3 곡선 직접 편집 / S4 정합 확인(이미 읽기 전용 존재) / S5
+`sleeveResult` 완료 스냅샷**(sourceBodiceHash 고정, 시접·너치·커프스·트임 제외). 완만 곡선 옆선은
+포함(straight 기본).
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
