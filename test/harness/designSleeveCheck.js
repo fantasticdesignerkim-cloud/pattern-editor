@@ -98,6 +98,45 @@ const lower = (len, cuff, side) => ({ lower: { sleeveLengthCm: len, cuffCircumfe
   ok(JSON.stringify(g) === snap, "8: 입력 sleeve 불변");
 }
 
+// 9. S3 capLineFromGeometry: 원형 cap → 관리형 선(뒤→SP→앞) + splitAnchorIndex(apex)
+{
+  const lc = S.capLineFromGeometry(sleeve());
+  ok(lc && Array.isArray(lc.segments) && lc.segments.length >= 2, "9: cap 선 세그먼트");
+  const anchors = lc.segments.map(s => s.from).concat([lc.segments[lc.segments.length - 1].to]);
+  ok(near(anchors[0].x, 5.53) && near(anchors[anchors.length - 1].x, 39.29), "9: 뒤(5.53)→앞(39.29) 방향");
+  ok(lc.splitAnchorIndex >= 1 && lc.splitAnchorIndex <= anchors.length - 2 && near(anchors[lc.splitAnchorIndex].y, 53, 0.5), "9: SP = apex 최근접 anchor(y≈53)");
+}
+// 10. S3 computeFromCapLine: 관리형 선 + lower → 소매 재합성 + SP 분할 측정
+{
+  const lc = S.capLineFromGeometry(sleeve());
+  const r = S.computeFromCapLine(sleeve(), lc.segments, lc.splitAnchorIndex, { sleeveLengthCm: 52, cuffCircumferenceCm: 30, sideShape: "straight" });
+  ok(r.ok && r.capLengths.front > 0 && r.capLengths.back > 0, "10: 재합성·앞/뒤 분리 측정");
+  ok(r.capLengths.front !== r.capLengths.back, "10: 앞≠뒤(비대칭 보존)");
+  const hem = hemOf(r); ok(hem && near(hem.from.y, 105), "10: 하부(밑단) 재생성");
+}
+// 11. S3 편집: SP anchor 를 위로 이동 → cap 길이 변화(길어짐)
+{
+  const lc = S.capLineFromGeometry(sleeve());
+  const r0 = S.computeFromCapLine(sleeve(), lc.segments, lc.splitAnchorIndex, { sleeveLengthCm: 52, cuffCircumferenceCm: 30 });
+  const segs = JSON.parse(JSON.stringify(lc.segments));
+  const sp = lc.splitAnchorIndex;
+  segs[sp - 1].to.y -= 4; segs[sp].from.y -= 4;   // SP 공유 anchor 위로(같은 점)
+  const r1 = S.computeFromCapLine(sleeve(), segs, sp, { sleeveLengthCm: 52, cuffCircumferenceCm: 30 });
+  ok(r1.ok && r1.capLengths.total > r0.capLengths.total, "11: SP 상승 → cap 봉제 길어짐");
+}
+// 12. S3 위상/안전 실패
+{
+  const lc = S.capLineFromGeometry(sleeve());
+  const segs = JSON.parse(JSON.stringify(lc.segments));
+  const sp = lc.splitAnchorIndex;
+  // SP 를 진동밑 아래로 → cap-order
+  const bad = JSON.parse(JSON.stringify(segs)); bad[sp - 1].to.y = 80; bad[sp].from.y = 80;
+  ok(S.computeFromCapLine(sleeve(), bad, sp, { sleeveLengthCm: 52, cuffCircumferenceCm: 30 }).reason === "cap-order", "12: SP 진동밑 아래 → cap-order");
+  // split 인덱스 범위 밖
+  ok(S.computeFromCapLine(sleeve(), segs, 0, { sleeveLengthCm: 52, cuffCircumferenceCm: 30 }).reason === "cap-split", "12: split=0 → cap-split");
+  ok(S.computeFromCapLine(sleeve(), [], sp, { sleeveLengthCm: 52, cuffCircumferenceCm: 30 }).reason === "no-cap-line", "12: 빈 cap 선 → no-cap-line");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

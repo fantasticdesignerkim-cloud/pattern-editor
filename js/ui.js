@@ -653,6 +653,7 @@
     const bodice = window.bodiceCheckpoint.latest(project);
     if (!bodice) return { ok: false, reason: "no-bodice" };
     if (window.bodiceCheckpoint.isCurrentBodiceChanged(project)) return { ok: false, reason: "bodice-stale" };
+    if (sleeveCapInvalid(project)) return { ok: false, reason: "cap-invalid" };   // manual 편집 무효 → 이세 보류
     // 소매산 길이: 파생 소매(sleeveDraft)면 그 capLengths(S1 원형 cap / S2 변환 cap), 없으면 원형 소매 측정.
     const draft = project.working && project.working.sleeveDraft;
     let cap;
@@ -674,7 +675,7 @@
     if (!project) { el.textContent = ""; return; }
     const r = sleeveEaseRelation(project);
     if (!r.ok) {
-      const m = { "no-bodice": "몸판 완료 후 소매산 이세 확인", "bodice-stale": "몸판 변경됨 · 다시 완료 후 이세 확인", "source-mismatch": "소매 출처가 몸판 완료본과 다름(source-mismatch)", "cap-unmeasured": "소매산 봉제선 측정 불가", "no-module": "" };
+      const m = { "no-bodice": "몸판 완료 후 소매산 이세 확인", "bodice-stale": "몸판 변경됨 · 다시 완료 후 이세 확인", "source-mismatch": "소매 출처가 몸판 완료본과 다름(source-mismatch)", "cap-unmeasured": "소매산 봉제선 측정 불가", "cap-invalid": "소매산 편집 무효 · 이세 현재 유효하지 않음", "no-module": "" };
       el.textContent = m[r.reason] || ""; return;
     }
     // 수치만 표시(합격/불합격 판정 없음). 음수 이세는 fmtL 이 부호를 그대로 노출.
@@ -738,37 +739,117 @@
     if (!r.ok) return r;
     project.working.sleeveDraft = {
       sourceBodiceHash: bodiceHashOf(project),
+      mode: "parametric", capLineId: null, capInvalid: false,   // S1/S2 적용은 parametric
       parameters: { lower: lower, cap: cap || null },
       geometry: r.geometry, capLengths: r.capLengths
     };
     project.working.geometry.sleeve = r.geometry;   // render/layout 미러(render.js 무변경).
     return { ok: true, result: r };
   }
+  function sleeveManual(project) { const d = project && project.working && project.working.sleeveDraft; return !!(d && d.mode === "manual"); }
+  function sleeveCapInvalid(project) { const d = project && project.working && project.working.sleeveDraft; return !!(d && d.capInvalid); }
   // body apply / 재완료 후 재파생. ★ 조건부 hash 규칙(사용자 확정): lower 는 재사용, cap 은 완료본
   // hash 가 달라지면 stale → 폐기하고 reference cap(+lower) 로 복원(사용자가 S2 재적용해야 새 cap).
   function refreshSleeve(project) {
     project = project || designProjectNow(); if (!project) return;
     const c = committedSleeve(project); if (!c.has) return;
+    const d = project.working.sleeveDraft;
     const currentHash = bodiceHashOf(project);
-    let cap = c.cap;
-    if (cap && project.working.sleeveDraft.sourceBodiceHash !== currentHash) cap = null;   // hash 변경 → cap stale
-    deriveSleeve(project, c.lower, cap);
+    if (d.sourceBodiceHash !== currentHash) {
+      // hash 변경 → parametric cap·manual cap 모두 stale: 관리선 제거·capLineId/capInvalid clear·cap 폐기·reference+lower.
+      if (d.capLineId) project.working.patternLines = (project.working.patternLines || []).filter(l => l.id !== d.capLineId);
+      deriveSleeve(project, c.lower, null);
+      return;
+    }
+    if (d.mode === "manual" && d.capLineId) recomposeSleeveCap();   // 같은 hash: 관리선에서 재합성(하부 변화 반영)
+    else deriveSleeve(project, c.lower, c.cap);
+  }
+  // 관리형 소매산 선(source of truth)에서 소매 재합성. 유효하면 working.geometry.sleeve 갱신, 무효면
+  // capInvalid=true(마지막 유효 geometry 유지, 완료 차단). designLineTool 편집 pointerup 이 호출.
+  function recomposeSleeveCap() {
+    const project = designProjectNow();
+    if (!project || !window.designSleeve) return;
+    const d = project.working.sleeveDraft;
+    if (!d || d.mode !== "manual") return;
+    const line = (project.working.patternLines || []).find(l => l.id === d.capLineId);
+    if (!line) return;
+    const r = window.designSleeve.computeFromCapLine(project.referenceGeometry && project.referenceGeometry.sleeve, line.segments, line.splitAnchorIndex, d.parameters.lower);
+    if (!r.ok) {
+      d.capInvalid = true;   // 무효: 마지막 유효 geometry 유지, 이세·완료 차단
+      setSleeveNote("소매산 편집 무효(" + sleeveFailStr(r.reason) + ") · 편집 복구 또는 기본 소매산으로 돌아가기");
+    } else {
+      d.capInvalid = false;
+      project.working.geometry.sleeve = r.geometry; d.geometry = r.geometry; d.capLengths = r.capLengths;
+      setSleeveNote("소매산 직접 수정 중 · 재합성됨 · 진동밑 고정");
+    }
+    if (typeof render === "function") render();
+    updateSleevePanel(project); updateSleeveEaseUI(project);
+  }
+  // 소매산 직접 수정(parametric → manual): 현재 cap 을 관리형 patternLine 으로 변환. cap 파라미터 보존.
+  function onSleeveCapManual() {
+    const project = designProjectNow();
+    if (!project || !window.designSleeve || !window.designLineTool) return;
+    if (!sleeveGateOk(project)) { setSleeveNote("몸판 완료 후 소매산을 직접 수정할 수 있습니다"); return; }
+    const c = committedSleeve(project);
+    if (!c.has) { setSleeveNote("먼저 소매/소매산을 적용한 뒤 직접 수정할 수 있습니다"); return; }
+    const lc = window.designSleeve.capLineFromGeometry(project.working.geometry.sleeve);
+    if (!lc) { setSleeveNote("소매산을 관리선으로 변환할 수 없습니다"); return; }
+    const ls = project.working.patternLines || (project.working.patternLines = []);
+    const id = window.designLineTool.nextId(ls);
+    ls.push({ id: id, piece: "sleeve", role: "boundary", managedBy: "sleeve-cap", splitAnchorIndex: lc.splitAnchorIndex, segments: lc.segments });
+    const d = project.working.sleeveDraft;
+    d.mode = "manual"; d.capLineId = id; d.capInvalid = false;
+    if (typeof render === "function") render();
+    setSleeveNote("소매산 직접 수정 중 · 진동밑 고정 · SP·중간 anchor·핸들 편집");
+    updateSleevePanel(project); updateSleeveEaseUI(project);
+  }
+  // 기본 소매산으로 돌아가기(manual → parametric): 관리선만 제거, 보존된 cap 파라미터로 재파생.
+  function onSleeveCapRevert() {
+    const project = designProjectNow();
+    if (!project || !window.designSleeve) return;
+    const d = project.working.sleeveDraft;
+    if (!d || d.mode !== "manual") return;
+    project.working.patternLines = (project.working.patternLines || []).filter(l => l.id !== d.capLineId);   // 관리선만 제거(다른 사용자 선 보존)
+    deriveSleeve(project, d.parameters.lower, d.parameters.cap);   // 보존된 parametric cap 재파생(mode parametric)
+    if (typeof render === "function") render();
+    setSleeveNote("기본 소매산으로 복원됨 · 세션 전용");
+    updateSleevePanel(project); updateSleeveEaseUI(project);
   }
   function syncSleeveButtons() {
     const project = designProjectNow(), gate = sleeveGateOk(project);
+    const manual = sleeveManual(project), invalid = sleeveCapInvalid(project);
     const apply = document.getElementById("btnApplySleeve"), reset = document.getElementById("btnResetSleeve");
     const applyCap = document.getElementById("btnApplyCap");
-    if (apply) apply.disabled = !(gate && readSleeveInputs().valid);
+    // capInvalid 동안 S1 적용 차단(어떤 cap 을 쓸지 모호). S2 cap 은 manual 이면 입력 잠금.
+    if (apply) apply.disabled = !(gate && readSleeveInputs().valid && !invalid);
     if (reset) reset.disabled = !(gate && committedSleeve(project).has);
-    if (applyCap) applyCap.disabled = !(gate && readCapInputs().valid);   // S2: 하부 없으면 apply 시 ref lower 사용
+    if (applyCap) applyCap.disabled = !(gate && readCapInputs().valid && !manual);
+    syncSleeveModeUI(project);   // 직접 수정/돌아가기 버튼·cap 입력 잠금 동기화
+  }
+  // 소매산 mode UI: manual 이면 cap 입력 잠금·기본 소매산으로 돌아가기 노출·직접 수정 숨김. capInvalid 안내.
+  function syncSleeveModeUI(project) {
+    const manual = sleeveManual(project), invalid = sleeveCapInvalid(project), gate = sleeveGateOk(project);
+    ["inpSleeveBicep", "inpSleeveCapHeight"].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = manual; });
+    const bM = document.getElementById("btnSleeveCapManual"), bR = document.getElementById("btnSleeveCapRevert");
+    if (bM) { bM.hidden = manual; bM.disabled = !(gate && committedSleeve(project).has && !manual); }
+    if (bR) bR.hidden = !manual;
   }
   // S1 적용(하부): lower 갱신, 기존 cap 유지(cap null 이면 원형 cap).
   function onApplySleeve() {
     const project = designProjectNow();
     if (!project || !window.designSleeve) return;
     if (!sleeveGateOk(project)) { setSleeveNote("몸판 완료 후 소매를 편집할 수 있습니다"); return; }
+    if (sleeveCapInvalid(project)) { setSleeveNote("소매산 편집이 무효입니다 · 복구 또는 기본 소매산으로 돌아간 뒤 적용"); return; }
     const st = readSleeveInputs();
     if (!st.valid) { setSleeveNote("소매길이 10–90 · 소매부리 완성둘레 8–60 범위를 확인하세요"); return; }
+    // manual 이면 하부만 갱신하고 cap 은 관리선 재합성(deriveSleeve 로 parametric 회귀 방지).
+    if (sleeveManual(project)) {
+      const d = project.working.sleeveDraft;
+      d.parameters.lower = { sleeveLengthCm: st.len.v, cuffCircumferenceCm: st.cuff.v, sideShape: st.side };
+      recomposeSleeveCap();
+      if (!sleeveCapInvalid(project)) setSleeveNote("소매길이 " + fmtL(st.len.v) + "cm · 소매부리 " + fmtL(st.cuff.v) + "cm · 소매산 직접 수정 유지 · 세션 전용");
+      syncSleeveButtons(); return;
+    }
     const c = committedSleeve(project);
     const r = deriveSleeve(project, { sleeveLengthCm: st.len.v, cuffCircumferenceCm: st.cuff.v, sideShape: st.side }, c.cap);
     if (!r.ok) { setSleeveNote(sleeveFailStr(r.reason)); return; }   // 이전 유지
@@ -783,6 +864,7 @@
     const project = designProjectNow();
     if (!project || !window.designSleeve) return;
     if (!sleeveGateOk(project)) { setSleeveNote("몸판 완료 후 소매산을 편집할 수 있습니다"); return; }
+    if (sleeveManual(project)) { setSleeveNote("직접 수정 중에는 소매산 수치를 잠급니다 · 기본 소매산으로 돌아가기 후 변경"); return; }
     const st = readCapInputs();
     if (!st.valid) { setSleeveNote("위팔 완성둘레 10–80 · 소매산 높이 3–30 범위를 확인하세요"); return; }
     const c = committedSleeve(project);
@@ -818,9 +900,12 @@
     if (sideEl && document.activeElement !== sideEl) sideEl.value = lw ? (lw.sideShape || "straight") : "straight";
     const cap = c.has ? c.cap : null;
     setIf("inpSleeveBicep", cap ? cap.bicepCircumferenceCm : rv.bicep); setIf("inpSleeveCapHeight", cap ? cap.capHeightCm : rv.capH);
-    if (!c.has) setSleeveNote(sleeveGateOk(project) ? "원형 소매 기준값 · 소매/소매산 적용으로 변형" : "몸판 완료 후 소매를 편집할 수 있습니다");
+    if (sleeveCapInvalid(project)) setSleeveNote("소매산 편집 무효 · 편집 복구 또는 기본 소매산으로 돌아가기");
+    else if (sleeveManual(project)) setSleeveNote("소매산 직접 수정 중 · 진동밑 고정 · SP·핸들 편집");
+    else if (!c.has) setSleeveNote(sleeveGateOk(project) ? "원형 소매 기준값 · 소매/소매산 적용으로 변형" : "몸판 완료 후 소매를 편집할 수 있습니다");
     else if (!cap) setSleeveNote("소매산은 원형 · 소매산 적용으로 위팔·높이 변형");
     syncSleeveButtons();
+    syncSleeveModeUI(project);
   }
 
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
@@ -1036,6 +1121,11 @@
     });
     const applyCap = document.getElementById("btnApplyCap");
     if (applyCap) applyCap.addEventListener("click", () => { if (!applyCap.disabled) onApplyCap(); });
+    // 소매산 직접 수정(S3): parametric→manual 변환 / 기본 소매산으로 돌아가기.
+    const capManual = document.getElementById("btnSleeveCapManual");
+    if (capManual) capManual.addEventListener("click", () => { if (!capManual.disabled) onSleeveCapManual(); });
+    const capRevert = document.getElementById("btnSleeveCapRevert");
+    if (capRevert) capRevert.addEventListener("click", () => { if (!capRevert.hidden) onSleeveCapRevert(); });
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");
@@ -1093,4 +1183,5 @@
   window.isDesignStageActive    = isDesignStageActive;   // render.js 등이 읽는 읽기 전용 신호
   window.refreshDesignBodyPanel = updateDesignBodyPanel;  // designLineTool 이 boundary 편집 후 목둘레·상태 갱신
   window.refreshFrontPlacket = () => refreshFrontPlacket();  // boundary 편집으로 유효 외곽 변경 시 여밈 재파생
+  window.recomposeSleeveCap = recomposeSleeveCap;            // designLineTool 이 관리형 소매산 편집 후 소매 재합성
 })();

@@ -212,5 +212,79 @@
     return s;
   }
 
-  window.designSleeve = Object.freeze({ computeSilhouette: computeSilhouette, referenceSilhouette: referenceSilhouette, transformCap: transformCap, measureCapSeam: measureCapSeam });
+  // 관리형 cap 선(patternLine 포맷 {kind:"line"|"cubic"})의 anchor 목록(seg from + 마지막 to).
+  function anchorsOfLine(segs) {
+    var a = segs.map(function (s) { return cp(s.from); });
+    if (segs.length) a.push(cp(segs[segs.length - 1].to));
+    return a;
+  }
+  // patternLine 세그먼트(line/cubic) → geometry 세그먼트(line / path[M,C]).
+  function lineSegToGeom(s) {
+    if (s.kind === "line") return { kind: "line", from: cp(s.from), to: cp(s.to) };
+    return { kind: "path", commands: [{ type: "M", points: [cp(s.from)] }, { type: "C", points: [cp(s.c1), cp(s.c2), cp(s.to)] }] };
+  }
+  function arcLenSegs(segs) { var t = 0; segs.forEach(function (s) { var p = flattenSeg(s); for (var i = 0; i < p.length - 1; i++) t += dist(p[i], p[i + 1]); }); return t; }
+
+  // S3: 관리형 cap 선(source of truth)에서 소매 재합성. cap = 편집된 선, 하부(옆선·밑단)는 lower 로
+  //   재생성. 위상 재검증(뒤 endpoint → SP → 앞 endpoint) + 자기교차 검사. SP=splitAnchorIndex 로 앞/뒤
+  //   봉제 분리 측정. 반환 { ok, geometry, capLengths{front,back,total}, warnings } | { ok:false, reason }.
+  function computeFromCapLine(refSleeve, capLineSegs, splitAnchorIndex, lower) {
+    var ref = referenceSilhouette(refSleeve);
+    if (!ref) return { ok: false, reason: "no-sleeve" };
+    if (!lower) return { ok: false, reason: "invalid-length" };
+    var len = lower.sleeveLengthCm, cuff = lower.cuffCircumferenceCm, side = lower.sideShape || "straight";
+    if (typeof len !== "number" || !isFinite(len) || len <= 0) return { ok: false, reason: "invalid-length" };
+    if (typeof cuff !== "number" || !isFinite(cuff) || cuff <= 0) return { ok: false, reason: "invalid-cuff" };
+    if (!Array.isArray(capLineSegs) || !capLineSegs.length) return { ok: false, reason: "no-cap-line" };
+    var anchors = anchorsOfLine(capLineSegs);
+    if (typeof splitAnchorIndex !== "number" || splitAnchorIndex < 1 || splitAnchorIndex > anchors.length - 2) return { ok: false, reason: "cap-split" };
+    var backU = anchors[0], frontU = anchors[anchors.length - 1], SP = anchors[splitAnchorIndex];
+    // 위상: 뒤(낮은 x) → SP → 앞(높은 x), SP 는 진동밑선 위(작은 y).
+    if (!(backU.x < SP.x && SP.x < frontU.x)) return { ok: false, reason: "cap-order" };
+    if (!(SP.y < backU.y && SP.y < frontU.y)) return { ok: false, reason: "cap-order" };
+
+    var capGeom = capLineSegs.map(lineSegToGeom);
+    var spY = SP.y, half = cuff / 2, hemY = spY + len;
+    var backHem = { x: ref.hemCenterX - half, y: hemY }, frontHem = { x: ref.hemCenterX + half, y: hemY };
+    var backSide = sideSeg(backU, backHem, side, -1), frontSide = sideSeg(frontU, frontHem, side, +1);
+    var outline = capGeom.concat([backSide, frontSide, L(backHem, frontHem)]);
+    // 자기교차: 닫힌 loop(cap 선 flatten → 앞옆선 → 밑단 → 뒤옆선).
+    var capPts = []; capLineSegs.forEach(function (s, i) { var p = flattenSeg(s); capPts = capPts.concat(i === 0 ? p : p.slice(1)); });
+    var loop = capPts.concat(flattenSeg(frontSide).slice(1)).concat([cp(backHem)]).concat(flattenSeg(backSide).reverse().slice(1));
+    if (loopSelfIntersects(loop)) return { ok: false, reason: "self-intersection" };
+    // SP 분할 봉제 측정: back = segs[0..split-1], front = segs[split..].
+    var backLen = arcLenSegs(capLineSegs.slice(0, splitAnchorIndex)), frontLen = arcLenSegs(capLineSegs.slice(splitAnchorIndex));
+    if (!(backLen > 0 && frontLen > 0)) return { ok: false, reason: "cap-unmeasured" };
+    var warnings = [];
+    if (cuff < ref.cuffCircumferenceCm - EPS) warnings.push("narrow-cuff");
+    return {
+      ok: true, geometry: { outline: outline, construction: (refSleeve.construction || []).map(cloneSeg) },
+      capLengths: { front: frontLen, back: backLen, total: frontLen + backLen },
+      cuffCircumferenceCm: cuff, sleeveLengthCm: len, warnings: warnings
+    };
+  }
+  // 원형/변환 cap geometry(path/cubic) → 관리형 patternLine 세그먼트 + SP anchor 인덱스(apex 최근접).
+  function capLineFromGeometry(sleeveGeometry) {
+    if (!sleeveGeometry || !Array.isArray(sleeveGeometry.outline)) return null;
+    var capSegs = capSegsOf(sleeveGeometry);
+    if (!capSegs.length) return null;
+    // geometry cap → patternLine 세그먼트(line/cubic), 진동밑(낮은 x)에서 시작하도록 방향 정렬.
+    var lineSegs = [];
+    capSegs.forEach(function (s) {
+      if (s.kind === "line") lineSegs.push({ kind: "line", from: cp(s.from), to: cp(s.to) });
+      else if (s.kind === "cubic") lineSegs.push({ kind: "cubic", from: cp(s.from), c1: cp(s.c1), c2: cp(s.c2), to: cp(s.to) });
+      else if (s.kind === "path") { var cur = s.commands[0].points[0]; s.commands.forEach(function (c) { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { lineSegs.push({ kind: "cubic", from: cp(cur), c1: cp(c.points[0]), c2: cp(c.points[1]), to: cp(c.points[2]) }); cur = c.points[2]; } }); }
+    });
+    if (!lineSegs.length) return null;
+    // 방향: 시작 anchor 가 뒤(낮은 x)여야. 아니면 전체 역순.
+    var first = lineSegs[0].from, last = lineSegs[lineSegs.length - 1].to;
+    if (first.x > last.x) lineSegs = lineSegs.reverse().map(function (s) { return s.kind === "line" ? { kind: "line", from: cp(s.to), to: cp(s.from) } : { kind: "cubic", from: cp(s.to), c1: cp(s.c2), c2: cp(s.c1), to: cp(s.from) }; });
+    // SP = apex(min y) 최근접 anchor.
+    var anchors = anchorsOfLine(lineSegs), sp = 0;
+    for (var i = 1; i < anchors.length; i++) if (anchors[i].y < anchors[sp].y) sp = i;
+    if (sp < 1 || sp > anchors.length - 2) return null;
+    return { segments: lineSegs, splitAnchorIndex: sp };
+  }
+
+  window.designSleeve = Object.freeze({ computeSilhouette: computeSilhouette, referenceSilhouette: referenceSilhouette, transformCap: transformCap, measureCapSeam: measureCapSeam, computeFromCapLine: computeFromCapLine, capLineFromGeometry: capLineFromGeometry });
 })();

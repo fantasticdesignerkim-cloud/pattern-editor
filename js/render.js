@@ -35,6 +35,7 @@ function _appendPatternLines(grp, patternLines, pc){
   const selId=(window.designLineTool && window.designLineTool.getSelectedId) ? window.designLineTool.getSelectedId() : null;
   patternLines.forEach(pl=>{
     if(!pl || pl.piece !== pc || !Array.isArray(pl.segments)) return;
+    if(pl.managedBy === "sleeve-cap") return;   // 관리형 소매산 선: navy 봉제선(working.geometry.sleeve)만 담당, 중복 렌더 금지(선택 overlay 는 별도)
     const d=_patternPathD(pl.segments);   // line·cubic 혼합 → 하나의 연속 path
     if(!d) return;
     const cls="design-line"+(pl.id===selId?" selected":"");

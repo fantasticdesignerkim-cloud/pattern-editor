@@ -254,6 +254,12 @@
           <div class="row" style="gap:4px">
             <button class="btn action-primary" id="btnApplyCap">소매산 적용</button>
           </div>
+          <!-- 소매산 직접 수정(S3): parametric cap → 관리형 patternLine(managedBy sleeve-cap). 진동밑 고정,
+               SP·중간 anchor·핸들 편집 → 소매 재합성. 기본 소매산으로 돌아가기로만 제거. -->
+          <div class="row" style="gap:4px">
+            <button class="btn" id="btnSleeveCapManual" disabled>소매산 직접 수정</button>
+            <button class="btn" id="btnSleeveCapRevert" hidden>기본 소매산으로 돌아가기</button>
+          </div>
           <div class="row note" id="designSleeveNote" aria-live="polite"></div>
           <!-- 소매산 봉제선 정합(읽기 전용): 완료 몸판 진동 ↔ 소매산(파생 cap) ↔ 이세. 수치만. -->
           <div class="row note" id="designSleeveEaseNote" aria-live="polite"></div>
@@ -314,7 +320,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026070731"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026082001"></script>
+<script src="js/render.js?v=2026082030"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -335,11 +341,11 @@
 <!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
 <script src="js/designPlacket.js?v=2026082001"></script>
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
-<script src="js/designSleeve.js?v=2026082020"></script>
+<script src="js/designSleeve.js?v=2026082030"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026081305"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026081931"></script>
+<script src="js/designLineTool.js?v=2026082030"></script>
 <!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
 <script src="js/bodiceCheckpoint.js?v=2026082011"></script>
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
@@ -348,7 +354,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026082030"></script>
+<script src="js/ui.js?v=2026082033"></script>
 
 </body>
 </html>
