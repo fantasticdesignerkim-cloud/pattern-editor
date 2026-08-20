@@ -40,62 +40,161 @@
     if (ends.length >= 2) return [ends[0], ends[ends.length - 1]];
     return [pts[0], pts[pts.length - 1]];
   }
-  function capApexY(capSegs) {
-    var minY = Infinity;
-    capSegs.forEach(function (s) {
-      if (s.kind === "line") { minY = Math.min(minY, s.from.y, s.to.y); return; }
-      var segs = s.kind === "cubic" ? [[s.from, s.c1, s.c2, s.to]] : cubicsOfPath(s);
-      segs.forEach(function (q) {
-        for (var i = 0; i <= 40; i++) { var t = i / 40, u = 1 - t;
-          var y = u * u * u * q[0].y + 3 * u * u * t * q[1].y + 3 * u * t * t * q[2].y + t * t * t * q[3].y;
-          if (y < minY) minY = y;
-        }
-      });
-    });
-    return minY;
-  }
   function cubicsOfPath(path) { var out = [], cur = path.commands[0].points[0]; path.commands.forEach(function (c) { if (c.type === "M") { cur = c.points[0]; return; } if (c.type === "C") { out.push([cur, c.points[0], c.points[1], c.points[2]]); cur = c.points[2]; } }); return out; }
+  function capSegsOf(refSleeve) { return refSleeve.outline.filter(function (s) { return s.kind === "path" || s.kind === "cubic"; }); }
+  // 세그먼트 → 조밀 점열(line/cubic/path). 40 샘플/cubic.
+  function flattenSeg(s) {
+    var out = [];
+    if (s.kind === "line") { out.push(cp(s.from), cp(s.to)); return out; }
+    var cubs = s.kind === "cubic" ? [[s.from, s.c1, s.c2, s.to]] : cubicsOfPath(s);
+    cubs.forEach(function (q, ci) {
+      for (var i = (ci === 0 ? 0 : 1); i <= 40; i++) { var t = i / 40, u = 1 - t;
+        out.push({ x: u * u * u * q[0].x + 3 * u * u * t * q[1].x + 3 * u * t * t * q[2].x + t * t * t * q[3].x,
+                   y: u * u * u * q[0].y + 3 * u * u * t * q[1].y + 3 * u * t * t * q[2].y + t * t * t * q[3].y }); }
+    });
+    return out;
+  }
+  // cap 곡선 체인을 조밀 점열로 잇는다(끝점 매칭). apex/봉제길이용.
+  function capPolyline(capSegs) {
+    var polys = capSegs.map(flattenSeg);
+    if (polys.length <= 1) return polys[0] || [];
+    var chain = polys.shift().slice(), guard = polys.length + 1;
+    while (polys.length && guard-- > 0) {
+      var tail = chain[chain.length - 1], hooked = false;
+      for (var i = 0; i < polys.length; i++) { var p = polys[i];
+        if (dist(tail, p[0]) < EPS) { chain = chain.concat(p.slice(1)); polys.splice(i, 1); hooked = true; break; }
+        if (dist(tail, p[p.length - 1]) < EPS) { chain = chain.concat(p.slice(0, -1).reverse()); polys.splice(i, 1); hooked = true; break; }
+      }
+      if (!hooked) break;
+    }
+    return chain;
+  }
+  function capApex(capSegs) {
+    var pts = capPolyline(capSegs), ap = pts[0];
+    pts.forEach(function (p) { if (p.y < ap.y) ap = p; });
+    return cp(ap);
+  }
+  // 변환된 cap 의 앞/뒤 봉제 길이(apex 분할). back=낮은 x 끝→apex, front=apex→높은 x 끝.
+  function measureCapSeam(capSegs) {
+    var pts = capPolyline(capSegs); if (pts.length < 3) return null;
+    var apex = 0; for (var i = 1; i < pts.length; i++) if (pts[i].y < pts[apex].y) apex = i;
+    if (apex === 0 || apex === pts.length - 1) return null;
+    var arc = function (a, b) { var s = 0; for (var k = a; k < b; k++) s += dist(pts[k], pts[k + 1]); return s; };
+    var s2a = arc(0, apex), a2e = arc(apex, pts.length - 1);
+    var backIsStart = pts[0].x < pts[pts.length - 1].x;
+    return { back: backIsStart ? s2a : a2e, front: backIsStart ? a2e : s2a, total: s2a + a2e };
+  }
+  // 선분 교차(끝점 공유는 교차 아님).
+  function segCross(a, b, c, d) {
+    var d1 = crossSign(c, d, a), d2 = crossSign(c, d, b), d3 = crossSign(a, b, c), d4 = crossSign(a, b, d);
+    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+  }
+  function crossSign(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
+  // 폐곡선 점열의 자기교차(비인접 선분 교차). loop=닫힌 순서.
+  function loopSelfIntersects(loop) {
+    var n = loop.length;
+    for (var i = 0; i < n - 1; i++) for (var j = i + 2; j < n - 1; j++) {
+      if (i === 0 && j === n - 2) continue;   // 시작·끝 인접(폐곡선)
+      if (segCross(loop[i], loop[i + 1], loop[j], loop[j + 1])) return true;
+    }
+    return false;
+  }
+  function transformSeg(s, tf) {
+    if (s.kind === "line") return { kind: "line", from: tf(s.from), to: tf(s.to) };
+    if (s.kind === "cubic") return { kind: "cubic", from: tf(s.from), c1: tf(s.c1), c2: tf(s.c2), to: tf(s.to) };
+    if (s.kind === "path") return { kind: "path", commands: s.commands.map(function (c) { return { type: c.type, points: c.points.map(tf) }; }) };
+    return cloneSeg(s);
+  }
+  // S2 cap 변환: SP·grain 중심축 고정. capHeight=SP→진동밑선 수직거리, bicep=양 진동밑점 총거리.
+  //   앞/뒤 폭은 원형 비율 유지(대칭 분할 아님). cap anchor·control 을 SP-local 로 옮겨 앞/뒤 x 독립
+  //   스케일 + y(높이) 스케일. 반환 {ok, segs, backU, frontU, spY} | {ok:false, reason}.
+  function transformCap(refSleeve, ref, capParams) {
+    var bicep = capParams.bicepCircumferenceCm, capH = capParams.capHeightCm;
+    if (typeof bicep !== "number" || !isFinite(bicep) || bicep <= 0) return { ok: false, reason: "invalid-bicep" };
+    if (typeof capH !== "number" || !isFinite(capH) || capH <= 0) return { ok: false, reason: "invalid-cap-height" };
+    var SPx = ref.spX, SPy = ref.spY;
+    var refBackW = SPx - ref.backUnderarm.x, refFrontW = ref.frontUnderarm.x - SPx, refCapH = ref.backUnderarm.y - SPy;
+    if (refBackW <= 0 || refFrontW <= 0 || refCapH <= 0) return { ok: false, reason: "degenerate-cap" };
+    var total = refBackW + refFrontW;
+    var newBackW = bicep * (refBackW / total), newFrontW = bicep * (refFrontW / total);
+    var sxBack = newBackW / refBackW, sxFront = newFrontW / refFrontW, sy = capH / refCapH;
+    var tf = function (p) { var dx = p.x - SPx, dy = p.y - SPy; return { x: SPx + dx * (dx >= 0 ? sxFront : sxBack), y: SPy + dy * sy }; };
+    var segs = capSegsOf(refSleeve).map(function (s) { return transformSeg(s, tf); });
+    return { ok: true, segs: segs, backU: { x: SPx - newBackW, y: SPy + capH }, frontU: { x: SPx + newFrontW, y: SPy + capH }, spY: SPy };
+  }
+
+  // 원형 소매의 기준 실루엣값(초기 UI). {sleeveLengthCm, cuffCircumferenceCm, hemCenterX, spX/spY, ...}.
 
   // 원형 소매의 기준 실루엣값(초기 UI). {sleeveLengthCm, cuffCircumferenceCm, hemCenterX, spY, bicepCm}.
   function referenceSilhouette(refSleeve) {
     if (!refSleeve || !Array.isArray(refSleeve.outline)) return null;
-    var capSegs = refSleeve.outline.filter(function (s) { return s.kind === "path" || s.kind === "cubic"; });
+    var capSegs = capSegsOf(refSleeve);
     if (!capSegs.length) return null;
     var ends = capEnds(capSegs); if (!ends) return null;
     var back = ends[0].x < ends[1].x ? ends[0] : ends[1];
     var front = ends[0].x < ends[1].x ? ends[1] : ends[0];
-    var spY = capApexY(capSegs);
+    var apex = capApex(capSegs);
     var lines = refSleeve.outline.filter(function (s) { return s.kind === "line"; });
     var isUnderarm = function (p) { return dist(p, back) < EPS || dist(p, front) < EPS; };
     var hem = lines.find(function (s) { return !isUnderarm(s.from) && !isUnderarm(s.to); });
     if (!hem) return null;
     var hemCenterX = (hem.from.x + hem.to.x) / 2, hemWidth = Math.abs(hem.to.x - hem.from.x);
     var hemY = (hem.from.y + hem.to.y) / 2;
-    return { sleeveLengthCm: hemY - spY, cuffCircumferenceCm: hemWidth, hemCenterX: hemCenterX, spY: spY, bicepCm: Math.abs(front.x - back.x), backUnderarm: cp(back), frontUnderarm: cp(front) };
+    return {
+      sleeveLengthCm: hemY - apex.y, cuffCircumferenceCm: hemWidth, hemCenterX: hemCenterX,
+      spX: apex.x, spY: apex.y, bicepCm: Math.abs(front.x - back.x),
+      capHeightCm: back.y - apex.y,   // SP→진동밑선 수직거리(양 진동밑 y 동일)
+      backUnderarm: cp(back), frontUnderarm: cp(front)
+    };
   }
 
-  // S1 파생: cap 고정 + 하부(옆선·밑단) 재생성. sideShape "straight"(직선)|"gentle"(완만 곡선).
-  //   반환 { ok, geometry:{outline,construction}, cuffCircumferenceCm, referenceCuffCm, sleeveLengthCm,
-  //          warnings:[...] } | { ok:false, reason }.
+  // 파생: params = { lower:{sleeveLengthCm, cuffCircumferenceCm, sideShape}, cap?:{bicepCircumferenceCm,
+  //   capHeightCm} }. cap 있으면 원형 cap 을 SP-local 스케일 변환(S2), 없으면 원형 cap 고정(S1).
+  //   그 뒤 진동밑점→소매부리 옆선 재생성. 형상 안전성(측정 가능·자기교차 없음) 확인.
+  //   반환 { ok, geometry, cuffCircumferenceCm, referenceCuffCm, sleeveLengthCm, capLengths{front,back,total},
+  //          bicepCircumferenceCm, capHeightCm, warnings } | { ok:false, reason }.
   function computeSilhouette(refSleeve, params) {
     var ref = referenceSilhouette(refSleeve);
     if (!ref) return { ok: false, reason: "no-sleeve" };
-    var len = params && params.sleeveLengthCm, cuff = params && params.cuffCircumferenceCm;
-    var side = (params && params.sideShape) || "straight";
+    var lower = (params && params.lower) || null, cap = (params && params.cap) || null;
+    if (!lower) return { ok: false, reason: "invalid-length" };
+    var len = lower.sleeveLengthCm, cuff = lower.cuffCircumferenceCm, side = lower.sideShape || "straight";
     if (typeof len !== "number" || !isFinite(len) || len <= 0) return { ok: false, reason: "invalid-length" };
     if (typeof cuff !== "number" || !isFinite(cuff) || cuff <= 0) return { ok: false, reason: "invalid-cuff" };
     if (side !== "straight" && side !== "gentle") return { ok: false, reason: "invalid-side-shape" };
 
-    var capSegs = refSleeve.outline.filter(function (s) { return s.kind === "path" || s.kind === "cubic"; });
-    var hemY = ref.spY + len, half = cuff / 2;
+    var capSegs, backU, frontU, spY;
+    if (cap) {
+      var tc = transformCap(refSleeve, ref, cap);
+      if (!tc.ok) return tc;
+      capSegs = tc.segs; backU = tc.backU; frontU = tc.frontU; spY = tc.spY;
+    } else {
+      capSegs = capSegsOf(refSleeve).map(cloneSeg);
+      backU = cp(ref.backUnderarm); frontU = cp(ref.frontUnderarm); spY = ref.spY;
+    }
+    var hemY = spY + len, half = cuff / 2;
     var backHem = { x: ref.hemCenterX - half, y: hemY }, frontHem = { x: ref.hemCenterX + half, y: hemY };
-    var backSide = sideSeg(ref.backUnderarm, backHem, side, -1);   // 뒤(왼쪽): 안쪽 = +x
-    var frontSide = sideSeg(ref.frontUnderarm, frontHem, side, +1); // 앞(오른쪽): 안쪽 = -x
-    var outline = capSegs.map(cloneSeg).concat([backSide, frontSide, L(backHem, frontHem)]);
+    var backSide = sideSeg(backU, backHem, side, -1);
+    var frontSide = sideSeg(frontU, frontHem, side, +1);
+    var outline = capSegs.concat([backSide, frontSide, L(backHem, frontHem)]);
+
+    // 형상 안전성(S2 완료 조건): 앞/뒤 측정 가능 + 자기교차·옆선 교차 없음.
+    var capLen = measureCapSeam(capSegs);
+    if (!capLen) return { ok: false, reason: "cap-unmeasured" };
+    // 닫힌 순서 loop: backU →(cap)→ frontU →(frontSide)→ frontHem →(hem)→ backHem →(backSide 역)→ backU.
+    var loop = capPolyline(capSegs)
+      .concat(flattenSeg(frontSide).slice(1))   // frontU → frontHem
+      .concat([cp(backHem)])                     // hem: frontHem → backHem
+      .concat(flattenSeg(backSide).reverse().slice(1));   // backHem → … → backU(폐곡선 닫힘)
+    if (loopSelfIntersects(loop)) return { ok: false, reason: "self-intersection" };
+
     var warnings = [];
-    if (cuff < ref.cuffCircumferenceCm - EPS) warnings.push("narrow-cuff");   // 원형보다 좁음 · 트임/커프스 필요 가능(착용 불가 아님)
-    return { ok: true, geometry: { outline: outline, construction: (refSleeve.construction || []).map(cloneSeg) },
-      cuffCircumferenceCm: cuff, referenceCuffCm: ref.cuffCircumferenceCm, sleeveLengthCm: len, warnings: warnings };
+    if (cuff < ref.cuffCircumferenceCm - EPS) warnings.push("narrow-cuff");
+    return {
+      ok: true, geometry: { outline: outline, construction: (refSleeve.construction || []).map(cloneSeg) },
+      cuffCircumferenceCm: cuff, referenceCuffCm: ref.cuffCircumferenceCm, sleeveLengthCm: len,
+      capLengths: capLen, bicepCircumferenceCm: Math.abs(frontU.x - backU.x), capHeightCm: backU.y - spY, warnings: warnings
+    };
   }
   // 옆선: 직선 = line. 완만 곡선 = 진동밑→밑단 cubic(중간을 안쪽으로 살짝 오목, 끝점은 정확).
   //   inwardSign = 안쪽 방향(뒤 −1: +x 가 안쪽 / 앞 +1: −x 가 안쪽). bow 는 길이에 비례해 작게.
@@ -113,5 +212,5 @@
     return s;
   }
 
-  window.designSleeve = Object.freeze({ computeSilhouette: computeSilhouette, referenceSilhouette: referenceSilhouette });
+  window.designSleeve = Object.freeze({ computeSilhouette: computeSilhouette, referenceSilhouette: referenceSilhouette, transformCap: transformCap, measureCapSeam: measureCapSeam });
 })();

@@ -246,8 +246,16 @@
             <button class="btn action-primary" id="btnApplySleeve">소매 적용</button>
             <button class="btn" id="btnResetSleeve">원형 소매로</button>
           </div>
+          <!-- 소매산(S2): 위팔 완성둘레 + 소매산 높이 → 원형 cap 을 SP-local 스케일 변환(앞/뒤 비율 보존).
+               위팔품·소매산은 독립 입력이 아니라 함께 원자적 재계산. 출력 = 이세(사실값). -->
+          <div class="row" style="margin-top:8px"><label>소매산</label></div>
+          <div class="row"><label for="inpSleeveBicep">위팔 완성둘레 (cm)</label><input id="inpSleeveBicep" type="number" min="10" max="80" step="0.1"></div>
+          <div class="row"><label for="inpSleeveCapHeight">소매산 높이 (cm)</label><input id="inpSleeveCapHeight" type="number" min="3" max="30" step="0.1"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnApplyCap">소매산 적용</button>
+          </div>
           <div class="row note" id="designSleeveNote" aria-live="polite"></div>
-          <!-- 소매산 봉제선 정합(읽기 전용, sleeveMeasure): 완료 몸판 진동 ↔ 소매산 ↔ 이세. 수치만. -->
+          <!-- 소매산 봉제선 정합(읽기 전용): 완료 몸판 진동 ↔ 소매산(파생 cap) ↔ 이세. 수치만. -->
           <div class="row note" id="designSleeveEaseNote" aria-live="polite"></div>
         </div><!-- /subtab sleeve -->
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
@@ -327,7 +335,7 @@
 <!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
 <script src="js/designPlacket.js?v=2026082001"></script>
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
-<script src="js/designSleeve.js?v=2026082011"></script>
+<script src="js/designSleeve.js?v=2026082020"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026081305"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
@@ -340,7 +348,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026082021"></script>
+<script src="js/ui.js?v=2026082030"></script>
 
 </body>
 </html>

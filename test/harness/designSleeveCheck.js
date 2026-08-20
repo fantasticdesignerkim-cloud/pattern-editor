@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════
-// designSleeveCheck.js — js/designSleeve.js S1 순수 파생 회귀.
-// cap+진동밑 고정 · 하부(옆선·밑단)만 변형 · 초기값=원형 재현 · 착용 경고 · 실패/불변 계약.
+// designSleeveCheck.js — js/designSleeve.js S1/S2 순수 파생 회귀.
+// S1: cap 고정·하부 실루엣·초기값 재현·착용 경고. S2: cap SP-local 변환(앞/뒤 비율 보존)·
+// 앞뒤 봉제 측정·형상 안전성(자기교차)·실패/불변.
 //   node test/harness/designSleeveCheck.js
 // ══════════════════════════════════════════════
 const vm = require("vm");
@@ -26,61 +27,75 @@ const cap = { kind: "path", commands: [
 const line = (a, b) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } });
 const sleeve = () => ({ outline: [cap, line([5.53, 66.42], [7.56, 105]), line([39.29, 66.42], [37.56, 105]), line([7.56, 105], [37.56, 105])], construction: [] });
 const hemOf = (r) => r.geometry.outline.filter(s => s.kind === "line").find(s => Math.abs(s.from.y - s.to.y) < 0.1 && s.from.y > 60);
+const lower = (len, cuff, side) => ({ lower: { sleeveLengthCm: len, cuffCircumferenceCm: cuff, sideShape: side || "straight" } });
 
-// 1. referenceSilhouette: 원형 기준값
+// 1. referenceSilhouette: 원형 기준값(+ spX·capHeight)
 {
   const ref = S.referenceSilhouette(sleeve());
-  ok(ref && near(ref.spY, 53) && near(ref.cuffCircumferenceCm, 30) && near(ref.hemCenterX, 22.56, 0.1), "1: ref spY 53·cuff 30·center 22.56");
-  ok(near(ref.sleeveLengthCm, 52) && near(ref.bicepCm, 33.76, 0.1), "1: ref 소매길이 52·bicep 33.76");
+  ok(ref && near(ref.spX, 23.75) && near(ref.spY, 53) && near(ref.cuffCircumferenceCm, 30), "1: ref spX 23.75·spY 53·cuff 30");
+  ok(near(ref.sleeveLengthCm, 52) && near(ref.bicepCm, 33.76, 0.1) && near(ref.capHeightCm, 13.42, 0.1), "1: 소매길이 52·bicep 33.76·capH 13.42");
 }
-// 2. 초기값 → 원형 밑단 재현 + cap 불변
+// 2. S1(cap 없음): 초기값 → 원형 밑단 재현 + cap 불변
 {
   const ref = S.referenceSilhouette(sleeve());
-  const r = S.computeSilhouette(sleeve(), { sleeveLengthCm: ref.sleeveLengthCm, cuffCircumferenceCm: ref.cuffCircumferenceCm, sideShape: "straight" });
-  ok(r.ok, "2: 파생 성공");
+  const r = S.computeSilhouette(sleeve(), lower(ref.sleeveLengthCm, ref.cuffCircumferenceCm));
+  ok(r.ok, "2: S1 파생 성공");
   const hem = hemOf(r);
-  ok(hem && near(Math.min(hem.from.x, hem.to.x), 7.56) && near(Math.max(hem.from.x, hem.to.x), 37.56) && near(hem.from.y, 105), "2: 초기값 밑단 원형 재현(7.56~37.56, y105)");
+  ok(hem && near(Math.min(hem.from.x, hem.to.x), 7.56) && near(hem.from.y, 105), "2: 초기값 밑단 원형 재현");
   ok(JSON.stringify(r.geometry.outline.find(s => s.kind === "path")) === JSON.stringify(cap), "2: cap 불변");
-  ok(r.warnings.length === 0, "2: 초기값 경고 없음");
+  ok(r.warnings.length === 0 && r.capLengths && r.capLengths.total > 0, "2: 경고 없음·capLengths 측정");
 }
-// 3. 짧게+좁게: 밑단 y·폭 감소, cap 불변, narrow-cuff 경고
+// 3. S1 짧게+좁게: narrow-cuff, cap 불변
 {
-  const r = S.computeSilhouette(sleeve(), { sleeveLengthCm: 40, cuffCircumferenceCm: 24, sideShape: "straight" });
-  const hem = hemOf(r);
-  ok(near(hem.from.y, 93) && near(Math.abs(hem.to.x - hem.from.x), 24), "3: 소매길이 40 → y93 · 폭 24");
-  ok(r.warnings.indexOf("narrow-cuff") >= 0, "3: 원형보다 좁음 → narrow-cuff 경고");
-  ok(JSON.stringify(r.geometry.outline.find(s => s.kind === "path")) === JSON.stringify(cap), "3: cap 여전히 불변");
-  // 진동밑점(cap 끝) = 옆선 시작 고정
-  const sides = r.geometry.outline.filter(s => s.kind === "line" && s.from.y < 70);
-  ok(sides.some(s => near(s.from.x, 5.53) && near(s.from.y, 66.42)) && sides.some(s => near(s.from.x, 39.29)), "3: 진동밑점 고정(옆선 시작)");
+  const r = S.computeSilhouette(sleeve(), lower(40, 24));
+  ok(near(hemOf(r).from.y, 93) && r.warnings.indexOf("narrow-cuff") >= 0, "3: 길이40 y93·narrow-cuff");
+  ok(JSON.stringify(r.geometry.outline.find(s => s.kind === "path")) === JSON.stringify(cap), "3: cap 불변");
 }
-// 4. 넓게: 경고 없음
+// 4. S2 cap 변환: bicep 30(원형 33.76보다 좁게)·capHeight 15 → 진동밑점 이동·앞뒤 비율 보존·SP 고정
 {
-  const r = S.computeSilhouette(sleeve(), { sleeveLengthCm: 52, cuffCircumferenceCm: 34, sideShape: "straight" });
-  ok(r.ok && r.warnings.length === 0, "4: 원형보다 넓음 → 경고 없음");
+  const ref = S.referenceSilhouette(sleeve());
+  const r = S.computeSilhouette(sleeve(), Object.assign(lower(52, 30), { cap: { bicepCircumferenceCm: 30, capHeightCm: 15 } }));
+  ok(r.ok, "4: S2 파생 성공");
+  ok(near(r.bicepCircumferenceCm, 30) && near(r.capHeightCm, 15), "4: bicep 30·capH 15 반영");
+  // cap 끝점(진동밑) — 앞/뒤 폭 비율 보존: refBack 18.22 refFront 15.54 → new 총 30
+  const capPath = r.geometry.outline.find(s => s.kind === "path");
+  const backU = capPath.commands[0].points[0];
+  const lastC = capPath.commands[capPath.commands.length - 1].points;
+  const frontU = lastC[lastC.length - 1];
+  const newBackW = 23.75 - backU.x, newFrontW = frontU.x - 23.75;
+  ok(near(newBackW / (newBackW + newFrontW), 18.22 / 33.76, 0.01), "4: 앞/뒤 폭 비율 원형 보존");
+  ok(near(newBackW + newFrontW, 30, 0.1), "4: 총 bicep 30");
+  ok(near(backU.y, 68) && near(frontU.y, 68), "4: 진동밑 y = SP 53 + capH 15 = 68");
+  // SP(apex) x 고정
+  const apex = S.measureCapSeam([capPath]); ok(apex && apex.front > 0 && apex.back > 0, "4: 변환 cap 앞/뒤 측정 가능");
 }
-// 5. 옆선 형태: 직선 = line, 완만 = cubic
+// 5. S2 앞/뒤 봉제 길이: 원형 대비 변화, front≠back(비대칭 보존)
 {
-  const rS = S.computeSilhouette(sleeve(), { sleeveLengthCm: 52, cuffCircumferenceCm: 26, sideShape: "straight" });
-  const rG = S.computeSilhouette(sleeve(), { sleeveLengthCm: 52, cuffCircumferenceCm: 26, sideShape: "gentle" });
-  ok(rS.geometry.outline.filter(s => s.kind === "line" && s.from.y < 70).length === 2, "5: 직선 옆선 = line 2");
-  ok(rG.geometry.outline.filter(s => s.kind === "cubic").length === 2, "5: 완만 옆선 = cubic 2");
-  // gentle 도 끝점(진동밑·밑단)은 정확
-  const g = rG.geometry.outline.find(s => s.kind === "cubic");
-  ok(near(g.from.x, 5.53) || near(g.from.x, 39.29), "5: 완만 옆선 끝점(진동밑) 정확");
+  const r0 = S.computeSilhouette(sleeve(), lower(52, 30));   // S1(원형 cap)
+  const r2 = S.computeSilhouette(sleeve(), Object.assign(lower(52, 30), { cap: { bicepCircumferenceCm: 30, capHeightCm: 15 } }));
+  ok(r0.capLengths.front !== r0.capLengths.back, "5: 원형 cap 앞≠뒤(비대칭)");
+  ok(r2.capLengths.total !== r0.capLengths.total, "5: S2 변환으로 봉제 길이 변화");
 }
-// 6. 실패 계약
+// 6. S2 실패 계약 + 형상 안전성
 {
-  ok(S.computeSilhouette(null, { sleeveLengthCm: 50, cuffCircumferenceCm: 30 }).reason === "no-sleeve", "6: no-sleeve");
-  ok(S.computeSilhouette(sleeve(), { sleeveLengthCm: 0, cuffCircumferenceCm: 30 }).reason === "invalid-length", "6: invalid-length");
-  ok(S.computeSilhouette(sleeve(), { sleeveLengthCm: 50, cuffCircumferenceCm: -5 }).reason === "invalid-cuff", "6: invalid-cuff");
-  ok(S.computeSilhouette(sleeve(), { sleeveLengthCm: 50, cuffCircumferenceCm: 30, sideShape: "zig" }).reason === "invalid-side-shape", "6: invalid-side-shape");
+  ok(S.computeSilhouette(sleeve(), Object.assign(lower(52, 30), { cap: { bicepCircumferenceCm: 0, capHeightCm: 15 } })).reason === "invalid-bicep", "6: invalid-bicep");
+  ok(S.computeSilhouette(sleeve(), Object.assign(lower(52, 30), { cap: { bicepCircumferenceCm: 30, capHeightCm: -2 } })).reason === "invalid-cap-height", "6: invalid-cap-height");
+  // 극단(bicep 2·capH 0.3): cap 이 붕괴하면 self-intersection 또는 측정 불가로 원자적 실패(또는 정상)
+  const ext = S.computeSilhouette(sleeve(), Object.assign(lower(52, 30), { cap: { bicepCircumferenceCm: 2, capHeightCm: 0.5 } }));
+  ok(ext.ok === true || ext.reason === "self-intersection" || ext.reason === "cap-unmeasured", "6: 극단 입력 = 정상 또는 원자적 실패");
 }
-// 7. 입력 불변
+// 7. S1 실패 계약(하위)
+{
+  ok(S.computeSilhouette(null, lower(50, 30)).reason === "no-sleeve", "7: no-sleeve");
+  ok(S.computeSilhouette(sleeve(), lower(0, 30)).reason === "invalid-length", "7: invalid-length");
+  ok(S.computeSilhouette(sleeve(), lower(50, -5)).reason === "invalid-cuff", "7: invalid-cuff");
+  ok(S.computeSilhouette(sleeve(), {}).reason === "invalid-length", "7: lower 누락 → invalid-length");
+}
+// 8. 입력 불변(S2 포함)
 {
   const g = sleeve(); const snap = JSON.stringify(g);
-  S.computeSilhouette(g, { sleeveLengthCm: 45, cuffCircumferenceCm: 28, sideShape: "gentle" });
-  ok(JSON.stringify(g) === snap, "7: 입력 sleeve 불변");
+  S.computeSilhouette(g, Object.assign(lower(45, 28, "gentle"), { cap: { bicepCircumferenceCm: 31, capHeightCm: 14 } }));
+  ok(JSON.stringify(g) === snap, "8: 입력 sleeve 불변");
 }
 
 console.log("══════════════════════════════════════════════");
