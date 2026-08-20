@@ -3119,6 +3119,49 @@ cap·좁은 bicep navy, 원형 gray). 하네스 `designSleeveCheck` **25**(S1 8 
 (sourceBodiceHash 고정, 시접·너치·커프스·트임 제외) / **별도 증분: 목표 총이세 → 소매산 높이·곡률
 자동 탐색**. sleeve.js·bodiceResult·referenceGeometry·몸판 geometry 무변경 유지.
 
+### ✅ S3a 구현 완료 (2026-08) — 소매산 직접 편집 핵심 수명주기
+
+parametric cap 을 **관리형 patternLine(source of truth)** 으로 변환해 직접 편집, 편집마다 소매 재합성.
+네크라인 manual(증분 3)과 같은 결이되 **소매산 앞·뒤 SP 분할 보존**. **S3b(편집 UX·무효 시각화)와
+S5 완료 게이트는 별도.** 사용자 확정 5개 계약 전부 잠금.
+
+**엔진 `designSleeve`**:
+- `capLineFromGeometry(sleeveGeometry)` → 현재 cap(path/cubic)을 관리형 선 세그먼트(line/cubic, 뒤→앞
+  방향 정렬) + `splitAnchorIndex`(apex 최근접 anchor)로 변환.
+- `computeFromCapLine(refSleeve, capLineSegs, splitAnchorIndex, lower)` → cap=편집 선, 하부 재생성.
+  **위상 재검증(뒤 endpoint x < SP.x < 앞 endpoint x, SP.y < 진동밑 y)** + 자기교차(닫힌 loop) 검사.
+  **SP 분할 앞/뒤 봉제 측정**(segs[0..split-1]=뒤, segs[split..]=앞). 실패 `cap-order`/`cap-split`/
+  `no-cap-line`/`self-intersection`/`cap-unmeasured`.
+
+**데이터 모델**: `sleeveDraft.{mode:"parametric"|"manual", capLineId, capInvalid, parameters:{lower,cap},
+geometry, capLengths}`. 관리형 선 = `working.patternLines` 에 `{piece:"sleeve", role:"boundary",
+managedBy:"sleeve-cap", splitAnchorIndex, segments}`.
+
+**① 관리형 선 보호(designLineTool)**: `isSleeveCapLine`(managedBy) → **역할 변경·개별 Delete 금지**·
+역할 버튼 disabled·선택 안내. **제거는 `기본 소매산으로 돌아가기`로만**. 다른 사용자 sleeve 선 보존.
+**② 위상 고정**: **양 endpoint anchor 이동 금지**(anchor drag 시작 차단), SP·중간 anchor·핸들만 편집.
+select-edit 은 anchor 추가·삭제를 안 하므로 splitAnchorIndex 불변. 편집 후 순서 재검증(computeFromCapLine).
+**③ 무효 원자성**: 편집 pointerup(designLineTool)→`window.recomposeSleeveCap`. 유효면 재합성, **무효면
+`capInvalid=true`·마지막 유효 `working.geometry.sleeve` 유지**·편집선은 화면에 남음·이세 "유효하지 않음"·
+**S1 적용 차단**(어떤 cap 인지 모호)·S5 완료 차단(예정). **④ 중복 렌더 금지**: render._appendPatternLines
+가 managedBy sleeve-cap 은 **path 미렌더**(navy 봉제선=working.geometry.sleeve 하나만), 선택 시 anchor·
+핸들 overlay 만. **⑤ 복귀·hash stale**: manual 진입 시 `parameters.cap` 보존 → 같은 hash 복귀는 그 cap
+재파생 / hash 변경 시 관리선 제거·capLineId·capInvalid clear·cap 폐기·reference cap+lower 복원.
+
+**잠금**: manual 이면 위팔·소매산 입력 disabled(직접 수정 우선). S1 길이·소매부리는 endpoint 안 건드리므로
+계속(단 capInvalid 중엔 차단). manual 중 S1 적용은 `parameters.lower` 갱신 후 관리선 재합성(parametric 회귀 방지).
+
+**검증(격리 origin, storage/console 0)**: 변환(mode manual·관리선·splitIdx·cap 보존·입력 잠금) → SP
+anchor 상승 편집→재합성·이세 재측정 → 무효 편집(cap-order)→capInvalid·geometry 유지·S1 차단·이세
+"유효하지 않음" → 복구 → **실 pointer 선택으로 Delete·역할 변경 차단**·역할버튼 disabled → 기본 복귀
+(관리선 제거·parametric·cap 복원·입력 잠금 해제) → hash stale(재완료)→manual 드롭·cap 폐기·lower 재사용 →
+관리 cap 중복 미렌더. 하네스 `designSleeveCheck` **35**(S3 10: capLineFromGeometry·computeFromCapLine·SP
+편집·위상/안전 실패). runAll 전체 통과, shape/perf 골든 diff 0. **DOM id 82→84**(btnSleeveCapManual·
+btnSleeveCapRevert). 캐시 `?v=2026082030`(designSleeve·designLineTool·render)·`?v=2026082033`(ui).
+
+**남은 것(S3b·S5)**: snap 후보 제한·무효선 빨강 표시+사유 안내(S3b) / S5 완료 게이트가 `capInvalid===false`
++ `sourceBodiceHash` 일치를 읽음. sleeve.js·bodiceResult·referenceGeometry·몸판 geometry 무변경 유지.
+
 ### S2 계약 (2026-08, 사용자 확정)
 
 **과결정 금지**: `위팔 완성둘레`·`소매산 높이`·`목표 이세량` 셋을 모두 독립 입력으로 두면 충돌한다.
