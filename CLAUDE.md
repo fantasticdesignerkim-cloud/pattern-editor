@@ -3050,9 +3050,13 @@ edge 없이 추가되면 재검토). 자기교차("단순") 별도 검사는 bui
   손둘레 입력은 현재 없음 → 경고만.
 
 **데이터 모델·UI (ui.js, index.html)**:
-- `working.parameters.sleeve` + **파생 소매를 `working.geometry.sleeve` 로 덮어씀**(render·designLayout
-  그대로 사용, render.js/designLayout **무변경**). **body apply 가 sleeve 를 블록으로 덮으면
-  `refreshSleeve` 가 referenceGeometry.sleeve(불변) 기준 재파생** → 파생 소매 유지.
+- **`working.sleeveDraft = { sourceBodiceHash, parameters, geometry }`**(사용자 확정, S2 전 보강) +
+  **파생 geometry 를 `working.geometry.sleeve` 로도 미러링**(render·designLayout 그대로 사용,
+  render.js/designLayout **무변경**). `sourceBodiceHash` = `bodiceResult.hash`(어떤 몸판 완료본에서
+  나왔는지 기록). **body apply 가 sleeve 를 블록으로 덮으면 `refreshSleeve` 가 referenceGeometry.sleeve
+  (불변) 기준 재파생** → 파생 소매 유지. **몸판 재완료로 hash 가 달라지면 S1 하부 설정(길이·둘레·옆선)
+  은 재사용하고 `sourceBodiceHash` 만 최신 완료본으로 갱신**(실측: cuff 22 재사용·hash 갱신). S2
+  소매산 파라미터가 붙으면 hash 불일치 시 그 파라미터·결과를 stale 처리(아래 S2 계약).
 - **몸판/소매 서브탭**(`#designSubtabs`, `.subtab`): 소매 탭 **게이트 = bodiceResult 존재 + 비스테일**
   (`syncDesignSubtabGate`). 게이트 실패 시 소매 탭 disabled·소매 탭이었으면 몸판으로 되돌림. S1 편집도
   `sleeveGateOk` 로 차단(몸판 stale 이면 편집 금지 — 사용자 계약).
@@ -3070,10 +3074,27 @@ edge 없이 추가되면 재검토). 자기교차("단순") 별도 검사는 bui
 inpSleeveCuff·selSleeveSide·btnApplySleeve·btnResetSleeve·designSleeveNote). 캐시 `?v=2026082010`
 (designSleeve)·`?v=2026082020`(ui·css).
 
-**남은 것**: **S2(위팔·소매산 결합 조정)** — 위팔품 변경 시 진동밑점·소매산 길이·이세·앞뒤 배분을
-원자적 재계산(별도 사이클). **S3 곡선 직접 편집 / S4 정합 확인(이미 읽기 전용 존재) / S5
+**착용 경고 문구(사용자 확정)**: `narrow-cuff` 는 **"착용 불가"가 아니라 "원형보다 좁음 ·
+트임/커프스 필요 가능"**. 손둘레 측정이 없으므로 경고 이상의 판정 금지. (module warning 은
+`narrow-cuff` 하나, UI 문구만 이 표현.)
+
+### S2 계약 (2026-08, 사용자 확정) — 아직 착수 전
+
+**과결정 금지**: `위팔 완성둘레`·`소매산 높이`·`목표 이세량` 셋을 모두 독립 입력으로 두면 충돌한다.
+**S2 1차 계약**:
+- **입력: 위팔 완성둘레 + 소매산 높이**(둘만).
+- **출력: 앞·뒤·총 이세량**(사실값 표시, 자동 합격·보정 없음).
+- **앞뒤 이세 배분은 기존 소매산 비율을 우선 유지**.
+- 위팔품 변경은 소매산과 **독립 입력이 아니다** — 진동밑점·소매산 길이가 함께 바뀌므로 위팔 여유·
+  소매산 높이·총이세·앞뒤 배분·앞뒤 소매산 봉제 길이를 **한 번에 원자적 재계산**. 실패(cap 곡선이
+  단순하지 않거나 교차)하면 **이전 소매 형상 유지**.
+- **hash 종속**: S2 소매산은 특정 `bodiceResult` 에 종속 → `sleeveDraft.sourceBodiceHash` 불일치 시
+  소매산 파라미터·결과 stale(S1 하부 설정은 재사용).
+- 그다음 **별도 증분**: `목표 총이세 → 소매산 높이/곡률 자동 탐색`.
+
+**남은 것**: **S2(위 계약)** → **S3 곡선 직접 편집 / S4 정합 확인(이미 읽기 전용 존재) / S5
 `sleeveResult` 완료 스냅샷**(sourceBodiceHash 고정, 시접·너치·커프스·트임 제외). 완만 곡선 옆선은
-포함(straight 기본).
+S1 에 포함(straight 기본).
 
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
