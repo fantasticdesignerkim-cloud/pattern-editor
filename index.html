@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026082001">
+<link rel="stylesheet" href="css/style.css?v=2026082020">
 </head>
 <body>
 
@@ -165,8 +165,14 @@
     <!-- design stage 전용 몸판 디자인 패널(DB1b). ui.js 가 stage 로 measurements 와 상호배타로
          표시한다(동시 노출 금지). 버튼은 inline handler 없이 bind()에서 연결(inline 37 유지). -->
     <details class="insp" data-panel="design-body" open hidden>
-      <summary>몸판 디자인</summary>
+      <summary>디자인</summary>
       <div class="insp-body">
+        <!-- 몸판/소매 서브탭: 형태 컨트롤 분리. 소매 탭은 몸판 완료(bodiceResult·비스테일) 후 활성. -->
+        <div class="subtabs" id="designSubtabs" role="tablist">
+          <button type="button" class="subtab" data-subtab-btn="body" aria-selected="true">몸판</button>
+          <button type="button" class="subtab" data-subtab-btn="sleeve" aria-selected="false" disabled title="몸판 완료 후 활성">소매</button>
+        </div>
+        <div class="subtab-panel" data-subtab="body">
         <!-- 품·여유량: 전체 가슴둘레 여유량 → 각 옆선 E/4 바깥 평행 이동(원본 블록 불변, 파생 geometry). -->
         <div class="row"><label for="inpBodyBustEase">품·여유량 (cm)</label><input id="inpBodyBustEase" type="number" min="0" max="100" step="0.1"></div>
         <div class="row"><label for="inpBodyHemExtension">엉덩이 길이 (cm)</label><input id="inpBodyHemExtension" type="number" min="0" max="100" step="0.1"></div>
@@ -226,9 +232,24 @@
           <button class="btn" id="btnCompleteBodice">몸판 모양 완료</button>
         </div>
         <div class="row note" id="designBodiceStatusNote" aria-live="polite">몸판 미완료 · 세션 전용</div>
-        <!-- 소매산 봉제선 정합 확인(읽기 전용, sleeveMeasure): 완료 몸판 진동 ↔ 소매산 ↔ 이세.
-             소매 형상·시접 미변경. 완료본 없음/스테일/출처 불일치면 측정 차단. -->
-        <div class="row note" id="designSleeveEaseNote" aria-live="polite"></div>
+        </div><!-- /subtab body -->
+
+        <!-- 소매 모양(S1: 기본 긴팔 하부 실루엣). cap·진동밑 고정, 아래쪽(옆선·밑단)만 변형 →
+             소매산·앞뒤 이세 관계 불변. 기준값 = 완료 원형 소매(referenceGeometry.sleeve). 몸판 stale 이면
+             편집 차단. 결과는 working.geometry.sleeve 로 덮어씀(파생, body apply 후 재파생). -->
+        <div class="subtab-panel" data-subtab="sleeve" hidden>
+          <div class="row"><label for="inpSleeveLength">소매길이 (cm)</label><input id="inpSleeveLength" type="number" min="10" max="90" step="0.1"></div>
+          <div class="row"><label for="inpSleeveCuff">소매부리 완성둘레 (cm)</label><input id="inpSleeveCuff" type="number" min="8" max="60" step="0.1"></div>
+          <div class="row"><label for="selSleeveSide">옆선</label>
+            <select id="selSleeveSide"><option value="straight">직선</option><option value="gentle">완만 곡선</option></select></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnApplySleeve">소매 적용</button>
+            <button class="btn" id="btnResetSleeve">원형 소매로</button>
+          </div>
+          <div class="row note" id="designSleeveNote" aria-live="polite"></div>
+          <!-- 소매산 봉제선 정합(읽기 전용, sleeveMeasure): 완료 몸판 진동 ↔ 소매산 ↔ 이세. 수치만. -->
+          <div class="row note" id="designSleeveEaseNote" aria-live="polite"></div>
+        </div><!-- /subtab sleeve -->
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
         <div class="row" style="margin-top:8px"><label>배치</label></div>
         <div class="row" style="gap:4px">
@@ -305,6 +326,8 @@
 <script src="js/designBodice.js?v=2026081920"></script>
 <!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
 <script src="js/designPlacket.js?v=2026082001"></script>
+<!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
+<script src="js/designSleeve.js?v=2026082010"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026081305"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
@@ -317,7 +340,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026082013"></script>
+<script src="js/ui.js?v=2026082020"></script>
 
 </body>
 </html>

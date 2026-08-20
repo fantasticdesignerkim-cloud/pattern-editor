@@ -325,6 +325,11 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 네크라인 형태 select · 목둘레 길이 표시. */
 .row select{padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--navy)}
 .row select:focus{outline:none;border-color:var(--cyan)}
+/* 디자인 몸판/소매 서브탭: 조밀한 탭 바. 선택 = navy 밑줄 강조, disabled = 흐림. */
+.subtabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin:0 0 8px}
+.subtab{flex:0 0 auto;padding:6px 12px;border:none;background:none;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.subtab[aria-selected="true"]{color:var(--navy);font-weight:600;border-bottom-color:var(--navy)}
+.subtab:disabled{color:var(--border);cursor:not-allowed}
 /* 네크라인 기본형 카드: 조밀한 선택 칩(radiogroup). 선택 = cyan 강조. */
 .neck-cards{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 4px}
 .neck-card{flex:0 0 auto;padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:var(--surface);color:var(--navy);cursor:pointer}
