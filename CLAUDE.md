@@ -3078,7 +3078,48 @@ inpSleeveCuff·selSleeveSide·btnApplySleeve·btnResetSleeve·designSleeveNote).
 트임/커프스 필요 가능"**. 손둘레 측정이 없으므로 경고 이상의 판정 금지. (module warning 은
 `narrow-cuff` 하나, UI 문구만 이 표현.)
 
-### S2 계약 (2026-08, 사용자 확정) — 아직 착수 전
+### ✅ S2 구현 완료 (2026-08) — 위팔·소매산 결합 조정
+
+**파라미터 분리(사용자 확정)**: `sleeveDraft.parameters = { lower:{sleeveLengthCm,cuffCircumferenceCm,
+sideShape}, cap:{bicepCircumferenceCm,capHeightCm}|null }`. cap=null 이면 원형 소매산(S1), 값이 있으면
+변환(S2).
+
+**cap 변환 (`designSleeve.transformCap`, 사용자 권고 알고리즘)**: **SP(cap apex)·grain 중심축 고정**.
+`capHeightCm`=SP→진동밑선 수직거리, `bicepCircumferenceCm`=양 진동밑점 총거리. **앞·뒤 폭은 대칭
+분할 아니라 원형 소매 비율 유지**(refBack 18.22 : refFront 15.54). 원형 cap anchor·control 을 **SP-local
+frame** 으로 옮겨 **앞/뒤 x 독립 스케일 + y(높이) 스케일** → 원형 cap 의 앞·뒤 비대칭·곡선 성격 보존.
+변환 cap 끝점이 곧 새 진동밑점. 그 뒤 S1 하부(옆선·밑단) 재생성.
+
+**형상 안전성(S2 완료 조건, 사용자 확정)**: `measureCapSeam` 로 앞·뒤 봉제 측정 가능 + 닫힌 순서 loop
+(cap→앞옆선→밑단→뒤옆선)의 `loopSelfIntersects`(비인접 선분 교차) 0. 실패(`cap-unmeasured`·
+`self-intersection`·`invalid-bicep/cap-height`·`degenerate-cap`)면 **원자적 이전 유지**. 이세는 아직
+차단 기준 아님(사실값만).
+
+**조건부 hash 규칙(사용자 확정, 필수)**: `refreshSleeve` 가 body apply/재완료 후 재파생하되 —
+**`lower` 는 재사용, `cap` 은 `sleeveDraft.sourceBodiceHash !== 현재 완료본 hash` 면 폐기(null)** →
+reference cap + lower 로 복원, 사용자가 소매산 재적용해야 새 hash cap 생성. 실측: body 변경→cap 유지·
+소매 탭 disabled → 재완료(hash 변경)→**cap 드롭·lower 재사용·sourceHash 갱신·cap 입력 원형값(33.8)
+복원·"소매산 원형" 안내**.
+
+**이세(S2 출력)**: `sleeveEaseRelation` 이 sleeveDraft 있으면 **파생 cap 의 `capLengths`**(S1 원형 /
+S2 변환)로, 없으면 원형 소매 측정으로 계산. 앞/뒤/총 이세 = capLength − 완료 몸판 진동. 수치만.
+source-mismatch = `sleeveDraft.sourceBodiceHash ≠ bodiceResult.hash`.
+
+**UI(소매 서브탭)**: S1(소매길이·소매부리·옆선 + 소매 적용) + **S2(위팔 완성둘레·소매산 높이 +
+소매산 적용)** + 이세 note. 초기값 = committed 또는 원형 기준값(bicep 33.76·capH 13.42).
+
+**검증(격리 origin, storage/console 0)**: S1 후 params{lower, cap:null}·block cap 이세 → S2(bicep 30·
+capH 15) 후 params{lower,cap}·capLengths front 21.77≠back 23.18(비대칭 보존)·이세 파생 cap 기준 →
+재완료(hash 변경) **조건부 stale**(cap 드롭·lower 재사용) → 원자적 실패(이전 유지) → 스크린샷(높은
+cap·좁은 bicep navy, 원형 gray). 하네스 `designSleeveCheck` **25**(S1 8 + S2 cap 변환·비율 보존·
+진동밑 이동·측정·자기교차·실패/불변). runAll 전체 통과, shape/perf 골든 diff 0. **DOM id 79→82**
+(inpSleeveBicep·inpSleeveCapHeight·btnApplyCap). 캐시 `?v=2026082020`(designSleeve)·`?v=2026082030`(ui).
+
+**남은 것**: **S3 곡선 직접 편집 / S4 정합 확인(읽기 전용 이미 존재) / S5 `sleeveResult` 완료 스냅샷**
+(sourceBodiceHash 고정, 시접·너치·커프스·트임 제외) / **별도 증분: 목표 총이세 → 소매산 높이·곡률
+자동 탐색**. sleeve.js·bodiceResult·referenceGeometry·몸판 geometry 무변경 유지.
+
+### S2 계약 (2026-08, 사용자 확정)
 
 **과결정 금지**: `위팔 완성둘레`·`소매산 높이`·`목표 이세량` 셋을 모두 독립 입력으로 두면 충돌한다.
 **S2 1차 계약**:
