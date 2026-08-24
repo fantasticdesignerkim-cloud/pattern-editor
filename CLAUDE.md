@@ -3184,10 +3184,70 @@ cap-unmeasured). 다시 유효 → 빨강 제거·navy 갱신·이세 복원.
 diff 0. **DOM id 84 유지**(신규 요소 없음). 캐시 `?v=2026082031`(designLineTool·render)·`?v=2026082035`
 (ui)·`?v=2026082032`(css).
 
-**남은 것(S5)**: **`sleeveResult` 완료 스냅샷** — `sourceBodiceHash`·최종 sleeve geometry·앞·뒤 cap
-primitives/길이·이세·lower/cap parameters·`capMode`·manual cap source 를 deep-freeze + 자체 hash.
-완료 게이트가 **`capInvalid===false` + `sourceBodiceHash` 일치**를 읽는다. sleeve.js·bodiceResult·
-referenceGeometry·몸판 geometry 무변경 유지.
+### ✅ S5 구현 완료 (2026-08) — 소매 모양 완료 체크포인트(sleeveResult)
+
+S3b 위에, Design 소매 결과를 **세션 스냅샷 `working.sleeveResult` 로 잠근다**(bodiceCheckpoint 와
+같은 결). **아직 시접·너치·커프스·트임·재단선 아님.** 완료본은 특정 몸판 완료본(sourceBodiceHash)에
+종속 — 몸판/소매 변경 시 조용히 갱신하지 않고 stale/무효 처리 → 명시적 재완료로만 교체.
+
+**엔진 (`js/designSleeve.js` 신규 export 2개)**:
+- **`capPrimitives(sleeveGeometry)`** → `{frontPrimitives, backPrimitives, splitPoint, lengths:{front,
+  back,total}}`. **cap 을 관리형 선이 아니라 최종 유효 geometry 에서** `capLineFromGeometry`(splitAnchorIndex)
+  로 다시 추출 → SP 기준 뒤(segs[0..sp-1])/앞(segs[sp..]) 분리, `arcLenSegs` 로 앞·뒤 호길이. 측정
+  불가면 null.
+- **`sleeveOutlineSelfIntersects(sleeveGeometry)`** → bool. 닫힌 순서 loop(backU→cap→frontU→앞옆선→
+  밑단→뒤옆선)의 `loopSelfIntersects`(비인접 선분 교차). 비정상·교차면 true.
+- ★ **`capSegsOf` 를 hem 기반 강건 식별로 수정**(회귀): 이전 `filter(kind==="path"||"cubic")` 는
+  **완만(gentle) 옆선 cubic 을 cap 으로 오인**했다. 이제 outline 최대 y(밑단)에 닿는 세그먼트(밑단
+  직선 + 밑단 접점)를 제외한 나머지가 cap. designSleeveCheck 35 PASS 유지로 무변경 확인.
+
+**모듈 (`js/sleeveCheckpoint.js` 신규, `window.sleeveCheckpoint`)**: `check`/`complete`/`latest`/
+`isCurrentSleeveChanged`/`invalidatedByBodice`.
+- **완료 게이트(7)**: `no-bodice`·`bodice-stale`(bodiceCheckpoint) / `source-mismatch`
+  (sleeveDraft.sourceBodiceHash ≠ bodiceResult.hash) / `cap-invalid`(capInvalid) / `manual-line-missing`
+  (manual 인데 capLineId 선 없음) / `cap-unmeasured`(capPrimitives null) / `self-intersection`
+  (sleeveOutlineSelfIntersects) / `ease-unmeasured`(앞·뒤 이세 비유한). **narrow-cuff·이세량은 차단
+  기준 아님**(사실값).
+- **`complete()`** → 게이트 통과 시에만 deep-frozen `working.sleeveResult` 생성(실패 시 변경 0):
+  ```
+  { schemaVersion:1, sourceBodiceHash, sourceBlock:{id,version,canonicalHash},
+    geometry(clone), parameters:{lower,cap},
+    cap:{ mode, frontPrimitives, backPrimitives, splitPoint, lengths:{front,back,total},
+          ease:{front,back,total}, manualSource: null | {lineId,splitAnchorIndex,segments} },
+    hash, completedAt }
+  ```
+  cap primitives 는 **최종 geometry 에서 재추출**(관리선 아님). manual 이면 `manualSource`(재현·감사용).
+- **`hash` = 형상 전용 signature**(canonGeom + parameters + cap.mode + cap.lengths + sourceBodiceHash).
+  **completedAt·layout·선택·snap 제외** → 같은 형상 = 같은 hash.
+- **`isCurrentSleeveChanged`**: 완료본 없음→true / 현재 무효→true / 형상 signature 비교(layout·선택
+  변경엔 불변). **`invalidatedByBodice`**: `sleeveResult.sourceBodiceHash ≠ bodiceResult.hash`(몸판
+  hash 변경 = "몸판 변경으로 소매 무효").
+
+**UI (`js/ui.js` + index.html sleeve 서브탭)**: `소매 완료` 버튼(`#btnCompleteSleeve`, 게이트 통과
+시에만 활성) + 검사 요약(`#designSleeveCheckNote`: 소매산 앞·뒤·총 · 이세 앞·뒤·총) + 상태
+(`#designSleeveStatusNote`: 완료 가능 / 소매 완료됨(원형 v_) / **소매 변경됨 · 다시 완료 필요** /
+**몸판 변경으로 소매 무효 · 다시 완료 필요**). `updateSleeveCheckpointUI(project)` 를 **updateSleevePanel
+끝 + onApplySleeve·onApplyCap·onResetSleeve 끝**에서 호출(적용 직후 버튼/문구 즉시 갱신 — 이 세 곳에
+빠져 있어 apply 후 버튼이 stale 하던 것을 수정). `onCompleteSleeve` 은 designProjectNow 재확인 →
+complete → 성공/실패 문구.
+
+**검증(격리 origin 127.0.0.1:8420, storage/console 0)** — 실 UI 완주(원형 생성→완료→디자인 시작→
+몸판 완료→소매탭→소매 적용):
+- 게이트 통과 → 완료 → **deep-frozen 스냅샷**(schemaVersion 1·sourceBodiceHash 435afbcb·capMode
+  parametric·front/back primitives·lengths total 45.46·ease total +3.24·manualSource null·자체 hash
+  f5be198c). 상태 "소매 완료됨(원형 v1)".
+- **소매 변경**(길이 58 재적용) → "소매 변경됨 · 다시 완료 필요" + isChanged true → 재완료 복귀.
+- **몸판 변경**(여유량 6 적용+재완료, hash 435afbcb→a57abdae) → invalidatedByBodice true, 상태
+  "몸판 변경으로 소매 무효".
+- **manual 완료**(소매산 직접 수정 변환 후): mode manual·**manualSource**(lineId·splitAnchorIndex 4·
+  segments 8) 기록.
+- 하네스 `sleeveCheckpointCheck` **32**(게이트 7 실패 모드·불변 스냅샷 spec·deepFrozen·hash
+  completedAt 제외·형상전용 스테일·invalidatedByBodice·manualSource, 스텁 project). runAll 전체 통과,
+  shape/perf 골든 diff 0. **DOM id 84→87**(designSleeveCheckNote·btnCompleteSleeve·
+  designSleeveStatusNote). 캐시 `?v=2026082041`(designSleeve·sleeveCheckpoint·ui).
+
+**★ 소매 모양 단계 종료. 다음 = 카라 모양 단계**(몸판 목둘레 최종 확정 뒤). `sleeveResult` 는 시접·
+너치·커프스·트임·재단선 미포함 — 별도 사양·승인 후.
 
 ### S2 계약 (2026-08, 사용자 확정)
 
