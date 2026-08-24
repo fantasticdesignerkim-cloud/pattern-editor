@@ -861,7 +861,7 @@
     if (typeof render === "function") render();
     const warn = r.result.warnings.indexOf("narrow-cuff") >= 0 ? " · ⚠ 원형보다 좁음 · 트임/커프스 필요 가능" : "";
     setSleeveNote("소매길이 " + fmtL(st.len.v) + "cm · 소매부리 " + fmtL(st.cuff.v) + "cm(" + (st.side === "gentle" ? "완만 곡선" : "직선") + ")" + warn + " · 세션 전용");
-    syncSleeveButtons(); updateSleeveEaseUI(project);
+    syncSleeveButtons(); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project);
   }
   // S2 적용(소매산): 위팔 완성둘레 + 소매산 높이로 cap 변환. lower 는 기존(없으면 원형 기준값).
   //   실패(cap 붕괴·교차)하면 이전 소매 형상 유지. 출력 = 이세(사실값, 판정 없음).
@@ -879,7 +879,7 @@
     if (!r.ok) { setSleeveNote(sleeveFailStr(r.reason)); return; }   // 원자적: 이전 유지
     if (typeof render === "function") render();
     setSleeveNote("소매산: 위팔 " + fmtL(st.bicep.v) + "cm · 소매산 높이 " + fmtL(st.capH.v) + "cm · 세션 전용");
-    syncSleeveButtons(); updateSleeveEaseUI(project);
+    syncSleeveButtons(); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project);
   }
   function onResetSleeve() {
     const project = designProjectNow(); if (!project || !window.designSleeve) return;
@@ -891,7 +891,7 @@
     project.working.geometry.sleeve = JSON.parse(JSON.stringify(project.referenceGeometry.sleeve));
     if (typeof render === "function") render();
     setSleeveNote("원형 소매로 복원됨 · 세션 전용");
-    syncSleeveButtons(); updateSleeveEaseUI(project);
+    syncSleeveButtons(); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project);
   }
   // refresh 훅: 소매 입력 복원(committed 있으면 그것, 없으면 원형 기준값) + 버튼 상태.
   function updateSleevePanel(project) {
@@ -911,6 +911,44 @@
     else if (!cap) setSleeveNote("소매산은 원형 · 소매산 적용으로 위팔·높이 변형");
     syncSleeveButtons();
     syncSleeveModeUI(project);
+    updateSleeveCheckpointUI(project);
+  }
+
+  // ── 소매 모양 완료 체크포인트(S5, sleeveCheckpoint) ──
+  function sleeveCPFailStr(reason) {
+    const m = { "no-bodice": "몸판 완료 필요", "bodice-stale": "몸판 변경됨 · 다시 완료 필요", "no-sleeve": "소매를 먼저 적용",
+      "source-mismatch": "소매 출처가 몸판 완료본과 다름", "cap-invalid": "소매산 편집 무효", "manual-line-missing": "관리형 소매산 선 없음",
+      "cap-unmeasured": "소매산 앞·뒤 분리 불가", "self-intersection": "소매 형상이 교차함", "ease-unmeasured": "이세 측정 불가", "no-project": "프로젝트 없음" };
+    return m[reason] || reason;
+  }
+  function updateSleeveCheckpointUI(project) {
+    const checkNote = document.getElementById("designSleeveCheckNote");
+    const statusNote = document.getElementById("designSleeveStatusNote");
+    const btn = document.getElementById("btnCompleteSleeve");
+    if (!project || !window.sleeveCheckpoint) { if (btn) btn.disabled = true; if (checkNote) checkNote.textContent = ""; if (statusNote) statusNote.textContent = "소매 미완료 · 세션 전용"; return; }
+    const c = window.sleeveCheckpoint.check(project);
+    const sgn = v => (v >= 0 ? "+" : "") + fmtL(v);
+    if (checkNote) {
+      if (c.capLengths && c.ease) checkNote.textContent = "소매산 앞 " + fmtL(c.capLengths.front) + "·뒤 " + fmtL(c.capLengths.back) + "·총 " + fmtL(c.capLengths.total) + "cm · 이세 앞 " + sgn(c.ease.front) + "·뒤 " + sgn(c.ease.back) + "·총 " + sgn(c.ease.total) + "cm";
+      else checkNote.textContent = c.fails.length ? "완료 전 검사: " + sleeveCPFailStr(c.fails[0]) : "";
+    }
+    if (btn) btn.disabled = !c.ok;
+    const latest = window.sleeveCheckpoint.latest(project);
+    if (statusNote) {
+      if (!latest) statusNote.textContent = c.ok ? "완료 가능 · 세션 전용" : "완료 전 검사: " + sleeveCPFailStr(c.fails[0]);
+      else if (window.sleeveCheckpoint.invalidatedByBodice(project)) statusNote.textContent = "몸판 변경으로 소매 무효 · 다시 완료 필요";
+      else if (window.sleeveCheckpoint.isCurrentSleeveChanged(project)) statusNote.textContent = "소매 변경됨 · 다시 완료 필요 · 세션 전용";
+      else statusNote.textContent = "소매 완료됨(원형 v" + (latest.sourceBlock.version != null ? latest.sourceBlock.version : "?") + ") · 세션 전용";
+    }
+  }
+  function onCompleteSleeve() {
+    const project = designProjectNow();
+    if (!project || !window.sleeveCheckpoint) return;
+    const r = window.sleeveCheckpoint.complete(project);
+    const statusNote = document.getElementById("designSleeveStatusNote");
+    if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + sleeveCPFailStr(r.reason); updateSleeveCheckpointUI(project); return; }
+    updateSleeveCheckpointUI(project);
+    if (statusNote) statusNote.textContent = "소매 완료됨(원형 v" + (r.result.sourceBlock.version != null ? r.result.sourceBlock.version : "?") + ") · 세션 전용";
   }
 
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
@@ -1131,6 +1169,9 @@
     if (capManual) capManual.addEventListener("click", () => { if (!capManual.disabled) onSleeveCapManual(); });
     const capRevert = document.getElementById("btnSleeveCapRevert");
     if (capRevert) capRevert.addEventListener("click", () => { if (!capRevert.hidden) onSleeveCapRevert(); });
+    // 소매 모양 완료(S5): 게이트 통과 시에만 활성(updateSleeveCheckpointUI 가 disabled 관리).
+    const completeSleeve = document.getElementById("btnCompleteSleeve");
+    if (completeSleeve) completeSleeve.addEventListener("click", () => { if (!completeSleeve.disabled) onCompleteSleeve(); });
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");

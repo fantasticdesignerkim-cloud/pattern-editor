@@ -41,7 +41,17 @@
     return [pts[0], pts[pts.length - 1]];
   }
   function cubicsOfPath(path) { var out = [], cur = path.commands[0].points[0]; path.commands.forEach(function (c) { if (c.type === "M") { cur = c.points[0]; return; } if (c.type === "C") { out.push([cur, c.points[0], c.points[1], c.points[2]]); cur = c.points[2]; } }); return out; }
-  function capSegsOf(refSleeve) { return refSleeve.outline.filter(function (s) { return s.kind === "path" || s.kind === "cubic"; }); }
+  // 소매산(cap) 세그먼트 = 옆선·밑단이 아닌 것. hem = 양 끝점이 최대 y(밑단), 옆선 = hem 끝점에 닿는
+  //   세그먼트. cap = 나머지(kind 무관 — gentle 옆선 cubic 도 hem 접점으로 걸러짐).
+  function capSegsOf(sleeve) {
+    var outline = (sleeve && sleeve.outline) || [];
+    var hemY = -Infinity;
+    outline.forEach(function (s) { endpointsOf(s).forEach(function (p) { if (p.y > hemY) hemY = p.y; }); });
+    var atHem = function (p) { return Math.abs(p.y - hemY) < 0.5; };
+    var isHem = function (s) { return s.kind === "line" && endpointsOf(s).every(atHem); };
+    var touchesHem = function (s) { return !isHem(s) && endpointsOf(s).some(atHem); };
+    return outline.filter(function (s) { return !isHem(s) && !touchesHem(s); });
+  }
   // 세그먼트 → 조밀 점열(line/cubic/path). 40 샘플/cubic.
   function flattenSeg(s) {
     var out = [];
@@ -286,5 +296,43 @@
     return { segments: lineSegs, splitAnchorIndex: sp };
   }
 
-  window.designSleeve = Object.freeze({ computeSilhouette: computeSilhouette, referenceSilhouette: referenceSilhouette, transformCap: transformCap, measureCapSeam: measureCapSeam, computeFromCapLine: computeFromCapLine, capLineFromGeometry: capLineFromGeometry });
+  // S5: 최종 유효 소매 geometry 에서 cap 앞·뒤 primitives + SP 분할점 + 봉제 길이 추출(관리형 선 아님).
+  //   반환 { frontPrimitives, backPrimitives, splitPoint, lengths{front,back,total} } | null.
+  function capPrimitives(sleeveGeometry) {
+    var lc = capLineFromGeometry(sleeveGeometry);
+    if (!lc) return null;
+    var sp = lc.splitAnchorIndex, segs = lc.segments, anchors = anchorsOfLine(segs);
+    var back = segs.slice(0, sp), front = segs.slice(sp);
+    if (!back.length || !front.length) return null;
+    var backLen = arcLenSegs(back), frontLen = arcLenSegs(front);
+    if (!(isFinite(backLen) && isFinite(frontLen) && backLen > 0 && frontLen > 0)) return null;
+    return { frontPrimitives: front.map(function (s) { return cloneSeg(s); }), backPrimitives: back.map(function (s) { return cloneSeg(s); }),
+      splitPoint: cp(anchors[sp]), lengths: { front: frontLen, back: backLen, total: frontLen + backLen } };
+  }
+  // S5: 최종 소매 outline 의 연결·단순성. hem/옆선/cap 식별 후 닫힌 loop 자기교차. 실패면 true(교차/비정상).
+  function sleeveOutlineSelfIntersects(sleeveGeometry) {
+    var outline = (sleeveGeometry && sleeveGeometry.outline) || [];
+    if (outline.length < 3) return true;
+    var hemY = -Infinity; outline.forEach(function (s) { endpointsOf(s).forEach(function (p) { if (p.y > hemY) hemY = p.y; }); });
+    var atHem = function (p) { return Math.abs(p.y - hemY) < 0.5; };
+    var isHem = function (s) { return s.kind === "line" && endpointsOf(s).every(atHem); };
+    var hem = outline.find(isHem); if (!hem) return true;
+    var sides = outline.filter(function (s) { return !isHem(s) && endpointsOf(s).some(atHem); });
+    if (sides.length !== 2) return true;
+    var capSegs = capSegsOf(sleeveGeometry); if (!capSegs.length) return true;
+    var capPts = capPolyline(capSegs); if (capPts.length < 3) return true;
+    var backX = capPts[0].x < capPts[capPts.length - 1].x;
+    var backU = backX ? capPts[0] : capPts[capPts.length - 1], frontU = backX ? capPts[capPts.length - 1] : capPts[0];
+    var sideOf = function (u) { return sides.find(function (s) { return endpointsOf(s).some(function (p) { return dist(p, u) < 0.5; }); }); };
+    var bs = sideOf(backU), fs = sideOf(frontU); if (!bs || !fs) return true;
+    var flatSide = function (s, u) { var p = flattenSeg(s); return dist(p[0], u) < 0.5 ? p : p.reverse(); };   // u 에서 시작
+    var frontSidePts = flatSide(fs, frontU), backSidePts = flatSide(bs, backU);
+    var frontHem = frontSidePts[frontSidePts.length - 1], backHem = backSidePts[backSidePts.length - 1];
+    // loop: backU →(cap)→ frontU →(frontSide)→ frontHem →(hem)→ backHem →(backSide 역)→ backU
+    var loop = (backX ? capPts : capPts.slice().reverse())
+      .concat(frontSidePts.slice(1)).concat([cp(backHem)]).concat(backSidePts.slice(0, -1).reverse());
+    return loopSelfIntersects(loop);
+  }
+
+  window.designSleeve = Object.freeze({ computeSilhouette: computeSilhouette, referenceSilhouette: referenceSilhouette, transformCap: transformCap, measureCapSeam: measureCapSeam, computeFromCapLine: computeFromCapLine, capLineFromGeometry: capLineFromGeometry, capPrimitives: capPrimitives, sleeveOutlineSelfIntersects: sleeveOutlineSelfIntersects });
 })();

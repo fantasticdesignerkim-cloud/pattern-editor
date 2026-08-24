@@ -50,6 +50,8 @@ const suites = [
   { file: "sleeveMeasureCheck.js",      golden: false },
   // 소매 모양 S1 파생: cap 고정·하부 실루엣·초기값 재현·착용 경고·실패/불변.
   { file: "designSleeveCheck.js",       golden: false },
+  // 소매 모양 완료 체크포인트(S5): 완료 게이트·불변 스냅샷·형상전용 스테일·몸판 무효화(스텁 project).
+  { file: "sleeveCheckpointCheck.js",   golden: false },
   // Design 배치(piece layout): designLayout.js 의 순수 기하(bbox/auto 배치) 검증.
   { file: "designLayoutCheck.js",       golden: false },
   { file: "draftLayoutCheck.js",        golden: false },
