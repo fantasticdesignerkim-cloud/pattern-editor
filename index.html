@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026082032">
+<link rel="stylesheet" href="css/style.css?v=2026082501">
 </head>
 <body>
 
@@ -171,6 +171,7 @@
         <div class="subtabs" id="designSubtabs" role="tablist">
           <button type="button" class="subtab" data-subtab-btn="body" aria-selected="true">몸판</button>
           <button type="button" class="subtab" data-subtab-btn="sleeve" aria-selected="false" disabled title="몸판 완료 후 활성">소매</button>
+          <button type="button" class="subtab" data-subtab-btn="collar" aria-selected="false" disabled title="소매 완료 후 활성">카라</button>
         </div>
         <div class="subtab-panel" data-subtab="body">
         <!-- 품·여유량: 전체 가슴둘레 여유량 → 각 옆선 E/4 바깥 평행 이동(원본 블록 불변, 파생 geometry). -->
@@ -272,6 +273,17 @@
           </div>
           <div class="row note" id="designSleeveStatusNote" aria-live="polite">소매 미완료 · 세션 전용</div>
         </div><!-- /subtab sleeve -->
+        <!-- 카라 모양(C1: 2피스 셔츠 칼라의 칼라 스탠드). designCollar.computeStand(bodiceResult)로
+             목둘레 봉제(반패턴 합계)·여밈 연장을 분리한 직선 스탠드 밴드. 소매 완료·비스테일일 때만 활성.
+             몸판 hash 변경 시 geometry 를 숨기고 stale 표시(높이 보존, 명시적 재적용 필요). -->
+        <div class="subtab-panel" data-subtab="collar" hidden>
+          <div class="row"><label for="inpCollarStandHeight">스탠드 완성높이 (cm)</label><input id="inpCollarStandHeight" type="number" min="1" max="8" step="0.1"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnApplyCollar">카라 적용</button>
+            <button class="btn" id="btnResetCollar">초기화</button>
+          </div>
+          <div class="row note" id="designCollarNote" aria-live="polite"></div>
+        </div><!-- /subtab collar -->
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
         <div class="row" style="margin-top:8px"><label>배치</label></div>
         <div class="row" style="gap:4px">
@@ -328,7 +340,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026070731"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026082031"></script>
+<script src="js/render.js?v=2026082501"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -351,7 +363,7 @@
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
 <script src="js/designSleeve.js?v=2026082041"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
-<script src="js/designLayout.js?v=2026081305"></script>
+<script src="js/designLayout.js?v=2026082501"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026082031"></script>
 <!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
@@ -360,11 +372,13 @@
 <script src="js/sleeveMeasure.js?v=2026082011"></script>
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
 <script src="js/sleeveCheckpoint.js?v=2026082041"></script>
+<!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
+<script src="js/designCollar.js?v=2026082501"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026082041"></script>
+<script src="js/ui.js?v=2026082501"></script>
 
 </body>
 </html>

@@ -130,6 +130,25 @@ function geom() {
   ok(L.placement.front === "auto" && L.placement.back === "auto", "10: 앞/뒤 placement auto 기본");
 }
 
+// 11. 카라(별도 조각) 배치 헬퍼: bboxOfStand / collarAutoOffset / ensureLayout collar 기본값
+{
+  const stand = { outline: [line(0, 0, 20, 0), line(20, 0, 20, -3), line(20, -3, 0, -3), line(0, -3, 0, 0)], construction: [] };
+  const bb = DL.bboxOfStand(stand);
+  ok(bb && bb.minX === 0 && bb.maxX === 20 && bb.minY === -3 && bb.maxY === 0, "11: bboxOfStand");
+  ok(DL.bboxOfStand({ outline: [], construction: [] }) === null, "11: 빈 stand → null");
+  const bs = { minX: 0, minY: 0, maxX: 35, maxY: 30 }, cbb = { minX: 0, minY: -3, maxX: 20, maxY: 0 };
+  const right = DL.collarAutoOffset(bs, cbb, "right");
+  ok(near(right.dx, 45) && near(right.dy, 16.5), "11: collarAutoOffset right(소매 오른쪽 GAP·세로중심)");
+  const below = DL.collarAutoOffset(bs, cbb, "below");
+  ok(near(below.dx, 7.5) && near(below.dy, 43), "11: collarAutoOffset below(bs 아래 GAP·가로중심)");
+  ok(DL.collarAutoOffset(null, cbb, "right").dx === 0 && DL.collarAutoOffset(bs, null, "right").dy === 0, "11: 결손 입력 안전");
+  // ensureLayout 이 collar 기본값·placement.collar 를 추가한다(신규·구형 모두).
+  const Lnew = DL.ensureLayout({ working: {} });
+  ok(Lnew.collar && Lnew.collar.dx === 0 && Lnew.placement.collar === "auto", "11: ensureLayout 신규 collar 기본");
+  const Lold = DL.ensureLayout({ working: { layout: { body: { dx: 7, dy: 8 }, sleeve: { dx: 9, dy: 10 }, sleevePlacement: "manual" } } });
+  ok(Lold.collar && Lold.collar.dx === 0 && Lold.placement.collar === "auto", "11: ensureLayout 구형 마이그레이션 시 collar 추가");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

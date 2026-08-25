@@ -23,6 +23,7 @@
   const GAP = 10;              // 피스 사이 실제 봉제선(outline) 간격(도안 cm)
   const FIT_MARGIN = 24;       // fit 안전 여백(px)
   const DESIGN_MIN_Z = 0.1;    // design 자동 fit 최소 zoom(휠·핀치 하한과 동일)
+  const COLLAR_MIN_FIT_Z = 0.32; // 카라를 소매 오른쪽에 뒀을 때 union fit zoom 이 이보다 작으면 아래 행으로 reflow
   const PIECES = ["front", "back", "sleeve"];
   // 각 배치 피스가 포함하는 geometry 키. shared 는 앞판을 따른다.
   const PIECE_KEYS = {
@@ -58,6 +59,26 @@
     if (!geometry) return null;
     return bboxFromKeys(geometry, PIECE_KEYS[which] || PIECE_KEYS.body, ["outline"]);
   }
+  // ── 카라(collarDraft.standGeometry): working.geometry 밖 별도 조각이라 전용 bbox·배치 ──
+  function bboxOfStand(standGeometry) {
+    if (!standGeometry) return null;
+    const pts = [];
+    ["outline", "construction"].forEach(rl => (standGeometry[rl] || []).forEach(p => pointsOfPrim(p, pts)));
+    if (pts.length === 0) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    pts.forEach(q => { if (q.x < minX) minX = q.x; if (q.x > maxX) maxX = q.x; if (q.y < minY) minY = q.y; if (q.y > maxY) maxY = q.y; });
+    return { minX, minY, maxX, maxY };
+  }
+  // 카라 auto offset(순수). "right" = 소매(bs) 오른쪽 GAP·세로중심 정렬 / "below" = bs 아래 GAP·가로중심 정렬.
+  function collarAutoOffset(bs, cbb, place) {
+    if (!bs || !cbb) return { dx: 0, dy: 0 };
+    if (place === "below") return { dx: (bs.minX + bs.maxX) / 2 - (cbb.minX + cbb.maxX) / 2, dy: (bs.maxY + GAP) - cbb.minY };
+    return { dx: (bs.maxX + GAP) - cbb.minX, dy: (bs.minY + bs.maxY) / 2 - (cbb.minY + cbb.maxY) / 2 };
+  }
+  function collarStandGeom(project) {
+    const cd = project && project.working && project.working.collarDraft;
+    return (cd && cd.standGeometry && Array.isArray(cd.standGeometry.outline) && cd.standGeometry.outline.length) ? cd.standGeometry : null;
+  }
 
   // ── 순수: 앞판 → 뒤판 → 소매 가로 배치 offset. 실제 봉제선 간격 GAP, 세로중심은 앞판 기준. ──
   function autoLayout(geometry) {
@@ -76,8 +97,8 @@
   // ── layout 기본값·정규화(구형 {body,sleeve,sleevePlacement} 마이그레이션 포함) ──
   function defaultLayout() {
     return {
-      front: { dx: 0, dy: 0 }, back: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 },
-      placement: { front: "auto", back: "auto", sleeve: "auto" }
+      front: { dx: 0, dy: 0 }, back: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 }, collar: { dx: 0, dy: 0 },
+      placement: { front: "auto", back: "auto", sleeve: "auto", collar: "auto" }
     };
   }
   function ensureLayout(project) {
@@ -86,11 +107,13 @@
     if (!L) { L = project.working.layout = defaultLayout(); return L; }
     if (L.body && !L.front) L.front = L.body;                        // 구형 body → 앞판 앵커
     PIECES.forEach(k => { if (!L[k] || typeof L[k].dx !== "number") L[k] = { dx: 0, dy: 0 }; });
+    if (!L.collar || typeof L.collar.dx !== "number") L.collar = { dx: 0, dy: 0 };   // 카라(별도 조각)
     if (!L.placement || typeof L.placement !== "object") {
       const slv = (typeof L.sleevePlacement === "string") ? L.sleevePlacement : "auto";
-      L.placement = { front: "auto", back: "auto", sleeve: slv };
+      L.placement = { front: "auto", back: "auto", sleeve: slv, collar: "auto" };
     } else {
       PIECES.forEach(k => { if (typeof L.placement[k] !== "string") L.placement[k] = "auto"; });
+      if (typeof L.placement.collar !== "string") L.placement.collar = "auto";
     }
     return L;
   }
@@ -115,6 +138,29 @@
     const r = svg.getBoundingClientRect();
     return { W: r.width || svg.clientWidth || 900, H: r.height || svg.clientHeight || 700 };
   }
+  function unionBB(a, b) {
+    if (!a) return b; if (!b) return a;
+    return { minX: Math.min(a.minX, b.minX), minY: Math.min(a.minY, b.minY), maxX: Math.max(a.maxX, b.maxX), maxY: Math.max(a.maxY, b.maxY) };
+  }
+  // 앞판+뒤판+소매 표시 outline union(카라 배치의 기준 = 소매 오른쪽 GAP).
+  function bsOutlineUnion(geometry, L) {
+    let u = null;
+    PIECES.forEach(k => { u = unionBB(u, offBBox(outlineBBoxOf(geometry, k), L[k])); });
+    return u;
+  }
+  // 표시된 카라 bbox(offset 반영). 카라 geometry 없으면 null.
+  function collarDispBBox(p, L) {
+    const cg = collarStandGeom(p); if (!cg) return null;
+    return offBBox(bboxOfStand(cg), L.collar || { dx: 0, dy: 0 });
+  }
+  // union bbox → fit zoom(fitUnion 과 동일 공식). reflow 판정·fit 공용.
+  function fitZoomForUnion(u) {
+    if (!u) return 1;
+    const halfW = (u.maxX - u.minX) / 2, halfH = (u.maxY - u.minY) / 2, wh = viewportWH();
+    const hz = (halfW * SC > 0) ? (wh.W / 2 - FIT_MARGIN) / (halfW * SC) : Infinity;
+    const vz = (halfH * SC > 0) ? (wh.H / 2 - FIT_MARGIN) / (halfH * SC) : Infinity;
+    let z = Math.min(hz, vz, 1); if (!(z > 0)) z = 1; return Math.max(z, DESIGN_MIN_Z);
+  }
 
   // placement==="auto" 인 피스만 autoLayout 결과로 갱신(manual 은 유지). no render.
   function refreshAutoLayout() {
@@ -122,19 +168,27 @@
     const L = ensureLayout(p);
     const auto = autoLayout(p.working.geometry); if (!auto) return;
     PIECES.forEach(k => { if (L.placement[k] === "auto") L[k] = { dx: auto[k].dx, dy: auto[k].dy }; });
+    // 카라(별도 조각): 우선 소매 오른쪽 GAP. 그 배치로 union fit 이 지나치게 작아지면 아래 행으로 reflow.
+    const cg = collarStandGeom(p);
+    if (cg && L.placement.collar === "auto") {
+      const bs = bsOutlineUnion(p.working.geometry, L), cbb = bboxOfStand(cg);
+      if (bs && cbb) {
+        let off = collarAutoOffset(bs, cbb, "right");
+        const dispRight = { minX: cbb.minX + off.dx, minY: cbb.minY + off.dy, maxX: cbb.maxX + off.dx, maxY: cbb.maxY + off.dy };
+        if (fitZoomForUnion(unionBB(bs, dispRight)) < COLLAR_MIN_FIT_Z) off = collarAutoOffset(bs, cbb, "below");
+        L.collar = off;
+      }
+    }
   }
 
-  // 세 피스 union 중심을 viewport 중심에 두는 카메라 fit(형상·layout 불변). no render.
+  // 세 피스 + 카라 union 중심을 viewport 중심에 두는 카메라 fit(형상·layout 불변). no render.
   function fitUnion() {
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
-    const u = unionOf(p.working.geometry, L, PIECES); if (!u) return;
+    const u = unionBB(unionOf(p.working.geometry, L, PIECES), collarDispBBox(p, L)); if (!u) return;
     const uCx = (u.minX + u.maxX) / 2, uCy = (u.minY + u.maxY) / 2;
-    const halfW = (u.maxX - u.minX) / 2, halfH = (u.maxY - u.minY) / 2;
     const { W, H } = viewportWH();
-    const hz = (halfW * SC > 0) ? (W / 2 - FIT_MARGIN) / (halfW * SC) : Infinity;
-    const vz = (halfH * SC > 0) ? (H / 2 - FIT_MARGIN) / (halfH * SC) : Infinity;
-    let z = Math.min(hz, vz, 1); if (!(z > 0)) z = 1; z = Math.max(z, DESIGN_MIN_Z);
+    const z = fitZoomForUnion(u);
     view.z = z; view.x = W / 2 - MX - uCx * SC * z; view.y = H / 2 - MY - uCy * SC * z;
     syncViewVars();
   }
@@ -187,6 +241,11 @@
   }
   // 엉덩이 길이 적용 직후(ui.js 호출, render 는 호출부): auto 피스만 재배치+fit, manual 유지.
   function afterBodyLength() {
+    const p = currentProject(); if (!p) return;
+    refreshAutoLayout(); fitUnion();
+  }
+  // 카라 적용/제거 직후(ui.js 호출, render 는 호출부): 카라 auto 배치(소매 오른쪽/reflow) + fit.
+  function afterCollar() {
     const p = currentProject(); if (!p) return;
     refreshAutoLayout(); fitUnion();
   }
@@ -250,9 +309,9 @@
 
   window.designLayout = Object.freeze({
     // 순수(harness)
-    bboxOf, outlineBBoxOf, autoLayout, ensureLayout,
+    bboxOf, outlineBBoxOf, autoLayout, ensureLayout, bboxOfStand, collarAutoOffset,
     // DOM 연동
-    enterDesign, centerBody, placeSleeveRight, resetLayout, refreshAutoLayout, afterBodyLength, resetViewForDesign,
+    enterDesign, centerBody, placeSleeveRight, resetLayout, refreshAutoLayout, afterBodyLength, afterCollar, resetViewForDesign,
     cancelLayoutDrag   // 모드 전환 시 진행 중 배치 드래그 취소(designLineTool.setMode 에서 호출)
   });
 })();
