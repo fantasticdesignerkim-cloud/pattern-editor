@@ -3267,6 +3267,66 @@ complete → 성공/실패 문구.
 `sleeveResult` 완료 스냅샷**(sourceBodiceHash 고정, 시접·너치·커프스·트임 제외). 완만 곡선 옆선은
 S1 에 포함(straight 기본).
 
+## ✅ 카라 모양 C1 — 셔츠 칼라 스탠드 스캐폴드 (2026-08)
+
+소매 모양 단계 완료 후 카라 모양 단계 착수. 첫 카라 = **2피스 셔츠 칼라**(스탠드 + 본체), 권장 순서
+**C1 스탠드 → C2 본체 → C3 직접 편집**. C1 은 **스탠드 직선 스캐폴드**만 구현했다. 순수 모듈(C1a,
+`914b69f`)과 UI 배선(C1b, `aeca05b`)을 분리 커밋. 캐시 `?v=2026082501`.
+
+### 확정 계약·경계 (위반 금지)
+- **C1 = 직선 스탠드 스캐폴드다.** 길이=반패턴 합계, 높이 기본 3cm 직선 밴드 + CF 여밈 연장.
+  **스탠드 베이스 곡률·CF 훅업은 없다**(이후 수치 파라미터로 확장 — 옆선 박스형→곡선화 증분과 같은 결).
+- **목둘레 봉제 구간과 앞여밈 연장 구간을 분리한다.** `seamLenCm` = 목둘레 봉제(= `bodiceResult.
+  necklineLengths.half`, 반패턴 합계 = 앞목 반쪽 + 뒤목 반쪽, CB 접어재단). `extensionLenCm` =
+  `bodiceResult.placket.parameters.overlapCm`(여밈 없으면 0). **연장분은 seamLenCm 에 미포함.**
+- **`standTopLenCm` 은 현재 "직선 스탠드 윗선 측정값"이며, C2 칼라 본체 봉제 길이는 아직 미확정이다.**
+  UI 도 `스탠드 윗선(직선)` 으로 표시한다. C2 가 이 윗선 길이를 기준으로 본체를 만들되, 실제 본체
+  봉제 길이는 C2 에서 정한다.
+- **카라 geometry 는 `bodiceResult.hash` 에만 종속**한다(`collarDraft.sourceBodiceHash`). 소매에는
+  의존하지 않으므로 `sourceSleeveHash` 에 묶지 않는다.
+- **소매 완료본은 작업 순서 게이트일 뿐 카라 형상 소스가 아니다.** 카라 탭 활성 =
+  `bodiceCheckpoint.latest` 존재·비스테일 **+** `sleeveCheckpoint.latest` 존재·비스테일(`isCurrentSleeveChanged`
+  false)·몸판 변경 무효 아님(`invalidatedByBodice` false). 형상은 순수하게 `bodiceResult` 로만 만든다.
+- **몸판 hash 변경 시**(재완료로 hash 달라짐) → 기존 카라 `standGeometry=null` 로 **숨기고**,
+  `parameters.stand.standHeightCm` 은 **보존**, stale 노트(`몸판 변경됨 · 카라 다시 적용 필요(높이 보존)`)
+  표시 → **명시적 재적용으로만 복구**. (`onCompleteBodice` 이 `refreshSleeve` 다음 `refreshCollarStale` 호출.)
+- **좁은 화면에서는 카라를 아래 행으로 reflow**: 카라를 소매 오른쪽 GAP 10cm 로 우선 배치하되, 그
+  배치로 union fit zoom 이 `COLLAR_MIN_FIT_Z`(0.32) 미만이면 body+sleeve 아래 행 가로중심으로 이동
+  (실측: 1280·560px=오른쪽, 360px=아래). 카라 배치는 `working.geometry` 밖 별도 조각이라 fitUnion 이
+  카라 bbox 를 union 에 포함시켜 항상 화면 안.
+- **아직 없는 것**: 스탠드 베이스 곡률·CF 훅업·앞끝 형태 / **C2 칼라 본체**(스탠드 윗선 기준 생성·
+  칼라 폭 기본 6cm·셔츠 칼라 끝) / C3 직접 편집 / 시접·너치·심지·단추. 전부 별도 승인 후.
+
+### 데이터 모델·구조
+- **순수 모듈 `js/designCollar.js`**(`window.designCollar`): `computeStand(bodiceResult, {standHeightCm})`
+  → `{ standGeometry:{outline,construction}, seamLenCm, extensionLenCm, standTopLenCm, standHeightCm,
+  anchors }`. 로컬 프레임(CB x=0, 봉제 모서리 y=0, 스탠드 −y). 세그먼트에 `part`
+  (`neck-seam`/`extension`/`cf`/`top`/`cb-fold`) 태깅. 실패 계약: `no-bodice`/`no-neckline`/
+  `invalid-overlap`/`invalid-stand-height`. 입력 불변. render·state·storage 미접근.
+- **`working.collarDraft`**(세션 전용, reload 소멸) = `{ sourceBodiceHash, type:"shirt-two-piece",
+  parameters:{stand:{standHeightCm}}, standGeometry, collarGeometry:null(C2), measure:{seamLenCm,
+  extensionLenCm,standTopLenCm} }`. **`working.geometry` 밖**이라 엉덩이 길이 재계산(computeGeometry
+  가 working.geometry 통째 교체)에도 **카라가 유지**된다(patternLines 와 같은 이유).
+- **`js/designLayout.js`**: 카라를 4번째 배치 조각으로(`bboxOfStand`·`collarAutoOffset` 순수 헬퍼 +
+  `L.collar` offset·`placement.collar`). collar geometry 는 `collarDraft.standGeometry` 에서 읽음
+  (working.geometry 아님). `refreshAutoLayout` 이 소매 오른쪽/reflow 배치, `fitUnion` 이 카라 포함.
+  카라는 C1 에서 **드래그 없음**(hit rect 없음, placement 항상 auto).
+- **`js/render.js`**: design 분기에 `_appendCollarStand`(스탠드 outline 닫힌 path, `L.collar` transform).
+  `standGeometry` 없으면(stale 숨김) 미렌더. CSS `.design-collar-stand`(스틸블루 #0E7490).
+- **`js/ui.js`**: 카라 서브탭 게이트(`collarGateOk`/`syncCollarSubtabGate`), 생성/재파생(`deriveCollar`),
+  stale 숨김(`collarStale`/`refreshCollarStale`), 패널(높이 입력·적용/초기화·측정 노트).
+  `refreshCollarUI` 는 `updateSleeveCheckpointUI` 종점에서 호출(소매/몸판 변경이 게이트에 영향).
+
+### 검증
+- 하네스: **designCollarCheck 32**(봉제/연장 분리·폐곡선·여밈 없음 4세그·실패·입력 불변) +
+  **designLayoutCheck 22→29**(bboxOfStand·collarAutoOffset right/below·ensureLayout collar 기본).
+  runAll 전체 통과, **shape/perf 골든 diff 0**, 엔진·render 라이브 원형 경로 무변경.
+- 실브라우저(격리 origin `127.0.0.1:8420`, storage 0키, 콘솔 0): 원형 생성→완료→디자인→몸판 완료→
+  소매 적용/완료 후 **카라 탭 활성**·적용 → 카라 스탠드 렌더(소매 오른쪽), 측정 `목둘레 봉제 18.8·여밈
+  연장 1.75·스탠드 윗선(직선) 20.6cm`. 몸판 재완료(hash 435afbcb→fdc77e16) → 카라 **숨김·높이 3 보존·
+  stale 노트**, 소매 재완료 후 재적용 → 새 hash·**여밈 연장 1.75 반영**. 엉덩이 길이 적용해도 카라 보존,
+  초기화 시 제거, reference frozen. reflow 실측(1280/560=오른쪽, 360=아래 행, 전부 화면 안).
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
