@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026082501">
+<link rel="stylesheet" href="css/style.css?v=2026082505">
 </head>
 <body>
 
@@ -284,6 +284,17 @@
             <button class="btn" id="btnResetCollar">초기화</button>
           </div>
           <div class="row note" id="designCollarNote" aria-live="polite"></div>
+          <!-- C2 칼라 본체: 스탠드 윗선 primitive 를 부착선으로(여밈 연장 미포함). 부착 길이 = 윗선 목 − 앞끝 물림.
+               스탠드 적용 후에만 활성. 스탠드(높이·앞끝올림) 변경 시 본체 stale → 재생성. 앞끝 물림은 CF→CB 방향. -->
+          <div class="row" style="margin-top:8px"><label>칼라 본체</label></div>
+          <div class="row"><label for="inpCollarBodyWidth">CB 칼라 폭 (cm)</label><input id="inpCollarBodyWidth" type="number" min="1" max="15" step="0.1"></div>
+          <div class="row"><label for="inpCollarBodyInset">앞끝 물림 (cm)</label><input id="inpCollarBodyInset" type="number" min="0" max="3" step="0.1"></div>
+          <div class="row"><label for="inpCollarBodyProjection">칼라 앞끝 돌출 (cm)</label><input id="inpCollarBodyProjection" type="number" min="0" max="15" step="0.1"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnApplyCollarBody">본체 적용</button>
+            <button class="btn" id="btnResetCollarBody">본체 초기화</button>
+          </div>
+          <div class="row note" id="designCollarBodyNote" aria-live="polite"></div>
         </div><!-- /subtab collar -->
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
         <div class="row" style="margin-top:8px"><label>배치</label></div>
@@ -341,7 +352,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026070731"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026082501"></script>
+<script src="js/render.js?v=2026082505"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -364,7 +375,7 @@
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
 <script src="js/designSleeve.js?v=2026082041"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
-<script src="js/designLayout.js?v=2026082502"></script>
+<script src="js/designLayout.js?v=2026082505"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026082031"></script>
 <!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
@@ -374,12 +385,12 @@
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
 <script src="js/sleeveCheckpoint.js?v=2026082041"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
-<script src="js/designCollar.js?v=2026082503"></script>
+<script src="js/designCollar.js?v=2026082506"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026082502"></script>
+<script src="js/ui.js?v=2026082506"></script>
 
 </body>
 </html>

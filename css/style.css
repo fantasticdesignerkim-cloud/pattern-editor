@@ -121,6 +121,8 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-placket-outline{fill:none;stroke:#B45309;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
 /* 카라 스탠드(C1 직선 스캐폴드): 별도 조각 밴드(실선 스틸블루 + 옅은 fill). */
 .design-collar-stand{stroke:#0E7490;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round;fill:color-mix(in srgb,#0E7490 8%,transparent)}
+/* 카라 본체(C2): 스탠드 윗선에 부착되는 조각(실선 블루 + 옅은 fill). 스탠드와 다른 색으로 구분. */
+.design-collar-body{stroke:#2563EB;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round;fill:color-mix(in srgb,#2563EB 7%,transparent)}
 /* 무효 소매산 편집: 빨강 점선(마지막 유효 navy geometry 는 유지, 선택 무관 표시).
    .design-working path(0,1,1) 를 이기도록 working 스코프(0,2,0). */
 .design-working .sleeve-cap-invalid{fill:none;stroke:#cc3333;stroke-width:2;stroke-dasharray:5 3;stroke-linejoin:round;stroke-linecap:round}

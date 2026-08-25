@@ -80,6 +80,14 @@
     const cd = project && project.working && project.working.collarDraft;
     return (cd && cd.standGeometry && Array.isArray(cd.standGeometry.outline) && cd.standGeometry.outline.length) ? cd.standGeometry : null;
   }
+  // 카라 조각 로컬 bbox = 스탠드 ∪ 본체(C2). 배치·fit 이 본체까지 포함하도록.
+  function collarLocalBBox(project) {
+    const cd = project && project.working && project.working.collarDraft; if (!cd) return null;
+    let u = collarStandGeom(project) ? bboxOfStand(collarStandGeom(project)) : null;
+    const bodyG = cd.body && cd.body.geometry && Array.isArray(cd.body.geometry.outline) && cd.body.geometry.outline.length ? cd.body.geometry : null;
+    if (bodyG) { const bb = bboxOfStand(bodyG); u = u ? { minX: Math.min(u.minX, bb.minX), minY: Math.min(u.minY, bb.minY), maxX: Math.max(u.maxX, bb.maxX), maxY: Math.max(u.maxY, bb.maxY) } : bb; }
+    return u;
+  }
 
   // ── 순수: 앞판 → 뒤판 → 소매 가로 배치 offset. 실제 봉제선 간격 GAP, 세로중심은 앞판 기준. ──
   function autoLayout(geometry) {
@@ -149,10 +157,10 @@
     PIECES.forEach(k => { u = unionBB(u, offBBox(outlineBBoxOf(geometry, k), L[k])); });
     return u;
   }
-  // 표시된 카라 bbox(offset 반영). 카라 geometry 없으면 null.
+  // 표시된 카라 bbox(offset 반영, 스탠드∪본체). 카라 geometry 없으면 null.
   function collarDispBBox(p, L) {
-    const cg = collarStandGeom(p); if (!cg) return null;
-    return offBBox(bboxOfStand(cg), L.collar || { dx: 0, dy: 0 });
+    const cbb = collarLocalBBox(p); if (!cbb) return null;
+    return offBBox(cbb, L.collar || { dx: 0, dy: 0 });
   }
   // union bbox → fit zoom(fitUnion 과 동일 공식). reflow 판정·fit 공용.
   function fitZoomForUnion(u) {
@@ -169,10 +177,10 @@
     const L = ensureLayout(p);
     const auto = autoLayout(p.working.geometry); if (!auto) return;
     PIECES.forEach(k => { if (L.placement[k] === "auto") L[k] = { dx: auto[k].dx, dy: auto[k].dy }; });
-    // 카라(별도 조각): 우선 소매 오른쪽 GAP. 그 배치로 union fit 이 지나치게 작아지면 아래 행으로 reflow.
-    const cg = collarStandGeom(p);
-    if (cg && L.placement.collar === "auto") {
-      const bs = bsOutlineUnion(p.working.geometry, L), cbb = bboxOfStand(cg);
+    // 카라(별도 조각, 스탠드∪본체): 우선 소매 오른쪽 GAP. 그 배치로 union fit 이 작아지면 아래 행 reflow.
+    const cbb = collarLocalBBox(p);
+    if (cbb && L.placement.collar === "auto") {
+      const bs = bsOutlineUnion(p.working.geometry, L);
       if (bs && cbb) {
         let off = collarAutoOffset(bs, cbb, "right");
         const dispRight = { minX: cbb.minX + off.dx, minY: cbb.minY + off.dy, maxX: cbb.maxX + off.dx, maxY: cbb.maxY + off.dy };

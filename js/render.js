@@ -188,6 +188,14 @@ function _appendCollarStand(root, collarDraft, off, scale){
   g.appendChild(E("path",{ d, class:"design-collar-stand", fill:"none" }));
   root.appendChild(g);
 }
+// 카라 본체(C2, collarDraft.body.geometry): 스탠드 윗선에 부착되는 닫힌 조각. 카라 offset 동승.
+function _appendCollarBody(root, collarDraft, off, scale){
+  if(!collarDraft || !collarDraft.body || !collarDraft.body.geometry || !Array.isArray(collarDraft.body.geometry.outline)) return;
+  const d=_partPathD(collarDraft.body.geometry.outline); if(!d) return;
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-collar":"body" });
+  g.appendChild(E("path",{ d, class:"design-collar-body", fill:"none" }));
+  root.appendChild(g);
+}
 
 function _appendDesignHitRect(root, geometry, pieceName, off, scale){
   if (!window.designLayout) return;
@@ -297,9 +305,10 @@ function render(){
       svg.appendChild(pRoot);
     }
     // 카라 스탠드 파생(있을 때만): 별도 조각(L.collar offset). 몸판 hash 변경 시 standGeometry=null 로 숨김.
-    if (dp.working.collarDraft && dp.working.collarDraft.standGeometry) {
+    if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body)) {
       const cRoot = E("g"); cRoot.setAttribute("data-design-root", "collar");
       _appendCollarStand(cRoot, dp.working.collarDraft, L.collar || { dx: 0, dy: 0 }, scale);
+      _appendCollarBody(cRoot, dp.working.collarDraft, L.collar || { dx: 0, dy: 0 }, scale);
       svg.appendChild(cRoot);
     }
 

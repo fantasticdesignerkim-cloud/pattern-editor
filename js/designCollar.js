@@ -103,6 +103,11 @@
     return out;
   }
   function reverseCubic(s, part) { var r = { kind: "cubic", from: cp(s.to), c1: cp(s.c2), c2: cp(s.c1), to: cp(s.from) }; if (part) r.part = part; return r; }
+  function cloneSeg(s, part) {
+    var r = s.kind === "cubic" ? { kind: "cubic", from: cp(s.from), c1: cp(s.c1), c2: cp(s.c2), to: cp(s.to) } : { kind: "line", from: cp(s.from), to: cp(s.to) };
+    if (part) r.part = part; else if (s.part) r.part = s.part;
+    return r;
+  }
 
   // 자기교차(원자적 실패): outline 을 조밀 점열로 펴서 비인접 선분 교차.
   function flattenSeg(s) {
@@ -153,13 +158,16 @@
     outline.push(L(cbTop, cbSeam, "cb-fold"));
     // 직선은 primitive 측정 = 정확. neck-seam 전체가 목둘레, top 전체가 윗선(연장 포함).
     var neckM = segMeasure(outline[0]), extM = overlap > 0 ? segMeasure(outline[1]) : 0;
+    var upperNeckEnd = { x: neck, y: -H };   // 윗선 목 끝(연장 제외) = 완성 CF 위쪽
     return {
       ok: true, standGeometry: { outline: outline, construction: [] },
+      // C2 부착선 후보: 윗선 목 구간(연장 제외) CB→CF. 직선 스탠드는 단일 직선 cbTop→(neck,−H).
+      upperNeckPath: [L(cbTop, upperNeckEnd, "attach")],
       lowerNeckSeamLenCm: neckM, lowerExtensionLenCm: extM,
       upperNeckSegmentLenCm: neckM, upperExtensionLenCm: extM, upperTotalLenCm: neckM + extM,
       standHeightCm: H, frontRiseCm: 0, backNeckLenCm: back, frontNeckLenCm: front,
       anchors: { cbSeam: cbSeam, cbTop: cbTop, shoulderSeam: { x: back, y: 0 }, shoulderTop: { x: back, y: -H },
-        cfSeam: cfSeam, cfExtSeam: cfExtSeam, cfTop: cfTop }
+        cfSeam: cfSeam, cfExtSeam: cfExtSeam, cfTop: cfTop, upperNeckEnd: upperNeckEnd }
     };
   }
 
@@ -192,7 +200,8 @@
     var extTipU = add(extTipL, nCF, H);
 
     var lowerArc = arcSubCubics(Cc, R, a0, a1, "neck-seam-arc");
-    var upperArcRev = arcSubCubics(Cc, R - H, a0, a1, null).reverse().map(function (s) { return reverseCubic(s, "top-arc"); });
+    var upperArcFwd = arcSubCubics(Cc, R - H, a0, a1, "top-arc");        // Su → CFu (윗선 진행 방향)
+    var upperArcRev = upperArcFwd.slice().reverse().map(function (s) { return reverseCubic(s, "top-arc"); });   // 폐곡선용 CFu → Su
 
     var outline = [L(cbSeam, S, "neck-seam-straight")].concat(lowerArc);
     if (overlap > 0) {
@@ -209,18 +218,101 @@
     if (outlineSelfIntersects(outline)) return { ok: false, reason: "self-intersection" };
 
     var m = measured(outline, "neck-seam-straight", "neck-seam-arc", "extension", "top-straight", "top-arc", "top-extension");
+    // C2 부착선 후보 = 윗선 목 구간(연장 제외), CB→CF 방향으로 정렬한 실제 primitive.
+    var upperNeckPath = [L(cbTop, Su, "attach")].concat(upperArcFwd.map(function (s) { return cloneSeg(s, "attach"); }));
     return {
-      ok: true, standGeometry: { outline: outline, construction: [] },
+      ok: true, standGeometry: { outline: outline, construction: [] }, upperNeckPath: upperNeckPath,
       lowerNeckSeamLenCm: m.lowerNeckSeamLenCm, lowerExtensionLenCm: m.lowerExtensionLenCm,
       upperNeckSegmentLenCm: m.upperNeckSegmentLenCm, upperExtensionLenCm: m.upperExtensionLenCm, upperTotalLenCm: m.upperTotalLenCm,
       standHeightCm: H, frontRiseCm: rise, backNeckLenCm: m.backNeckLenCm, frontNeckLenCm: m.frontNeckLenCm,
-      anchors: { cbSeam: cbSeam, cbTop: cbTop, shoulderSeam: S, shoulderTop: Su, cfSeam: CF, cfExtSeam: extTipL, cfTop: CFu }
+      anchors: { cbSeam: cbSeam, cbTop: cbTop, shoulderSeam: S, shoulderTop: Su, cfSeam: CF, cfExtSeam: extTipL, cfTop: CFu, upperNeckEnd: CFu }
+    };
+  }
+
+  // ══ C2 칼라 본체 ══ 부착선 = 스탠드 윗선 목 primitive 를 CF 에서 CB 방향으로 frontInset 만큼 물린 subpath.
+  //   ★ 여밈 연장(upperExtension)은 절대 포함하지 않는다(부착선 후보 = upperNeckPath, 이미 연장 제외).
+  //   0.3cm 물림은 x 좌표가 아니라 실제 윗선 호길이 기준. cubic 중간에서 끝나면 de Casteljau 로 정확 분할.
+  // frontProjectionCm = **접선 방향 투영량**(칼라 앞끝을 CF 접선 전방으로 돌출시키는 양)이다.
+  //   실제 포인트 사선 길이가 아니다(그건 앞폭 6 + 투영 4 가 합쳐져 더 길다). "칼라 끝 길이"로 부르지 않는다.
+  function referenceBodyParams() { return { cbWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 }; }
+
+  function sub(a, b) { return { x: a.x - b.x, y: a.y - b.y }; }
+  function unit(v) { var d = Math.hypot(v.x, v.y) || 1; return { x: v.x / d, y: v.y / d }; }
+  function lerp(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
+  function startTangent(s) { return unit(s.kind === "cubic" ? sub(s.c1, s.from) : sub(s.to, s.from)); }
+  function endTangent(s) { return unit(s.kind === "cubic" ? sub(s.to, s.c2) : sub(s.to, s.from)); }
+  // 칼라쪽(neck seam 반대, 위=−y) 법선. 접선에 수직인 두 후보 중 y<0(위) 쪽.
+  function normalUp(t) { var n = { x: -t.y, y: t.x }; return n.y <= 0 ? n : { x: t.y, y: -t.x }; }
+  // cubic 을 t 에서 de Casteljau 로 나눈 **왼쪽[0,t]** 부분.
+  function cubicSplitLeft(s, t) {
+    var a = lerp(s.from, s.c1, t), b = lerp(s.c1, s.c2, t), c = lerp(s.c2, s.to, t);
+    var d = lerp(a, b, t), e = lerp(b, c, t), f = lerp(d, e, t);
+    return { kind: "cubic", from: cp(s.from), c1: a, c2: d, to: f };
+  }
+  // cubic 에서 시작점부터 호길이 target 이 되는 t(이분탐색, adaptive 측정).
+  function tFromArcLen(s, target) {
+    var lo = 0, hi = 1;
+    for (var i = 0; i < 44; i++) { var m = (lo + hi) / 2; if (segMeasure(cubicSplitLeft(s, m)) < target) lo = m; else hi = m; }
+    return (lo + hi) / 2;
+  }
+  // path(정렬된 segs) 를 시작부터 호길이 target 까지 자른 subpath(중간 seg 는 정확 분할).
+  function subpathByLength(path, target) {
+    var acc = 0, out = [];
+    for (var i = 0; i < path.length; i++) {
+      var s = path[i], Ln = segMeasure(s);
+      if (acc + Ln <= target + 1e-12) { out.push(cloneSeg(s)); acc += Ln; if (Math.abs(acc - target) < 1e-9) return out; continue; }
+      var rem = target - acc;
+      if (s.kind === "line") out.push({ kind: "line", from: cp(s.from), to: lerp(s.from, s.to, rem / Ln) });
+      else out.push(cubicSplitLeft(s, tFromArcLen(s, rem)));
+      return out;
+    }
+    return out;   // target ≥ 전체 길이 → 전체
+  }
+
+  // C2: 칼라 본체 첫 스캐폴드. standResult(computeStand 반환) + { cbWidthCm, frontInsetCm, pointLengthCm }.
+  //   반환 { ok, bodyGeometry:{outline,construction}, attachLenCm, anchors } | { ok:false, reason }.
+  function computeBody(standResult, params) {
+    if (!standResult || !standResult.ok || !Array.isArray(standResult.upperNeckPath) || !standResult.upperNeckPath.length) return { ok: false, reason: "invalid-stand" };
+    var cbW = params && params.cbWidthCm, inset = params && params.frontInsetCm, proj = params && params.frontProjectionCm;
+    if (!num(cbW) || cbW <= 0) return { ok: false, reason: "invalid-cb-width" };
+    if (!num(inset) || inset < 0) return { ok: false, reason: "invalid-front-inset" };
+    if (!num(proj) || proj < 0) return { ok: false, reason: "invalid-front-projection" };
+
+    var path = standResult.upperNeckPath;
+    var upperLen = sumMeasure(path);                 // = upperNeckSegmentLenCm (연장 제외)
+    var targetLen = upperLen - inset;                // 부착 길이(CB→물림점). 연장은 절대 미포함.
+    if (targetLen <= 1e-9) return { ok: false, reason: "invalid-front-inset" };
+    var attach = subpathByLength(path, targetLen);
+    var attachLen = sumMeasure(attach);              // 실제 출력 primitive 측정값
+
+    var cbPoint = cp(path[0].from);
+    var target = cp(attach[attach.length - 1].to);
+    var nCB = normalUp(startTangent(attach[0]));
+    var tTgt = endTangent(attach[attach.length - 1]), nTgt = normalUp(tTgt);
+    var cbOuter = add(cbPoint, nCB, cbW);            // CB 완성 칼라 폭
+    var frontOuter = add(target, nTgt, cbW);         // 앞폭도 동일 6cm(평행 폭 스캐폴드)
+    var tip = add(frontOuter, tTgt, proj);           // 칼라 앞끝: 앞쪽 외곽점에서 접선(CF 방향) 전방으로 proj 만큼 투영
+
+    // 폐곡선: 부착선(CB→물림) → 물림→tip → tip→frontOuter → frontOuter→cbOuter(외곽) → cbOuter→CB(접힘).
+    var outline = attach.map(function (s) { return cloneSeg(s, "attach"); });
+    outline.push(L(target, tip, "point-front"));
+    outline.push(L(tip, frontOuter, "point-top"));
+    outline.push(L(frontOuter, cbOuter, "outer"));
+    outline.push(L(cbOuter, cbPoint, "cb-fold"));
+
+    if (outlineSelfIntersects(outline)) return { ok: false, reason: "self-intersection" };
+    return {
+      ok: true, bodyGeometry: { outline: outline, construction: [] }, attachLenCm: attachLen,
+      // frontTangent/frontNormal: 앞끝 투영이 접선 방향임을 회귀로 잠그고 향후 벌어짐/앞폭 변화 설계에 쓴다.
+      anchors: { cbAttach: cbPoint, cbOuter: cbOuter, target: target, frontOuter: frontOuter, tip: tip, frontTangent: tTgt, frontNormal: nTgt }
     };
   }
 
   window.designCollar = Object.freeze({
     referenceParams: referenceParams,
+    referenceBodyParams: referenceBodyParams,
     readBodice: readBodice,
-    computeStand: computeStand
+    computeStand: computeStand,
+    computeBody: computeBody
   });
 })();

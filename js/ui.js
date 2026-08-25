@@ -985,7 +985,7 @@
   // stale 이면 standGeometry=null(숨김) — parameters.stand 는 보존. 명시적 재적용으로만 복구.
   function refreshCollarStale(project) {
     const cd = project && project.working && project.working.collarDraft;
-    if (cd && collarStale(project)) cd.standGeometry = null;
+    if (cd && collarStale(project)) { cd.standGeometry = null; cd.body = null; }   // 스탠드 숨김 시 본체도 무효
   }
   function deriveCollar(project, standHeightCm, frontRiseCm) {
     if (!window.designCollar || !window.bodiceCheckpoint) return { ok: false, reason: "no-module" };
@@ -997,7 +997,8 @@
       type: "shirt-two-piece",
       parameters: { stand: { standHeightCm: standHeightCm, frontRiseCm: frontRiseCm } },
       standGeometry: r.standGeometry,
-      collarGeometry: null,   // C2 에서 채움
+      collarGeometry: null,   // (미사용 예약)
+      body: null,             // C2 본체(스탠드 재적용 시 무효 → 명시적 재생성)
       // 5분리 길이(직선 스캐폴드 아님 — 곡률 반영). C2 는 upperTotal 을 직접 쓰지 않고 앞끝 여백을 별도 결정.
       measure: {
         lowerNeckSeamLenCm: r.lowerNeckSeamLenCm, lowerExtensionLenCm: r.lowerExtensionLenCm,
@@ -1052,8 +1053,65 @@
       setCollarNote("목둘레 봉제 " + fmtL(m.lowerNeckSeamLenCm) + "cm(뒤 " + fmtL(m.backNeckLenCm) + "·앞 " + fmtL(m.frontNeckLenCm) + ") · 여밈 연장 " + fmtL(m.lowerExtensionLenCm) + "cm · 윗선 목 " + fmtL(m.upperNeckSegmentLenCm) + "cm · 앞끝 올림 " + fmtL(c.frontRiseCm) + "cm · 세션 전용");
     }
     else setCollarNote("스탠드 높이·앞끝 올림 적용으로 카라 스탠드 생성 · 세션 전용");
+    updateCollarBodyPanel(project);
   }
   function refreshCollarUI(project) { syncCollarSubtabGate(project); updateCollarPanel(project); }
+
+  // ── C2 칼라 본체 ── 스탠드 윗선 primitive 를 부착선으로. 스탠드가 준비(비스테일)됐을 때만.
+  //   스탠드 높이·앞끝 올림이 바뀌면(deriveCollar 가 collarDraft 재생성) body 는 자동 소멸 → 명시적 재생성.
+  function collarStandReady(project) { const c = committedCollar(project); return !!(c.has && c.geom && !collarStale(project) && collarGateOk(project)); }
+  function committedCollarBody(project) {
+    const bd = project && project.working && project.working.collarDraft && project.working.collarDraft.body;
+    return bd ? { has: true, params: bd.parameters, attachLenCm: bd.attachLenCm } : { has: false, params: null, attachLenCm: null };
+  }
+  function deriveCollarBody(project, bodyParams) {
+    if (!window.designCollar || !window.bodiceCheckpoint) return { ok: false, reason: "no-module" };
+    const cd = project.working.collarDraft; if (!cd) return { ok: false, reason: "invalid-stand" };
+    // 스탠드 result 재생성(순수, upperNeckPath·anchors 확보) → 본체 파생.
+    const stand = window.designCollar.computeStand(window.bodiceCheckpoint.latest(project), cd.parameters.stand);
+    if (!stand.ok) return stand;
+    const r = window.designCollar.computeBody(stand, bodyParams);
+    if (!r.ok) return r;
+    cd.body = { parameters: bodyParams, geometry: r.bodyGeometry, attachLenCm: r.attachLenCm };
+    return { ok: true, result: r };
+  }
+  function setCollarBodyNote(t) { const n = document.getElementById("designCollarBodyNote"); if (n) n.textContent = t; }
+  function collarBodyFailStr(reason) {
+    const m = { "invalid-stand": "스탠드를 먼저 적용", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-front-inset": "앞끝 물림 값 확인(0–3)", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
+    return m[reason] || "칼라 본체를 적용할 수 없습니다";
+  }
+  function onApplyCollarBody() {
+    const project = designProjectNow(); if (!project) return;
+    if (!collarStandReady(project)) { setCollarBodyNote("카라 스탠드를 먼저 적용하세요"); return; }
+    const w = readNum("inpCollarBodyWidth", 1, 15), inset = readNum("inpCollarBodyInset", 0, 3), proj = readNum("inpCollarBodyProjection", 0, 15);
+    if (!w.valid || !inset.valid || !proj.valid) { setCollarBodyNote("칼라 본체 값 범위를 확인하세요(폭 1–15·물림 0–3·앞끝 돌출 0–15)"); return; }
+    const r = deriveCollarBody(project, { cbWidthCm: w.v, frontInsetCm: inset.v, frontProjectionCm: proj.v });
+    if (!r.ok) { setCollarBodyNote("적용 불가: " + collarBodyFailStr(r.reason)); return; }   // 이전 유지
+    if (window.designLayout) window.designLayout.afterCollar();
+    if (typeof render === "function") render();
+    updateCollarBodyPanel(project);
+  }
+  function onResetCollarBody() {
+    const project = designProjectNow(); if (!project) return;
+    if (project.working.collarDraft) project.working.collarDraft.body = null;
+    if (window.designLayout) window.designLayout.afterCollar();
+    if (typeof render === "function") render();
+    updateCollarBodyPanel(project);
+  }
+  function updateCollarBodyPanel(project) {
+    if (!project) return;
+    const ready = collarStandReady(project), cb = committedCollarBody(project);
+    const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
+    const ref = (window.designCollar && window.designCollar.referenceBodyParams()) || { cbWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 };
+    const p = cb.has ? cb.params : ref;
+    setIf("inpCollarBodyWidth", p.cbWidthCm); setIf("inpCollarBodyInset", p.frontInsetCm); setIf("inpCollarBodyProjection", p.frontProjectionCm);
+    const applyBtn = document.getElementById("btnApplyCollarBody"), resetBtn = document.getElementById("btnResetCollarBody");
+    if (applyBtn) applyBtn.disabled = !ready;
+    if (resetBtn) resetBtn.disabled = !cb.has;
+    if (!ready) setCollarBodyNote("카라 스탠드 적용 후 본체를 생성할 수 있습니다");
+    else if (cb.has) setCollarBodyNote("부착 길이 " + fmtL(cb.attachLenCm) + "cm(윗선 목 − 앞끝 물림 " + fmtL(cb.params.frontInsetCm) + ") · CB 폭 " + fmtL(cb.params.cbWidthCm) + "·앞끝 돌출 " + fmtL(cb.params.frontProjectionCm) + "cm · 세션 전용");
+    else setCollarBodyNote("CB 폭·앞끝 물림·앞끝 돌출 적용으로 본체 생성(여밈 연장 미포함) · 세션 전용");
+  }
 
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
   // committed 기준 note. 성공/오류 문구는 onApply/onReset 이 직접 관리(refresh 미호출).
@@ -1285,6 +1343,15 @@
     if (applyCollar) applyCollar.addEventListener("click", () => { if (!applyCollar.disabled) onApplyCollar(); });
     const resetCollar = document.getElementById("btnResetCollar");
     if (resetCollar) resetCollar.addEventListener("click", () => { if (!resetCollar.disabled) onResetCollar(); });
+    // 카라 본체(C2): CB 폭·앞끝 물림·앞끝 돌출 Enter 로 적용, 본체 적용/초기화.
+    ["inpCollarBodyWidth", "inpCollarBodyInset", "inpCollarBodyProjection"].forEach(id => {
+      const el = document.getElementById(id); if (!el) return;
+      el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyCollarBody(); } });
+    });
+    const applyCollarBody = document.getElementById("btnApplyCollarBody");
+    if (applyCollarBody) applyCollarBody.addEventListener("click", () => { if (!applyCollarBody.disabled) onApplyCollarBody(); });
+    const resetCollarBody = document.getElementById("btnResetCollarBody");
+    if (resetCollarBody) resetCollarBody.addEventListener("click", () => { if (!resetCollarBody.disabled) onResetCollarBody(); });
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");

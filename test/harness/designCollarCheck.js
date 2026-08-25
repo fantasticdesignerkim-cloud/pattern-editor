@@ -153,5 +153,54 @@ ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm ==
   ok(near(r0.lowerNeckSeamLenCm, partActual(r0.standGeometry, "neck-seam"), 1e-9) && near(r0.lowerNeckSeamLenCm, half), "7: 직선 primitive 실측=half");
 }
 
+// 8. C2 칼라 본체 — 부착선 = 스탠드 윗선 목 primitive − frontInset(연장 미포함), 실측 attachLenCm.
+{
+  ok(typeof C.computeBody === "function", "8: computeBody API");
+  ok(C.referenceBodyParams().cbWidthCm === 6 && C.referenceBodyParams().frontInsetCm === 0.3 && C.referenceBodyParams().frontProjectionCm === 4, "8: referenceBodyParams 6/0.3/4");
+  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
+  const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
+  const standStr = JSON.stringify(stand);
+  const bp = { cbWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 };
+  const bpStr = JSON.stringify(bp);
+  const r = C.computeBody(stand, bp);
+  ok(r.ok, "8: 본체 파생 성공");
+  // attach 실제 primitive(독립 측정) == attachLenCm
+  const attachActual = partActual(r.bodyGeometry, "attach");
+  ok(near(r.attachLenCm, attachActual, 1e-5), "8: attachLenCm == 실제 attach primitive");
+  // attachLen = upperNeckSegment − inset (upperExtension 절대 미포함)
+  ok(Math.abs(r.attachLenCm - (stand.upperNeckSegmentLenCm - 0.3)) <= 1e-3, "8: attachLen = upperNeckSegment − 0.3 (실측 " + Math.abs(r.attachLenCm - (stand.upperNeckSegmentLenCm - 0.3)).toExponential(1) + ")");
+  ok(stand.upperExtensionLenCm > 0 && Math.abs(r.attachLenCm - (stand.upperTotalLenCm - 0.3)) > 1, "8: upperExtension 미포함(upperTotal 기준과 명확히 다름)");
+  // CF 물림 = upperNeckSegment − attachLen ≈ 0.3 (호길이 기준)
+  ok(Math.abs((stand.upperNeckSegmentLenCm - r.attachLenCm) - 0.3) <= 1e-3, "8: CF 물림 0.3cm(호길이 기준)");
+  // CB 완성 칼라 폭 = 6
+  ok(near(Math.hypot(r.anchors.cbOuter.x - r.anchors.cbAttach.x, r.anchors.cbOuter.y - r.anchors.cbAttach.y), 6), "8: CB 칼라 폭 6cm");
+  // 앞끝 돌출 = 접선 방향 투영량(사선 길이 아님): dot(tip−frontOuter, frontTangent)=4, dot(·, frontNormal)=0
+  const dv = { x: r.anchors.tip.x - r.anchors.frontOuter.x, y: r.anchors.tip.y - r.anchors.frontOuter.y };
+  const ft = r.anchors.frontTangent, fn = r.anchors.frontNormal;
+  ok(near(dv.x * ft.x + dv.y * ft.y, 4) && near(dv.x * fn.x + dv.y * fn.y, 0), "8: 앞끝 돌출 4cm = 접선 투영량(법선성분 0)");
+  ok(near(Math.hypot(ft.x, ft.y), 1) && near(Math.hypot(fn.x, fn.y), 1) && near(ft.x * fn.x + ft.y * fn.y, 0), "8: frontTangent·frontNormal 단위·직교");
+  ok(near(Math.hypot(r.anchors.frontOuter.x - r.anchors.target.x, r.anchors.frontOuter.y - r.anchors.target.y), 6), "8: 앞쪽 칼라 폭 6cm");
+  // 폐곡선 연속(각 to==다음 from)
+  let closed = true, o = r.bodyGeometry.outline;
+  for (let i = 0; i < o.length; i++) { const nx = o[(i + 1) % o.length]; if (!near(o[i].to.x, nx.from.x, 1e-6) || !near(o[i].to.y, nx.from.y, 1e-6)) closed = false; }
+  ok(closed, "8: 본체 폐곡선 연속");
+  ok(r.bodyGeometry.outline.some(s => s.part === "attach") && r.bodyGeometry.outline.filter(s => s.part === "cb-fold" || s.part === "outer" || s.part === "point-front" || s.part === "point-top").length === 4, "8: 부착·외곽·칼라끝·접힘 parts");
+  // 입력·스탠드 불변
+  ok(JSON.stringify(stand) === standStr && JSON.stringify(bp) === bpStr, "8: 스탠드·params 입력 불변");
+  // cubic 중간 분할(inset 이 arc 중간에 걸리는 큰 값)
+  const r2 = C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 3, frontProjectionCm: 4 });
+  ok(r2.ok && Math.abs((stand.upperNeckSegmentLenCm - r2.attachLenCm) - 3) <= 1e-3 && r2.bodyGeometry.outline.some(s => s.part === "attach" && s.kind === "cubic"), "8: 큰 inset arc 중간 de Casteljau 분할");
+  // 직선 스탠드에서도 동작(attach = neck − inset)
+  const stand0 = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: 0 });
+  const r0 = C.computeBody(stand0, bp);
+  ok(r0.ok && Math.abs(r0.attachLenCm - (stand0.upperNeckSegmentLenCm - 0.3)) <= 1e-3, "8: 직선 스탠드 본체 attach=neck−0.3");
+  // 실패 계약
+  ok(C.computeBody(stand, { cbWidthCm: 0, frontInsetCm: 0.3, frontProjectionCm: 4 }).reason === "invalid-cb-width", "8: cbWidth 0");
+  ok(C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: -1, frontProjectionCm: 4 }).reason === "invalid-front-inset", "8: inset 음수");
+  ok(C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 999, frontProjectionCm: 4 }).reason === "invalid-front-inset", "8: inset ≥ upperLen");
+  ok(C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: NaN }).reason === "invalid-front-projection", "8: point NaN");
+  ok(C.computeBody({ ok: false }, bp).reason === "invalid-stand", "8: 무효 스탠드");
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }
