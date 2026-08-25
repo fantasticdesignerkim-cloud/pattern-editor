@@ -52,6 +52,8 @@ const suites = [
   { file: "designSleeveCheck.js",       golden: false },
   // 소매 모양 완료 체크포인트(S5): 완료 게이트·불변 스냅샷·형상전용 스테일·몸판 무효화(스텁 project).
   { file: "sleeveCheckpointCheck.js",   golden: false },
+  // 카라 모양 C1(designCollar): bodiceResult → 칼라 스탠드 직선 스캐폴드 순수 파생·봉제/연장 분리.
+  { file: "designCollarCheck.js",       golden: false },
   // Design 배치(piece layout): designLayout.js 의 순수 기하(bbox/auto 배치) 검증.
   { file: "designLayoutCheck.js",       golden: false },
   { file: "draftLayoutCheck.js",        golden: false },
