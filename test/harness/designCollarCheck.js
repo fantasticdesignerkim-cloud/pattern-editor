@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════
-// designCollarCheck.js — js/designCollar.js C1 순수 파생 회귀.
-//   스탠드 직선 스캐폴드: 목둘레 봉제 길이(반패턴 합계)·여밈 연장 분리·직선 밴드 형상·실패/불변.
+// designCollarCheck.js — js/designCollar.js C1c 순수 파생 회귀.
+//   직선+원호 복합 스탠드(어깨 경계): 뒤목 직선 + 앞목 원호(frontRise 상승) + 여밈 접선 연장 + 윗선 오프셋.
+//   frontRise=0 → C1 직선 스캐폴드 정확 재현. 봉제/연장 5분리 길이. 원자적 실패·불변.
 //   node test/harness/designCollarCheck.js
 // ══════════════════════════════════════════════
 const vm = require("vm");
@@ -12,94 +13,144 @@ function ok(cond, name) { if (cond) PASS++; else { FAIL++; fails.push(name); } }
 const near = (a, b, e = 1e-4) => Math.abs(a - b) < e;
 const segLen = (s) => Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y);
 const partSeg = (g, part) => g.outline.find(s => s.part === part);
+// cubic 조밀 점열(독립 ground-truth, 모듈과 다른 조밀 샘플).
+function cubicPts(s, N) { const out = [s.from]; for (let i = 1; i <= N; i++) { const u = 1 - i / N, v = i / N;
+  out.push({ x: u * u * u * s.from.x + 3 * u * u * v * s.c1.x + 3 * u * v * v * s.c2.x + v * v * v * s.to.x,
+             y: u * u * u * s.from.y + 3 * u * u * v * s.c1.y + 3 * u * v * v * s.c2.y + v * v * v * s.to.y }); } return out; }
+function cubicLen(s) { const p = cubicPts(s, 200); let t = 0; for (let i = 1; i < p.length; i++) t += Math.hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y); return t; }
+// 실제 출력 primitive 측정(line/cubic, 독립 조밀 2000샘플).
+function denseSegLen(s) { if (s.kind === "line") return Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y);
+  const p = cubicPts(s, 2000); let t = 0; for (let i = 1; i < p.length; i++) t += Math.hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y); return t; }
+function partActual(g, part) { return g.outline.filter(s => s.part === part).reduce((t, s) => t + denseSegLen(s), 0); }
+function partPts(g, part) { let pts = []; g.outline.filter(s => s.part === part).forEach((s, i) => { const p = s.kind === "line" ? [s.from, s.to] : cubicPts(s, 400); pts = pts.concat(i === 0 ? p : p.slice(1)); }); return pts; }
+function ptToPolyDist(p, poly) { let best = Infinity; for (let i = 1; i < poly.length; i++) { const a = poly[i - 1], b = poly[i], dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+  let t = L2 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2 : 0; t = Math.max(0, Math.min(1, t)); const d = Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)); if (d < best) best = d; } return best; }
+// 테스트용 θ 해(모듈과 동일 계약, 독립 재구현).
+function solveTheta(Llen, h) { let lo = 1e-9, hi = Math.PI; if (h >= Llen * (1 - Math.cos(hi)) / hi) return null;
+  for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if (Llen * (1 - Math.cos(m)) / m < h) lo = m; else hi = m; } return (lo + hi) / 2; }
 
 const sandbox = { window: {}, Math, Object, JSON, Array, isFinite, Infinity };
 vm.createContext(sandbox);
 vm.runInContext(SRC, sandbox, { filename: "designCollar.js" });
 const C = sandbox.window.designCollar;
 
-// bodiceResult fixture: 반패턴 합계 20cm, 여밈 overlap 1.75cm.
-function bodice(neckHalf, overlap) {
-  const b = { necklineLengths: { half: neckHalf, front: neckHalf / 2, back: neckHalf / 2, finished: 2 * neckHalf } };
+// bodiceResult fixture: 뒤목 10, 앞목 8(half 18), 여밈 overlap 1.75.
+function bodice(back, front, overlap) {
+  const half = back + front;
+  const b = { necklineLengths: { back, front, half, finished: 2 * half } };
   if (overlap !== undefined) b.placket = { parameters: { overlapCm: overlap, facingWidthCm: 4, lengthMode: "full" } };
   return b;
 }
 
 ok(typeof C.computeStand === "function" && typeof C.readBodice === "function" && Object.isFrozen(C), "0: API·frozen");
+ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm === 1.5, "1: referenceParams standHeight 3·frontRise 1.5");
 
-// 1. referenceParams 기본 3cm
-ok(C.referenceParams().standHeightCm === 3, "1: referenceParams standHeight 3");
-
-// 2. readBodice — 유효/실패
+// 2. readBodice
 {
-  const r = C.readBodice(bodice(20, 1.75));
-  ok(r.ok && near(r.neckHalfCm, 20) && near(r.overlapCm, 1.75), "2: readBodice 유효 half 20·overlap 1.75");
+  const r = C.readBodice(bodice(10, 8, 1.75));
+  ok(r.ok && near(r.backCm, 10) && near(r.frontCm, 8) && near(r.overlapCm, 1.75), "2: readBodice 뒤10·앞8·overlap1.75");
   ok(C.readBodice(null).reason === "no-bodice", "2: no-bodice");
-  ok(C.readBodice({ necklineLengths: { half: 0 } }).reason === "no-neckline", "2: no-neckline(0)");
-  ok(C.readBodice({}).reason === "no-neckline", "2: no-neckline(누락)");
-  ok(C.readBodice(bodice(20, -1)).reason === "invalid-overlap", "2: invalid-overlap(음수)");
-  ok(C.readBodice(bodice(20)).ok && C.readBodice(bodice(20)).overlapCm === 0, "2: placket 없음 → overlap 0");
+  ok(C.readBodice({ necklineLengths: { back: 10 } }).reason === "no-neckline", "2: front 누락→no-neckline");
+  ok(C.readBodice(bodice(10, 0)).reason === "no-neckline", "2: front 0→no-neckline");
+  ok(C.readBodice(bodice(10, 8, -1)).reason === "invalid-overlap", "2: invalid-overlap");
+  ok(C.readBodice(bodice(10, 8)).ok && C.readBodice(bodice(10, 8)).overlapCm === 0, "2: placket 없음→overlap 0");
 }
 
-// 3. computeStand — 여밈 있는 기본 스탠드
+// 3. frontRise=0 → C1 직선 스캐폴드 정확 재현(단일 목둘레 봉제선, 5/4 세그, 길이).
 {
-  const r = C.computeStand(bodice(20, 1.75), { standHeightCm: 3 });
-  ok(r.ok, "3: 파생 성공");
-  ok(near(r.seamLenCm, 20), "3: seamLenCm = 반패턴 합계 20(연장 미포함)");
-  ok(near(r.extensionLenCm, 1.75), "3: extensionLenCm = overlap 1.75");
-  ok(near(r.standTopLenCm, 21.75), "3: standTopLenCm = 20 + 1.75");
-  ok(near(r.standHeightCm, 3), "3: standHeightCm 3");
-  // 세그먼트: neck-seam · extension · cf · top · cb-fold = 5
-  ok(r.standGeometry.outline.length === 5, "3: outline 5세그(여밈)");
-  ok(near(segLen(partSeg(r.standGeometry, "neck-seam")), 20), "3: neck-seam 길이 정확히 20");
-  ok(near(segLen(partSeg(r.standGeometry, "extension")), 1.75), "3: extension 길이 1.75");
-  ok(near(segLen(partSeg(r.standGeometry, "top")), 21.75), "3: 스탠드 윗선(top) 길이 21.75");
-  ok(near(segLen(partSeg(r.standGeometry, "cf")), 3) && near(segLen(partSeg(r.standGeometry, "cb-fold")), 3), "3: CF·CB 높이 3");
-  // 앵커 좌표
-  const a = r.anchors;
-  ok(near(a.cbSeam.x, 0) && near(a.cbSeam.y, 0) && near(a.cfSeam.x, 20), "3: CB(0,0)·CF봉제 x20");
-  ok(near(a.cfExtSeam.x, 21.75) && near(a.cfTop.x, 21.75) && near(a.cfTop.y, -3) && near(a.cbTop.y, -3), "3: 완성앞단 x21.75·top y−3");
-  // 닫힌 폐곡선: 각 세그 to == 다음 세그 from, 마지막 to == 첫 from
+  const r = C.computeStand(bodice(10, 8, 1.75), { standHeightCm: 3, frontRiseCm: 0 });
+  ok(r.ok && r.standGeometry.outline.length === 5, "3: 직선 5세그(여밈)");
+  const ns = partSeg(r.standGeometry, "neck-seam");
+  ok(ns && ns.kind === "line" && near(segLen(ns), 18), "3: 단일 목둘레 봉제선 길이=half 18");
+  ok(near(r.lowerNeckSeamLenCm, 18) && near(r.upperNeckSegmentLenCm, 18) && near(r.lowerExtensionLenCm, 1.75), "3: 직선 lower=upper=18·ext 1.75");
+  ok(near(r.upperTotalLenCm, 19.75) && r.frontRiseCm === 0, "3: upperTotal 19.75·frontRise 0");
+  const r2 = C.computeStand(bodice(10, 8), { standHeightCm: 3, frontRiseCm: 0 });
+  ok(r2.standGeometry.outline.length === 4 && !partSeg(r2.standGeometry, "extension"), "3: 여밈 없음→4세그");
+  // params 생략 시 기본 frontRise 1.5(곡선) — 직선 아님
+  const rd = C.computeStand(bodice(10, 8, 1.75), { standHeightCm: 3 });
+  ok(rd.ok && rd.frontRiseCm === 1.5 && !!partSeg(rd.standGeometry, "neck-seam-arc"), "3: 기본 frontRise 1.5→곡선(neck-seam-arc)");
+}
+
+// 4. 곡선 복합(back10 front8 rise1.5 H3 overlap1.75): 직선=뒤목·원호=앞목·어깨경계·접선·오프셋.
+{
+  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
+  const r = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
+  ok(r.ok, "4: 곡선 파생 성공");
+  const straight = partSeg(r.standGeometry, "neck-seam-straight"), arc = partSeg(r.standGeometry, "neck-seam-arc");
+  ok(straight && near(segLen(straight), back), "4: lower 직선 길이=뒤목 10");
+  ok(arc && near(partActual(r.standGeometry, "neck-seam-arc"), front, 2e-3), "4: lower 원호 실측≈앞목 8");
+  ok(near(r.lowerNeckSeamLenCm, 18), "4: lower 전체 봉제=half 18");
+  // 어깨 경계 위치 + 접선 연속(직선 방향 == 원호 시작 접선)
+  ok(near(r.anchors.shoulderSeam.x, back) && near(r.anchors.shoulderSeam.y, 0), "4: 어깨 경계 (10,0)");
+  const arcStartTan = { x: arc.c1.x - arc.from.x, y: arc.c1.y - arc.from.y };
+  ok(arcStartTan.x > 0 && near(arcStartTan.y, 0, 1e-6), "4: 원호 시작 접선 = 수평(직선과 연속)");
+  // CF 높이 = frontRise
+  ok(near(r.anchors.cfSeam.y, -rise), "4: CF 높이 = -frontRise");
+  // 여밈 연장이 CF 접선 방향
+  const theta = solveTheta(front, rise), tEnd = { x: Math.cos(theta), y: -Math.sin(theta) };
+  const extDir = { x: r.anchors.cfExtSeam.x - r.anchors.cfSeam.x, y: r.anchors.cfExtSeam.y - r.anchors.cfSeam.y };
+  const extLen = Math.hypot(extDir.x, extDir.y);
+  ok(near(extLen, ov) && near(extDir.x / extLen, tEnd.x, 1e-4) && near(extDir.y / extLen, tEnd.y, 1e-4), "4: 여밈 연장=1.75·CF 접선 방향");
+  // 윗선 법선거리 = standHeight (어깨·CF 양쪽)
+  ok(near(Math.hypot(r.anchors.shoulderTop.x - r.anchors.shoulderSeam.x, r.anchors.shoulderTop.y - r.anchors.shoulderSeam.y), H), "4: 어깨 윗선 법선거리=H");
+  ok(near(Math.hypot(r.anchors.cfTop.x - r.anchors.cfSeam.x, r.anchors.cfTop.y - r.anchors.cfSeam.y), H, 1e-6), "4: CF 윗선 법선거리=H");
+  // upperNeckSegmentLen ≈ back + (R-H)θ (실측이라 해석식과 근사), 그리고 < lowerNeckSeamLen. 엄밀 실측은 test 7.
+  const R = front / theta, expUpper = back + (R - H) * theta;
+  ok(near(r.upperNeckSegmentLenCm, expUpper, 5e-3) && r.upperNeckSegmentLenCm < r.lowerNeckSeamLenCm, "4: upperNeck≈back+(R-H)θ < lower");
+  ok(near(r.upperExtensionLenCm, ov, 1e-6) && near(r.upperTotalLenCm, r.upperNeckSegmentLenCm + ov, 1e-9), "4: upperExt=1.75·upperTotal=upperNeck+ext");
+  // 폐곡선 연속(각 to == 다음 from)
   let closed = true, o = r.standGeometry.outline;
-  for (let i = 0; i < o.length; i++) { const nx = o[(i + 1) % o.length]; if (!near(o[i].to.x, nx.from.x) || !near(o[i].to.y, nx.from.y)) closed = false; }
-  ok(closed, "3: outline 폐곡선 연속(오차 0)");
+  for (let i = 0; i < o.length; i++) { const nx = o[(i + 1) % o.length]; if (!near(o[i].to.x, nx.from.x, 1e-9) || !near(o[i].to.y, nx.from.y, 1e-9)) closed = false; }
+  ok(closed, "4: 폐곡선 연속(오차 0)");
+  // 곡선(overlap 없음) 세그 수 = 6
+  const rn = C.computeStand(bodice(back, front), { standHeightCm: H, frontRiseCm: rise });
+  ok(rn.ok && rn.standGeometry.outline.length === 6 && !partSeg(rn.standGeometry, "extension"), "4: 여밈 없는 곡선 6세그");
 }
 
-// 4. 여밈 없음(placket null) → 연장 세그 없음, extensionLen 0, CF봉제==완성앞단
+// 5. 원자적 실패
 {
-  const r = C.computeStand(bodice(18), { standHeightCm: 3 });
-  ok(r.ok && r.standGeometry.outline.length === 4, "4: 여밈 없음 → 4세그");
-  ok(!partSeg(r.standGeometry, "extension"), "4: extension 세그 없음");
-  ok(near(r.extensionLenCm, 0) && near(r.seamLenCm, 18) && near(r.standTopLenCm, 18), "4: extension 0·seam=top=18");
-  ok(near(r.anchors.cfSeam.x, r.anchors.cfExtSeam.x), "4: CF봉제 == 완성앞단(연장 0)");
+  ok(C.computeStand(bodice(10, 2, 1.75), { standHeightCm: 3, frontRiseCm: 1.0 }).reason === "invalid-stand-offset", "5: R−H≤0→invalid-stand-offset");
+  ok(C.computeStand(bodice(10, 8, 1.75), { standHeightCm: 3, frontRiseCm: 6 }).reason === "invalid-front-rise", "5: rise 과대→invalid-front-rise");
+  ok(C.computeStand(bodice(10, 8, 1.75), { standHeightCm: 3, frontRiseCm: -1 }).reason === "invalid-front-rise", "5: rise 음수→invalid-front-rise");
+  ok(C.computeStand(bodice(10, 8, 1.75), { standHeightCm: 0, frontRiseCm: 1.5 }).reason === "invalid-stand-height", "5: height 0");
+  ok(C.computeStand(bodice(10, 8, 1.75), { standHeightCm: 3, frontRiseCm: NaN }).reason === "invalid-front-rise", "5: rise NaN");
+  ok(C.computeStand(null, { standHeightCm: 3, frontRiseCm: 1.5 }).reason === "no-bodice", "5: bodice null");
 }
 
-// 5. 기본 standHeight(params 생략) = 3
+// 6. 입력·bodiceResult 불변
 {
-  const r = C.computeStand(bodice(20, 1.75));
-  ok(r.ok && near(r.standHeightCm, 3), "5: params 생략 시 standHeight 3");
+  const bod = bodice(10, 8, 1.75), before = JSON.stringify(bod);
+  const p = { standHeightCm: 3, frontRiseCm: 1.5 }, pb = JSON.stringify(p);
+  C.computeStand(bod, p);
+  ok(JSON.stringify(bod) === before && JSON.stringify(p) === pb, "6: bodiceResult·params 입력 불변");
 }
 
-// 6. 커스텀 standHeight
+// 7. cubic primitive 실측 잠금 — 반환 길이 = 실제 출력 primitive(해석식 R·θ 아님), 법선거리=standHeight.
 {
-  const r = C.computeStand(bodice(20, 1.75), { standHeightCm: 4 });
-  ok(r.ok && near(r.standHeightCm, 4) && near(segLen(partSeg(r.standGeometry, "cf")), 4), "6: standHeight 4 반영");
-}
-
-// 7. 실패 — 잘못된 높이
-{
-  ok(C.computeStand(bodice(20, 1.75), { standHeightCm: 0 }).reason === "invalid-stand-height", "7: height 0 거부");
-  ok(C.computeStand(bodice(20, 1.75), { standHeightCm: -2 }).reason === "invalid-stand-height", "7: height 음수 거부");
-  ok(C.computeStand(bodice(20, 1.75), { standHeightCm: NaN }).reason === "invalid-stand-height", "7: height NaN 거부");
-  ok(C.computeStand(null, { standHeightCm: 3 }).reason === "no-bodice", "7: bodice null 거부");
-}
-
-// 8. 입력 불변(bodiceResult 비변형)
-{
-  const b = bodice(20, 1.75);
-  const before = JSON.stringify(b);
-  C.computeStand(b, { standHeightCm: 3 });
-  ok(JSON.stringify(b) === before, "8: bodiceResult 입력 불변");
+  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75, half = back + front;
+  const r = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
+  ok(r.ok, "7: 파생 성공");
+  // 실제 출력 primitive 독립 재측정(조밀 2000샘플)
+  const lowerActual = partActual(r.standGeometry, "neck-seam-straight") + partActual(r.standGeometry, "neck-seam-arc");
+  const upperActual = partActual(r.standGeometry, "top-straight") + partActual(r.standGeometry, "top-arc");
+  const extActual = partActual(r.standGeometry, "extension"), upExtActual = partActual(r.standGeometry, "top-extension");
+  // 반환값 == 실제 측정값(모듈 adaptive 측정 vs 독립 조밀 측정)
+  ok(near(r.lowerNeckSeamLenCm, lowerActual, 1e-5), "7: 반환 lowerNeckSeam == 실제 primitive");
+  ok(near(r.upperNeckSegmentLenCm, upperActual, 1e-5), "7: 반환 upperNeckSegment == 실제 primitive(메타값 아님)");
+  ok(near(r.lowerExtensionLenCm, extActual, 1e-6) && near(r.upperExtensionLenCm, upExtActual, 1e-6), "7: 반환 여밈 == 실제 primitive");
+  // 뒤 직선 실제 + 앞 cubic 실제 vs half ≤ 0.001
+  ok(Math.abs(lowerActual - half) <= 1e-3, "7: (뒤직선+앞cubic) 실제 vs half ≤ 0.001cm (실측 " + Math.abs(lowerActual - half).toExponential(1) + ")");
+  ok(r.upperNeckSegmentLenCm < r.lowerNeckSeamLenCm, "7: 윗선 목 < 아랫선 목(곡선)");
+  // 여밈 연장 실제 == extensionLenCm(overlap)
+  ok(near(extActual, ov, 1e-6) && near(upExtActual, ov, 1e-6), "7: 여밈 연장 실제 = 1.75(아랫·윗선)");
+  // 앞 원호 여러 지점에서 아랫선↔윗선 법선거리 vs standHeight ≤ 0.01
+  const lowerArcPts = partPts(r.standGeometry, "neck-seam-arc"), upperArcPoly = partPts(r.standGeometry, "top-arc");
+  let maxNormalErr = 0;
+  lowerArcPts.forEach(p => { const d = ptToPolyDist(p, upperArcPoly); if (Math.abs(d - H) > maxNormalErr) maxNormalErr = Math.abs(d - H); });
+  ok(maxNormalErr <= 1e-2, "7: 원호 전 지점 법선거리 vs standHeight ≤ 0.01cm (실측 " + maxNormalErr.toExponential(1) + ")");
+  // frontRise=0 직선도 primitive 실측이 목표와 일치
+  const r0 = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: 0 });
+  ok(near(r0.lowerNeckSeamLenCm, partActual(r0.standGeometry, "neck-seam"), 1e-9) && near(r0.lowerNeckSeamLenCm, half), "7: 직선 primitive 실측=half");
 }
 
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);

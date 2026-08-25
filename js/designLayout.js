@@ -36,6 +36,7 @@
   // ── 순수 기하 ──
   function pointsOfPrim(p, out) {
     if (p.kind === "line") { out.push(p.from, p.to); return; }
+    if (p.kind === "cubic") { out.push(p.from, p.c1, p.c2, p.to); return; }   // 카라 원호(cubic) bbox
     p.commands.forEach(c => c.points.forEach(q => out.push(q)));
   }
   function bboxFromKeys(geometry, keys, roles) {
