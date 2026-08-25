@@ -3327,6 +3327,41 @@ S1 에 포함(straight 기본).
   stale 노트**, 소매 재완료 후 재적용 → 새 hash·**여밈 연장 1.75 반영**. 엉덩이 길이 적용해도 카라 보존,
   초기화 시 제거, reference frozen. reflow 실측(1280/560=오른쪽, 360=아래 행, 전부 화면 안).
 
+### C1c 스탠드 곡률 (직선+원호 복합, 어깨 경계) — 위 직선 스캐폴드를 곡선화
+
+C1 직선 스캐폴드를 **아랫선(목둘레 봉제) 곡선화**로 확장. **standTopLenCm(직선 윗선)을 C2 봉제로 쓰면
+스탠드 곡선화 시 본체가 깨지므로**, C2 전에 곡률을 먼저 확정한다(사용자 지시).
+
+- **직선+원호 복합, 어깨 경계**: `CB ─(뒤목 직선 = necklineLengths.back)─ 어깨 ─(앞목 원호 = .front,
+  CF 에서 frontRise 상승)─ CF ─(CF 접선 여밈 연장)`. **상승 시작 위치는 임의 비율이 아니라 어깨점**
+  (뒤목/앞목 경계) — 전통 2피스 칼라 제도가 CB·어깨·CF 를 구분하는 것과 일치. 별도 "상승 비율" 파라미터 없음.
+- **★ 수학적 원호가 아니라 "원호형 cubic"이다** — 끝점·접선은 원 위, 사이는 cubic 근사. 그래서 해석식
+  `R·θ` 와 실제 봉제선 길이가 미세하게 다르다. **반환·검증 길이는 전부 실제 출력 primitive 를 adaptive
+  flattening 으로 측정한 값**이다(해석식 메타값 아님) — `upperNeckSegmentLenCm` 도 `(R−H)θ` 가 아니라
+  실측 윗선 primitive 길이. 정확도를 위해 앞목 원호를 **얕은 sub-cubic(≤30°) 여러 개로 분할**한다(θ 클 때
+  단일 cubic 오차·법선거리 드리프트 방지). C2 는 이 실측 길이를 기준으로 삼아야 다시 흔들리지 않는다.
+- **원호 계약**: 앞목 목표 길이 L=`.front`, 앞끝 올림 h=`frontRiseCm`. `L=R·θ, h=R(1−cosθ)` → θ 수치 결정,
+  R=L/θ. 원호 시작 접선=뒤쪽 직선과 수평(접선 연속), CF 높이=frontRise, 여밈=CF 접선 방향(사용자 확정).
+- **윗선 = 법선 오프셋(standHeight)**: 직선부 평행(길이=뒤목), 원호부 **동심(반경 R−H)** → 윗선 앞목 구간이
+  아랫선보다 짧아짐(곡선 스탠드 정상 성질). frontRise 는 CF 를 CB 대비 올리는 값(여밈 연장은 그 뒤 별도).
+- **`frontRiseCm=0` → C1 직선 스캐폴드 정확 재현**(단일 목둘레 봉제선, 4/5세그). 기본값 frontRise=1.5·
+  standHeight 3. UI 입력 범위 0–6(과대 방지).
+- **5분리 반환**: `lowerNeckSeamLenCm`(=half, 실측) / `lowerExtensionLenCm` / `upperNeckSegmentLenCm`(<lower,
+  실측) / `upperExtensionLenCm` / `upperTotalLenCm`. **C2 는 `upperTotalLenCm` 을 직접 쓰지 않는다** —
+  실제 셔츠 칼라는 스탠드 앞끝보다 약간 뒤(≈3mm 물림)에서 본체가 끝나므로, 그 **앞끝 여백은 C2 의 별도
+  파라미터**로 확정한다(C1c 에서 잠그지 않음).
+- **원자적 실패(이전 유지)**: `invalid-front-rise`(θ∈(0,π) 해 없음, rise≥2·front/π) / `invalid-stand-offset`
+  (R−H≤0, 윗선 동심 오프셋 붕괴) / `self-intersection` / 비유한.
+- **변경**: `js/designCollar.js`(곡률 복합·adaptive 측정·sub-cubic) · `js/designLayout.js`(`pointsOfPrim` 에
+  cubic bbox 추가) · `js/ui.js`(앞끝 올림 입력·5분리 노트·실패 사유) · `index.html`(입력·캐시). **render.js·
+  css·shape/perf 골든 무변경.**
+- **검증**: designCollarCheck **35→44**(직선+원호·frontRise0 재현·어깨경계·접선 연속·**실제 primitive 측정
+  잠금**: 반환==실측, 뒤직선+앞cubic 실측 vs half ≤1e-3, upper==실측 primitive, 원호 전 지점 법선거리 vs
+  standHeight ≤1e-2, 여밈 primitive 일치). 실측 여유 압도적(`|lower−half|≈2e-7`, `법선오차≈1.6e-7`; θ 큰
+  경우 sub-cubic 3분할도 동일). runAll 전체 통과, 골든 diff 0. 실브라우저(격리 origin, storage 0, 콘솔 0):
+  곡선 밴드 렌더(앞끝 상승), 반환 `lowerNeckSeam 18.8218 == 실제 primitive == half`·`upperNeck 18.0081 ==
+  실측`, frontRise=0 직선 재현, 입력 범위 가드, reference frozen. 커밋 `a6bd352`(코드).
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
