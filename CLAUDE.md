@@ -3362,6 +3362,41 @@ C1 직선 스캐폴드를 **아랫선(목둘레 봉제) 곡선화**로 확장. *
   곡선 밴드 렌더(앞끝 상승), 반환 `lowerNeckSeam 18.8218 == 실제 primitive == half`·`upperNeck 18.0081 ==
   실측`, frontRise=0 직선 재현, 입력 범위 가드, reference frozen. 커밋 `a6bd352`(코드).
 
+### C2 칼라 본체 첫 스캐폴드 (2피스 셔츠 칼라 본체)
+
+C1c 스탠드 윗선 위에 붙는 **칼라 본체**를 만든다. `working.collarDraft.body = { parameters, geometry,
+attachLenCm }`(세션 전용). 순수 `designCollar.computeBody(standResult, params)` + 스탠드가 노출하는
+`upperNeckPath`(cbTop→CFu, **여밈 연장 제외** 윗선 목 primitive). 커밋 `2de4766`(코드).
+
+- **★ 부착선 = 스탠드 윗선 목 primitive 를 CF→CB 방향으로 `frontInsetCm` 만큼 물린 subpath**.
+  `attachLen = upperNeckSegmentLenCm − frontInsetCm`. **`upperExtensionLenCm`(여밈 연장)은 절대 더하지
+  않는다** — 실제 셔츠 칼라도 스탠드는 버튼 연장까지 가지만 본체는 CF 보다 약간(기본 0.3cm) 뒤에서 끝난다.
+- **물림 0.3cm 는 x 좌표가 아니라 실제 윗선 호길이 기준**이다. cubic 중간에서 끝나면 **de Casteljau 로
+  정확 분할**(t 는 호길이 이분탐색). **`attachLenCm` 은 해석식이 아니라 실제 출력 primitive 측정값**
+  (실측 물림 오차 ~1e-13).
+- **★ 용어**: `frontProjectionCm`(기본 4cm)는 **접선 방향 투영량**(칼라 앞끝을 CF 접선 전방으로 돌출시키는
+  양)이다. **실제 포인트 사선 길이가 아니다**(그건 앞폭 6 + 투영 4 가 합쳐져 더 길다). UI 라벨 "칼라 앞끝
+  돌출", 내부명 `frontProjectionCm`. **"칼라 끝 길이"로 부르지 않는다.** 회귀로 잠금:
+  `dot(tip−frontOuter, frontTangent)=frontProjection`, `dot(tip−frontOuter, frontNormal)=0`
+  (anchors 에 `frontTangent`/`frontNormal` 노출).
+- **첫 스캐폴드 형상(사용자 확정)**: 부착선(CB→물림) + CB 에서 부착선 법선 6cm(`cbWidthCm`) → CB outer +
+  단순 직선 외곽(CB outer→front outer) + 앞쪽 외곽점에서 접선 전방 4cm 돌출 → tip + tip→물림점 연결(셔츠
+  칼라 포인트). **`cbWidthCm=6` 을 앞쪽에도 동일 적용한 평행 폭 스캐폴드**(front outer = 물림점 + 6cm 법선).
+- **아직 미구현(경계)**: 앞쪽 폭 변화 · 외곽 곡률 · 칼라 벌어짐(spread) · 실제 포인트 사선 길이 조절 —
+  전부 후속 증분(별도 사양). C2 는 부착 길이·CB 폭·물림·앞끝 투영만.
+- **실패(원자적, 이전 유지)**: `invalid-stand`/`invalid-cb-width`/`invalid-front-inset`(음수·≥윗선 길이)/
+  `invalid-front-projection`/`self-intersection`.
+- **수명주기**: 스탠드 적용(비스테일)일 때만 본체 활성. **스탠드 높이·앞끝 올림이 바뀌면**(deriveCollar 가
+  collarDraft 재생성) **본체 자동 소멸 → 명시적 재생성**. 몸판 hash 변경 stale 시 스탠드·본체 함께 숨김.
+- **변경**: `designCollar.js`(computeBody·upperNeckPath) · `ui.js`(본체 컨트롤·stale) · `render.js`
+  (`_appendCollarBody`, 파란 #2563EB) · `designLayout.js`(collar bbox = 스탠드∪본체, `pointsOfPrim` cubic) ·
+  `css`·`index.html`. shape/perf 골든 무변경.
+- **검증**: designCollarCheck **44→65**(부착선=윗선−물림·연장 미포함·CB 폭·물림 호길이·de Casteljau
+  분할·실측 attachLen·앞끝 투영 접선성분 4/법선성분 0·실패·불변). runAll 전체 통과, 골든 diff 0. 실브라우저
+  (격리 origin, storage 0, 콘솔 0): 본체 렌더(스탠드 위 파란 조각·앞 포인트), `attachLen 17.7081 = 윗선 목
+  18.0081 − 0.3`, 스탠드 재적용 시 본체 stale·재생성, 초기화, **360px 본체 포함 fit(스탠드∪본체 union)·
+  클리핑 0**(좁은 화면 아래 행 reflow).
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
