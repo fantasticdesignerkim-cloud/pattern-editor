@@ -156,7 +156,7 @@ ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm ==
 // 8. C2 칼라 본체 — 부착선 = 스탠드 윗선 목 primitive − frontInset(연장 미포함), 실측 attachLenCm.
 {
   ok(typeof C.computeBody === "function", "8: computeBody API");
-  ok(C.referenceBodyParams().cbWidthCm === 6 && C.referenceBodyParams().frontInsetCm === 0.3 && C.referenceBodyParams().frontProjectionCm === 4, "8: referenceBodyParams 6/0.3/4");
+  ok(C.referenceBodyParams().cbWidthCm === 6 && C.referenceBodyParams().frontWidthCm === 6 && C.referenceBodyParams().frontInsetCm === 0.3 && C.referenceBodyParams().frontProjectionCm === 4, "8: referenceBodyParams 6/6/0.3/4");
   const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
   const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
   const standStr = JSON.stringify(stand);
@@ -200,6 +200,45 @@ ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm ==
   ok(C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 999, frontProjectionCm: 4 }).reason === "invalid-front-inset", "8: inset ≥ upperLen");
   ok(C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: NaN }).reason === "invalid-front-projection", "8: point NaN");
   ok(C.computeBody({ ok: false }, bp).reason === "invalid-stand", "8: 무효 스탠드");
+}
+
+// 9. 앞쪽 폭 변화(frontWidthCm) — CB 폭과 독립. 기본 6/6 = 현재 형상 동일. 읽기전용 measure.
+{
+  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
+  const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
+  // 기본 6/6/0.3/4 == frontWidth 생략(=cbW) 과 동일 geometry
+  const rA = C.computeBody(stand, { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 });
+  const rB = C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 });
+  ok(rA.ok && JSON.stringify(rA.bodyGeometry) === JSON.stringify(rB.bodyGeometry), "9: frontWidth 6 == 생략(=cbW) 동일 형상");
+  ok(near(rA.measure.cbWidthCm, 6) && near(rA.measure.frontWidthCm, 6) && near(rA.measure.frontProjectionCm, 4), "9: measure 파라미터 반영");
+  // 포인트 사선 길이 = sqrt(frontWidth² + projection²) = sqrt(36+16)=√52
+  ok(near(rA.measure.pointDiagonalLenCm, Math.sqrt(52), 1e-6), "9: 포인트 사선 = √(frontW²+proj²) ≈ 7.211");
+  ok(near(Math.hypot(rA.anchors.tip.x - rA.anchors.target.x, rA.anchors.tip.y - rA.anchors.target.y), rA.measure.pointDiagonalLenCm, 1e-9), "9: pointDiagonal = dist(tip, attachFront)");
+  // ★ 앞끝 기울기 = 부착선 로컬 접선 기준(캔버스 축·spread 아님): 대각(target→tip)의 접선/법선 성분.
+  const dg = { x: rA.anchors.tip.x - rA.anchors.target.x, y: rA.anchors.tip.y - rA.anchors.target.y };
+  const localTan = dg.x * rA.anchors.frontTangent.x + dg.y * rA.anchors.frontTangent.y;
+  const localNor = dg.x * rA.anchors.frontNormal.x + dg.y * rA.anchors.frontNormal.y;
+  ok(near(localTan, 4) && near(localNor, 6), "9: localTangentComponent=projection 4·localNormalComponent=frontWidth 6");
+  ok(near(rA.measure.localTiltDeg, Math.atan2(6, 4) * 180 / Math.PI) && near(rA.measure.localTiltDeg, 56.31, 1e-2), "9: localTiltDeg = atan2(frontWidth, projection) = 56.31°");
+  // frontRise 가 달라도 같은 본체 비율이면 localTiltDeg 동일(캔버스 기준이 아님을 증명)
+  const stand25 = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: 2.5 });
+  const r25 = C.computeBody(stand25, { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 });
+  ok(near(r25.measure.localTiltDeg, rA.measure.localTiltDeg), "9: localTiltDeg frontRise 무관(1.5 vs 2.5 동일)");
+  // 앞폭을 줄이면 front outer 가 부착점에 가까워진다(법선거리 = frontWidth)
+  const rN = C.computeBody(stand, { cbWidthCm: 6, frontWidthCm: 3, frontInsetCm: 0.3, frontProjectionCm: 4 });
+  ok(rN.ok && near(Math.hypot(rN.anchors.frontOuter.x - rN.anchors.target.x, rN.anchors.frontOuter.y - rN.anchors.target.y), 3), "9: frontWidth 3 → 앞 법선거리 3");
+  ok(near(Math.hypot(rN.anchors.cbOuter.x - rN.anchors.cbAttach.x, rN.anchors.cbOuter.y - rN.anchors.cbAttach.y), 6), "9: CB 폭은 여전히 6(독립)");
+  ok(near(rN.measure.pointDiagonalLenCm, Math.sqrt(3 * 3 + 16), 1e-6), "9: 앞폭 3 → 포인트 사선 √25=5");
+  // 앞끝 투영은 여전히 접선 방향(법선성분 0)
+  const dv = { x: rN.anchors.tip.x - rN.anchors.frontOuter.x, y: rN.anchors.tip.y - rN.anchors.frontOuter.y };
+  ok(near(dv.x * rN.anchors.frontTangent.x + dv.y * rN.anchors.frontTangent.y, 4) && near(dv.x * rN.anchors.frontNormal.x + dv.y * rN.anchors.frontNormal.y, 0), "9: 앞폭 변경에도 투영=접선 4·법선 0");
+  // 실패: frontWidth 0/음수
+  ok(C.computeBody(stand, { cbWidthCm: 6, frontWidthCm: 0, frontInsetCm: 0.3, frontProjectionCm: 4 }).reason === "invalid-front-width", "9: frontWidth 0");
+  ok(C.computeBody(stand, { cbWidthCm: 6, frontWidthCm: -2, frontInsetCm: 0.3, frontProjectionCm: 4 }).reason === "invalid-front-width", "9: frontWidth 음수");
+  // 폐곡선·자기교차 없음(앞폭 변경 케이스)
+  let closed = true, o = rN.bodyGeometry.outline;
+  for (let i = 0; i < o.length; i++) { const nx = o[(i + 1) % o.length]; if (!near(o[i].to.x, nx.from.x, 1e-6) || !near(o[i].to.y, nx.from.y, 1e-6)) closed = false; }
+  ok(closed, "9: 앞폭 변경 폐곡선 연속");
 }
 
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
