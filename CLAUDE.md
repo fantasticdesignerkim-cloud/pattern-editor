@@ -3493,6 +3493,45 @@ attachLenCm }`(세션 전용). 순수 `designCollar.computeBody(standResult, par
   파라미터 해제) · **몸판 hash 변경 관리선 제거·collar 숨김**.
 - **다음**: `collarResult` 완료 스냅샷(sourceBodiceHash 고정, 시접·너치·심지 제외).
 
+### ✅ 카라 모양 완료 체크포인트 (collarCheckpoint) — Design 형상 단계 종료
+
+카라 결과를 **세션 스냅샷 `working.collarResult` 로 잠근다**(bodice/sleeve 체크포인트와 같은 결). 커밋
+`9980d4a`(코드). **아직 시접·너치·심지·윗칼라/밑칼라 차이·재단 아님.**
+
+- **★ 형상 종속성 vs 작업 순서 게이트 분리(핵심)**: 형상 source = `bodiceResult`(`sourceBodiceHash` 고정) —
+  **몸판 hash 변경 → 카라 무효**(`invalidatedByBodice`). **소매 완료본은 작업 순서 게이트일 뿐 스냅샷 source 에
+  미포함** — 소매 변경은 카라 result·geometry 를 **무효화하지 않고** `카라 완료됨 · 소매 단계 변경됨 · 작업
+  순서 확인 필요`만 표시(`sleeveStepChanged`).
+- **완료 게이트(모두 통과)**: bodiceResult 존재·비스테일 / `collarDraft.sourceBodiceHash === bodice.hash` /
+  현재 sleeveResult 존재·비스테일(순서 게이트) / 스탠드·본체 geometry 존재·폐곡선·자기교차 없음
+  (`designCollar.validateClosedOutline`) / body manual 이면 관리선 존재·`invalid===false` / 부착선=스탠드 윗선
+  subpath(`attachLen = upperNeckSegment − frontInset`, **여밈 연장 미포함**) / 실측·파라미터 유한. 실패 시 기존
+  collarResult·현재 geometry 불변.
+- **스냅샷**(deep clone + deep-freeze): `{schemaVersion:1, type:"shirt-two-piece", sourceBodiceHash, sourceBlock,
+  necklineLengths, stand:{parameters,geometry,lengths:{lowerNeckSeam,lowerExtension,upperNeckSegment,upperExtension,
+  upperTotal}}, body:{mode, parameters, geometry, attachLenCm, measures, manualSource:null|{lineId,segments}},
+  symmetry:"half-cb-fold", hash, completedAt}`. `manualSource` = 관리형 `collar-body` 선 하나만.
+- **`hash` = 형상 전용**: `completedAt`·layout·선택·snap·UI note·다른 patternLines 제외. `isCurrentCollarChanged`
+  는 **형상 signature 만 비교(소매 게이트와 무관)** — 소매 stale 은 카라 형상을 안 바꾸므로 "변경"으로 보지
+  않는다(그 상태는 sleeveStepChanged 로 표시).
+- **idempotent 완료**: 같은 현재 형상에서 `카라 완료` 반복 → 기존 `collarResult` **참조 그대로 반환·`completedAt`
+  불변**. 이전 frozen result 는 자동 삭제·갱신하지 않고, 명시적 완료에서만 교체.
+- **변경/무효화**: 스탠드·본체 파라미터 변경 또는 manual 편집 → `카라 변경됨` / 몸판 hash 변경 → `몸판 변경으로
+  카라 무효` / 소매 변경 → `소매 단계 변경됨`(무효화 아님). refreshCollarStale(몸판 hash)은 관리선·스탠드·본체를
+  제거하지만 **collarResult 는 남긴다**(무효 상태 표시).
+- **UI**: 요약(`스탠드: 목 봉제·연장·윗선 / 본체: 부착·CB폭·앞폭·포인트 사선·외곽`) + 상태(완료/변경됨/몸판 무효/
+  소매 단계 변경됨) + `카라 모양 완료` 버튼(게이트 통과 시만 활성).
+- **변경**: `designCollar.js`(`validateClosedOutline`) · `collarCheckpoint.js`(신규) · `ui.js`(완료 UI) ·
+  `index.html`(UI·script·캐시). 엔진·render·shape/perf 골든 무변경.
+- **검증**: collarCheckpointCheck **27**(게이트 실패·불변 스냅샷·deepFrozen·형상전용 스테일·몸판 무효 vs 소매 순서
+  분리·idempotent·manual manualSource, 실제 designCollar 로드). runAll 전체 통과, 골든 diff 0. 실브라우저(격리
+  origin, storage 0, 콘솔 0): parametric·manual 완료(manualSource segs 4)·idempotent(참조·completedAt 불변)·
+  param 변경→변경됨·재완료·**소매 변경→소매 단계 변경됨(result 유지)**·**몸판 hash 변경→몸판 무효(result 유지)**·
+  요약 표시.
+
+**★ Design 형상 단계(몸판→소매→카라) 전체 완료.** 다음은 별도 통합 결과를 만든 뒤 파트명·수량·식서·시접·너치
+(재단 단계)로 넘어간다 — 별도 사양·승인 후.
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
