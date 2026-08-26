@@ -3425,6 +3425,34 @@ attachLenCm }`(세션 전용). 순수 `designCollar.computeBody(standResult, par
   2.5 재적용해도 56.31° 동일.
 - **다음 순서**: 외곽 곡률 → 관리형 선 직접 편집 → 카라 완료 스냅샷.
 
+### C2 외곽 곡률 (outerBowCm) — cm 단위 signed 휨량
+
+칼라 본체의 **외곽선(top edge)만** 매끄럽게 휜다(벌어짐·포인트 위치는 이 증분에서 안 바꾼다). 커밋
+`ce87ffd`(코드). **추상적인 0–1 곡률이 아니라 종이 위에서 잴 수 있는 cm 단위**로 정의한다.
+
+- **★ `outerBowCm` 정의**: 일반적인 "곡률 반경"이 **아니라**, **직선 외곽(cbOuter↔frontOuter)의 중점에서
+  부착선 반대 방향 법선으로 측정한 signed 휨량(cm)**이다. `0`=직선, 양수=바깥 볼록(부착선에서 멀어짐),
+  음수=안쪽 오목(부착선 쪽). UI 범위 −2…2 step 0.1, 기본 0.
+- **`outerBowCm===0` 은 두 path 를 만들지 않고 현재 line primitive 를 그대로 반환** → byte-identical no-op
+  (outerBow 생략과도 동일). 파라미터 없는 기존 body 호출도 bow=0 폴백이라 형상 불변.
+- **고정점(불변)**: `cbOuter`·`frontOuter`·`tip`·부착선 전체·CB 폭·앞쪽 폭·앞끝 돌출. bow 는 **외곽선만** 바꾼다.
+- **외곽선 = `cbOuter → bowMid → frontOuter` 두 cubic**: `bowMid = 직선 중점 + signed 법선 × outerBowCm`.
+  **CB 시작 접선 = 부착 CB 접선**(=CB 접힘선과 직각), **중간점 두 cubic 접선 연속(G1)**, **frontOuter 도착
+  접선 = 앞끝 돌출(tTgt) 방향**(frontOuter→tip 매끄럽게 연결). **핸들 = 각 구간 길이의 1/3**(overshoot 방지).
+- **`measure.outerEdgeLenCm` = 실제 출력 primitive 를 adaptive flattening 으로 측정한 값**(해석식 아님).
+  `measure.outerBowCm` 도 함께 반환. UI 는 이 둘을 읽기 전용 표시.
+- **★ `FLAT_TOL` 1e-4→1e-5 는 길이 측정 정밀도 변경일 뿐 형상 좌표 변경이 아니다** — 반환 길이(outer·attach·
+  arc)가 독립 dense 측정과 <1e-5 일치하도록 정밀화한 것이고, geometry 좌표·byte-identical no-op 은 불변.
+- **원자적 실패(이전 유지)**: `invalid-outer-bow`(비유한) · `self-intersection`(과도한 휨이 부착선·포인트선과
+  교차). ± 양쪽 폐곡선·자기교차 0 확인.
+- **변경**: `designCollar.js`(outerBow·measure·FLAT_TOL) · `ui.js`(입력·읽기전용 표시) · `index.html`(입력·캐시). shape/perf 골든 무변경.
+- **검증**: designCollarCheck **79→109**(bow 0 byte-identical·단일 line·고정점/부착선/폭·투영/포인트 불변·
+  중점 signed offset=outerBowCm·3접선 연속(CB=부착접선/중간/front=돌출)·outerEdgeLen 실측 일치·±폐곡선·
+  비유한/과도 휨 실패). runAll 전체 통과, 골든 diff 0. 실브라우저(격리 origin, storage 0, 콘솔 0): bow 0
+  단일 line, +1.5 바깥 볼록(외곽선 16.1→16.5), −1.5 안쪽 오목, 읽기전용 measure 표시.
+- **다음(관리형 직접 편집)**: 현재 파라미터 형상을 source 로 변환하되 **부착선 endpoint·CB 접힘 endpoint 는
+  보호**하고 **외곽·포인트 anchor/handle 만 편집**하는 구조. 그다음 카라 완료 스냅샷.
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
