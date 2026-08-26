@@ -241,5 +241,69 @@ ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm ==
   ok(closed, "9: 앞폭 변경 폐곡선 연속");
 }
 
+// 10. 외곽 휨량(outerBowCm) — cm 단위 signed bow. 0=직선 byte-identical, 고정점 불변, 접선 연속, 실측 길이.
+{
+  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
+  const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
+  const base = { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 };
+  ok(C.referenceBodyParams().outerBowCm === 0, "10: referenceBodyParams outerBowCm 0");
+  // bow 0 → outerBow 생략과 byte-identical, 그리고 outer 는 단일 line
+  const r0 = C.computeBody(stand, Object.assign({ outerBowCm: 0 }, base));
+  const rOmit = C.computeBody(stand, base);
+  ok(r0.ok && JSON.stringify(r0.bodyGeometry) === JSON.stringify(rOmit.bodyGeometry), "10: bow 0 == 생략 byte-identical");
+  ok(r0.bodyGeometry.outline.filter(s => s.part === "outer").length === 1 && r0.bodyGeometry.outline.find(s => s.part === "outer").kind === "line", "10: bow 0 → 단일 line outer");
+  ok(near(r0.measure.outerBowCm, 0) && near(r0.measure.outerEdgeLenCm, Math.hypot(r0.anchors.frontOuter.x - r0.anchors.cbOuter.x, r0.anchors.frontOuter.y - r0.anchors.cbOuter.y)), "10: bow 0 outerEdgeLen = 직선 길이");
+
+  const seKind = (s) => s.kind === "cubic";
+  const segStartTan = (s) => { const v = seKind(s) ? { x: s.c1.x - s.from.x, y: s.c1.y - s.from.y } : { x: s.to.x - s.from.x, y: s.to.y - s.from.y }; const d = Math.hypot(v.x, v.y) || 1; return { x: v.x / d, y: v.y / d }; };
+  const segEndTan = (s) => { const v = seKind(s) ? { x: s.to.x - s.c2.x, y: s.to.y - s.c2.y } : { x: s.to.x - s.from.x, y: s.to.y - s.from.y }; const d = Math.hypot(v.x, v.y) || 1; return { x: v.x / d, y: v.y / d }; };
+  const cross = (a, b) => a.x * b.y - a.y * b.x;
+
+  function checkBow(bow) {
+    const r = C.computeBody(stand, Object.assign({ outerBowCm: bow }, base));
+    ok(r.ok, "10: bow " + bow + " 성공");
+    // 고정점 불변(bow 0 결과와 동일 anchors)
+    ok(JSON.stringify(r.anchors) === JSON.stringify(r0.anchors), "10: bow " + bow + " 고정점(cbOuter·frontOuter·tip·접선) 불변");
+    // 부착선 불변
+    ok(JSON.stringify(r.bodyGeometry.outline.filter(s => s.part === "attach")) === JSON.stringify(r0.bodyGeometry.outline.filter(s => s.part === "attach")), "10: bow " + bow + " 부착선 불변");
+    // 측정 불변: CB 폭·앞폭·투영·포인트 사선
+    ok(near(r.measure.cbWidthCm, 6) && near(r.measure.frontWidthCm, 6) && near(r.measure.frontProjectionCm, 4) && near(r.measure.pointDiagonalLenCm, r0.measure.pointDiagonalLenCm), "10: bow " + bow + " 폭·투영·포인트사선 불변");
+    // 외곽 = 두 cubic
+    const outer = r.bodyGeometry.outline.filter(s => s.part === "outer");
+    ok(outer.length === 2 && outer.every(seKind), "10: bow " + bow + " 외곽 두 cubic");
+    // 중점 signed offset = outerBowCm
+    const cbO = r.anchors.cbOuter, fO = r.anchors.frontOuter;
+    const chord = (() => { const v = { x: fO.x - cbO.x, y: fO.y - cbO.y }, d = Math.hypot(v.x, v.y); return { x: v.x / d, y: v.y / d }; })();
+    let perp = { x: -chord.y, y: chord.x };
+    const nCBv = segEndTan(r.bodyGeometry.outline.find(s => s.part === "cb-fold"));  // not used for sign; recompute nCB below
+    // nCB = attach CB 법선(위) — attach 첫 세그 접선의 normalUp
+    const aTan = segStartTan(r.bodyGeometry.outline.find(s => s.part === "attach"));
+    let nCB = { x: -aTan.y, y: aTan.x }; if (nCB.y > 0) nCB = { x: aTan.y, y: -aTan.x };
+    if (perp.x * nCB.x + perp.y * nCB.y < 0) perp = { x: chord.y, y: -chord.x };
+    const M = { x: (cbO.x + fO.x) / 2, y: (cbO.y + fO.y) / 2 };
+    const bowMid = outer[0].to;   // 두 cubic 접점
+    const signedOff = (bowMid.x - M.x) * perp.x + (bowMid.y - M.y) * perp.y;
+    ok(near(signedOff, bow, 1e-6), "10: bow " + bow + " 중점 signed offset = outerBowCm");
+    // 접선 연속: 중간 접점(outer[0] 끝 == outer[1] 시작), front(=tTgt), CB(=부착 CB 접선)
+    ok(Math.abs(cross(segEndTan(outer[0]), segStartTan(outer[1]))) < 1e-6, "10: bow " + bow + " 중간 접선 연속");
+    ok(Math.abs(cross(segStartTan(outer[0]), r.anchors.frontTangent)) < 1e-6, "10: bow " + bow + " front 도착 접선 = 앞끝 돌출 방향");
+    ok(Math.abs(cross(segEndTan(outer[1]), aTan)) < 1e-6, "10: bow " + bow + " CB 시작 접선 = 부착 CB 접선");
+    // 실측 outer length == 반환값
+    ok(near(r.measure.outerEdgeLenCm, partActual(r.bodyGeometry, "outer"), 1e-5), "10: bow " + bow + " outerEdgeLen == 실제 primitive");
+    // 폐곡선 연속 + 교차 0(ok 로 보장)
+    let closed = true, o = r.bodyGeometry.outline;
+    for (let i = 0; i < o.length; i++) { const nx = o[(i + 1) % o.length]; if (!near(o[i].to.x, nx.from.x, 1e-6) || !near(o[i].to.y, nx.from.y, 1e-6)) closed = false; }
+    ok(closed, "10: bow " + bow + " 폐곡선 연속");
+    return r;
+  }
+  const rPos = checkBow(1.5), rNeg = checkBow(-1.5);
+  // 볼록(+)은 안쪽(−)보다 외곽이 부착선에서 멀다 → outer 길이 둘 다 직선보다 김
+  ok(rPos.measure.outerEdgeLenCm > r0.measure.outerEdgeLenCm && rNeg.measure.outerEdgeLenCm > r0.measure.outerEdgeLenCm, "10: ± 휨 outer 길이 > 직선");
+  // 원자적 실패
+  ok(C.computeBody(stand, Object.assign({ outerBowCm: NaN }, base)).reason === "invalid-outer-bow", "10: bow NaN → invalid-outer-bow");
+  ok(C.computeBody(stand, Object.assign({ outerBowCm: Infinity }, base)).reason === "invalid-outer-bow", "10: bow Infinity");
+  ok(C.computeBody(stand, Object.assign({ outerBowCm: -20 }, base)).reason === "self-intersection", "10: 과도한 안쪽 휨 → self-intersection");
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

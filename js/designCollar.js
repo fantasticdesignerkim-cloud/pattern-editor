@@ -38,7 +38,7 @@
   var DEFAULT_STAND_HEIGHT = 3;   // cm
   var DEFAULT_FRONT_RISE = 1.5;   // cm (앞끝 올림)
   var EPS_RISE = 1e-6;            // 이 미만이면 직선 스캐폴드(C1 정확 재현)
-  var FLAT_TOL = 1e-4;           // adaptive de Casteljau 평탄 허용(코드베이스 관례)
+  var FLAT_TOL = 1e-5;           // adaptive de Casteljau 평탄 허용(길이 측정 정밀도. 형상 좌표엔 무영향)
   var SUB_ARC_MAX = Math.PI / 6;  // 원호 sub-cubic 최대 각(30°) — 얕게 유지해 근사 오차 최소화
 
   function referenceParams() { return { standHeightCm: DEFAULT_STAND_HEIGHT, frontRiseCm: DEFAULT_FRONT_RISE }; }
@@ -235,7 +235,7 @@
   // frontProjectionCm = **접선 방향 투영량**(칼라 앞끝을 CF 접선 전방으로 돌출시키는 양)이다.
   //   실제 포인트 사선 길이가 아니다(그건 앞폭 + 투영 이 합쳐져 더 길다). "칼라 끝 길이"로 부르지 않는다.
   // frontWidthCm = 앞 부착점에서 법선 방향 칼라 폭(cbWidthCm 과 독립). 기본 6=cbWidth 면 현재 평행 폭과 동일.
-  function referenceBodyParams() { return { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 }; }
+  function referenceBodyParams() { return { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4, outerBowCm: 0 }; }
 
   function sub(a, b) { return { x: a.x - b.x, y: a.y - b.y }; }
   function unit(v) { var d = Math.hypot(v.x, v.y) || 1; return { x: v.x / d, y: v.y / d }; }
@@ -280,6 +280,8 @@
     if (!num(frontW) || frontW <= 0) return { ok: false, reason: "invalid-front-width" };
     if (!num(inset) || inset < 0) return { ok: false, reason: "invalid-front-inset" };
     if (!num(proj) || proj < 0) return { ok: false, reason: "invalid-front-projection" };
+    var bow = (params && params.outerBowCm !== undefined) ? params.outerBowCm : 0;   // 외곽 휨량(cm, 부호 있음). 0=직선
+    if (!num(bow)) return { ok: false, reason: "invalid-outer-bow" };
 
     var path = standResult.upperNeckPath;
     var upperLen = sumMeasure(path);                 // = upperNeckSegmentLenCm (연장 제외)
@@ -290,28 +292,45 @@
 
     var cbPoint = cp(path[0].from);
     var target = cp(attach[attach.length - 1].to);
-    var nCB = normalUp(startTangent(attach[0]));
+    var tCB = startTangent(attach[0]), nCB = normalUp(tCB);
     var tTgt = endTangent(attach[attach.length - 1]), nTgt = normalUp(tTgt);
     var cbOuter = add(cbPoint, nCB, cbW);            // CB 완성 칼라 폭
     var frontOuter = add(target, nTgt, frontW);      // 앞 부착점에서 법선 방향 앞쪽 칼라 폭(cbW 와 독립)
     var tip = add(frontOuter, tTgt, proj);           // 칼라 앞끝: 앞쪽 외곽점에서 접선(CF 방향) 전방으로 proj 만큼 투영
 
-    // 폐곡선: 부착선(CB→물림) → 물림→tip → tip→frontOuter → frontOuter→cbOuter(외곽) → cbOuter→CB(접힘).
+    // 외곽선(loop 방향 frontOuter→cbOuter). bow=0 이면 line primitive 그대로(byte-identical no-op).
+    //   bow≠0: cbOuter→bowMid→frontOuter 두 cubic. CB 시작 접선 = 부착 CB 접선(=CB 접힘선 직각), 중간 접선 연속,
+    //   frontOuter 도착 접선 = 앞끝 돌출(tTgt) 방향(frontOuter→tip 매끄러운 연결). 핸들 = 각 구간 1/3(overshoot 방지).
+    var outerSegs, outerLen;
+    if (bow === 0) { outerSegs = [L(frontOuter, cbOuter, "outer")]; outerLen = lineLen(frontOuter, cbOuter); }
+    else {
+      var chord = unit(sub(frontOuter, cbOuter)), Mmid = mid(cbOuter, frontOuter);
+      var perp = { x: -chord.y, y: chord.x };                       // 바깥 법선(칼라쪽 nCB 와 정렬 = 부착선에서 멀어짐)
+      if (perp.x * nCB.x + perp.y * nCB.y < 0) perp = { x: chord.y, y: -chord.x };
+      var bowMid = add(Mmid, perp, bow);
+      var hA = lineLen(cbOuter, bowMid) / 3, hB = lineLen(bowMid, frontOuter) / 3;
+      var cubicA = { kind: "cubic", from: cp(cbOuter), c1: add(cbOuter, tCB, hA), c2: add(bowMid, chord, -hA), to: cp(bowMid) };
+      var cubicB = { kind: "cubic", from: cp(bowMid), c1: add(bowMid, chord, hB), c2: add(frontOuter, tTgt, -hB), to: cp(frontOuter) };
+      outerSegs = [reverseCubic(cubicB, "outer"), reverseCubic(cubicA, "outer")];   // loop 방향
+      outerLen = sumMeasure(outerSegs);
+    }
+
+    // 폐곡선: 부착선(CB→물림) → 물림→tip → tip→frontOuter → 외곽(frontOuter→…→cbOuter) → cbOuter→CB(접힘).
     var outline = attach.map(function (s) { return cloneSeg(s, "attach"); });
     outline.push(L(target, tip, "point-front"));
     outline.push(L(tip, frontOuter, "point-top"));
-    outline.push(L(frontOuter, cbOuter, "outer"));
+    outline = outline.concat(outerSegs);
     outline.push(L(cbOuter, cbPoint, "cb-fold"));
 
-    if (outlineSelfIntersects(outline)) return { ok: false, reason: "self-intersection" };
-    // 읽기 전용 실제 결과: 포인트 사선 길이(=앞폭·투영 합성) + 로컬 앞끝 기울기.
+    if (outlineSelfIntersects(outline)) return { ok: false, reason: "self-intersection" };   // 과도한 휨(부착·포인트선 교차) 차단
+    // 읽기 전용 실제 결과: 포인트 사선 길이(=앞폭·투영 합성) + 로컬 앞끝 기울기 + 외곽 실측 길이.
     //   ★ 기울기는 **부착선 로컬 접선 기준**(캔버스 전역축·착용 spread 아님)이라 frontRise 와 무관하게 본체 비율만 반영.
     //   포인트 대각(target→tip) = frontWidth·법선 + projection·접선 → localTiltDeg = atan2(frontWidth, projection).
     var pointDiagonalLenCm = lineLen(tip, target);
     var localTiltDeg = Math.atan2(frontW, proj) * 180 / Math.PI;   // 접선 축에서 잰 대각 각(평면 기하, frontRise 무관)
     return {
       ok: true, bodyGeometry: { outline: outline, construction: [] }, attachLenCm: attachLen,
-      measure: { cbWidthCm: cbW, frontWidthCm: frontW, frontProjectionCm: proj, pointDiagonalLenCm: pointDiagonalLenCm, localTiltDeg: localTiltDeg },
+      measure: { cbWidthCm: cbW, frontWidthCm: frontW, frontProjectionCm: proj, pointDiagonalLenCm: pointDiagonalLenCm, localTiltDeg: localTiltDeg, outerBowCm: bow, outerEdgeLenCm: outerLen },
       // frontTangent/frontNormal: 앞끝 투영이 접선 방향임을 회귀로 잠그고 향후 외곽 곡률/앞폭 설계에 쓴다.
       anchors: { cbAttach: cbPoint, cbOuter: cbOuter, target: target, frontOuter: frontOuter, tip: tip, frontTangent: tTgt, frontNormal: nTgt }
     };

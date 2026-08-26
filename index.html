@@ -291,6 +291,7 @@
           <div class="row"><label for="inpCollarBodyFrontWidth">앞쪽 칼라 폭 (cm)</label><input id="inpCollarBodyFrontWidth" type="number" min="1" max="15" step="0.1"></div>
           <div class="row"><label for="inpCollarBodyInset">앞끝 물림 (cm)</label><input id="inpCollarBodyInset" type="number" min="0" max="3" step="0.1"></div>
           <div class="row"><label for="inpCollarBodyProjection">칼라 앞끝 돌출 (cm)</label><input id="inpCollarBodyProjection" type="number" min="0" max="15" step="0.1"></div>
+          <div class="row"><label for="inpCollarBodyBow">외곽 휨 (cm)</label><input id="inpCollarBodyBow" type="number" min="-2" max="2" step="0.1"></div>
           <div class="row" style="gap:4px">
             <button class="btn action-primary" id="btnApplyCollarBody">본체 적용</button>
             <button class="btn" id="btnResetCollarBody">본체 초기화</button>
@@ -386,12 +387,12 @@
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
 <script src="js/sleeveCheckpoint.js?v=2026082041"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
-<script src="js/designCollar.js?v=2026082508"></script>
+<script src="js/designCollar.js?v=2026082509"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026082508"></script>
+<script src="js/ui.js?v=2026082509"></script>
 
 </body>
 </html>

@@ -1077,15 +1077,15 @@
   }
   function setCollarBodyNote(t) { const n = document.getElementById("designCollarBodyNote"); if (n) n.textContent = t; }
   function collarBodyFailStr(reason) {
-    const m = { "invalid-stand": "스탠드를 먼저 적용", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-front-width": "앞쪽 칼라 폭 값 확인(1–15)", "invalid-front-inset": "앞끝 물림 값 확인(0–3)", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
+    const m = { "invalid-stand": "스탠드를 먼저 적용", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-front-width": "앞쪽 칼라 폭 값 확인(1–15)", "invalid-front-inset": "앞끝 물림 값 확인(0–3)", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "invalid-outer-bow": "외곽 휨 값 확인(−2–2)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
     return m[reason] || "칼라 본체를 적용할 수 없습니다";
   }
   function onApplyCollarBody() {
     const project = designProjectNow(); if (!project) return;
     if (!collarStandReady(project)) { setCollarBodyNote("카라 스탠드를 먼저 적용하세요"); return; }
-    const w = readNum("inpCollarBodyWidth", 1, 15), fw = readNum("inpCollarBodyFrontWidth", 1, 15), inset = readNum("inpCollarBodyInset", 0, 3), proj = readNum("inpCollarBodyProjection", 0, 15);
-    if (!w.valid || !fw.valid || !inset.valid || !proj.valid) { setCollarBodyNote("칼라 본체 값 범위를 확인하세요(CB 폭·앞폭 1–15·물림 0–3·앞끝 돌출 0–15)"); return; }
-    const r = deriveCollarBody(project, { cbWidthCm: w.v, frontWidthCm: fw.v, frontInsetCm: inset.v, frontProjectionCm: proj.v });
+    const w = readNum("inpCollarBodyWidth", 1, 15), fw = readNum("inpCollarBodyFrontWidth", 1, 15), inset = readNum("inpCollarBodyInset", 0, 3), proj = readNum("inpCollarBodyProjection", 0, 15), bow = readNum("inpCollarBodyBow", -2, 2);
+    if (!w.valid || !fw.valid || !inset.valid || !proj.valid || !bow.valid) { setCollarBodyNote("칼라 본체 값 범위를 확인하세요(CB 폭·앞폭 1–15·물림 0–3·앞끝 돌출 0–15·외곽 휨 −2–2)"); return; }
+    const r = deriveCollarBody(project, { cbWidthCm: w.v, frontWidthCm: fw.v, frontInsetCm: inset.v, frontProjectionCm: proj.v, outerBowCm: bow.v });
     if (!r.ok) { setCollarBodyNote("적용 불가: " + collarBodyFailStr(r.reason)); return; }   // 이전 유지
     if (window.designLayout) window.designLayout.afterCollar();
     if (typeof render === "function") render();
@@ -1106,6 +1106,7 @@
     const p = cb.has ? cb.params : ref;
     setIf("inpCollarBodyWidth", p.cbWidthCm); setIf("inpCollarBodyFrontWidth", p.frontWidthCm != null ? p.frontWidthCm : p.cbWidthCm);
     setIf("inpCollarBodyInset", p.frontInsetCm); setIf("inpCollarBodyProjection", p.frontProjectionCm);
+    setIf("inpCollarBodyBow", p.outerBowCm != null ? p.outerBowCm : 0);
     const applyBtn = document.getElementById("btnApplyCollarBody"), resetBtn = document.getElementById("btnResetCollarBody");
     if (applyBtn) applyBtn.disabled = !ready;
     if (resetBtn) resetBtn.disabled = !cb.has;
@@ -1113,9 +1114,9 @@
     // 읽기 전용 실제 결과: CB 폭·앞쪽 폭·앞끝 접선 돌출·포인트 사선 길이(=앞폭·투영 합성)·앞끝 기울기.
     //   ★ 기울기는 부착선 로컬 접선 기준 평면 기하값(캔버스 축·착용 spread 아님). frontRise 와 무관.
     else if (cb.has && cb.measure) { const m = cb.measure;
-      setCollarBodyNote("부착 " + fmtL(cb.attachLenCm) + "cm · CB 폭 " + fmtL(m.cbWidthCm) + "·앞폭 " + fmtL(m.frontWidthCm) + " · 앞끝 접선 돌출 " + fmtL(m.frontProjectionCm) + "cm · 포인트 사선 " + fmtL(m.pointDiagonalLenCm) + "cm · 앞끝 기울기(부착 접선 기준) " + m.localTiltDeg.toFixed(1) + "° · 세션 전용");
+      setCollarBodyNote("부착 " + fmtL(cb.attachLenCm) + "cm · CB 폭 " + fmtL(m.cbWidthCm) + "·앞폭 " + fmtL(m.frontWidthCm) + " · 앞끝 돌출 " + fmtL(m.frontProjectionCm) + "cm · 포인트 사선 " + fmtL(m.pointDiagonalLenCm) + "cm · 앞끝 기울기(부착 접선) " + m.localTiltDeg.toFixed(1) + "° · 외곽 휨 " + fmtL(m.outerBowCm) + "cm(외곽선 " + fmtL(m.outerEdgeLenCm) + "cm) · 세션 전용");
     }
-    else setCollarBodyNote("CB 폭·앞폭·앞끝 물림·앞끝 돌출 적용으로 본체 생성(여밈 연장 미포함) · 세션 전용");
+    else setCollarBodyNote("CB 폭·앞폭·앞끝 물림·앞끝 돌출·외곽 휨 적용으로 본체 생성(여밈 연장 미포함) · 세션 전용");
   }
 
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
@@ -1348,8 +1349,8 @@
     if (applyCollar) applyCollar.addEventListener("click", () => { if (!applyCollar.disabled) onApplyCollar(); });
     const resetCollar = document.getElementById("btnResetCollar");
     if (resetCollar) resetCollar.addEventListener("click", () => { if (!resetCollar.disabled) onResetCollar(); });
-    // 카라 본체(C2): CB 폭·앞폭·앞끝 물림·앞끝 돌출 Enter 로 적용, 본체 적용/초기화.
-    ["inpCollarBodyWidth", "inpCollarBodyFrontWidth", "inpCollarBodyInset", "inpCollarBodyProjection"].forEach(id => {
+    // 카라 본체(C2): CB 폭·앞폭·앞끝 물림·앞끝 돌출·외곽 휨 Enter 로 적용, 본체 적용/초기화.
+    ["inpCollarBodyWidth", "inpCollarBodyFrontWidth", "inpCollarBodyInset", "inpCollarBodyProjection", "inpCollarBodyBow"].forEach(id => {
       const el = document.getElementById(id); if (!el) return;
       el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyCollarBody(); } });
     });
