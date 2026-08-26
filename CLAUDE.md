@@ -3397,6 +3397,34 @@ attachLenCm }`(세션 전용). 순수 `designCollar.computeBody(standResult, par
   18.0081 − 0.3`, 스탠드 재적용 시 본체 stale·재생성, 초기화, **360px 본체 포함 fit(스탠드∪본체 union)·
   클리핑 0**(좁은 화면 아래 행 reflow).
 
+### C2 앞쪽 폭 변화 (frontWidthCm) — CB 폭과 독립
+
+칼라 본체의 **앞쪽 폭을 CB 폭과 독립**으로 조절해 포인트의 깊이·기울기를 바꾼다(외곽선은 이 증분까지
+직선 유지). 커밋 `44b193d`(코드). **spread(벌어짐)를 별도 입력으로 넣지 않는다** — 현재 `CB 폭 + 앞끝
+돌출` 과 자유도가 겹쳐 과결정이고, 실제 벌어짐·롤은 원단·심지 영향까지 받아 2D 종이 패턴의 단일 수치로
+단정하기 어렵다(FreeSewing/Minerva 제도 원리 참고). 대신 2D 에서 명확히 검증 가능한 앞쪽 폭부터 추가.
+
+- **최종 파라미터**: `{ cbWidthCm:6, frontWidthCm:6, frontInsetCm:0.3, frontProjectionCm:4 }`. **기본 6/6/0.3/4
+  는 현재 geometry 와 정확히 동일**(frontWidth 생략 시 cbWidth 로 폴백 → byte-identical, 하네스로 잠금).
+- **`front outer = 앞 부착점(target) + frontWidthCm·법선`**(CB outer 는 그대로 `cbWidthCm·법선`). tip 은
+  여전히 `front outer + frontProjectionCm·접선`. 앞폭을 줄이면 포인트가 짧고 얕아진다(√(frontW²+proj²)).
+- **읽기 전용 measure(UI 표시)**: CB 칼라 폭 · 앞쪽 칼라 폭 · 앞끝 접선 돌출 · **포인트 사선 길이
+  `= dist(tip, attachFront) = √(frontWidth²+projection²)`**(앞폭·투영 합성이라 투영보다 길다) ·
+  **앞끝 기울기 `= atan2(frontWidthCm, frontProjectionCm)`**.
+- **★ 앞끝 기울기는 부착선 로컬 접선 기준 평면 기하값**이다 — **캔버스 전역축도, 착용 시 spread 도 아니다.**
+  포인트 대각(target→tip)을 접선/법선으로 분해하면 접선성분=projection, 법선성분=frontWidth 이고
+  `localTiltDeg = atan2(frontWidth, projection)`. 따라서 **frontRise 가 바뀌어도 같은 본체 비율이면 값이
+  동일**하다(회귀로 고정: `localTangentComponent===frontProjectionCm`, `localNormalComponent===frontWidthCm`,
+  `localAngle===atan2(frontWidthCm, frontProjectionCm)`, frontRise 1.5 vs 2.5 동일). 초기 구현은 접선을
+  캔버스축으로 잰 값(15.1°)이라 frontRise 종속이었고 이를 교정했다.
+- **실패**: `invalid-front-width`(0·음수). 폐곡선·자기교차 검사 유지.
+- **변경**: `designCollar.js`(frontWidth·measure) · `ui.js`(입력·읽기전용 표시) · `index.html`(입력·캐시). shape/perf 골든 무변경.
+- **검증**: designCollarCheck **65→79**(앞폭 독립·기본 6/6 byte-identical·포인트 사선 √52/√25·로컬 접선
+  성분=proj/frontWidth·localTilt=atan2(frontWidth,proj)·frontRise 무관·실패·폐곡선). runAll 전체 통과, 골든
+  diff 0. 실브라우저(격리 origin, storage 0, 콘솔 0): 기본 56.31°·앞폭3 → 36.87°(=atan2(3,4))·frontRise
+  2.5 재적용해도 56.31° 동일.
+- **다음 순서**: 외곽 곡률 → 관리형 선 직접 편집 → 카라 완료 스냅샷.
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
