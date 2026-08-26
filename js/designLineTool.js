@@ -610,6 +610,7 @@
     if (mode !== "select" || !selectedId) return;
     if (isNeckAutoLine(selectedId)) { setNote("네크라인 전용선은 삭제할 수 없습니다 · 기본형으로 돌아가기로만 제거"); return; }   // 자동 네크라인 보호
     if (isSleeveCapLine(selectedId)) { setNote("소매산 관리선은 삭제할 수 없습니다 · 기본 소매산으로 돌아가기로만 제거"); return; }   // 관리형 소매산 보호
+    if (isCollarBodyLine(selectedId)) { setNote("칼라 본체 관리선은 삭제할 수 없습니다 · 기본형으로 돌아가기로만 제거"); return; }   // 관리형 칼라 본체 보호
     const p = project(); p.working.patternLines = ensurePatternLines(p).filter(l => l.id !== selectedId);
     invalidateParts(p);
     selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); syncCutStatus(); rerender();
@@ -619,6 +620,7 @@
     if (mode !== "select" || !selectedId || !ROLE_LABEL[role]) return;
     if (isNeckAutoLine(selectedId)) { setNote("네크라인 전용선은 역할을 바꿀 수 없습니다"); return; }   // 자동 네크라인 보호
     if (isSleeveCapLine(selectedId)) { setNote("소매산 관리선은 역할을 바꿀 수 없습니다"); return; }   // 관리형 소매산 보호
+    if (isCollarBodyLine(selectedId)) { setNote("칼라 본체 관리선은 역할을 바꿀 수 없습니다"); return; }   // 관리형 칼라 본체 보호
     const line = findLine(selectedId); if (!line) return;
     line.role = role; invalidateParts(); setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); syncCutStatus(); rerender();
   }
@@ -626,7 +628,7 @@
   function syncRoleButtons() {
     const sel = (mode === "select" && selectedId) ? findLine(selectedId) : null;
     const role = sel ? (sel.role || "guide") : null;
-    const locked = sel && (isNeckAutoLine(sel.id) || isSleeveCapLine(sel));
+    const locked = sel && (isNeckAutoLine(sel.id) || isSleeveCapLine(sel) || isCollarBodyLine(sel));
     [["btnRoleCut", "cut"], ["btnRoleBoundary", "boundary"], ["btnRoleGuide", "guide"]].forEach(pair => {
       const b = document.getElementById(pair[0]); if (!b) return;
       b.disabled = !sel || locked; b.setAttribute("aria-pressed", role === pair[1] ? "true" : "false");
@@ -788,6 +790,7 @@
         const as = anchorsFromSegments(line.segments);
         for (let k = 0; k < as.length; k++) if (Math.hypot(geo.x - as[k].x, geo.y - as[k].y) < rCm) {
           if (isSleeveCapLine(line) && (k === 0 || k === as.length - 1)) { setNote("소매산 진동밑점은 고정됩니다 · SP·중간 anchor·핸들만 편집"); return; }   // 진동밑 endpoint 고정
+          if (isCollarBodyLine(line) && (k === 0 || k === as.length - 1)) { setNote("칼라 본체 endpoint(cbOuter·attachFront)는 고정됩니다 · 외곽·포인트 anchor·핸들만 편집"); return; }   // endpoint 고정
           editDrag = { kind: "anchor", k: k, startGeo: geo, origAnchor: { x: as[k].x, y: as[k].y }, orig: JSON.parse(JSON.stringify(line.segments)) }; return;
         }
       }
@@ -797,6 +800,7 @@
     lines().forEach(l => { if (l.piece !== piece) return; const d = distToLine(geo, l); if (d < bestD) { bestD = d; best = l; } });
     selectedId = best ? best.id : null;
     setNote(best ? (isSleeveCapLine(selectedId) ? "소매산 관리선 · 진동밑 고정 · SP·중간 anchor·핸들 편집(재합성)"
+      : isCollarBodyLine(selectedId) ? "칼라 본체 관리선 · endpoint 고정 · 외곽·포인트 anchor·핸들 편집(재합성) · 기본형으로 돌아가기로만 제거"
       : isNeckAutoLine(selectedId) ? "네크라인 전용선 · 역할 변경·삭제 금지(기본형으로 돌아가기로만) · anchor/핸들만 편집"
       : "선택됨 · Delete 삭제 · anchor/핸들 드래그 · Esc 해제") : SELECT_NOTE);
   }
@@ -894,6 +898,7 @@
       } else if (mode === "select" && editDrag) {
         const edited = findLine(selectedId);
         if (edited && isSleeveCapLine(edited)) { if (window.recomposeSleeveCap) window.recomposeSleeveCap(); }   // 소매산 편집 → 소매 재합성
+        else if (edited && isCollarBodyLine(edited)) { if (window.recomposeCollarBody) window.recomposeCollarBody(); }   // 칼라 본체 편집 → 본체 재합성
         else if (edited && edited.role === "boundary") recomposeAfterBoundaryEdit();   // 대체선 편집 → designOutline 재합성
         else invalidateParts();                                                   // 그 외(cut/guide) → 파생 무효화
         editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
@@ -1042,6 +1047,12 @@
     const line = (typeof lineOrId === "string") ? findLine(lineOrId) : lineOrId;
     return !!(line && line.managedBy === "sleeve-cap");
   }
+  // 관리형 칼라 본체 선(managedBy collar-body): 역할 변경·개별 삭제 금지, endpoint(cbOuter·attachFront) 이동 금지.
+  // 제거는 '기본형으로 돌아가기'로만.
+  function isCollarBodyLine(lineOrId) {
+    const line = (typeof lineOrId === "string") ? findLine(lineOrId) : lineOrId;
+    return !!(line && line.managedBy === "collar-body");
+  }
   // boundary(anchor·핸들) 편집 pointerup 후: designOutline 재합성(에메랄드가 편집 위치로 즉시 이동).
   // 유효하지 않으면 designOutline 무효화 + 오류(이전 stale 유지 금지). 목둘레·상태는 ui 로 갱신.
   function recomposeAfterBoundaryEdit() {
@@ -1063,7 +1074,7 @@
 
   window.designLineTool = Object.freeze({
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
-    convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen, isNeckAutoLine, isSleeveCapLine, findLine: (id) => findLine(id),
+    convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen, isNeckAutoLine, isSleeveCapLine, isCollarBodyLine, findLine: (id) => findLine(id),
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
     validateSelectedCut, revalidate, validateCut, flattenLine, segCross, distPtToSegs,
     doSplit, invalidateParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,

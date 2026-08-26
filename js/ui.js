@@ -985,7 +985,11 @@
   // stale 이면 standGeometry=null(숨김) — parameters.stand 는 보존. 명시적 재적용으로만 복구.
   function refreshCollarStale(project) {
     const cd = project && project.working && project.working.collarDraft;
-    if (cd && collarStale(project)) { cd.standGeometry = null; cd.body = null; }   // 스탠드 숨김 시 본체도 무효
+    if (cd && collarStale(project)) {
+      // 몸판 hash 변경 → 관리형 선 제거·manual 폐기·스탠드/본체 숨김(소매 stale 과 분리 — 소매는 탭 게이트만).
+      if (cd.body && cd.body.lineId) project.working.patternLines = (project.working.patternLines || []).filter(l => l.id !== cd.body.lineId);
+      cd.standGeometry = null; cd.body = null;
+    }
   }
   function deriveCollar(project, standHeightCm, frontRiseCm) {
     if (!window.designCollar || !window.bodiceCheckpoint) return { ok: false, reason: "no-module" };
@@ -1111,12 +1115,74 @@
     if (applyBtn) applyBtn.disabled = !ready;
     if (resetBtn) resetBtn.disabled = !cb.has;
     if (!ready) setCollarBodyNote("카라 스탠드 적용 후 본체를 생성할 수 있습니다");
+    else if (collarBodyManual(project)) {
+      if (collarBodyInvalid(project)) setCollarBodyNote("칼라 본체 편집 무효 · " + collarBodyReasonStr(project.working.collarDraft.body.invalidReason) + " · 편집 복구 또는 기본형으로 돌아가기");
+      else { const m = cb.measure || {}; setCollarBodyNote("칼라 본체 직접 수정 중 · endpoint 고정 · 외곽·포인트 anchor·핸들 편집 · 포인트 사선 " + fmtL(m.pointDiagonalLenCm || 0) + "cm · 외곽선 " + fmtL(m.outerEdgeLenCm || 0) + "cm"); }
+    }
     // 읽기 전용 실제 결과: CB 폭·앞쪽 폭·앞끝 접선 돌출·포인트 사선 길이(=앞폭·투영 합성)·앞끝 기울기.
     //   ★ 기울기는 부착선 로컬 접선 기준 평면 기하값(캔버스 축·착용 spread 아님). frontRise 와 무관.
-    else if (cb.has && cb.measure) { const m = cb.measure;
+    else if (cb.has && cb.measure && cb.measure.cbWidthCm != null) { const m = cb.measure;
       setCollarBodyNote("부착 " + fmtL(cb.attachLenCm) + "cm · CB 폭 " + fmtL(m.cbWidthCm) + "·앞폭 " + fmtL(m.frontWidthCm) + " · 앞끝 돌출 " + fmtL(m.frontProjectionCm) + "cm · 포인트 사선 " + fmtL(m.pointDiagonalLenCm) + "cm · 앞끝 기울기(부착 접선) " + m.localTiltDeg.toFixed(1) + "° · 외곽 휨 " + fmtL(m.outerBowCm) + "cm(외곽선 " + fmtL(m.outerEdgeLenCm) + "cm) · 세션 전용");
     }
     else setCollarBodyNote("CB 폭·앞폭·앞끝 물림·앞끝 돌출·외곽 휨 적용으로 본체 생성(여밈 연장 미포함) · 세션 전용");
+    syncCollarBodyModeUI(project);
+  }
+
+  // ── C3 칼라 본체 직접 편집(관리형 선, 소매산 manual 미러) ──
+  function collarBodyManual(project) { const cd = project && project.working && project.working.collarDraft; return !!(cd && cd.body && cd.body.mode === "manual"); }
+  function collarBodyInvalid(project) { const cd = project && project.working && project.working.collarDraft; return !!(cd && cd.body && cd.body.invalid); }
+  function collarBodyReasonStr(reason) {
+    const m = { "endpoint-cbouter": "CB 외곽점이 고정 위치를 벗어남", "endpoint-attachfront": "앞 부착점이 고정 위치를 벗어남", "not-closed": "외곽선 연결이 끊김", "self-intersection": "형상이 교차/부착선 침범", "degenerate-area": "형상이 퇴화됨", "no-line": "관리선 없음", "no-attach": "부착선 없음" };
+    return m[reason] || reason;
+  }
+  // 파라미터 본체 → 관리형 선(collar-body) 변환. 스탠드+본체 파라미터 입력 잠금(부착선 고정).
+  function onCollarBodyManual() {
+    const project = designProjectNow(); if (!project || !window.designCollar || !window.designLineTool) return;
+    if (!collarStandReady(project)) { setCollarBodyNote("카라 스탠드 적용 후 직접 수정할 수 있습니다"); return; }
+    const cd = project.working.collarDraft;
+    if (!cd.body || !cd.body.geometry) { setCollarBodyNote("먼저 본체를 적용한 뒤 직접 수정할 수 있습니다"); return; }
+    if (cd.body.mode === "manual") return;
+    const lc = window.designCollar.collarBodyLineFromGeometry(cd.body.geometry);
+    if (!lc) { setCollarBodyNote("본체를 관리선으로 변환할 수 없습니다"); return; }
+    const ls = project.working.patternLines || (project.working.patternLines = []);
+    const id = window.designLineTool.nextId(ls);
+    ls.push({ id: id, piece: "collar", role: "boundary", managedBy: "collar-body", segments: lc.segments });
+    cd.body.mode = "manual"; cd.body.lineId = id; cd.body.invalid = false; cd.body.invalidReason = null; cd.body.manualLocked = lc.locked;
+    if (typeof render === "function") render();
+    updateCollarBodyPanel(project);
+  }
+  // 기본형으로 돌아가기(manual → parametric): 관리선만 제거(다른 선 보존), 보존 파라미터로 재파생.
+  function onCollarBodyRevert() {
+    const project = designProjectNow(); if (!project) return;
+    const cd = project.working.collarDraft; if (!cd || !cd.body || cd.body.mode !== "manual") return;
+    project.working.patternLines = (project.working.patternLines || []).filter(l => l.id !== cd.body.lineId);   // 관리선만 제거
+    const r = deriveCollarBody(project, cd.body.parameters);   // 보존 파라미터로 parametric 재생성(mode 없음=parametric)
+    if (typeof render === "function") render();
+    updateCollarBodyPanel(project);
+    setCollarBodyNote(r.ok ? "기본형으로 복원됨 · 세션 전용" : "복원 실패: " + collarBodyFailStr(r.reason));
+  }
+  // designLineTool 관리선 편집 pointerup 이 호출: 검증→갱신/무효(마지막 유효 geometry 유지).
+  function recomposeCollarBody() {
+    const project = designProjectNow(); if (!project || !window.designCollar) return;
+    const cd = project.working.collarDraft; if (!cd || !cd.body || cd.body.mode !== "manual") return;
+    const line = (project.working.patternLines || []).find(l => l.id === cd.body.lineId);
+    if (!line) { cd.body.invalid = true; cd.body.invalidReason = "no-line"; updateCollarBodyPanel(project); return; }
+    const r = window.designCollar.computeFromBodyLine(line.segments, cd.body.manualLocked);
+    if (!r.ok) { cd.body.invalid = true; cd.body.invalidReason = r.reason; }   // 무효: 마지막 유효 geometry 유지
+    else { cd.body.invalid = false; cd.body.invalidReason = null; cd.body.geometry = r.bodyGeometry; cd.body.attachLenCm = r.attachLenCm; cd.body.measure = r.measure; }
+    updateCollarBodyPanel(project);
+  }
+  // manual 이면 스탠드·본체 파라미터 입력 잠금 + 기본형으로 돌아가기 노출·직접 수정 숨김.
+  function syncCollarBodyModeUI(project) {
+    const manual = collarBodyManual(project), ready = collarStandReady(project), hasBody = committedCollarBody(project).has;
+    const manualBtn = document.getElementById("btnCollarBodyManual"), revertBtn = document.getElementById("btnCollarBodyRevert");
+    if (manualBtn) { manualBtn.hidden = manual; manualBtn.disabled = !(ready && hasBody && !manual); }
+    if (revertBtn) revertBtn.hidden = !manual;
+    // 입력은 manual 이면 잠금·아니면 해제(다른 disable 조건 없음). 부착선이 스탠드에 고정되므로 스탠드 입력도 잠금.
+    ["inpCollarStandHeight", "inpCollarFrontRise", "inpCollarBodyWidth", "inpCollarBodyFrontWidth", "inpCollarBodyInset", "inpCollarBodyProjection", "inpCollarBodyBow"]
+      .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = manual; });
+    // 적용/초기화 버튼은 기존 gate/ready 상태 위에 manual 잠금을 얹는다(manual 이면 무조건 disabled).
+    if (manual) ["btnApplyCollar", "btnResetCollar", "btnApplyCollarBody", "btnResetCollarBody"].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
   }
 
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
@@ -1358,6 +1424,11 @@
     if (applyCollarBody) applyCollarBody.addEventListener("click", () => { if (!applyCollarBody.disabled) onApplyCollarBody(); });
     const resetCollarBody = document.getElementById("btnResetCollarBody");
     if (resetCollarBody) resetCollarBody.addEventListener("click", () => { if (!resetCollarBody.disabled) onResetCollarBody(); });
+    // 카라 본체 직접 편집(C3): parametric→manual 변환 / 기본형으로 돌아가기.
+    const collarBodyManualBtn = document.getElementById("btnCollarBodyManual");
+    if (collarBodyManualBtn) collarBodyManualBtn.addEventListener("click", () => { if (!collarBodyManualBtn.disabled) onCollarBodyManual(); });
+    const collarBodyRevertBtn = document.getElementById("btnCollarBodyRevert");
+    if (collarBodyRevertBtn) collarBodyRevertBtn.addEventListener("click", () => { if (!collarBodyRevertBtn.hidden) onCollarBodyRevert(); });
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");
@@ -1416,4 +1487,5 @@
   window.refreshDesignBodyPanel = updateDesignBodyPanel;  // designLineTool 이 boundary 편집 후 목둘레·상태 갱신
   window.refreshFrontPlacket = () => refreshFrontPlacket();  // boundary 편집으로 유효 외곽 변경 시 여밈 재파생
   window.recomposeSleeveCap = recomposeSleeveCap;            // designLineTool 이 관리형 소매산 편집 후 소매 재합성
+  window.recomposeCollarBody = recomposeCollarBody;          // designLineTool 이 관리형 칼라 본체 편집 후 본체 재합성
 })();

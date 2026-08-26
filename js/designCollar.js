@@ -336,11 +336,71 @@
     };
   }
 
+  // ══ C3 칼라 본체 직접 편집(관리형 선) ══ 소매산 manual 과 같은 결.
+  //   관리형 체인은 항상 [cbOuter, bowMid, frontOuter, tip, attachFront] 로 고정 — outerBow=0(직선)도
+  //   중간점 bowMid 를 명시 생성해 두 line 으로 정규화한다. 그래야 편집 anchor index 가 파라미터 상태와 무관.
+  function reverseSeg(s) { return s.kind === "cubic" ? { kind: "cubic", from: cp(s.to), c1: cp(s.c2), c2: cp(s.c1), to: cp(s.from) } : { kind: "line", from: cp(s.to), to: cp(s.from) }; }
+  function outlineArea(outline) {
+    var pts = []; outline.forEach(function (s, i) { var f = flattenSeg(s); pts = pts.concat(i === 0 ? f : f.slice(1)); });
+    var a = 0; for (var i = 0; i < pts.length; i++) { var j = (i + 1) % pts.length; a += pts[i].x * pts[j].y - pts[j].x * pts[i].y; }
+    return Math.abs(a) / 2;
+  }
+
+  // 파라미터 본체 geometry → 관리형 체인(cbOuter→bowMid→frontOuter→tip→attachFront) + 고정(locked).
+  //   반환 { segments, anchors, locked:{attachSegs, attachCB, attachFront, cbOuter} } | null.
+  function collarBodyLineFromGeometry(g) {
+    if (!g || !Array.isArray(g.outline)) return null;
+    var byPart = function (p) { return g.outline.filter(function (s) { return s.part === p; }); };
+    var attach = byPart("attach"), outer = byPart("outer"), ptop = byPart("point-top"), pfront = byPart("point-front"), fold = byPart("cb-fold");
+    if (!attach.length || !outer.length || ptop.length !== 1 || pfront.length !== 1 || fold.length !== 1) return null;
+    var attachCB = cp(attach[0].from), attachFront = cp(attach[attach.length - 1].to);
+    var cbOuter = cp(fold[0].from);           // cb-fold: cbOuter → attachCB
+    var frontOuter = cp(outer[0].from);       // outer(loop) 시작 = frontOuter
+    // outer 를 cbOuter→bowMid→frontOuter 두 세그로 정규화(직선=두 line, 곡선=두 cubic)
+    var outerNorm;
+    if (outer.length === 1) { var bm = mid(cbOuter, frontOuter); outerNorm = [L(cbOuter, bm), L(bm, frontOuter)]; }
+    else outerNorm = [reverseSeg(outer[outer.length - 1]), reverseSeg(outer[0])];   // [frontOuter→bowMid, bowMid→cbOuter] → 역: [cbOuter→bowMid, bowMid→frontOuter]
+    var tip = cp(ptop[0].from);               // point-top: tip → frontOuter
+    var frontToTip = reverseSeg(ptop[0]);     // frontOuter → tip
+    var tipToAttach = reverseSeg(pfront[0]);  // point-front(attachFront→tip) 역 = tip → attachFront
+    var segments = outerNorm.concat([frontToTip, tipToAttach]);
+    var anchors = segments.map(function (s) { return cp(s.from); }); anchors.push(cp(segments[segments.length - 1].to));
+    return { segments: segments, anchors: anchors,
+      locked: { attachSegs: attach.map(function (s) { return cloneSeg(s); }), attachCB: attachCB, attachFront: attachFront, cbOuter: cbOuter } };
+  }
+
+  // ★ 관리형 선이 source of truth. params 로 외곽·포인트를 다시 계산하지 않는다(params 는 복귀용 보존).
+  //   고정 부착선(locked.attachSegs) + 편집된 관리형 체인으로 본체 재조립·검증.
+  //   허용 접점: cb-fold↔체인은 cbOuter 만, 부착선↔체인은 attachFront 만(둘 다 인접 세그 공유 endpoint 라
+  //   proper-crossing 검사가 자동 허용). 그 외 횡단·침범은 outlineSelfIntersects 가 잡는다(blanket tolerance 없음).
+  function computeFromBodyLine(managedSegs, locked) {
+    if (!Array.isArray(managedSegs) || managedSegs.length < 2) return { ok: false, reason: "no-line" };
+    if (!locked || !Array.isArray(locked.attachSegs) || !locked.attachSegs.length) return { ok: false, reason: "no-attach" };
+    var start = managedSegs[0].from, end = managedSegs[managedSegs.length - 1].to;
+    if (lineLen(start, locked.cbOuter) > 1e-6) return { ok: false, reason: "endpoint-cbouter" };     // 첫 anchor=cbOuter 고정
+    if (lineLen(end, locked.attachFront) > 1e-6) return { ok: false, reason: "endpoint-attachfront" }; // 마지막 anchor=attachFront 고정
+    var revManaged = managedSegs.slice().reverse().map(function (s) { return reverseSeg(s); });        // attachFront→…→cbOuter
+    var parts = ["point-front", "point-top"]; for (var k = 2; k < revManaged.length; k++) parts.push("outer");
+    var outline = locked.attachSegs.map(function (s) { return cloneSeg(s, "attach"); });
+    revManaged.forEach(function (s, i) { var c = cloneSeg(s); c.part = parts[i] || "outer"; outline.push(c); });
+    outline.push(L(locked.cbOuter, locked.attachCB, "cb-fold"));
+    for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (lineLen(outline[i].to, nx.from) > 1e-6) return { ok: false, reason: "not-closed" }; }
+    if (outlineSelfIntersects(outline)) return { ok: false, reason: "self-intersection" };            // 부착선 침범·CB fold 교차·자기교차 포함
+    if (outlineArea(outline) < 0.01) return { ok: false, reason: "degenerate-area" };
+    var tip = cp(revManaged[0].to);   // point-front 끝 = tip
+    return {
+      ok: true, bodyGeometry: { outline: outline, construction: [] }, attachLenCm: sumMeasure(locked.attachSegs),
+      measure: { outerEdgeLenCm: sumMeasure(outline.filter(function (s) { return s.part === "outer"; })), pointDiagonalLenCm: lineLen(tip, locked.attachFront) }
+    };
+  }
+
   window.designCollar = Object.freeze({
     referenceParams: referenceParams,
     referenceBodyParams: referenceBodyParams,
     readBodice: readBodice,
     computeStand: computeStand,
-    computeBody: computeBody
+    computeBody: computeBody,
+    collarBodyLineFromGeometry: collarBodyLineFromGeometry,
+    computeFromBodyLine: computeFromBodyLine
   });
 })();

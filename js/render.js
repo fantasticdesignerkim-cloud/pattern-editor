@@ -44,6 +44,16 @@ function _appendPatternLines(grp, patternLines, pc){
       grp.appendChild(E("path",{ d:di, fill:"none", class:"sleeve-cap-invalid", "data-piece":pc, "data-line-id":pl.id }));
       return;
     }
+    if(pl.managedBy === "collar-body"){
+      // 유효: 파란 본체 geometry(collarDraft.body.geometry)만 담당, 중복 렌더 금지. 무효: 빨강 점선(선택 무관).
+      // 카라는 .design-working 밖(카라 레이어)이라 전용 클래스로 스타일한다.
+      const _p=(window.designWorkflow && window.designWorkflow.current());
+      const _inv=_p && _p.working.collarDraft && _p.working.collarDraft.body && _p.working.collarDraft.body.invalid;
+      if(!_inv) return;
+      const di=_patternPathD(pl.segments); if(!di) return;
+      grp.appendChild(E("path",{ d:di, fill:"none", class:"design-collar-invalid", "data-piece":pc, "data-line-id":pl.id }));
+      return;
+    }
     const d=_patternPathD(pl.segments);   // line·cubic 혼합 → 하나의 연속 path
     if(!d) return;
     const cls="design-line"+(pl.id===selId?" selected":"");
@@ -197,6 +207,19 @@ function _appendCollarBody(root, collarDraft, off, scale){
   root.appendChild(g);
 }
 
+// 카라 hit rect(collar-body manual 편집 시에만): designLineTool.pieceAt 이 "collar" 를 해석하도록.
+// 레이아웃 드래그는 designLayout 이 collar 를 PIECES 에서 제외해 무시한다(=편집 전용 hit).
+function _appendCollarHitRect(root, collarDraft, off, scale){
+  if(!window.designLayout || !window.designLayout.bboxOfStand) return;
+  let bb=null;
+  const add=(g)=>{ if(!g||!Array.isArray(g.outline)||!g.outline.length) return; const b=window.designLayout.bboxOfStand(g); if(!b) return; bb=bb?{minX:Math.min(bb.minX,b.minX),minY:Math.min(bb.minY,b.minY),maxX:Math.max(bb.maxX,b.maxX),maxY:Math.max(bb.maxY,b.maxY)}:b; };
+  add(collarDraft.standGeometry); add(collarDraft.body && collarDraft.body.geometry);
+  if(!bb) return;
+  const [x1,y1]=c2p(bb.minX,bb.minY), [x2,y2]=c2p(bb.maxX,bb.maxY), pad=3;
+  root.appendChild(E("rect",{ x:Math.min(x1,x2)-pad, y:Math.min(y1,y2)-pad, width:Math.abs(x2-x1)+2*pad, height:Math.abs(y2-y1)+2*pad,
+    fill:"transparent", class:"design-layout-hit", "data-layout-piece":"collar", transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")" }));
+}
+
 function _appendDesignHitRect(root, geometry, pieceName, off, scale){
   if (!window.designLayout) return;
   const bb = window.designLayout.bboxOf(geometry, pieceName);
@@ -306,15 +329,26 @@ function render(){
     }
     // 카라 스탠드 파생(있을 때만): 별도 조각(L.collar offset). 몸판 hash 변경 시 standGeometry=null 로 숨김.
     if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body)) {
+      const cOff = L.collar || { dx: 0, dy: 0 };
       const cRoot = E("g"); cRoot.setAttribute("data-design-root", "collar");
-      _appendCollarStand(cRoot, dp.working.collarDraft, L.collar || { dx: 0, dy: 0 }, scale);
-      _appendCollarBody(cRoot, dp.working.collarDraft, L.collar || { dx: 0, dy: 0 }, scale);
+      _appendCollarStand(cRoot, dp.working.collarDraft, cOff, scale);
+      _appendCollarBody(cRoot, dp.working.collarDraft, cOff, scale);
+      // 관리형 collar-body 선(무효 시 빨강 점선) + 편집 overlay(카라 offset transform 동승).
+      const cLineGrp = E("g"); cLineGrp.setAttribute("transform", tf(cOff));
+      _appendPatternLines(cLineGrp, dp.working.patternLines, "collar");
+      if (_draft && _draft.piece === "collar") _appendPatternLinePreview(cLineGrp, _draft);
+      if (_overlay && _overlay.piece === "collar") _appendSelectionOverlay(cLineGrp, _overlay);
+      if (_snap && _snap.piece === "collar") _appendSnapHint(cLineGrp, _snap.point);
+      cRoot.appendChild(cLineGrp);
       svg.appendChild(cRoot);
     }
 
     // 투명 hit layer(최상단): reference/working 은 pointer-events:none, hit rect 만 잡는다.
     const hitRoot = E("g"); hitRoot.setAttribute("data-design-root", "hit");
     SUBS.forEach(([pc]) => _appendDesignHitRect(hitRoot, dp.working.geometry, pc, L[pc], scale));
+    // 카라 hit rect 는 collar-body manual 편집 시에만(그 외엔 카라 비상호작용).
+    if (dp.working.collarDraft && dp.working.collarDraft.body && dp.working.collarDraft.body.mode === "manual")
+      _appendCollarHitRect(hitRoot, dp.working.collarDraft, L.collar || { dx: 0, dy: 0 }, scale);
     svg.appendChild(hitRoot);
 
     const sb = document.getElementById("sb");

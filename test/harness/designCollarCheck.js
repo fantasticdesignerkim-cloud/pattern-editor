@@ -305,5 +305,50 @@ ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm ==
   ok(C.computeBody(stand, Object.assign({ outerBowCm: -20 }, base)).reason === "self-intersection", "10: 과도한 안쪽 휨 → self-intersection");
 }
 
+// 11. C3 관리형 직접 편집 순수: 고정 anchor topology·source-of-truth 재조립·endpoint 잠금·교차·불변.
+{
+  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
+  const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
+  const base = { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 };
+  // 변환: bow 0(직선) — 관리 체인 항상 [cbOuter,bowMid,frontOuter,tip,attachFront]
+  const body0 = C.computeBody(stand, Object.assign({ outerBowCm: 0 }, base));
+  const lc = C.collarBodyLineFromGeometry(body0.bodyGeometry);
+  ok(lc && lc.segments.length === 4 && lc.anchors.length === 5, "11: 관리 체인 4세그·5 anchor");
+  ok(near(lc.anchors[0].x, body0.anchors.cbOuter.x) && near(lc.anchors[0].y, body0.anchors.cbOuter.y), "11: anchor0 = cbOuter");
+  ok(near(lc.anchors[4].x, body0.anchors.target.x) && near(lc.anchors[4].y, body0.anchors.target.y), "11: anchor4 = attachFront");
+  ok(near(lc.anchors[2].x, body0.anchors.frontOuter.x) && near(lc.anchors[3].x, body0.anchors.tip.x), "11: anchor2 frontOuter·anchor3 tip");
+  ok(near(lc.anchors[1].x, (body0.anchors.cbOuter.x + body0.anchors.frontOuter.x) / 2), "11: bow0 bowMid = 직선 중점(명시 생성)");
+  ok(lc.locked && lc.locked.attachSegs.length && near(lc.locked.cbOuter.x, body0.anchors.cbOuter.x), "11: locked attachSegs·cbOuter");
+  // bow≠0 도 같은 anchor index 구조(외곽 두 세그가 cubic)
+  const body15 = C.computeBody(stand, Object.assign({ outerBowCm: 1.5 }, base));
+  const lc15 = C.collarBodyLineFromGeometry(body15.bodyGeometry);
+  ok(lc15.segments.length === 4 && lc15.segments[0].kind === "cubic" && lc15.segments[1].kind === "cubic", "11: bow≠0 도 4세그(외곽 cubic)·index 동일");
+  // round-trip: 관리 체인 → computeFromBodyLine → 유효 폐곡선, attachLen·포인트 사선 보존
+  const rt = C.computeFromBodyLine(lc.segments, lc.locked);
+  ok(rt.ok && near(rt.attachLenCm, body0.attachLenCm, 1e-5) && near(rt.measure.pointDiagonalLenCm, body0.measure.pointDiagonalLenCm, 1e-6), "11: round-trip attachLen·포인트 사선 보존");
+  // endpoint 잠금
+  const cl = s => ({ kind: "line", from: { x: s.from.x, y: s.from.y }, to: { x: s.to.x, y: s.to.y } });
+  const moveA = (segs, idx, np) => { const s = segs.map(cl); if (idx > 0) s[idx - 1].to = { x: np.x, y: np.y }; if (idx < s.length) s[idx].from = { x: np.x, y: np.y }; return s; };
+  ok(C.computeFromBodyLine(moveA(lc.segments, 0, { x: 99, y: 99 }), lc.locked).reason === "endpoint-cbouter", "11: cbOuter 이동 → endpoint-cbouter");
+  ok(C.computeFromBodyLine(moveA(lc.segments, 4, { x: 99, y: 99 }), lc.locked).reason === "endpoint-attachfront", "11: attachFront 이동 → endpoint-attachfront");
+  // 편집 유효(SP 근처 소폭 이동) → ok
+  const okEdit = C.computeFromBodyLine(moveA(lc.segments, 1, { x: lc.anchors[1].x, y: lc.anchors[1].y - 1 }), lc.locked);
+  ok(okEdit.ok, "11: 유효 편집(bowMid 위로) → ok");
+  // 교차: tip 을 부착선 아래로 끌어 침범 → self-intersection
+  const bad = C.computeFromBodyLine(moveA(lc.segments, 3, { x: lc.locked.attachCB.x, y: lc.locked.attachCB.y + 3 }), lc.locked);
+  ok(bad.reason === "self-intersection" || bad.reason === "degenerate-area", "11: tip 침범 → self-intersection/degenerate (" + bad.reason + ")");
+  // 실패 계약
+  ok(C.computeFromBodyLine([], lc.locked).reason === "no-line", "11: 빈 체인 → no-line");
+  ok(C.computeFromBodyLine(lc.segments, { attachSegs: [] }).reason === "no-attach", "11: locked 없음 → no-attach");
+  // 입력 불변
+  const segStr = JSON.stringify(lc.segments), lockStr = JSON.stringify(lc.locked);
+  C.computeFromBodyLine(lc.segments, lc.locked);
+  ok(JSON.stringify(lc.segments) === segStr && JSON.stringify(lc.locked) === lockStr, "11: computeFromBodyLine 입력 불변");
+  // collarBodyLineFromGeometry 입력 불변
+  const gStr = JSON.stringify(body0.bodyGeometry);
+  C.collarBodyLineFromGeometry(body0.bodyGeometry);
+  ok(JSON.stringify(body0.bodyGeometry) === gStr, "11: collarBodyLineFromGeometry 입력 불변");
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }
