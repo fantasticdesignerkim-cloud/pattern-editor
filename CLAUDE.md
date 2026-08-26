@@ -3453,6 +3453,46 @@ attachLenCm }`(세션 전용). 순수 `designCollar.computeBody(standResult, par
 - **다음(관리형 직접 편집)**: 현재 파라미터 형상을 source 로 변환하되 **부착선 endpoint·CB 접힘 endpoint 는
   보호**하고 **외곽·포인트 anchor/handle 만 편집**하는 구조. 그다음 카라 완료 스냅샷.
 
+### C3 칼라 본체 직접 편집 (관리형 선, 소매산 manual 미러)
+
+파라미터 본체를 **관리형 patternLine 으로 변환**해 직접 편집한다. 소매산 manual(managedBy sleeve-cap)과
+같은 결이되, **소매산 인프라(designLineTool 편집·보호·snap)를 재사용**한다. 커밋 `1ef42d6`(코드).
+
+- **고정 anchor topology**: 관리형 체인은 항상 `[cbOuter, bowMid, frontOuter, tip, attachFront]` (5 anchor·
+  4 세그). `outerBowCm=0`(직선)도 변환 시 **중간점 bowMid 를 명시 생성**해 두 line 으로 정규화 → 편집
+  anchor index 가 파라미터 상태와 무관하게 동일. 곡선 외곽은 기존 두 cubic 유지.
+- **★ 관리형 선이 source of truth**: `computeFromBodyLine(managedSegs, locked)` 가 편집된 체인 +
+  **고정 부착선**으로 본체를 재조립한다. **params 로 외곽·포인트를 다시 계산하지 않는다**(params 는 복귀용
+  보존). `locked = {attachSegs(고정 부착선), attachCB, attachFront, cbOuter}` — 첫 anchor=cbOuter·마지막
+  anchor=attachFront 정확 일치를 강제(endpoint 이동 시 무효).
+- **허용 접점 한정(blanket tolerance 금지)**: 폐곡선 outline(부착 + 역managed + cb-fold)의 proper-crossing
+  검사(`outlineSelfIntersects`)만 쓴다 — cb-fold↔체인은 cbOuter, 부착선↔체인은 attachFront 에서만 접하고
+  (인접 세그 공유 endpoint 라 자동 허용), 그 외 횡단·침범은 전부 무효. + 퇴화 면적 차단.
+- **소매 stale ≠ 카라 invalidation 분리**: 소매 변경/stale 은 **카라 탭 게이트만** 잠그고(collarGateOk)
+  collarDraft·관리선을 **삭제하지 않는다**. **몸판 hash 변경**만 `refreshCollarStale` 이 **관리선 제거·manual
+  폐기·스탠드/본체 숨김**.
+- **수명주기(소매산 미러)**: `onCollarBodyManual`(변환: `collarBodyLineFromGeometry` → managedBy collar-body
+  선 push, mode=manual, manualLocked 저장) · `recomposeCollarBody`(designLineTool pointerup 훅: 검증→
+  geometry/measure 갱신 / 무효면 `body.invalid`·마지막 유효 geometry 유지) · `onCollarBodyRevert`(관리선만
+  제거·다른 선 보존·보존 params 로 parametric 재파생). manual 중 **스탠드+본체 파라미터 입력·적용 전부
+  잠금**(부착선이 스탠드에 고정되므로).
+- **designLineTool 통합**: `isCollarBodyLine`(managedBy collar-body) 보호 — 역할 변경·개별 Delete 금지,
+  endpoint(index 0·last) 이동 금지, 편집 pointerup 이 `window.recomposeCollarBody` 호출. snap 은 piece
+  기반이라 자연히 **자기 anchor + 0.5cm 격자만**(geom["collar"] 없음), 핸들 위치 snap 없음·Shift 45°.
+- **render**: 카라 레이어(L.collar offset)에 관리선/overlay. **유효 시 파란 body geometry 만(중복 렌더 없음)**,
+  무효 시 빨강 점선(`.design-collar-invalid`, 카라는 `.design-working` 밖이라 전용 클래스). **collar hit rect
+  는 manual 편집 시에만** 추가 → `pieceAt` 이 "collar" 해석(designLayout 은 collar 를 PIECES 에서 제외해
+  레이아웃 드래그 무시 = 편집 전용).
+- **변경**: `designCollar.js`(collarBodyLineFromGeometry·computeFromBodyLine) · `designLineTool.js`(보호·훅) ·
+  `render.js`(collar-body 분기·overlay·hit rect) · `ui.js`(수명주기·모드잠금·stale) · `css`·`index.html`.
+  엔진·shape/perf 골든 무변경.
+- **검증**: designCollarCheck **109→125**(고정 topology·round-trip·endpoint 잠금·교차·불변) · designLineToolCheck
+  103 유지. runAll 전체 통과, 골든 diff 0. **실브라우저(격리 origin, storage 0, 콘솔 0)**: 변환(관리선·파라미터
+  잠금·hit rect·유효 시 navy만) · **실제 pointer 선택**(pieceAt="collar"·overlay 5 anchor) · 역할변경/삭제 차단 ·
+  유효 편집 재합성 · 무효 편집(self-intersection·빨강 점선·마지막 유효 navy 유지·사유) · 복구 · 복귀(관리선 제거·
+  파라미터 해제) · **몸판 hash 변경 관리선 제거·collar 숨김**.
+- **다음**: `collarResult` 완료 스냅샷(sourceBodiceHash 고정, 시접·너치·심지 제외).
+
 ## ✅ Design piece layout — 형상 불변 작업 화면 배치 (2026-08, `82b3e43`)
 
 **배경(사용자 구분)**: 회색 reference↔남색 working 겹침은 **의도된 비교 겹침**(유지),
