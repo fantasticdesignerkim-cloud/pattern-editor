@@ -303,6 +303,14 @@
             <button class="btn" id="btnCollarBodyRevert" hidden>기본형으로 돌아가기</button>
           </div>
           <div class="row note" id="designCollarBodyNote" aria-live="polite"></div>
+          <!-- 카라 모양 완료(collarCheckpoint): 게이트 통과 시 working.collarResult 세션 스냅샷.
+               형상 source=bodiceResult(sourceBodiceHash 고정), 소매는 작업 순서 게이트만. 시접·너치·심지·재단 미포함. -->
+          <div class="row" style="margin-top:8px"><label>카라 완료</label></div>
+          <div class="row note" id="designCollarCheckNote" aria-live="polite"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn" id="btnCompleteCollar">카라 모양 완료</button>
+          </div>
+          <div class="row note" id="designCollarStatusNote" aria-live="polite">카라 미완료 · 세션 전용</div>
         </div><!-- /subtab collar -->
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
         <div class="row" style="margin-top:8px"><label>배치</label></div>
@@ -393,12 +401,14 @@
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
 <script src="js/sleeveCheckpoint.js?v=2026082041"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
-<script src="js/designCollar.js?v=2026082510"></script>
+<script src="js/designCollar.js?v=2026082511"></script>
+<!-- 카라 모양 완료 체크포인트: window.collarCheckpoint. 게이트 + working.collarResult 세션 스냅샷(형상 source=bodice, 소매=순서 게이트). -->
+<script src="js/collarCheckpoint.js?v=2026082512"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026082510"></script>
+<script src="js/ui.js?v=2026082511"></script>
 
 </body>
 </html>

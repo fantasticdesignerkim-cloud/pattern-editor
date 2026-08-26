@@ -1126,6 +1126,7 @@
     }
     else setCollarBodyNote("CB 폭·앞폭·앞끝 물림·앞끝 돌출·외곽 휨 적용으로 본체 생성(여밈 연장 미포함) · 세션 전용");
     syncCollarBodyModeUI(project);
+    updateCollarCheckpointUI(project);
   }
 
   // ── C3 칼라 본체 직접 편집(관리형 선, 소매산 manual 미러) ──
@@ -1183,6 +1184,48 @@
       .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = manual; });
     // 적용/초기화 버튼은 기존 gate/ready 상태 위에 manual 잠금을 얹는다(manual 이면 무조건 disabled).
     if (manual) ["btnApplyCollar", "btnResetCollar", "btnApplyCollarBody", "btnResetCollarBody"].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+  }
+
+  // ── 카라 모양 완료 체크포인트(collarCheckpoint) ──
+  function collarCPFailStr(reason) {
+    const m = { "no-bodice": "몸판 완료 필요", "bodice-stale": "몸판 변경됨 · 다시 완료 필요", "no-collar": "카라 적용 필요",
+      "source-mismatch": "카라 출처가 몸판 완료본과 다름", "no-sleeve": "소매 완료 필요(작업 순서)", "sleeve-stale": "소매 변경됨 · 작업 순서 확인",
+      "no-stand": "스탠드 적용 필요", "no-body": "본체 적용 필요", "body-invalid": "본체 편집 무효 · 복구 필요", "manual-line-missing": "관리형 본체 선 없음",
+      "attach-mismatch": "부착 길이 불일치", "extension-included": "여밈 연장이 부착에 포함됨", "unmeasured": "측정 불가", "no-project": "프로젝트 없음", "no-module": "" };
+    if (m[reason] != null) return m[reason];
+    if (reason && reason.indexOf("stand-") === 0) return "스탠드 형상 오류(" + reason.slice(6) + ")";
+    if (reason && reason.indexOf("body-") === 0) return "본체 형상 오류(" + reason.slice(5) + ")";
+    return reason;
+  }
+  function updateCollarCheckpointUI(project) {
+    const checkNote = document.getElementById("designCollarCheckNote");
+    const statusNote = document.getElementById("designCollarStatusNote");
+    const btn = document.getElementById("btnCompleteCollar");
+    if (!project || !window.collarCheckpoint) { if (btn) btn.disabled = true; if (checkNote) checkNote.textContent = ""; if (statusNote) statusNote.textContent = "카라 미완료 · 세션 전용"; return; }
+    const c = window.collarCheckpoint.check(project), cd = project.working.collarDraft;
+    if (checkNote) {
+      if (cd && cd.measure && cd.body && cd.body.measure) {
+        const sm = cd.measure, bm = cd.body.measure, bp = cd.body.parameters || {};
+        checkNote.textContent = "스탠드: 목 봉제 " + fmtL(sm.lowerNeckSeamLenCm) + "·연장 " + fmtL(sm.lowerExtensionLenCm) + "·윗선 " + fmtL(sm.upperNeckSegmentLenCm) + "cm · 본체: 부착 " + fmtL(cd.body.attachLenCm) + "·CB폭 " + fmtL(bm.cbWidthCm != null ? bm.cbWidthCm : bp.cbWidthCm) + "·앞폭 " + fmtL(bm.frontWidthCm != null ? bm.frontWidthCm : bp.frontWidthCm) + "·포인트 사선 " + fmtL(bm.pointDiagonalLenCm) + "·외곽 " + fmtL(bm.outerEdgeLenCm) + "cm";
+      } else checkNote.textContent = c.fails.length ? "완료 전 검사: " + collarCPFailStr(c.fails[0]) : "";
+    }
+    if (btn) btn.disabled = !c.ok;
+    const latest = window.collarCheckpoint.latest(project);
+    if (statusNote) {
+      if (!latest) statusNote.textContent = c.ok ? "완료 가능 · 세션 전용" : "완료 전 검사: " + collarCPFailStr(c.fails[0]);
+      else if (window.collarCheckpoint.invalidatedByBodice(project)) statusNote.textContent = "몸판 변경으로 카라 무효 · 다시 완료 필요";
+      else if (window.collarCheckpoint.isCurrentCollarChanged(project)) statusNote.textContent = "카라 변경됨 · 다시 완료 필요 · 세션 전용";
+      else if (window.collarCheckpoint.sleeveStepChanged(project)) statusNote.textContent = "카라 완료됨 · 소매 단계 변경됨 · 작업 순서 확인 필요";
+      else statusNote.textContent = "카라 완료됨(원형 v" + (latest.sourceBlock.version != null ? latest.sourceBlock.version : "?") + ") · 세션 전용";
+    }
+  }
+  function onCompleteCollar() {
+    const project = designProjectNow(); if (!project || !window.collarCheckpoint) return;
+    const r = window.collarCheckpoint.complete(project);
+    const statusNote = document.getElementById("designCollarStatusNote");
+    if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + collarCPFailStr(r.reason); updateCollarCheckpointUI(project); return; }
+    updateCollarCheckpointUI(project);
+    if (statusNote) statusNote.textContent = r.idempotent ? "카라 완료됨(변경 없음) · 세션 전용" : "카라 완료됨(원형 v" + (r.result.sourceBlock.version != null ? r.result.sourceBlock.version : "?") + ") · 세션 전용";
   }
 
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
@@ -1429,6 +1472,9 @@
     if (collarBodyManualBtn) collarBodyManualBtn.addEventListener("click", () => { if (!collarBodyManualBtn.disabled) onCollarBodyManual(); });
     const collarBodyRevertBtn = document.getElementById("btnCollarBodyRevert");
     if (collarBodyRevertBtn) collarBodyRevertBtn.addEventListener("click", () => { if (!collarBodyRevertBtn.hidden) onCollarBodyRevert(); });
+    // 카라 모양 완료(collarCheckpoint): 게이트 통과 시에만 활성.
+    const completeCollar = document.getElementById("btnCompleteCollar");
+    if (completeCollar) completeCollar.addEventListener("click", () => { if (!completeCollar.disabled) onCompleteCollar(); });
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");

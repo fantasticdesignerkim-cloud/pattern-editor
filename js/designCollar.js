@@ -394,6 +394,15 @@
     };
   }
 
+  // 완료 게이트용: outline 폐곡선·자기교차·퇴화 검증. {ok, reason}.
+  function validateClosedOutline(outline) {
+    if (!Array.isArray(outline) || outline.length < 3) return { ok: false, reason: "empty" };
+    for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (!nx.from || !outline[i].to || lineLen(outline[i].to, nx.from) > 1e-4) return { ok: false, reason: "not-closed" }; }
+    if (outlineSelfIntersects(outline)) return { ok: false, reason: "self-intersection" };
+    if (outlineArea(outline) < 0.01) return { ok: false, reason: "degenerate-area" };
+    return { ok: true };
+  }
+
   window.designCollar = Object.freeze({
     referenceParams: referenceParams,
     referenceBodyParams: referenceBodyParams,
@@ -401,6 +410,7 @@
     computeStand: computeStand,
     computeBody: computeBody,
     collarBodyLineFromGeometry: collarBodyLineFromGeometry,
-    computeFromBodyLine: computeFromBodyLine
+    computeFromBodyLine: computeFromBodyLine,
+    validateClosedOutline: validateClosedOutline
   });
 })();
