@@ -3532,6 +3532,72 @@ attachLenCm }`(세션 전용). 순수 `designCollar.computeBody(standResult, par
 **★ Design 형상 단계(몸판→소매→카라) 전체 완료.** 다음은 별도 통합 결과를 만든 뒤 파트명·수량·식서·시접·너치
 (재단 단계)로 넘어간다 — 별도 사양·승인 후.
 
+## ✅ 교재 M형 셔츠 칼라 표준 기본형 (2026-08) — 몸판 셔츠 목선 + 칼라 M 프리셋
+
+교재(『パターン製作の基礎』)의 **M형 셔츠 칼라 제도법을 "표준 기본형"으로 추가**했다. 기존 칼라 시스템(수치 변형·
+관리형 직접 편집·완료 체크포인트)은 **전부 그대로 보존** — 기본값과 프리셋만 M 기준으로 정렬한 것이다. 두 증분:
+
+### ★ 몸판 셔츠 목선 여유와 칼라 M 기본형은 서로 다른 명시적 작업이다
+- **증분 A(몸판 셔츠 목선)**: 몸판 네크라인 단계의 프리셋. 앞·뒤 어깨목점 +1cm, 앞중심 목점 1cm 내림
+  (`neckWidthCm=1, frontDepthCm=1, backDepthCm=0`). 밴드 달림선 길이 기준 `× = 뒤목둘레`, `⊘ = 앞목둘레`,
+  밴드 = `× + ⊘`(= `necklineLengths.half`). **적용하면 몸판이 변경 상태**가 되고 사용자가 몸판을 다시 완료해야
+  하며, 칼라는 새 bodiceResult 만 참조한다(collar 모듈이 bodiceResult 를 묵시 변경하지 않는다).
+- **증분 B(칼라 M 기본형)**: 카라 단계의 프리셋. 밴드 3·앞끝올림 1·CB폭 4·물림 0.5·돌출 1.5·사선 6·외곽휨 0.
+- 둘은 **별개 프리셋**이다 — 셔츠 목선(몸판)은 네크라인 카드 `셔츠 목선`, 칼라 M(카라)은 `교재 M 기본형으로
+  초기화` 버튼. 셔츠 목선 프리셋은 **placket 값을 변경하지 않는다**(앞여밈은 기존 몸판 여밈 설정 사용).
+
+### 셔츠 목선 타입(`shirt`) — round scoop 명시적 재사용
+- `designBodice.js` `NECK_TYPES` 에 `shirt` 추가. `buildNecklineShape` 는 **`type==="round" || type==="shirt"` 를
+  명시적으로** 처리해 round 사분타원 scoop 을 재사용한다(우연한 fallthrough 아님). **알 수 없는 type 은 조용히
+  round 가 되지 않고** `unknown-neckline-type` 로 실패한다(NECK_TYPES 게이트와 이 분기가 어긋나면 loud fail).
+  computeGeometry 상 NECK_TYPES 에 없는 type 은 미적용 no-op(=original)이라 이미 round 와 다르다.
+- **셔츠 카드 클릭은 M 여유값(1/1/0/1)을 입력에 채우기만** 하고, 실제 몸판 변경은 기존 `적용` 버튼에서만 일어난다
+  (카드 클릭 시점 geometry 불변 — 실측 확인).
+
+### 3cm 작업 간격은 geometry/hash 에 없다 · 위 칼라 CB 길이 조정의 계산적 동등
+- 교재는 밴드와 위 칼라 사이 **3cm 작업용 제도 간격**을 두지만, 이는 종이 제도 편의일 뿐 **최종 geometry·hash·
+  완성 치수에 포함하지 않는다.** 현재 구현은 위 칼라 부착선을 **밴드 윗선 primitive 에서 `subpathByLength`로 직접
+  추출**(`attachLen = upperNeckSegmentLenCm − frontInsetCm`, 여밈 연장 미포함)해 만든다.
+- 교재의 "위 칼라 이음선과 밴드 윗선 길이 차이를 **위 칼라 CB선 이동**으로 수정" 원칙은, 현재처럼 밴드 윗선에서
+  직접 파생하면 **처음부터 길이차 0**(CB 이동량 0)이므로 **CB 이동의 계산적 동등 구현**이다. collarCheckpoint 게이트
+  (`attachLen === upperNeckSegment − frontInset`, 오차 ≤0.01)와 designCollarCheck test 12 가 이를 잠근다.
+
+### M 초기화 ≠ manual "수치형으로 돌아가기" (서로 다른 동작)
+- **`교재 M 기본형으로 초기화`**(`onCollarBaseM`): 스탠드·본체를 **교재 M 기준값으로 정확히** 복원한다
+  (referenceParams/referenceBodyParams, frontWidth=√33.75 로 입력 반올림 왕복을 피해 **pointDiagonal 정확히 6**).
+- **`수치형으로 돌아가기`**(`btnCollarBodyRevert`, 라벨 정정): 관리형 직접 편집(manual) 진입 **전 보존된 사용자
+  파라미터로 복귀**한다(M 기준값이 아니다). 둘은 명시적으로 다른 버튼·동작.
+- **manual 보호**: 관리형 직접 편집 중에는 `교재 M 기본형` 버튼이 **disabled**(수치형으로 먼저 돌아가야 함).
+  버튼 상태는 `syncCollarBodyModeUI` 한 곳에서 **양방향 단일 관리**(manual 진입 disable / 수치형 복귀 re-enable,
+  조건 = gate 통과 + manual 아님). 핸들러(`onCollarBaseM`)도 manual 이면 즉시 return 해 **관리선을 묵시 삭제/
+  덮어쓰기 하지 않는다**(실측: manual 중 강제 클릭에도 collarDraft·관리선·다른 사용자 patternLines 전부 보존).
+- **M 초기화 원자성**: 스탠드·본체를 **임시로 모두 계산·검증**한 뒤 둘 다 성공할 때만 `collarDraft` 를 **한 번에
+  교체**한다. 어느 하나라도 실패하면 기존 스탠드·본체·관리선·완료본을 전부 그대로 유지(실측: computeBody 실패
+  stub 에서 collarDraft 완전 보존).
+
+### 완료본 상태 전이 · baseMethod
+- M 초기화로 실제 geometry 가 바뀌면 기존 `collarResult`·`designResult` 가 각각 `카라 변경됨`·`Design 변경됨`
+  으로 표시된다(실측: 완료 후 M 초기화 → 둘 다 isChanged=true).
+- **`baseMethod: "bunka-shirt-collar-M-v1"`** 를 collarDraft·frozen collarResult **메타로 기록**하되 **형상 hash 에는
+  제외**한다(모든 카라가 M 제도법 파생이므로 baseMethod 는 type 과 함께 출처 표기용). baseMethod 만 바꾸고
+  geometry 가 동일하면 hash 불변(실측: isCurrentCollarChanged=false).
+
+### 변경 파일·검증
+- **엔진 로직 무변경** — geometry 엔진(computeStand/computeBody)은 이미 M 제도법 그대로였다. 증분 B 는 기본값 6곳
+  교정(frontRise 1.5→1, cbWidth 6→4, frontInset 0.3→0.5, frontProjection 4→1.5, frontWidth 6→√33.75) + baseMethod +
+  프리셋 UI + 테스트/문서일 뿐이다.
+- 변경: `js/designBodice.js`(shirt 타입) · `js/designCollar.js`(M 기본값) · `js/ui.js`(셔츠 프리셋·onCollarBaseM
+  원자성·manual 보호) · `js/collarCheckpoint.js`(baseMethod 메타) · `index.html`(카드·M 버튼·라벨·캐시 `?v=2026082810`) ·
+  `test/harness/designBodiceCheck.js`(4h) · `test/harness/designCollarCheck.js`(test 12).
+- 하네스: **designBodiceCheck 187 / designCollarCheck 136** PASS, runAll 전체 통과, **shape·perf 골든 diff 0**.
+- 실브라우저(격리 origin `127.0.0.1:8420`, storage 0, 콘솔 0): 셔츠 카드 1/1/0/1 채움·적용전 geometry 불변·적용 후
+  밴드=×+⊘ / 사용자 수치형→M 초기화 정확·M 2회 byte-identical / manual→M버튼 disabled·관리선/사용자선 보존·
+  수치형 복귀 후 재활성 / computeBody 실패→collarDraft 완전 보존 / 카라·Design 완료 후 M 초기화→두 완료본 변경 /
+  baseMethod hash 미포함.
+
+**남은 것/경계**: 기존 카라 시스템 전부 보존. 앞끝 기울기(부착 접선 기준 atan2(frontWidth, projection)=75.5°)는
+M 값(사선 6·돌출 1.5)의 결과값이지 별도 파라미터가 아니다. 시접·너치·심지·윗칼라/밑칼라 차이·재단은 여전히 미포함.
+
 ## ✅ Design 형상 통합 결과 (designResult) — 세 완료본 + structuralLines (2026-08, `770f13b`)
 
 몸판·소매·카라 세 완료본을 **하나의 세션 형상 패키지 `working.designResult` 로 묶는다**. **재단 패턴이
