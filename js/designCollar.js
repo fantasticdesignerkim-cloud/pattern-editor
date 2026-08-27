@@ -35,8 +35,11 @@
   function mid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
   function lineLen(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
 
+  // ── 교재 M형(bunka-shirt-collar-M-v1) 기본값 ──
+  //   밴드: 폭 3, 앞끝 올림 1(여밈 연장량 아님 — 인체 목 곡률용). 위 칼라: 뒤중심 폭 4, 앞끝 물림 0.5,
+  //   앞끝 접선 돌출 1.5, 이음선 앞끝→칼라끝 실제 사선 6 → 앞폭 = √(6²−1.5²)=√33.75. 외곽 휨 0.
   var DEFAULT_STAND_HEIGHT = 3;   // cm
-  var DEFAULT_FRONT_RISE = 1.5;   // cm (앞끝 올림)
+  var DEFAULT_FRONT_RISE = 1;     // cm (앞끝 올림) — 교재 M
   var EPS_RISE = 1e-6;            // 이 미만이면 직선 스캐폴드(C1 정확 재현)
   var FLAT_TOL = 1e-5;           // adaptive de Casteljau 평탄 허용(길이 측정 정밀도. 형상 좌표엔 무영향)
   var SUB_ARC_MAX = Math.PI / 6;  // 원호 sub-cubic 최대 각(30°) — 얕게 유지해 근사 오차 최소화
@@ -234,8 +237,11 @@
   //   0.3cm 물림은 x 좌표가 아니라 실제 윗선 호길이 기준. cubic 중간에서 끝나면 de Casteljau 로 정확 분할.
   // frontProjectionCm = **접선 방향 투영량**(칼라 앞끝을 CF 접선 전방으로 돌출시키는 양)이다.
   //   실제 포인트 사선 길이가 아니다(그건 앞폭 + 투영 이 합쳐져 더 길다). "칼라 끝 길이"로 부르지 않는다.
-  // frontWidthCm = 앞 부착점에서 법선 방향 칼라 폭(cbWidthCm 과 독립). 기본 6=cbWidth 면 현재 평행 폭과 동일.
-  function referenceBodyParams() { return { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4, outerBowCm: 0 }; }
+  // frontWidthCm = 앞 부착점에서 법선 방향 칼라 폭(cbWidthCm 과 독립). 교재 M 은 pointDiagonal(사선) 6 을 기준으로
+  //   삼아 frontWidth = √(pointDiagonal²−projection²) = √(6²−1.5²) = √33.75 로 유도한다(실측 pointDiagonal 정확히 6).
+  var M_POINT_DIAGONAL = 6, M_FRONT_PROJECTION = 1.5;
+  var M_FRONT_WIDTH = Math.sqrt(M_POINT_DIAGONAL * M_POINT_DIAGONAL - M_FRONT_PROJECTION * M_FRONT_PROJECTION);   // √33.75 ≈ 5.809475
+  function referenceBodyParams() { return { cbWidthCm: 4, frontWidthCm: M_FRONT_WIDTH, frontInsetCm: 0.5, frontProjectionCm: M_FRONT_PROJECTION, outerBowCm: 0 }; }
 
   function sub(a, b) { return { x: a.x - b.x, y: a.y - b.y }; }
   function unit(v) { var d = Math.hypot(v.x, v.y) || 1; return { x: v.x / d, y: v.y / d }; }

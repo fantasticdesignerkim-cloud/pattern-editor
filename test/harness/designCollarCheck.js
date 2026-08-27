@@ -43,7 +43,7 @@ function bodice(back, front, overlap) {
 }
 
 ok(typeof C.computeStand === "function" && typeof C.readBodice === "function" && Object.isFrozen(C), "0: API·frozen");
-ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm === 1.5, "1: referenceParams standHeight 3·frontRise 1.5");
+ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm === 1, "1: 교재 M referenceParams standHeight 3·frontRise 1");
 
 // 2. readBodice
 {
@@ -66,9 +66,9 @@ ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm ==
   ok(near(r.upperTotalLenCm, 19.75) && r.frontRiseCm === 0, "3: upperTotal 19.75·frontRise 0");
   const r2 = C.computeStand(bodice(10, 8), { standHeightCm: 3, frontRiseCm: 0 });
   ok(r2.standGeometry.outline.length === 4 && !partSeg(r2.standGeometry, "extension"), "3: 여밈 없음→4세그");
-  // params 생략 시 기본 frontRise 1.5(곡선) — 직선 아님
+  // params 생략 시 기본 frontRise 1(교재 M, 곡선) — 직선 아님
   const rd = C.computeStand(bodice(10, 8, 1.75), { standHeightCm: 3 });
-  ok(rd.ok && rd.frontRiseCm === 1.5 && !!partSeg(rd.standGeometry, "neck-seam-arc"), "3: 기본 frontRise 1.5→곡선(neck-seam-arc)");
+  ok(rd.ok && rd.frontRiseCm === 1 && !!partSeg(rd.standGeometry, "neck-seam-arc"), "3: 기본 frontRise 1(교재 M)→곡선(neck-seam-arc)");
 }
 
 // 4. 곡선 복합(back10 front8 rise1.5 H3 overlap1.75): 직선=뒤목·원호=앞목·어깨경계·접선·오프셋.
@@ -156,7 +156,8 @@ ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm ==
 // 8. C2 칼라 본체 — 부착선 = 스탠드 윗선 목 primitive − frontInset(연장 미포함), 실측 attachLenCm.
 {
   ok(typeof C.computeBody === "function", "8: computeBody API");
-  ok(C.referenceBodyParams().cbWidthCm === 6 && C.referenceBodyParams().frontWidthCm === 6 && C.referenceBodyParams().frontInsetCm === 0.3 && C.referenceBodyParams().frontProjectionCm === 4, "8: referenceBodyParams 6/6/0.3/4");
+  { const rb = C.referenceBodyParams();
+    ok(rb.cbWidthCm === 4 && near(rb.frontWidthCm, Math.sqrt(33.75), 1e-9) && rb.frontInsetCm === 0.5 && rb.frontProjectionCm === 1.5 && rb.outerBowCm === 0, "8: 교재 M referenceBodyParams cb4/frontWidth√33.75/inset0.5/proj1.5/bow0"); }
   const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
   const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
   const standStr = JSON.stringify(stand);
@@ -348,6 +349,36 @@ ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm ==
   const gStr = JSON.stringify(body0.bodyGeometry);
   C.collarBodyLineFromGeometry(body0.bodyGeometry);
   ok(JSON.stringify(body0.bodyGeometry) === gStr, "11: collarBodyLineFromGeometry 입력 불변");
+}
+
+// 12. 교재 M 기본형(bunka-shirt-collar-M-v1) 종합 — referenceParams/referenceBodyParams 로 정확히 파생.
+//     밴드: CB 수평 접선·어깨 경계=뒤목·CF 올림 1·달림선=×+⊘. 위 칼라: 사선 정확히 6·부착=윗선−0.5·연장 미포함.
+//     '위 칼라를 밴드 윗선 primitive 에서 직접 파생' = 처음부터 길이 일치(CB 이동량 0) → CB 이동의 계산적 동등.
+{
+  const back = 10, front = 8, ov = 1.75;
+  const rp = C.referenceParams(), rb = C.referenceBodyParams();
+  const stand = C.computeStand(bodice(back, front, ov), rp);
+  ok(stand.ok && stand.frontRiseCm === 1, "12: M 스탠드 frontRise 1");
+  // CB 수평 접선(뒤목 직선 = 수평), 어깨 경계 = 뒤목둘레 지점, CF 올림 1
+  const straight = partSeg(stand.standGeometry, "neck-seam-straight");
+  ok(straight && near(straight.from.y, straight.to.y), "12: CB 시작 접선 수평(뒤목 직선)");
+  ok(near(stand.anchors.shoulderSeam.x, back) && near(stand.anchors.shoulderSeam.y, 0), "12: 어깨 경계 = 뒤목둘레 지점");
+  ok(near(stand.anchors.cfSeam.y, -1), "12: CF 올림 = 1cm");
+  // 달림선(목둘레 봉제) = 뒤목 + 앞목 = × + ⊘ (여밈 연장 미포함)
+  ok(near(stand.lowerNeckSeamLenCm, back + front) && near(stand.backNeckLenCm, back) && near(stand.frontNeckLenCm, front), "12: 밴드 달림선 = ×+⊘ (연장 별도)");
+  // 위 칼라(M): 사선 정확히 6, frontWidth √33.75, cb4/inset0.5/proj1.5/bow0
+  const body = C.computeBody(stand, rb);
+  ok(body.ok && near(body.measure.pointDiagonalLenCm, 6, 1e-9), "12: 위 칼라 앞끝 사선 정확히 6cm");
+  ok(near(body.measure.cbWidthCm, 4) && near(body.measure.frontWidthCm, Math.sqrt(33.75), 1e-9) && near(body.measure.frontProjectionCm, 1.5) && near(body.measure.outerBowCm, 0), "12: M 본체 cb4/frontWidth√33.75/proj1.5/bow0");
+  // 부착선 = 밴드 윗선 목 primitive − 0.5(여밈 연장 미포함). 3cm 작업 간격이 geometry 에 없음(직접 파생).
+  ok(Math.abs(body.attachLenCm - (stand.upperNeckSegmentLenCm - 0.5)) <= 1e-3, "12: 부착 = 윗선 목 − 0.5(CB 이동 동등: 길이차 0)");
+  ok(stand.upperExtensionLenCm > 0 && Math.abs(body.attachLenCm - (stand.upperTotalLenCm - 0.5)) > 1, "12: 여밈 연장 부착 미포함");
+  // 폐곡선·자기교차 없음
+  ok(C.validateClosedOutline(stand.standGeometry.outline).ok && C.validateClosedOutline(body.bodyGeometry.outline).ok, "12: 스탠드·본체 폐곡선·자기교차 없음");
+  // M 기본형 복원 결정성(같은 기준값 → 동일 geometry)
+  const stand2 = C.computeStand(bodice(back, front, ov), C.referenceParams());
+  const body2 = C.computeBody(stand2, C.referenceBodyParams());
+  ok(JSON.stringify(stand.standGeometry) === JSON.stringify(stand2.standGeometry) && JSON.stringify(body.bodyGeometry) === JSON.stringify(body2.bodyGeometry), "12: M 기본형 복원 결정성(동일 geometry)");
 }
 
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);

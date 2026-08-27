@@ -412,8 +412,8 @@
       const forTypes = r.getAttribute("data-neck-for").split(/\s+/);
       const show = type !== "original" && (forTypes.indexOf("common") >= 0 || forTypes.indexOf(type) >= 0);
       r.hidden = !show;
-      // 곡선 정도 행을 처음 표시할 때 비어 있으면 형태 기본값 채움(빈 값=0=평평 방지)
-      if (show && r.getAttribute("data-neck-for") === "round boat") {
+      // 곡선 정도 행을 처음 표시할 때 비어 있으면 형태 기본값 채움(빈 값=0=평평 방지). round/boat/shirt 공용.
+      if (show && r.getAttribute("data-neck-for").indexOf("round") >= 0) {
         const inp = document.getElementById("inpNeckCurveAmount");
         if (inp && String(inp.value).trim() === "") inp.value = fmtL(type === "boat" ? 0.5 : 1);
       }
@@ -438,7 +438,7 @@
     if (W !== 0) parts.push("허리 " + offStr(W, "안쪽", "바깥"));
     if (H !== 0) parts.push("밑단 " + offStr(H, "안쪽", "바깥"));
     if (Cv > 0) parts.push("옆선 곡선 " + fmtL(Cv));
-    const NECK_LABEL = { round: "라운드넥", v: "V넥", square: "스퀘어넥", boat: "보트넥" };
+    const NECK_LABEL = { shirt: "셔츠 목선", round: "라운드넥", v: "V넥", square: "스퀘어넥", boat: "보트넥" };
     if (NECK_LABEL[neckType]) parts.push(NECK_LABEL[neckType]);
     return parts.length ? parts.join(" · ") + " · 세션 전용" : "여유량·길이·옆선 실루엣·네크라인으로 몸판을 조정합니다";
   }
@@ -1003,6 +1003,7 @@
     project.working.collarDraft = {
       sourceBodiceHash: bodice.hash,
       type: "shirt-two-piece",
+      baseMethod: "bunka-shirt-collar-M-v1",   // 정본 제도법 출처(geometry 엔진이 곧 교재 M형). hash 미포함 메타.
       parameters: { stand: { standHeightCm: standHeightCm, frontRiseCm: frontRiseCm } },
       standGeometry: r.standGeometry,
       collarGeometry: null,   // (미사용 예약)
@@ -1041,6 +1042,41 @@
     if (window.designLayout) window.designLayout.afterCollar();
     if (typeof render === "function") render();
     updateCollarPanel(project);
+  }
+  // 교재 M 기본형으로 초기화: 스탠드·본체를 M 기준값으로 **정확히**(referenceParams/referenceBodyParams,
+  //   frontWidth=√33.75) 적용한다 — 입력 반올림 왕복을 피해 pointDiagonal 이 정확히 6 이 되게. "수치형으로
+  //   돌아가기"(직접 편집 전 사용자 파라미터 복귀)와 다르다: 이건 교재 M 기준값 복원이다.
+  //   ★ manual(관리형 직접 편집) 중에는 금지 — 관리선을 묵시 삭제/덮어쓰기 하지 않는다(먼저 수치형으로 돌아가기).
+  //   ★ 원자성: 스탠드·본체를 임시로 모두 계산·검증한 뒤, 둘 다 성공할 때만 collarDraft 를 **한 번에** 교체한다.
+  //     어느 하나라도 실패하면 기존 스탠드·본체·관리선·완료본을 전부 그대로 유지(collarDraft 미변경).
+  function onCollarBaseM() {
+    const project = designProjectNow(); if (!project || !window.designCollar || !window.bodiceCheckpoint) return;
+    if (!collarGateOk(project)) { setCollarNote("소매 완료 후 카라를 편집할 수 있습니다"); return; }
+    if (collarBodyManual(project)) { setCollarBodyNote("직접 수정 중에는 교재 M 기본형으로 초기화할 수 없습니다 · 먼저 수치형으로 돌아가기"); return; }
+    const bodice = window.bodiceCheckpoint.latest(project);
+    const rp = window.designCollar.referenceParams();        // { standHeightCm:3, frontRiseCm:1 }
+    const rb = window.designCollar.referenceBodyParams();    // 교재 M 본체(√33.75 정확)
+    // 임시 계산·검증(collarDraft 미변경) — 둘 다 성공해야 커밋.
+    const standRe = window.designCollar.computeStand(bodice, rp);
+    if (!standRe.ok) { setCollarNote("적용 불가: " + collarFailStr(standRe.reason)); return; }
+    const bodyRe = window.designCollar.computeBody(standRe, rb);
+    if (!bodyRe.ok) { setCollarBodyNote("적용 불가: " + collarBodyFailStr(bodyRe.reason)); return; }
+    // ── 원자 교체(둘 다 ok) ──
+    project.working.collarDraft = {
+      sourceBodiceHash: bodice.hash, type: "shirt-two-piece", baseMethod: "bunka-shirt-collar-M-v1",
+      parameters: { stand: { standHeightCm: rp.standHeightCm, frontRiseCm: rp.frontRiseCm } },
+      standGeometry: standRe.standGeometry, collarGeometry: null,
+      body: { parameters: rb, geometry: bodyRe.bodyGeometry, attachLenCm: bodyRe.attachLenCm, measure: bodyRe.measure },
+      measure: {
+        lowerNeckSeamLenCm: standRe.lowerNeckSeamLenCm, lowerExtensionLenCm: standRe.lowerExtensionLenCm,
+        upperNeckSegmentLenCm: standRe.upperNeckSegmentLenCm, upperExtensionLenCm: standRe.upperExtensionLenCm,
+        upperTotalLenCm: standRe.upperTotalLenCm, backNeckLenCm: standRe.backNeckLenCm, frontNeckLenCm: standRe.frontNeckLenCm
+      }
+    };
+    if (window.designLayout) window.designLayout.afterCollar();
+    if (typeof render === "function") render();
+    updateCollarPanel(project); updateCollarBodyPanel(project);
+    setCollarNote("교재 M 기본형 적용 · 세션 전용");
   }
   // refresh 훅: 입력 복원(포커스 중 안 덮음) + 버튼/게이트 + committed 기준 note.
   function updateCollarPanel(project) {
@@ -1188,6 +1224,10 @@
       .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = manual; });
     // 적용/초기화 버튼은 기존 gate/ready 상태 위에 manual 잠금을 얹는다(manual 이면 무조건 disabled).
     if (manual) ["btnApplyCollar", "btnResetCollar", "btnApplyCollarBody", "btnResetCollarBody"].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+    // ★ 교재 M 기본형 버튼은 **양방향** 상태를 여기서 단일 관리한다(manual 진입 시 disable, 수치형 복귀 시 re-enable).
+    //   조건 = gate 통과 + manual 아님. updateCollarPanel·updateCollarBodyPanel·manual 진입/복귀 전 경로가 이 함수를 거친다.
+    const baseM = document.getElementById("btnCollarBaseM");
+    if (baseM) baseM.disabled = manual || !collarGateOk(project);   // 관리형 직접 편집 중엔 M 초기화 금지(관리선 묵시 삭제 방지)
   }
 
   // ── 카라 모양 완료 체크포인트(collarCheckpoint) ──
@@ -1433,9 +1473,21 @@
       el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyBodyLength(); } });
     });
     // 네크라인 기본형 카드: 클릭 = 형태 선택(+형태별 입력 행 표시). 값은 적용 버튼에서 커밋.
+    //   ★ 셔츠 목선 = 교재 셔츠 칼라 기본 목선 프리셋: 클릭 시 M 여유값을 채운다(앞·뒤 SNP +1cm,
+    //     앞중심 FNP 1cm 내림, 뒤목 0, round scoop 1). 명시적 프리셋 선택이므로 기존 값을 덮는다
+    //     (refresh 복원과 달리 카드 클릭은 사용자 의도). 곡선 형태는 round scoop 재사용.
     const neckCards = document.getElementById("necklineCards");
     if (neckCards) neckCards.querySelectorAll(".neck-card").forEach(c =>
-      c.addEventListener("click", () => { if (c.disabled) return; setNeckType(c.getAttribute("data-neck")); syncBodyButtons(); }));
+      c.addEventListener("click", () => {
+        if (c.disabled) return;
+        const type = c.getAttribute("data-neck");
+        setNeckType(type);
+        if (type === "shirt") {
+          const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = fmtL(v); };
+          setV("inpNeckWidth", 1); setV("inpNeckFrontDepth", 1); setV("inpNeckBackDepth", 0); setV("inpNeckCurveAmount", 1);
+        }
+        syncBodyButtons();
+      }));
     // 세부 수정(→manual boundary 변환) · 기본형으로 돌아가기(→parametric 복귀).
     const neckManual = document.getElementById("btnNeckManual");
     if (neckManual) neckManual.addEventListener("click", () => { if (!neckManual.disabled) onNeckManual(); });
@@ -1495,6 +1547,8 @@
     if (applyCollar) applyCollar.addEventListener("click", () => { if (!applyCollar.disabled) onApplyCollar(); });
     const resetCollar = document.getElementById("btnResetCollar");
     if (resetCollar) resetCollar.addEventListener("click", () => { if (!resetCollar.disabled) onResetCollar(); });
+    const collarBaseM = document.getElementById("btnCollarBaseM");
+    if (collarBaseM) collarBaseM.addEventListener("click", () => { if (!collarBaseM.disabled) onCollarBaseM(); });
     // 카라 본체(C2): CB 폭·앞폭·앞끝 물림·앞끝 돌출·외곽 휨 Enter 로 적용, 본체 적용/초기화.
     ["inpCollarBodyWidth", "inpCollarBodyFrontWidth", "inpCollarBodyInset", "inpCollarBodyProjection", "inpCollarBodyBow"].forEach(id => {
       const el = document.getElementById(id); if (!el) return;

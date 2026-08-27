@@ -391,11 +391,16 @@
       var mid = mul(add(FNPn, SNPn), 0.5), Q = add(mid, mul(g, caB * Math.abs(W) * 0.3));   // 얕은 하강 bow
       return { cfPt: FNPn, segs: [_pathC(FNPn, add(FNPn, mul(sub(Q, FNPn), 2 / 3)), add(SNPn, mul(sub(Q, SNPn), 2 / 3)), SNPn)] };
     }
-    // round(기본): 사분타원 scoop. FNP' 수평 접선 · SNP' 수직 접선. curveAmountNorm(0–1)이 K 스케일.
-    var caR = params.curveAmountNorm != null ? num0(params.curveAmountNorm) : 1;
-    var kk = K * caR;
-    var c1 = add(FNPn, mul(p, kk * W)), c2 = add(SNPn, mul(g, kk * D));
-    return { cfPt: FNPn, segs: [_pathC(FNPn, c1, c2, SNPn)] };
+    // round·shirt: 사분타원 scoop. FNP' 수평 접선 · SNP' 수직 접선. curveAmountNorm(0–1)이 K 스케일.
+    //   ★ shirt(교재 셔츠 기본 목선)는 round scoop 을 **명시적으로** 재사용한다(우연한 fallthrough 아님).
+    //   알 수 없는 type 은 조용히 round 가 되지 않고 실패한다(NECK_TYPES 게이트와 이 분기가 어긋나면 loud fail).
+    if (type === "round" || type === "shirt") {
+      var caR = params.curveAmountNorm != null ? num0(params.curveAmountNorm) : 1;
+      var kk = K * caR;
+      var c1 = add(FNPn, mul(p, kk * W)), c2 = add(SNPn, mul(g, kk * D));
+      return { cfPt: FNPn, segs: [_pathC(FNPn, c1, c2, SNPn)] };
+    }
+    fail("unknown-neckline-type", type);
   }
   // 네크라인 적용: 공통(목너비·깊이) 이동 후 형태별 seg 로 네크라인 교체. center/shoulder 끝점 함께
   // 이동(FNP→cfPt, SNP→SNP'). construction(다트) 불변. 원본 geometry 불변(clone 작업본).
@@ -431,7 +436,10 @@
     segs.forEach(function (pr) { flattenPrim(pr).forEach(function (e) { total += len(sub(e[1], e[0])); }); });
     return total;
   }
-  var NECK_TYPES = { round: 1, v: 1, square: 1, boat: 1 };
+  // shirt = 교재 셔츠 칼라 기본 목선. buildNecklineShape 에서 v/square/boat 가 아니므로 **round 기본 분기**를
+  //   그대로 타 round scoop 곡선을 재사용한다(사용자 확정). 형태는 round 와 동일하고, M 여유(앞·뒤 SNP +1cm,
+  //   앞중심 FNP 1cm 내림)는 UI 프리셋이 기본값으로 채운다 — 타입은 셔츠 목선 identity/프리셋용.
+  var NECK_TYPES = { round: 1, v: 1, square: 1, boat: 1, shirt: 1 };
 
   function computeGeometry(referenceGeometry, opts) {
     if (!validGeometry(referenceGeometry)) fail("invalid-geometry");

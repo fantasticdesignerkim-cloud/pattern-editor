@@ -106,6 +106,7 @@
     }
     var result = {
       schemaVersion: 1, type: "shirt-two-piece",
+      baseMethod: cd.baseMethod || null,   // 정본 제도법 출처(메타) — signatureOf 에 미포함(hash 제외).
       sourceBodiceHash: cd.sourceBodiceHash,
       sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
       necklineLengths: clone(bodice.necklineLengths),

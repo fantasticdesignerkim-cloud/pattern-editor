@@ -388,6 +388,41 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
     const r0 = DB.computeGeometry(ref, { neckline: { mode: "parametric", type: "original", parameters: {} } });
     ok(r0.front.necklineLenCm == null, "4g: 미적용 시 necklineLenCm 없음(원본 fallback)");
   }
+
+  // 4h. 셔츠 목선(교재 M 기본형): round scoop 곡선 재사용(같은 params → round 와 동일 geometry) +
+  //     M 여유(앞·뒤 어깨목점 +1cm, 앞중심 목점 1cm 내림, 뒤목 0). 다트/옆선/밑단 불변·비누적.
+  {
+    const P = { neckWidthCm: 1, frontDepthCm: 1, backDepthCm: 0, curveAmountNorm: 1 };
+    const rShirt = DB.computeGeometry(ref, nlT("shirt", P));
+    const rRound = DB.computeGeometry(ref, nlT("round", P));
+    ok(eq(rShirt, rRound), "4h: shirt = round scoop 재사용(같은 params → 동일 geometry)");
+    // 앞: FNP y 5→6(1cm 내림), SNP shoulder 방향 +1cm
+    const fFNP = frontCenterNeck(rShirt);
+    ok(near(fFNP.x, 47.5) && near(fFNP.y, 6), "4h: 앞중심 목점 1cm 내림(5→6)");
+    const fNeck = rShirt.front.outline.find(pr => !("edge" in pr) && pr.kind === "path" && near(pr.commands[0].points[0].y, 6, 1e-3));
+    const fSNP = fNeck.commands[fNeck.commands.length - 1].points.slice(-1)[0];
+    const fDir = (() => { const dx = 32.5 - 40.5, dy = 3, l = Math.hypot(dx, dy); return { x: dx / l, y: dy / l }; })();
+    ok(near(fSNP.x, 40.5 + fDir.x, 1e-2) && near(fSNP.y, fDir.y, 1e-2), "4h: 앞 어깨목점 +1cm");
+    // 뒤: BNP(뒤중심 목점) 불변(backDepth 0), SNP shoulder 방향 +1cm
+    const bc = edgePrims(rShirt.back.outline, "center")[0];
+    const bBNP = near(bc.from.y, 38) ? bc.to : bc.from;
+    ok(near(bBNP.x, 0) && near(bBNP.y, 5), "4h: 뒤중심 목점 불변(backDepth 0)");
+    const bNeck = rShirt.back.outline.find(pr => !("edge" in pr) && pr.kind === "path" && near(pr.commands[0].points[0].y, 5, 1e-3));
+    const bSNP = bNeck.commands[bNeck.commands.length - 1].points.slice(-1)[0];
+    const bDir = (() => { const dx = 15 - 7, dy = 3, l = Math.hypot(dx, dy); return { x: dx / l, y: dy / l }; })();
+    ok(near(bSNP.x, 7 + bDir.x, 1e-2) && near(bSNP.y, bDir.y, 1e-2), "4h: 뒤 어깨목점 +1cm");
+    // 다트·reference 불변, ×(뒤목)·⊘(앞목) 측정(밴드 길이 = ×+⊘)
+    ok(eq(rShirt.front.construction, ref.front.construction) && eq(rShirt.back.construction, ref.back.construction), "4h: 다트 불변");
+    ok(!sharesRef(rShirt, ref), "4h: reference 분리");
+    ok(typeof rShirt.front.necklineLenCm === "number" && rShirt.front.necklineLenCm > 0 &&
+       typeof rShirt.back.necklineLenCm === "number" && rShirt.back.necklineLenCm > 0, "4h: ×·⊘ 측정(밴드 길이)");
+    // 비누적: 재적용 동일
+    ok(eq(rShirt, DB.computeGeometry(ref, nlT("shirt", P))), "4h: 비누적(재적용 동일)");
+    // ★ 알 수 없는 type 은 조용히 round 가 되지 않는다: NECK_TYPES 미포함 → 미적용 no-op(round 와 다름).
+    const rBogus = DB.computeGeometry(ref, nlT("bogus", P));
+    ok(eq(rBogus, ref) && !sharesRef(rBogus, ref), "4h: 알 수 없는 type = 미적용 no-op(round 아님)");
+    ok(JSON.stringify(rBogus) !== JSON.stringify(rRound), "4h: 알 수 없는 type ≠ round 결과");
+  }
 }
 
 // 5. topology / 수치 실패 계약
