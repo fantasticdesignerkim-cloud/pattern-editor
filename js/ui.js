@@ -202,6 +202,9 @@
     updateDartInspector();
     updateCompletionUI();
     updateDesignBodyPanel();
+    // Design 통합 상태는 서브탭 활성 여부와 무관하게(hidden 이어도) 현재 project 로 항상 갱신 —
+    // 경로 의존적 stale 방지(designProjectNow() 가 null 이면 자체 가드로 "Design 미완료").
+    updateDesignResultUI(designProjectNow());
   }
 
   // ── 원형 완료 최소 UI ─────────────────────────
@@ -633,6 +636,7 @@
     updateSleeveEaseUI(project);   // 소매산 봉제선 정합(읽기 전용) 갱신
     syncDesignSubtabGate(project); // 소매 탭 활성 게이트(몸판 완료·비스테일)
     updateSleevePanel(project);    // 소매 입력·버튼 상태
+    updateDesignResultUI(project); // 몸판 완료/재완료는 Design 통합 게이트에 영향(소매·카라는 각 체크포인트 체인이 이미 갱신)
   }
   function onCompleteBodice() {
     const project = designProjectNow();
@@ -1218,6 +1222,7 @@
       else if (window.collarCheckpoint.sleeveStepChanged(project)) statusNote.textContent = "카라 완료됨 · 소매 단계 변경됨 · 작업 순서 확인 필요";
       else statusNote.textContent = "카라 완료됨(원형 v" + (latest.sourceBlock.version != null ? latest.sourceBlock.version : "?") + ") · 세션 전용";
     }
+    updateDesignResultUI(project);   // 카라 완료 상태는 Design 통합 게이트에 영향 → 함께 갱신
   }
   function onCompleteCollar() {
     const project = designProjectNow(); if (!project || !window.collarCheckpoint) return;
@@ -1226,6 +1231,38 @@
     if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + collarCPFailStr(r.reason); updateCollarCheckpointUI(project); return; }
     updateCollarCheckpointUI(project);
     if (statusNote) statusNote.textContent = r.idempotent ? "카라 완료됨(변경 없음) · 세션 전용" : "카라 완료됨(원형 v" + (r.result.sourceBlock.version != null ? r.result.sourceBlock.version : "?") + ") · 세션 전용";
+  }
+
+  // ── Design 형상 통합 완료(designResult) — 몸판+소매+카라 형상 패키지. 재단 패턴 아님. ──
+  function designResultFailStr(reason) {
+    const m = { "no-bodice": "몸판 완료 필요", "bodice-changed": "몸판 변경됨 · 다시 완료 필요", "no-sleeve": "소매 완료 필요",
+      "sleeve-changed": "소매 변경됨 · 다시 완료 필요", "sleeve-bodice-mismatch": "소매 출처가 몸판과 다름", "no-collar": "카라 완료 필요",
+      "collar-changed": "카라 변경됨 · 다시 완료 필요", "collar-bodice-mismatch": "카라 출처가 몸판과 다름", "collar-sleeve-order": "카라 소매 순서 확인 필요",
+      "sleeve-source-mismatch": "소매 출처가 몸판과 다름", "collar-source-mismatch": "카라 출처가 몸판과 다름", "no-project": "프로젝트 없음", "no-module": "" };
+    return m[reason] != null ? m[reason] : reason;
+  }
+  function updateDesignResultUI(project) {
+    const checkNote = document.getElementById("designResultCheckNote");
+    const statusNote = document.getElementById("designResultStatusNote");
+    const btn = document.getElementById("btnCompleteDesign");
+    if (!project || !window.designResult) { if (btn) btn.disabled = true; if (checkNote) checkNote.textContent = ""; if (statusNote) statusNote.textContent = "Design 미완료 · 세션 전용"; return; }
+    const c = window.designResult.check(project);
+    if (checkNote) checkNote.textContent = c.ok ? ("몸판·소매·카라 완료 · 유효 절개선 " + c._cuts.length + "개") : ("완료 전 검사: " + designResultFailStr(c.fails[0]));
+    if (btn) btn.disabled = !c.ok;
+    const latest = window.designResult.latest(project);
+    if (statusNote) {
+      if (!latest) statusNote.textContent = c.ok ? "Design 완료 가능 · 세션 전용" : "완료 전 검사: " + designResultFailStr(c.fails[0]);
+      else if (window.designResult.isCurrentDesignChanged(project)) statusNote.textContent = "Design 변경됨 · 다시 완료 필요 · 세션 전용";
+      else statusNote.textContent = "Design 형상 완료됨(원형 v" + (latest.sourceBlock.version != null ? latest.sourceBlock.version : "?") + ") · 유효 절개선 " + latest.structuralLines.cut.length + "개 · 세션 전용";
+    }
+  }
+  function onCompleteDesign() {
+    const project = designProjectNow(); if (!project || !window.designResult) return;
+    const r = window.designResult.complete(project);
+    const statusNote = document.getElementById("designResultStatusNote");
+    if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + designResultFailStr(r.reason); updateDesignResultUI(project); return; }
+    updateDesignResultUI(project);
+    if (statusNote) statusNote.textContent = r.idempotent ? "Design 형상 완료됨(변경 없음) · 세션 전용" : "Design 형상 완료됨(원형 v" + (r.result.sourceBlock.version != null ? r.result.sourceBlock.version : "?") + ") · 유효 절개선 " + r.result.structuralLines.cut.length + "개 · 세션 전용";
   }
 
   // refresh 훅: design 진입/재진입 시 committed 값을 표시(포커스 중 입력은 안 덮음) + 버튼 상태 +
@@ -1475,6 +1512,11 @@
     // 카라 모양 완료(collarCheckpoint): 게이트 통과 시에만 활성.
     const completeCollar = document.getElementById("btnCompleteCollar");
     if (completeCollar) completeCollar.addEventListener("click", () => { if (!completeCollar.disabled) onCompleteCollar(); });
+    // Design 형상 통합 완료(designResult): 세 완료본 일치 시에만 활성.
+    const completeDesign = document.getElementById("btnCompleteDesign");
+    if (completeDesign) completeDesign.addEventListener("click", () => { if (!completeDesign.disabled) onCompleteDesign(); });
+    // cut 생성·삭제·역할 변경·편집 후 designLineTool 이 호출하는 훅 — 항상 현재 project 로 갱신(hidden 이어도).
+    window.refreshDesignResultUI = () => updateDesignResultUI(designProjectNow());
     // 배치 버튼(designLayout 위임 — 형상 불변, 카메라/offset 만). inline handler 없음.
     const layoutBtn = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener("click", () => { if (window.designLayout) window.designLayout[fn](); }); };
     layoutBtn("btnLayoutCenterBody", "centerBody");

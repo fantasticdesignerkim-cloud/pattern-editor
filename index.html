@@ -311,6 +311,14 @@
             <button class="btn" id="btnCompleteCollar">카라 모양 완료</button>
           </div>
           <div class="row note" id="designCollarStatusNote" aria-live="polite">카라 미완료 · 세션 전용</div>
+          <!-- Design 형상 통합(designResult): 몸판+소매+카라 형상 패키지 + 유효 cut(structuralLines).
+               재단 패턴 아님. 세 완료본 일치 + 유효 cut 재검증 시에만 활성. hash 에 structuralLines 포함. -->
+          <div class="row" style="margin-top:8px"><label>Design 형상 완료</label></div>
+          <div class="row note" id="designResultCheckNote" aria-live="polite"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnCompleteDesign">Design 형상 완료</button>
+          </div>
+          <div class="row note" id="designResultStatusNote" aria-live="polite">Design 미완료 · 세션 전용</div>
         </div><!-- /subtab collar -->
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
         <div class="row" style="margin-top:8px"><label>배치</label></div>
@@ -393,7 +401,7 @@
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <script src="js/designLayout.js?v=2026082505"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026082510"></script>
+<script src="js/designLineTool.js?v=2026082701"></script>
 <!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
 <script src="js/bodiceCheckpoint.js?v=2026082011"></script>
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
@@ -404,11 +412,13 @@
 <script src="js/designCollar.js?v=2026082511"></script>
 <!-- 카라 모양 완료 체크포인트: window.collarCheckpoint. 게이트 + working.collarResult 세션 스냅샷(형상 source=bodice, 소매=순서 게이트). -->
 <script src="js/collarCheckpoint.js?v=2026082512"></script>
+<!-- Design 형상 통합: window.designResult. 세 완료본 + structuralLines(유효 cut) 묶음. 재단 아님. -->
+<script src="js/designResult.js?v=2026082701"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026082511"></script>
+<script src="js/ui.js?v=2026082701"></script>
 
 </body>
 </html>

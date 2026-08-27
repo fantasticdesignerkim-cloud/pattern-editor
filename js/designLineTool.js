@@ -521,12 +521,21 @@
     })); });
     return pts;
   }
+  // outline primitive 배열(line·cubic·path[M/C]) → flattenLine 이 이해하는 line/cubic 세그먼트.
+  //   geometry.outline 과 bodiceResult[piece].outline(frozen effective outline) 둘 다 이 형식을 거쳐야
+  //   flattenSegment 가 raw path 를 [undefined,undefined] 로 내지 않는다.
+  function outlinePrimsToSegs(outline) {
+    const segs = [];
+    (outline || []).forEach(pr => {
+      if (pr.kind === "line") segs.push({ kind: "line", from: pr.from, to: pr.to });
+      else if (pr.kind === "cubic") segs.push({ kind: "cubic", from: pr.from, c1: pr.c1, c2: pr.c2, to: pr.to });
+      else if (pr.kind === "path") { let cur = null; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { segs.push({ kind: "cubic", from: cur, c1: c.points[0], c2: c.points[1], to: c.points[2] }); cur = c.points[2]; } }); }
+    });
+    return segs;
+  }
   function outlineSegsOf(geom, keys) {
     const segs = [];
-    keys.forEach(k => { const b = geom[k]; if (!b) return; (b.outline || []).forEach(pr => {
-      if (pr.kind === "line") segs.push({ kind: "line", from: pr.from, to: pr.to });
-      else if (pr.kind === "path") { let cur = null; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { segs.push({ kind: "cubic", from: cur, c1: c.points[0], c2: c.points[1], to: c.points[2] }); cur = c.points[2]; } }); }
-    }); });
+    keys.forEach(k => { const b = geom[k]; if (!b) return; outlinePrimsToSegs(b.outline).forEach(s => segs.push(s)); });
     return segs;
   }
   function patternAnchorPts(piece, exclude) {
@@ -591,12 +600,14 @@
   }
 
   // ── draw 동작 ──
+  // cut 생성·삭제·역할 변경·편집 후 Design 통합 UI 갱신(hidden 이어도 상태 갱신). ui.js 가 훅 설치.
+  function notifyDesignResult() { if (window.refreshDesignResultUI) window.refreshDesignResultUI(); }
   function commitDraft() {
     if (!draft || draft.anchors.length < 2) { setNote("점 2개 이상 필요"); return false; }
     const p = project(); const ls = ensurePatternLines(p);
     ls.push(makePatternLine(nextId(ls), draft.piece, draft.anchors));
     invalidateParts(p);
-    draft = null; drawDrag = null; lastDown = null; setNote("완료 · 새 선은 다시 첫 점부터"); rerender(); return true;
+    draft = null; drawDrag = null; lastDown = null; setNote("완료 · 새 선은 다시 첫 점부터"); rerender(); notifyDesignResult(); return true;
   }
   function draftBackspace() {
     if (!draft || !draft.anchors.length) return;
@@ -613,7 +624,7 @@
     if (isCollarBodyLine(selectedId)) { setNote("칼라 본체 관리선은 삭제할 수 없습니다 · 기본형으로 돌아가기로만 제거"); return; }   // 관리형 칼라 본체 보호
     const p = project(); p.working.patternLines = ensurePatternLines(p).filter(l => l.id !== selectedId);
     invalidateParts(p);
-    selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); syncCutStatus(); rerender();
+    selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult();
   }
   // 선택한 선의 역할 지정(cut/boundary/guide). 표시만 바뀌고 outline 분할은 다음 단계.
   function setRole(role) {
@@ -622,7 +633,7 @@
     if (isSleeveCapLine(selectedId)) { setNote("소매산 관리선은 역할을 바꿀 수 없습니다"); return; }   // 관리형 소매산 보호
     if (isCollarBodyLine(selectedId)) { setNote("칼라 본체 관리선은 역할을 바꿀 수 없습니다"); return; }   // 관리형 칼라 본체 보호
     const line = findLine(selectedId); if (!line) return;
-    line.role = role; invalidateParts(); setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); syncCutStatus(); rerender();
+    line.role = role; invalidateParts(); setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult();
   }
   // 역할 버튼(design inspector): 선택 시 활성, 현재 역할 강조. 자동 네크라인 전용선이면 잠금(역할 변경 금지).
   function syncRoleButtons() {
@@ -643,6 +654,35 @@
     const outlineFlat = flattenLine(currentOutlineSegs(p, line.piece));   // 합성 design outline 이 있으면 그 기준
     const others = lines().filter(l => l.piece === line.piece && l.role === "cut" && l.id !== line.id).map(l => flattenLine(l.segments));
     return validateCut(line, outlineFlat, others);
+  }
+  // Design 통합용: 유효한 role:"cut" 절개선을 **완료된 몸판(frozen bodiceResult)의 최종 effective
+  //   outline 기준으로 재검증**해 수집한다(mutable working outline 아님 — 몸판 완료 후 표류 방지).
+  //   반환 [{ piece, segments(형상 cm 복사) }], **canonical 정렬**(patternLine 배열·id 순서 무관 →
+  //   design hash 안정). role=cut·piece=front/back 만. designResult 가 소비.
+  function _cutCanonKey(cut) {
+    const r = v => Math.round(v * 1e4) / 1e4;
+    return cut.piece + ":" + cut.segments.map(s => s.kind === "cubic"
+      ? "C" + [s.from.x, s.from.y, s.c1.x, s.c1.y, s.c2.x, s.c2.y, s.to.x, s.to.y].map(r).join(",")
+      : "L" + [s.from.x, s.from.y, s.to.x, s.to.y].map(r).join(",")).join("|");
+  }
+  function gatherValidCuts(patternLines, bodiceResult) {
+    if (!bodiceResult) return [];
+    const src = Array.isArray(patternLines) ? patternLines : lines();
+    const out = [];
+    ["front", "back"].forEach(piece => {
+      const face = bodiceResult[piece];
+      if (!face || !Array.isArray(face.outline) || !face.outline.length) return;
+      const cuts = src.filter(l => l.piece === piece && l.role === "cut");
+      if (!cuts.length) return;
+      // frozen 몸판 effective outline(raw primitive) → line/cubic 정규화 후 평탄화(path 를 null 로 내지 않게).
+      const outlineFlat = flattenLine(outlinePrimsToSegs(face.outline));
+      cuts.forEach(line => {
+        const others = cuts.filter(l => l.id !== line.id).map(l => flattenLine(l.segments));
+        if (validateCut(line, outlineFlat, others).ok) out.push({ piece: piece, segments: line.segments.map(cloneSeg) });
+      });
+    });
+    out.sort((a, b) => { const ka = _cutCanonKey(a), kb = _cutCanonKey(b); return ka < kb ? -1 : ka > kb ? 1 : 0; });
+    return out;
   }
   // 검사 결과를 UI 상태로만 표시(#designCutStatus). data-ok 로 통과/실패 색 구분.
   function syncCutStatus() {
@@ -901,7 +941,7 @@
         else if (edited && isCollarBodyLine(edited)) { if (window.recomposeCollarBody) window.recomposeCollarBody(); }   // 칼라 본체 편집 → 본체 재합성
         else if (edited && edited.role === "boundary") recomposeAfterBoundaryEdit();   // 대체선 편집 → designOutline 재합성
         else invalidateParts();                                                   // 그 외(cut/guide) → 파생 무효화
-        editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender();
+        editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender(); notifyDesignResult();
       }
     };
     svg.addEventListener("pointerup", endDrag);
@@ -1076,7 +1116,7 @@
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
     convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen, isNeckAutoLine, isSleeveCapLine, isCollarBodyLine, findLine: (id) => findLine(id),
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
-    validateSelectedCut, revalidate, validateCut, flattenLine, segCross, distPtToSegs,
+    validateSelectedCut, revalidate, validateCut, gatherValidCuts, flattenLine, segCross, distPtToSegs,
     doSplit, invalidateParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,

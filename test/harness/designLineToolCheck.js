@@ -403,6 +403,43 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   ok(ms.length === 2 && ms[0].kind === "cubic" && near(ms[1].from.x, 3), "18: 다중 C → cubic 여러 개(연속 cur)");
 }
 
+// ── gatherValidCuts: frozen 몸판(raw path primitive) 기준 재검증 + canonical 정렬 ──
+//   ★ 회귀: bodiceResult.front.outline 은 {kind:"path"} primitive 를 담아 flattenLine 이 [null,null] 을
+//   냈고 validateCut 이 크래시했다. outlinePrimsToSegs 정규화로 방지. + role/piece 필터 + 순서 무관.
+{
+  // top: 직선형 cubic(path) (0,0)→(10,0) / 나머지 3변 line → 폐곡선 사각형.
+  const front = {
+    outline: [
+      { kind: "path", commands: [{ type: "M", points: [{ x: 0, y: 0 }] }, { type: "C", points: [{ x: 3, y: 0 }, { x: 7, y: 0 }, { x: 10, y: 0 }] }] },
+      { kind: "line", from: { x: 10, y: 0 }, to: { x: 10, y: 10 } },
+      { kind: "line", from: { x: 10, y: 10 }, to: { x: 0, y: 10 } },
+      { kind: "line", from: { x: 0, y: 10 }, to: { x: 0, y: 0 } }
+    ]
+  };
+  const bodiceResult = { front: front, back: null };
+  const cutAt = x => ({ id: "cut-" + x, piece: "front", role: "cut", segments: [{ kind: "line", from: { x: x, y: 0 }, to: { x: x, y: 10 } }] });
+  const cA = cutAt(3), cB = cutAt(7);
+  const guide = { id: "g", piece: "front", role: "guide", segments: [{ kind: "line", from: { x: 2, y: 0 }, to: { x: 2, y: 10 } }] };
+  const backCut = { id: "bc", piece: "back", role: "cut", segments: [{ kind: "line", from: { x: 5, y: 0 }, to: { x: 5, y: 10 } }] };
+
+  let crashed = false, r1;
+  try { r1 = T.gatherValidCuts([cA, guide, backCut], bodiceResult); } catch (_) { crashed = true; }
+  ok(!crashed, "GVC: path-form 몸판 outline 에서 크래시 없음(null-pair 회귀)");
+  ok(r1 && r1.length === 1 && r1[0].piece === "front", "GVC: 유효 cut 1개(guide·back 제외)");
+
+  // 순서 무관 canonical 정렬: [cB,cA] 과 [cA,cB] 동일 출력 순서.
+  const rAB = T.gatherValidCuts([cA, cB], bodiceResult).map(c => c.segments[0].from.x);
+  const rBA = T.gatherValidCuts([cB, cA], bodiceResult).map(c => c.segments[0].from.x);
+  ok(rAB.length === 2 && rAB[0] === 3 && rAB[1] === 7, "GVC: 두 유효 cut·canonical 오름차순");
+  ok(JSON.stringify(rAB) === JSON.stringify(rBA), "GVC: patternLine 배열 순서 무관(정렬 안정)");
+
+  // bodiceResult falsy → [] (명시 전달 계약)
+  ok(T.gatherValidCuts([cA], null).length === 0, "GVC: bodiceResult 없으면 빈 배열");
+  // 세그먼트는 형상 cm 복사본(원본 비변형)
+  const rc = T.gatherValidCuts([cA], bodiceResult);
+  ok(rc[0].segments !== cA.segments && rc[0].segments[0].from.x === 3, "GVC: segments 복사본(원본 참조 아님)");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);
