@@ -344,6 +344,11 @@
   // ── 네크라인(parametric) ──
   var num0 = function (v) { return (typeof v === "number" && isFinite(v)) ? v : 0; };
   var near2 = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y) < 0.02; };
+  // 구조 모서리(SV2) — 네크라인·어깨가 될 수 없는 경계. SV3 봉제 의미(neckline/shoulder/
+  // armhole)가 붙어도 아래 위상 탐색이 **기존과 동일한 세그먼트를 고르도록** 이 집합만 배제한다
+  // (semantic 을 탐색 기준으로 승격하지 않는다 — 의미 추가로 탐색 결과가 바뀌면 안 된다).
+  var STRUCT_EDGE = { center: 1, waist: 1, "side-seam": 1, hem: 1 };
+  var isStructEdge = function (pr) { return !!STRUCT_EDGE[pr.edge]; };
   // outline 에서 목선 위상: FNP/BNP(center 목점=top) · neckline seg · SNP · shoulder 방향.
   function necklineInfo(outline) {
     var center = null; outline.forEach(function (pr) { if (pr.edge === "center") center = pr; });
@@ -351,10 +356,10 @@
     var ce = endpts(center);
     var FNP = ce[0].y < ce[1].y ? ce[0] : ce[1];   // 목점 = y 작은 끝(위)
     var neckSeg = null, SNP = null;
-    outline.forEach(function (pr) { if ("edge" in pr) return; var e = endpts(pr); if (near2(e[0], FNP)) { neckSeg = pr; SNP = e[1]; } else if (near2(e[1], FNP)) { neckSeg = pr; SNP = e[0]; } });
+    outline.forEach(function (pr) { if (isStructEdge(pr)) return; var e = endpts(pr); if (near2(e[0], FNP)) { neckSeg = pr; SNP = e[1]; } else if (near2(e[1], FNP)) { neckSeg = pr; SNP = e[0]; } });
     if (!neckSeg) fail("neckline-not-found");
     var shoulderTip = null;
-    outline.forEach(function (pr) { if ("edge" in pr || pr === neckSeg) return; var e = endpts(pr); if (near2(e[0], SNP)) shoulderTip = e[1]; else if (near2(e[1], SNP)) shoulderTip = e[0]; });
+    outline.forEach(function (pr) { if (isStructEdge(pr) || pr === neckSeg) return; var e = endpts(pr); if (near2(e[0], SNP)) shoulderTip = e[1]; else if (near2(e[1], SNP)) shoulderTip = e[0]; });
     if (!shoulderTip) fail("shoulder-not-found");
     return { FNP: FNP, neckSeg: neckSeg, SNP: SNP, shoulderDir: norm(sub(shoulderTip, SNP)) };
   }
@@ -412,6 +417,9 @@
     var SNPn = add(SNP, mul(info.shoulderDir, neckW));
     var FNPn = add(FNP, mul(g, depth));
     var shape = buildNecklineShape(type, FNPn, SNPn, g, p, params);
+    // SV3: 새로 만든 네크라인 span 은 이 함수가 "목선을 만든다"는 작업 의미를 알고 있으므로
+    // neckline role 을 **명시적으로** 부여한다(좌표 추론 아님). 다세그먼트(스퀘어)도 전부 같은 role.
+    shape.segs.forEach(function (s) { s.edge = "neckline"; });
     var moves = [{ pt: FNP, d: sub(shape.cfPt, FNP) }, { pt: SNP, d: sub(SNPn, SNP) }];
     var outline = [];
     piece.outline.forEach(function (pr) { if (pr === info.neckSeg) shape.segs.forEach(function (s) { outline.push(s); }); else outline.push(movePrimPoints(pr, moves)); });

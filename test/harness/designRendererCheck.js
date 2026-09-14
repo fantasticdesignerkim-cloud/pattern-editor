@@ -405,6 +405,30 @@ function childSeq(g) { return g.childNodes.map(c => c.getAttribute("data-piece")
   throws(() => h.dr.createReferenceGroup(gsh), "edge-placement", "37: shared hem 금지");
 }
 
+// 38(SV3). 봉제 경계 의미(neckline/shoulder/armhole) 재발행 + 위치 규칙
+{
+  const h = makeHarness();
+  const g = freshGeometry();
+  g.front.outline.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edge: "neckline" });
+  g.front.outline.push({ kind: "line", from: { x: 2, y: 2 }, to: { x: 3, y: 3 }, edge: "shoulder" });
+  // armhole 은 여러 span 가능 — 두 primitive 가 같은 role 로 재발행되는지 함께 확인
+  g.back.outline.push({ kind: "line", from: { x: 4, y: 4 }, to: { x: 5, y: 5 }, edge: "armhole" });
+  g.back.outline.push({ kind: "line", from: { x: 5, y: 5 }, to: { x: 6, y: 6 }, edge: "armhole" });
+  const grp = h.dr.createReferenceGroup(g);
+  const byEdge = (e) => grp.childNodes.filter(c => c.getAttribute("data-edge") === e);
+  ok(byEdge("neckline").length === 1, "38: neckline data-edge 재발행");
+  ok(byEdge("shoulder").length === 1, "38: shoulder data-edge 재발행");
+  ok(byEdge("armhole").length === 2, "38: armhole 다중 span 이 같은 role 로 재발행");
+
+  // 위치 규칙: front/back outline 밖(구성선·소매·shared)은 금지
+  ["neckline", "shoulder", "armhole"].forEach(e => {
+    const gc = freshGeometry(); gc.front.construction.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edge: e });
+    throws(() => h.dr.createReferenceGroup(gc), "edge-placement", "38: front construction " + e + " 금지");
+    const gs = freshGeometry(); gs.sleeve.outline.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edge: e });
+    throws(() => h.dr.createReferenceGroup(gs), "edge-placement", "38: sleeve outline " + e + " 금지");
+  });
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

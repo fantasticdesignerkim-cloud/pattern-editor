@@ -246,19 +246,49 @@
     const tt = t1 > 0 ? t0 / t1 : 0;
     return split(L[0], L[1], L[2], L[3], tt).right;           // [t0,t1]
   }
+  // ── 의미 metadata 보존 ──
+  // 유지 구간(대체되지 않고 남는 경계)은 잘리고·뒤집히고·복제돼도 **원본 semantic 을 그대로
+  // 들고 가야** manual/designOutline 경로에서 의미가 유실되지 않는다. 좌표·kind·개수·순서는
+  // 바뀌지 않는다(전부 own-property 로만 추가되고, 없으면 추가하지 않는다 — SV2 계약).
+  // ★ `_canonKey`(정준 정렬)는 이 필드들을 보지 않는다 → 합성 결과의 정렬 순서 불변.
+  //
+  // 세 필드의 책임 분리:
+  //   · edge             = **실제 semantic role 만**(neckline/shoulder/armhole/center/…).
+  //                        "unresolved" 를 role 값으로 위장하지 않는다.
+  //   · edgeStatus       = 해결 상태. 현재 유일한 값은 "unresolved"(의미 미지정 대체 구간).
+  //   · edgeSourceLineId = 그 구간을 만든 patternLine 의 stable ID(provenance).
+  //                        **중첩 객체가 아니라 평문 문자열** — clone/freeze 경로에서 공유
+  //                        참조가 생길 여지를 아예 없앤다.
+  const SEMANTIC_KEYS = ["edge", "edgeStatus", "edgeSourceLineId"];
+  function _carryEdge(src, dst) {
+    if (src) SEMANTIC_KEYS.forEach(k => { if (k in src) dst[k] = src[k]; });
+    return dst;
+  }
+  // 대체선(boundary patternLine)의 세그먼트를 합성 입력으로 변환한다.
+  //   의미가 명시된 구간(예: 목선 전환 도구가 만든 edge:"neckline")은 그대로 승계하고,
+  //   **의미가 없는 일반 replacement 구간에만** 명시적 unresolved + provenance 를 부여한다.
+  //   → "edge 부재"만으로 unresolved 를 표현하지 않는다(다트 다리·구성선과 구분 가능).
+  function boundarySegsOf(line) {
+    const id = line && line.id;
+    return ((line && line.segments) || []).map(s => {
+      const o = cloneSeg(s);
+      if (!("edge" in o)) { o.edgeStatus = "unresolved"; o.edgeSourceLineId = id || null; }
+      return o;
+    });
+  }
   function subSegment(seg, t0, t1) {
-    if (seg.kind === "line") return { kind: "line", from: _lerpP(seg.from, seg.to, t0), to: _lerpP(seg.from, seg.to, t1) };
+    if (seg.kind === "line") return _carryEdge(seg, { kind: "line", from: _lerpP(seg.from, seg.to, t0), to: _lerpP(seg.from, seg.to, t1) });
     const R = _cubicBetween(seg.from, seg.c1, seg.c2, seg.to, t0, t1);
-    return { kind: "cubic", from: R[0], c1: R[1], c2: R[2], to: R[3] };
+    return _carryEdge(seg, { kind: "cubic", from: R[0], c1: R[1], c2: R[2], to: R[3] });
   }
   function reverseSeg(seg) {
-    if (seg.kind === "line") return { kind: "line", from: _pt(seg.to), to: _pt(seg.from) };
-    return { kind: "cubic", from: _pt(seg.to), c1: _pt(seg.c2), c2: _pt(seg.c1), to: _pt(seg.from) };
+    if (seg.kind === "line") return _carryEdge(seg, { kind: "line", from: _pt(seg.to), to: _pt(seg.from) });
+    return _carryEdge(seg, { kind: "cubic", from: _pt(seg.to), c1: _pt(seg.c2), c2: _pt(seg.c1), to: _pt(seg.from) });
   }
   function cloneSeg(seg) {
-    return seg.kind === "cubic"
+    return _carryEdge(seg, seg.kind === "cubic"
       ? { kind: "cubic", from: _pt(seg.from), c1: _pt(seg.c1), c2: _pt(seg.c2), to: _pt(seg.to) }
-      : { kind: "line", from: _pt(seg.from), to: _pt(seg.to) };
+      : { kind: "line", from: _pt(seg.from), to: _pt(seg.to) });
   }
   function _segLen(seg) { return Math.hypot(seg.to.x - seg.from.x, seg.to.y - seg.from.y); }
   // 점을 세그먼트에 투영 → {t, point, dist}. cubic 은 조밀 샘플 후 Newton 정밀화.
@@ -527,9 +557,10 @@
   function outlinePrimsToSegs(outline) {
     const segs = [];
     (outline || []).forEach(pr => {
-      if (pr.kind === "line") segs.push({ kind: "line", from: pr.from, to: pr.to });
-      else if (pr.kind === "cubic") segs.push({ kind: "cubic", from: pr.from, c1: pr.c1, c2: pr.c2, to: pr.to });
-      else if (pr.kind === "path") { let cur = null; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { segs.push({ kind: "cubic", from: cur, c1: c.points[0], c2: c.points[1], to: c.points[2] }); cur = c.points[2]; } }); }
+      // path 가 여러 C 로 쪼개져도 **각 span 이 같은 edge role 을 유지**한다(span 수는 identity 아님).
+      if (pr.kind === "line") segs.push(_carryEdge(pr, { kind: "line", from: pr.from, to: pr.to }));
+      else if (pr.kind === "cubic") segs.push(_carryEdge(pr, { kind: "cubic", from: pr.from, c1: pr.c1, c2: pr.c2, to: pr.to }));
+      else if (pr.kind === "path") { let cur = null; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { segs.push(_carryEdge(pr, { kind: "cubic", from: cur, c1: c.points[0], c2: c.points[1], to: c.points[2] })); cur = c.points[2]; } }); }
     });
     return segs;
   }
@@ -758,7 +789,7 @@
     const p = project(); if (!p) return null;
     const rb = buildRingForPiece(p, line.piece);
     if (!rb.ok) return { ok: false, reason: rb.reason };
-    return replaceArcOnRing(rb.ring, line.segments);
+    return replaceArcOnRing(rb.ring, boundarySegsOf(line));
   }
   function syncBoundaryStatus() {
     const el = document.getElementById("designBoundaryStatus");
@@ -791,7 +822,7 @@
     const keys = PIECE_GEOM_KEYS[piece] || [piece];
     const rb = buildPieceRing(outlineSegsOf(p.working.geometry, keys), constrLinesOf(p.working.geometry, keys));   // ★ 원본 ring
     if (!rb.ok) return { ok: false, reason: rb.reason };
-    const res = composeDesignOutline(rb.ring, bl.map(l => l.segments));
+    const res = composeDesignOutline(rb.ring, bl.map(boundarySegsOf));
     if (!res.ok) return { ok: false, reason: res.reason };
     return { ok: true, outline: res.outline, lineIds: bl.map(l => l.id) };
   }
@@ -990,7 +1021,7 @@
       const keys = PIECE_GEOM_KEYS[pc] || [pc];
       const rb = buildPieceRing(outlineSegsOf(geometry, keys), constrLinesOf(geometry, keys));
       if (!rb.ok) return { ok: false, reason: rb.reason };
-      const res = composeDesignOutline(rb.ring, bl.map(l => l.segments));
+      const res = composeDesignOutline(rb.ring, bl.map(boundarySegsOf));
       if (!res.ok) return { ok: false, reason: res.reason };
       result[pc] = { outline: res.outline, lineIds: bl.map(l => l.id) };
     }
@@ -1017,6 +1048,10 @@
     for (const pc of ["front", "back"]) {
       const segs = geomToPatternSegments(segsByPiece[pc]);
       if (!segs.length) return { ok: false, reason: "empty-neckline-" + pc };
+      // ★ 이 도구는 "목선을 패턴선으로 전환"이라는 **작업 의미를 알고 있으므로** 새 대체 구간에
+      //   neckline role 을 명시적으로 부여한다(좌표 추론·승계 아님). 합성 시 cloneSeg 가 그대로 나른다.
+      //   일반 boundary replacement 는 의미 입력 수단이 없으므로 role 을 지어내지 않고 unresolved 로 둔다.
+      segs.forEach(s => { s.edge = "neckline"; });
       const keys = PIECE_GEOM_KEYS[pc] || [pc];
       const rb = buildPieceRing(outlineSegsOf(candGeom, keys), constrLinesOf(candGeom, keys));
       if (!rb.ok) return { ok: false, reason: rb.reason };
@@ -1124,6 +1159,6 @@
     chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment, constrainAngle45,
     // 파트 분리·외곽 대체(순수)
     buildPieceRing, splitRingByCut, subSegment, reverseSeg, projectOntoRing, projectOntoSeg, walkConstruction,
-    replaceArcOnRing, extractArcTagged, composeDesignOutline, geomToPatternSegments
+    replaceArcOnRing, extractArcTagged, composeDesignOutline, geomToPatternSegments, outlinePrimsToSegs, boundarySegsOf
   });
 })();

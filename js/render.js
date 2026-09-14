@@ -611,13 +611,18 @@ function drawAppliedSegments(g, segs, cls, color, side) {
     "back-neckline", "front-neckline",
   ]);
 
-  // SV2 의미 모서리 화이트리스트: baked seg.type → data-edge.
-  // 화이트리스트에 없는 타입(dart-leg-*, old-dart 등)은 edge 없음. 곡선(CURVE_TYPES)은
-  // 진동/네크라인뿐이라 이 표에 해당하는 타입이 오지 않는다(직선 분기에서만 부여).
+  // 의미 모서리 화이트리스트: baked seg.type → data-edge.
+  // 화이트리스트에 없는 타입(dart-leg-*, old-dart, back-shoulder-dart 등)은 edge 없음.
+  // SV2 = center/waist/side-seam(직선 분기). SV3 = shoulder(직선) + armhole/neckline(곡선 분기).
+  // ★ 곡선(CURVE_TYPES)은 flushSmoothPath 가 curveType 으로 이 표를 조회해 부여한다 —
+  //   split·rotate·bake 로 경계가 재조립돼도 role 은 seg.type 을 따라가므로 올바른 경계에 남는다.
   const SEG_EDGE = {
     "front-center": "center", "back-center": "center",
     "front-waist": "waist", "back-waist": "waist",
     "side-seam": "side-seam",
+    "front-shoulder": "shoulder", "back-shoulder": "shoulder",
+    "front-armhole-lower": "armhole", "front-armhole-upper": "armhole", "back-armhole": "armhole",
+    "front-neckline": "neckline", "back-neckline": "neckline",
   };
 
   const flushSmoothPath = (pts) => {
@@ -645,7 +650,8 @@ function drawAppliedSegments(g, segs, cls, color, side) {
     el.setAttribute("d", d);
     el.setAttribute("fill", "none");
     if (color) el.setAttribute("style", `stroke:${color};`);
-    _tagGeom(el, side, "outline");
+    // curveType 은 flush 시점에 아직 이 곡선의 타입이다(호출부가 전부 flush 후 재할당).
+    _tagGeom(el, side, "outline", SEG_EDGE[curveType]);
     g.appendChild(el);
   };
 
@@ -776,7 +782,7 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
           class:"pattern"
         });
         if(DEBUG_COLORS) _fnp.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
-        _tagGeom(_fnp, "front", "outline");
+        _tagGeom(_fnp, "front", "outline", "neckline");   // SV3 봉제 경계 의미
         gPat.appendChild(_fnp);
       }
 
@@ -801,7 +807,7 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
     }
 
     // ─ 앞어깨선 ──────────────────────────────────
-    gPat.appendChild(_tagGeom(LnC(nTL, FSP, "pattern", _DC_F), "front", "outline"));
+    gPat.appendChild(_tagGeom(LnC(nTL, FSP, "pattern", _DC_F), "front", "outline", "shoulder"));
     if(showDim) gPat.appendChild(dimLine(nTL, FSP, 12));
     gPat.appendChild(dot(FSP, "pt-main", 3));
     gPat.appendChild(lbl(FSP, "FSP", "txt-dark", 6, 10));
@@ -839,7 +845,7 @@ function drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
           class:"pattern"
         });
         if(DEBUG_COLORS) _p.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
-        _tagGeom(_p, "front", "outline");
+        _tagGeom(_p, "front", "outline", "armhole");      // SV3(진동 상부 — 가슴다트로 나뉜 span 중 하나)
         gPat.appendChild(_p);
       }
 
@@ -902,7 +908,7 @@ function drawBackNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
           class:"pattern"
         });
         if(DEBUG_COLORS) _bnp.setAttribute("style", `stroke:${DBG_BACK};`); // DEBUG
-        _tagGeom(_bnp, "back", "outline");
+        _tagGeom(_bnp, "back", "outline", "neckline");    // SV3 봉제 경계 의미
         gPat.appendChild(_bnp);
       }
 
@@ -944,8 +950,9 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
 
 
 
-    gPat.appendChild(_tagGeom(LnC(bND, dartCenter, "pattern", _DC_B), "back", "outline"));
-    gPat.appendChild(_tagGeom(LnC(dartEnd_, bSP, "pattern", _DC_B), "back", "outline"));
+    // SV3: 뒤어깨선은 뒤어깨다트로 두 span 으로 나뉜다 — 두 primitive 가 같은 shoulder role.
+    gPat.appendChild(_tagGeom(LnC(bND, dartCenter, "pattern", _DC_B), "back", "outline", "shoulder"));
+    gPat.appendChild(_tagGeom(LnC(dartEnd_, bSP, "pattern", _DC_B), "back", "outline", "shoulder"));
     gPat.appendChild(dot(bSP, "pt-main", 3));
     gPat.appendChild(lbl(bSP, "BSP", "txt-dark", 4, 10));
     gPat.appendChild(Ln(p.E, eOnSh, "dep"));
@@ -1009,7 +1016,7 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
                      ` C${hx1b},${hy1b} ${hx2a},${hy2a} ${bx2},${by2}`;
         const _bp = E("path",{ d:_bpd, class:"pattern" });
         if(DEBUG_COLORS) _bp.setAttribute("style", `stroke:${DBG_BACK};`); // DEBUG
-        _tagGeom(_bp, "back", "outline");
+        _tagGeom(_bp, "back", "outline", "armhole");      // SV3
         gPat.appendChild(_bp);
       }
 
@@ -1019,7 +1026,7 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
                      ` C${hx3b},${hy3b} ${hx4},${hy4} ${bx4},${by4}`;
         const _fp = E("path",{ d:_fpd, class:"pattern" });
         if(DEBUG_COLORS) _fp.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
-        _tagGeom(_fp, "front", "outline");
+        _tagGeom(_fp, "front", "outline", "armhole");     // SV3(진동 하부 span)
         gPat.appendChild(_fp);
       }
 

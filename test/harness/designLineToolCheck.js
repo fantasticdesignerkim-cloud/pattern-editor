@@ -440,6 +440,103 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   ok(rc[0].segments !== cA.segments && rc[0].segments[0].from.x === 3, "GVC: segments 복사본(원본 참조 아님)");
 }
 
+// ══════════════════════════════════════════════
+// 19(SV3). manual/designOutline 경로의 의미(edge) 보존
+//   · 유지 구간: 잘리고·뒤집히고·복제돼도 원본 role 을 그대로 가져간다
+//   · 대체 구간: 세그먼트에 role 이 명시돼 있으면 승계, 없으면 **그 구간만 unresolved**
+//   · 좌표·kind·개수·순서는 role 유무와 무관하게 동일(메타만 추가) — 정준 정렬 키 불변
+// ══════════════════════════════════════════════
+{
+  const L = (a, b, edge) => { const o = { kind: "line", from: a, to: b }; if (edge) o.edge = edge; return o; };
+  const P = (x, y) => ({ x, y });
+
+  // (a) 순수 헬퍼가 edge 를 나른다 — 없으면 own-property 도 만들지 않는다(SV2 계약)
+  {
+    const withEdge = L(P(0, 0), P(10, 0), "neckline"), plain = L(P(0, 0), P(10, 0));
+    ok(T.subSegment(withEdge, 0.2, 0.8).edge === "neckline", "19: subSegment edge 보존");
+    // status·provenance 도 잘림/뒤집힘/복제에서 유실되지 않는다
+    const un = { kind: "line", from: P(0, 0), to: P(10, 0), edgeStatus: "unresolved", edgeSourceLineId: "line-9" };
+    [T.subSegment(un, 0.1, 0.9), T.reverseSeg(un), T.outlinePrimsToSegs([un])[0]].forEach((o, i) =>
+      ok(o.edgeStatus === "unresolved" && o.edgeSourceLineId === "line-9", "19: unresolved 표식 보존 " + i));
+    ok(T.reverseSeg(withEdge).edge === "neckline", "19: reverseSeg edge 보존");
+    ok(!("edge" in T.subSegment(plain, 0.2, 0.8)), "19: edge 없으면 own-property 미생성(subSegment)");
+    ok(!("edge" in T.reverseSeg(plain)), "19: edge 없으면 own-property 미생성(reverseSeg)");
+    // cubic 도 동일
+    const cub = { kind: "cubic", from: P(0, 0), c1: P(1, 2), c2: P(3, 2), to: P(4, 0), edge: "armhole" };
+    ok(T.subSegment(cub, 0.1, 0.9).edge === "armhole" && T.reverseSeg(cub).edge === "armhole", "19: cubic edge 보존");
+  }
+
+  // (b) geometry primitive → 세그먼트 변환에서 role 보존(path 가 여러 C 로 쪼개져도 각 span 동일 role)
+  {
+    const prim = { kind: "path", edge: "armhole", commands: [
+      { type: "M", points: [P(0, 0)] },
+      { type: "C", points: [P(1, 1), P(2, 1), P(3, 0)] },
+      { type: "C", points: [P(4, -1), P(5, -1), P(6, 0)] }
+    ] };
+    const segs = T.outlinePrimsToSegs([prim, { kind: "line", from: P(6, 0), to: P(7, 0) }]);
+    ok(segs.length === 3, "19: path 2 C → 2 span + line");
+    ok(segs[0].edge === "armhole" && segs[1].edge === "armhole", "19: 다중 span 이 같은 role 유지");
+    ok(!("edge" in segs[2]), "19: role 없는 primitive 는 그대로 무-role");
+  }
+
+  // (c) 합성: 유지 구간 role 보존 + 명시 role 대체선 승계 + 무-role 대체선은 그 구간만 unresolved
+  {
+    const outline = [
+      L(P(0, 0), P(10, 0), "waist"), L(P(10, 0), P(10, 10), "side-seam"),
+      L(P(10, 10), P(6, 10), "shoulder"), L(P(4, 10), P(0, 10), "neckline"), L(P(0, 10), P(0, 0), "center")
+    ];
+    const constr = [{ from: P(4, 10), to: P(5, 6) }, { from: P(5, 6), to: P(6, 10) }];
+    const rb = T.buildPieceRing(outline, constr);
+    ok(rb.ok, "19: ring 구성");
+    // 프로덕션과 동일하게 boundarySegsOf 로 decorate 한 뒤 합성한다(호출부 경로).
+    const namedLine = { id: "line-7", segments: [L(P(0, 3), P(3, 0), "neckline")] };   // 목선 전환 도구 상당
+    const plainLine = { id: "line-8", segments: [L(P(10, 3), P(7, 0))] };              // 일반 대체선(의미 미지정)
+    const named = T.boundarySegsOf(namedLine), plain = T.boundarySegsOf(plainLine);
+    ok(named[0].edge === "neckline" && !("edgeStatus" in named[0]), "19: 명시 role 은 explicit(상태 표식 없음)");
+    ok(!("edge" in plain[0]) && plain[0].edgeStatus === "unresolved" && plain[0].edgeSourceLineId === "line-8",
+      "19: 일반 대체선은 명시적 unresolved + lineId provenance");
+    const comp = T.composeDesignOutline(rb.ring, [named, plain]);
+    ok(comp.ok, "19: 합성 성공");
+    if (comp.ok) {
+      // 대체선은 **양 끝점이 모두** 대각선 끝과 일치하는 세그먼트로 특정한다
+      // (유지 구간이 같은 좌표에서 잘리므로 한쪽 끝점만으로는 구분이 안 된다).
+      const diag = (a, b) => comp.outline.find(s => {
+        const m = (p, q) => Math.abs(p.x - q.x) < 1e-6 && Math.abs(p.y - q.y) < 1e-6;
+        return (m(s.from, a) && m(s.to, b)) || (m(s.from, b) && m(s.to, a));
+      });
+      const namedSeg = diag(P(0, 3), P(3, 0)), plainSeg = diag(P(10, 3), P(7, 0));
+      ok(namedSeg && namedSeg.edge === "neckline", "19: 명시 role 대체 구간은 role 승계");
+      ok(namedSeg && !("edgeStatus" in namedSeg), "19: 명시 role 구간엔 unresolved 표식 없음");
+      // ★ "edge 부재"만으로는 unresolved 를 인정하지 않는다 — 명시 상태 + provenance 를 요구한다.
+      ok(plainSeg && !("edge" in plainSeg), "19: 일반 대체 구간은 role 을 지어내지 않음");
+      ok(plainSeg && plainSeg.edgeStatus === "unresolved", "19: 일반 대체 구간은 **명시적** unresolved");
+      ok(plainSeg && plainSeg.edgeSourceLineId === "line-8", "19: unresolved 구간은 lineId provenance 보존");
+      ok(plainSeg.edge !== "unresolved", "19: unresolved 를 role 값으로 위장하지 않음");
+      // 평가 대상이 아닌 구간(다트 다리 등)은 unresolved 로 오인되지 않는다 — ring 의 dartleg 은 출력 자체가 없고,
+      // 유지 구간은 role 을 갖거나(아래) 표식이 없다. 표식이 붙은 구간은 대체선 하나뿐이어야 한다.
+      ok(comp.outline.filter(s => s.edgeStatus === "unresolved").length === 1, "19: unresolved 표식은 대체 구간 하나뿐");
+      // 유지 구간(대체되지 않은 side-seam/center/shoulder)은 role 이 살아있다
+      const kept = comp.outline.filter(s => "edge" in s).map(s => s.edge).sort();
+      ["center", "neckline", "shoulder", "side-seam"].forEach(e =>
+        ok(kept.indexOf(e) >= 0, "19: 유지 구간 role 보존(" + e + ")"));
+      // 잘린 유지 구간도 원본 role 을 그대로 — center 는 대체선에 의해 잘려도 center
+      const centerParts = comp.outline.filter(s => s.edge === "center");
+      ok(centerParts.length >= 1 && centerParts.every(s => s.edge === "center"), "19: 잘린 유지 구간도 같은 role");
+    }
+
+    // (d) role 유무와 무관하게 좌표·kind·개수·순서 동일(메타만 추가) — 정준 정렬 키에 edge 미포함
+    const bare = outline.map(s => ({ kind: s.kind, from: s.from, to: s.to }));
+    const rbBare = T.buildPieceRing(bare, constr);
+    const compBare = T.composeDesignOutline(rbBare.ring, [[L(P(0, 3), P(3, 0))], [L(P(10, 3), P(7, 0))]]);
+    ok(compBare.ok, "19: 무-role 합성 성공(대조군)");
+    if (comp.ok && compBare.ok) {
+      const strip = (r) => JSON.stringify(r.outline.map(s => ({ k: s.kind, f: s.from, t: s.to, c1: s.c1, c2: s.c2 })));
+      ok(strip(comp) === strip(compBare), "19: 의미 metadata 추가가 형상·개수·순서를 바꾸지 않음");
+      ok(comp.outline.length === compBare.outline.length, "19: primitive 개수 동일");
+    }
+  }
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

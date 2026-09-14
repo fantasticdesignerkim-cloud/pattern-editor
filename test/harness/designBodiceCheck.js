@@ -326,8 +326,8 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
     const center = edgePrims(r.front.outline, "center")[0];
     const FNP = near(center.from.y, 38) ? center.to : center.from;   // 목점=waist 아닌 끝
     ok(near(FNP.x, 47.5) && near(FNP.y, 5 + 4), "4e: 앞 FNP grain 아래 +깊이(5→9)");
-    // neckline = edge 없는 path, FNP' 를 M 시작으로
-    const neck = r.front.outline.find(pr => !("edge" in pr) && pr.kind === "path" && near(pr.commands[0].points[0].x, FNP.x, 1e-3) && near(pr.commands[0].points[0].y, FNP.y, 1e-3));
+    // neckline = edge:"neckline" path(SV3 — 생성 도구가 명시 부여), FNP' 를 M 시작으로
+    const neck = r.front.outline.find(pr => pr.edge === "neckline" && pr.kind === "path" && near(pr.commands[0].points[0].x, FNP.x, 1e-3) && near(pr.commands[0].points[0].y, FNP.y, 1e-3));
     ok(!!neck, "4e: 네크라인 = 라운드 path(FNP' 시작)");
     // SNP' = SNP + shoulderDir×2. 원본 SNP=(40.5,0), tip=(32.5,3) → dir=norm((-8,3))
     const SNP = neck.commands[neck.commands.length - 1].points.slice(-1)[0];
@@ -343,7 +343,7 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
   // 4f. 형태별(V / 스퀘어 / 보트): 공통 입력(목너비·앞목깊이) + 형태별 입력. 다트 불변·reference 분리.
   const nlT = (type, params) => ({ neckline: { mode: "parametric", type, parameters: params } });
   const frontCenterNeck = (r) => { const c = edgePrims(r.front.outline, "center")[0]; return near(c.from.y, 38) ? c.to : c.from; };
-  const neckSegs = (r) => r.front.outline.filter(pr => !("edge" in pr));   // edge 없는 = neckline/shoulder
+  const neckSegs = (r) => r.front.outline.filter(pr => pr.edge === "neckline");   // SV3 neckline role
   // V넥: 앞목 깊이 2 + V끝점 깊이 4 → CF 접점 = FNP' 에서 4 더 내려간 (47.5, 5+2+4=11). neckline = 직선 1개.
   {
     const r = DB.computeGeometry(ref, nlT("v", { neckWidthCm: 0, frontDepthCm: 2, backDepthCm: 1, vPointDepthCm: 4 }));
@@ -399,7 +399,7 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
     // 앞: FNP y 5→6(1cm 내림), SNP shoulder 방향 +1cm
     const fFNP = frontCenterNeck(rShirt);
     ok(near(fFNP.x, 47.5) && near(fFNP.y, 6), "4h: 앞중심 목점 1cm 내림(5→6)");
-    const fNeck = rShirt.front.outline.find(pr => !("edge" in pr) && pr.kind === "path" && near(pr.commands[0].points[0].y, 6, 1e-3));
+    const fNeck = rShirt.front.outline.find(pr => pr.edge === "neckline" && pr.kind === "path" && near(pr.commands[0].points[0].y, 6, 1e-3));
     const fSNP = fNeck.commands[fNeck.commands.length - 1].points.slice(-1)[0];
     const fDir = (() => { const dx = 32.5 - 40.5, dy = 3, l = Math.hypot(dx, dy); return { x: dx / l, y: dy / l }; })();
     ok(near(fSNP.x, 40.5 + fDir.x, 1e-2) && near(fSNP.y, fDir.y, 1e-2), "4h: 앞 어깨목점 +1cm");
@@ -407,7 +407,7 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
     const bc = edgePrims(rShirt.back.outline, "center")[0];
     const bBNP = near(bc.from.y, 38) ? bc.to : bc.from;
     ok(near(bBNP.x, 0) && near(bBNP.y, 5), "4h: 뒤중심 목점 불변(backDepth 0)");
-    const bNeck = rShirt.back.outline.find(pr => !("edge" in pr) && pr.kind === "path" && near(pr.commands[0].points[0].y, 5, 1e-3));
+    const bNeck = rShirt.back.outline.find(pr => pr.edge === "neckline" && pr.kind === "path" && near(pr.commands[0].points[0].y, 5, 1e-3));
     const bSNP = bNeck.commands[bNeck.commands.length - 1].points.slice(-1)[0];
     const bDir = (() => { const dx = 15 - 7, dy = 3, l = Math.hypot(dx, dy); return { x: dx / l, y: dy / l }; })();
     ok(near(bSNP.x, 7 + bDir.x, 1e-2) && near(bSNP.y, bDir.y, 1e-2), "4h: 뒤 어깨목점 +1cm");
@@ -423,6 +423,61 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
     ok(eq(rBogus, ref) && !sharesRef(rBogus, ref), "4h: 알 수 없는 type = 미적용 no-op(round 아님)");
     ok(JSON.stringify(rBogus) !== JSON.stringify(rRound), "4h: 알 수 없는 type ≠ round 결과");
   }
+}
+
+// 4i(SV3). 봉제 경계 의미(neckline/shoulder/armhole) 보존:
+//   · 디자인 변환(여유·길이·옆선·곡선·네크라인)을 거쳐도 role 이 유실되지 않는다
+//   · 변환 결과의 좌표·kind·개수·순서는 role 유무와 무관하게 동일하다(메타만 추가)
+//   · legacy(무-role) 입력에는 role 을 지어내지 않는다
+{
+  const npath = (a, c1, c2, b, edge) => { const o = { kind: "path", commands: [{ type: "M", points: [{ x: a[0], y: a[1] }] }, { type: "C", points: [{ x: c1[0], y: c1[1] }, { x: c2[0], y: c2[1] }, { x: b[0], y: b[1] }] }] }; if (edge) o.edge = edge; return o; };
+  // v3 형태: 목선·어깨·진동에 role. 진동은 **2 span**(span 수 비고정 계약).
+  function seamPiece(Cx, sgn, W, withSeamRoles) {
+    const E = (e) => withSeamRoles ? e : undefined;
+    const S = { x: Cx + sgn * W, y: 38 };
+    return {
+      outline: [
+        npath([Cx, 5], [Cx + sgn * 2, 2], [Cx + sgn * 5, 0], [Cx + sgn * 7, 0], E("neckline")),
+        line(Cx + sgn * 7, 0, Cx + sgn * 15, 3, E("shoulder")),
+        npath([Cx + sgn * 15, 3], [Cx + sgn * 18, 8], [Cx + sgn * 21, 14], [Cx + sgn * 23, 22], E("armhole")),
+        npath([Cx + sgn * 23, 22], [Cx + sgn * 23.5, 25], [S.x, 27], [S.x, 30], E("armhole")),
+        line(Cx, 5, Cx, 38, "center"), line(Cx, 38, S.x, S.y, "waist"), line(S.x, 30, S.x, 38, "side-seam")
+      ],
+      construction: [line(Cx - 3, 20, Cx - 1, 38)]
+    };
+  }
+  const seamGeom = (withSeamRoles) => ({
+    front: seamPiece(47.5, -1, 24.4469, withSeamRoles), back: seamPiece(0, +1, 23.0531, withSeamRoles),
+    shared: { outline: [], construction: [] }, sleeve: { outline: [], construction: [] }
+  });
+  const rolesOf = (r, pc) => r[pc].outline.map(p => p.edge || "∅");
+  // 변환 묶음: 여유 + 길이 + 허리·밑단 옆선 + 옆선 곡선 + 네크라인(라운드)
+  const OPTS = {
+    body: { bustEaseCm: 6, hemExtensionBelowWaistCm: 10, waistSideOffsetCm: -2, hemSideOffsetCm: 1, sideSeamCurve: 0.8 },
+    neckline: { mode: "parametric", type: "round", parameters: { neckWidthCm: 1, frontDepthCm: 2, backDepthCm: 1 } }
+  };
+  const v3 = seamGeom(true), legacy = seamGeom(false);
+  const r3 = DB.computeGeometry(v3, OPTS), rL = DB.computeGeometry(legacy, OPTS);
+
+  // (a) 변환 후에도 shoulder/armhole role 이 남아있고, armhole 다중 span 이 같은 role 을 유지
+  ["front", "back"].forEach(pc => {
+    ok(r3[pc].outline.filter(p => p.edge === "shoulder").length === 1, "4i: " + pc + " shoulder role 보존");
+    ok(r3[pc].outline.filter(p => p.edge === "armhole").length === 2, "4i: " + pc + " armhole 2 span 보존(같은 role)");
+    ok(r3[pc].outline.filter(p => p.edge === "neckline").length >= 1, "4i: " + pc + " neckline role 존재(교체 구간에 명시 부여)");
+  });
+  // (b) 변환 전후 좌표·kind·개수·순서는 role 유무와 무관하게 동일 — 메타만 추가된다
+  const stripEdges = (r) => JSON.parse(JSON.stringify(r, (k, v) => k === "edge" ? undefined : v));
+  ok(JSON.stringify(stripEdges(r3)) === JSON.stringify(stripEdges(rL)), "4i: role 유무와 무관하게 형상·개수·순서 동일");
+  // (c) legacy(무-role) 입력에는 shoulder/armhole 을 지어내지 않는다(neckline 은 도구가 새로 만든 구간이라 예외)
+  const fabricated = ["front", "back"].some(pc => rL[pc].outline.some(p => p.edge === "shoulder" || p.edge === "armhole"));
+  ok(!fabricated, "4i: legacy 입력에 shoulder/armhole fabricated 주입 없음");
+  // (d) 네크라인 미적용(원형 유지)에서도 기존 role 은 그대로
+  const rKeep = DB.computeGeometry(v3, { body: { bustEaseCm: 4 } });
+  ok(JSON.stringify(rolesOf(rKeep, "front")) === JSON.stringify(rolesOf(v3, "front")), "4i: 네크라인 미적용 시 role 순서·집합 불변");
+  // (e) 다트 자체는 불변(길이 연장 시 waist 참고선이 construction 으로 합류하므로 배열 전체 비교는 안 함)
+  const dart0 = JSON.stringify(v3.front.construction[0]);
+  ok(r3.front.construction.some(p => JSON.stringify(p) === dart0), "4i: 다트 primitive 불변");
+  ok(!sharesRef(r3, v3), "4i: reference 참조 분리");
 }
 
 // 5. topology / 수치 실패 계약

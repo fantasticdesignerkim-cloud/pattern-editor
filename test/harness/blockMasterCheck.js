@@ -56,7 +56,11 @@ function elFactory() {
     if (edge) a["data-edge"] = edge;
     return el("line", a);
   };
-  const pathEl = (piece, role, d) => el("path", { "data-piece": piece, "data-geometry-role": role, d });
+  const pathEl = (piece, role, d, edge) => {
+    const a = { "data-piece": piece, "data-geometry-role": role, d };
+    if (edge) a["data-edge"] = edge;
+    return el("path", a);
+  };
   return { el, lineEl, pathEl };
 }
 const { el, lineEl, pathEl } = elFactory();
@@ -70,6 +74,12 @@ const F_WAIST = { x1: 240, y1: 300, x2: 140, y2: 300 };
 const F_CENTER = { x1: 140, y1: 300, x2: 140, y2: 100 };
 const B_WAIST = { x1: 240, y1: 300, x2: 60, y2: 300 };
 const B_CENTER = { x1: 60, y1: 300, x2: 60, y2: 100 };
+// SV3 봉제 경계 의미(neckline/shoulder/armhole). 진동은 **앞판 2 span**(다트로 나뉜 형태)로
+// 두어 "span 수 고정 아님 / 여러 primitive 가 같은 role" 계약을 픽스처가 직접 덮는다.
+const F_NECK = { x1: 140, y1: 100, x2: 170, y2: 80 };
+const F_SHOULDER = { x1: 170, y1: 80, x2: 200, y2: 60 };
+const B_NECK = { x1: 60, y1: 100, x2: 90, y2: 80 };
+const B_SHOULDER = { x1: 90, y1: 80, x2: 120, y2: 60 };
 
 // 기본 scene: workMode 에 따라 파트를 포함/제외(프로덕션 body→소매 없음, sleeve→몸판 없음).
 function defaultScene(mode) {
@@ -77,13 +87,18 @@ function defaultScene(mode) {
   const body = mode !== "sleeve";
   const sleeve = mode !== "body";
   if (body) {
-    out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160")); // [0] 진동곡선(edge 없음)
+    out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160", "armhole")); // [0] 진동 span 1
+    out.push(pathEl("front", "outline", "M200,160 C210,170 215,175 220,180", "armhole")); // 진동 span 2(같은 role)
+    out.push(lineEl("front", "outline", F_NECK, "neckline"));                   // 앞 목선
+    out.push(lineEl("front", "outline", F_SHOULDER, "shoulder"));               // 앞 어깨
     out.push(lineEl("front", "outline", SIDE, "side-seam"));                    // 앞 옆선
     out.push(lineEl("front", "outline", F_WAIST, "waist"));                     // 앞 허리
     out.push(lineEl("front", "outline", F_CENTER, "center"));                   // 앞 중심
     out.push(lineEl("front", "construction", { x1: 100, y1: 60, x2: 120, y2: 80 }));
     out.push(lineEl("front", "construction", { x1: 130, y1: 60, x2: 150, y2: 80 }));
-    out.push(pathEl("back", "outline", "M60,100 C80,120 100,140 120,160"));
+    out.push(pathEl("back", "outline", "M60,100 C80,120 100,140 120,160", "armhole"));
+    out.push(lineEl("back", "outline", B_NECK, "neckline"));                    // 뒤 목선
+    out.push(lineEl("back", "outline", B_SHOULDER, "shoulder"));                // 뒤 어깨
     out.push(lineEl("back", "outline", SIDE, "side-seam"));                     // 뒤 옆선(앞과 동일 좌표)
     out.push(lineEl("back", "outline", B_WAIST, "waist"));
     out.push(lineEl("back", "outline", B_CENTER, "center"));
@@ -161,12 +176,12 @@ function makeHarness(cfg) {
 {
   const h = makeHarness();
   const s = h.capture();
-  ok(s.schemaVersion === 2, "1: schemaVersion=2");
+  ok(s.schemaVersion === 3, "1: schemaVersion=3");
   ok(deepEqual(Object.keys(s).sort(), ["geometry", "schemaVersion", "source"]), "1: 최상위 키");
   const dist = {};
   ["front", "back", "shared", "sleeve"].forEach(pc => ["outline", "construction"].forEach(rl => { dist[pc + "/" + rl] = s.geometry[pc][rl].length; }));
-  ok(dist["front/outline"] === 4 && dist["front/construction"] === 2, "1: front 분포");
-  ok(dist["back/outline"] === 4 && dist["back/construction"] === 2, "1: back 분포");
+  ok(dist["front/outline"] === 7 && dist["front/construction"] === 2, "1: front 분포");
+  ok(dist["back/outline"] === 6 && dist["back/construction"] === 2, "1: back 분포");
   ok(dist["shared/outline"] === 0 && dist["shared/construction"] === 2, "1: shared 분포");
   ok(dist["sleeve/outline"] === 2 && dist["sleeve/construction"] === 0, "1: sleeve 분포");
   ok(deepEqual(s.source.measurements, { B: 83, W: 64, BL: 38, SL: 52, Hem: 30, capAdj: 3, capFormula: "culture", dartTotal: 12.5 }), "1: measurements");
@@ -234,7 +249,7 @@ function makeHarness(cfg) {
     const s = h.capture();
     ok(h.state.workMode === mode, "7: workMode 복원(" + mode + ")");
     // 캡처는 내부적으로 all 로 수집하므로 분포는 항상 전 파트
-    ok(s.geometry.sleeve.outline.length === 2 && s.geometry.front.outline.length === 4, "7: all 강제 수집(" + mode + ")");
+    ok(s.geometry.sleeve.outline.length === 2 && s.geometry.front.outline.length === 7, "7: all 강제 수집(" + mode + ")");
   });
 }
 
@@ -353,13 +368,16 @@ function makeHarness(cfg) {
   ok(h.calls.setItem === 0, "18: setItem 호출 0");
 }
 
-// 테스트 19: SV2 edge 가 snapshot 에 보존(앞·뒤 outline 각각 center/waist/side-seam)
+// 테스트 19: edge 가 snapshot 에 보존 — SV2 구조(center/waist/side-seam) + SV3 봉제 의미
+//   (neckline/shoulder/armhole). 앞 진동은 2 span 이라 armhole 이 두 번 나온다(span 수 비고정).
 {
   const h = makeHarness();
   const s = h.capture();
   const edgesOf = (arr) => arr.filter(p => Object.prototype.hasOwnProperty.call(p, "edge")).map(p => p.edge).sort();
-  ok(deepEqual(edgesOf(s.geometry.front.outline), ["center", "side-seam", "waist"]), "19: front edge 집합");
-  ok(deepEqual(edgesOf(s.geometry.back.outline), ["center", "side-seam", "waist"]), "19: back edge 집합");
+  ok(deepEqual(edgesOf(s.geometry.front.outline),
+    ["armhole", "armhole", "center", "neckline", "shoulder", "side-seam", "waist"]), "19: front edge 집합");
+  ok(deepEqual(edgesOf(s.geometry.back.outline),
+    ["armhole", "center", "neckline", "shoulder", "side-seam", "waist"]), "19: back edge 집합");
 }
 
 // 테스트 20: edge 없는 primitive 는 own-property "edge" 자체가 없다
@@ -369,7 +387,7 @@ function makeHarness(cfg) {
   const noEdge = (p) => Object.prototype.hasOwnProperty.call(p, "edge") === false;
   ok(s.geometry.front.construction.every(noEdge), "20: front construction edge 없음");
   ok(s.geometry.sleeve.outline.every(noEdge), "20: sleeve outline edge 없음");
-  ok(noEdge(s.geometry.front.outline[0]), "20: 진동곡선 path edge 없음");
+  ok(s.geometry.shared.construction.every(noEdge), "20: shared construction edge 없음");
   // undefined 값을 가진 own-property 도 없어야 한다
   const hasUndefEdge = s.geometry.front.construction.some(p => "edge" in p && p.edge === undefined);
   ok(!hasUndefEdge, "20: edge:undefined own-property 없음");
@@ -429,13 +447,56 @@ function makeHarness(cfg) {
 }
 
 // 테스트 28: v1형 scene(모서리 전무) → missing-required-edge 로 거부(SV2 요구)
+//   data-edge 만 가리고 tagName/좌표는 그대로 둔다(path 를 line 으로 바꾸면 중복 판정에 걸린다).
 {
-  const v1Scene = (mode) => defaultScene(mode).map(e =>
-    (e.getAttribute("data-edge") !== null)
-      ? lineEl(e.getAttribute("data-piece"), e.getAttribute("data-geometry-role"),
-          { x1: +e.getAttribute("x1"), y1: +e.getAttribute("y1"), x2: +e.getAttribute("x2"), y2: +e.getAttribute("y2") })
-      : e);
+  const stripEdge = (e) => ({ tagName: e.tagName, getAttribute(k) { return k === "data-edge" ? null : e.getAttribute(k); } });
+  const v1Scene = (mode) => defaultScene(mode).map(stripEdge);
   throws(() => makeHarness({ sceneBuilder: v1Scene }).capture(), "missing-required-edge", "28: 모서리 없는 v1형 거부");
+}
+
+// ══════════════════════════════════════════════
+// 테스트 29(SV3): 봉제 경계 의미가 하나라도 빠지면 정상 v3 로 통과하지 않는다.
+//   → v3 는 "신규 semantic 없이도 통과하는 optional schema" 가 아니다.
+{
+  const dropEdge = (edge, piece) => (mode) => defaultScene(mode).map(e =>
+    (e.getAttribute("data-edge") === edge && e.getAttribute("data-piece") === piece)
+      ? { tagName: e.tagName, getAttribute(k) { return k === "data-edge" ? null : e.getAttribute(k); } }
+      : e);
+  ["neckline", "shoulder", "armhole"].forEach(edge => {
+    ["front", "back"].forEach(piece => {
+      throws(() => makeHarness({ sceneBuilder: dropEdge(edge, piece) }).capture(),
+        "missing-seam-edge", "29: " + piece + "/" + edge + " 누락 거부");
+    });
+  });
+}
+
+// 테스트 30(SV3): armhole 은 여러 연속 span 으로 나뉠 수 있고 span 수는 고정이 아니다.
+//   배열 위치·primitive 종류를 identity 로 쓰지 않는다(같은 role 이 여러 primitive 에).
+{
+  const h = makeHarness();
+  const s = h.capture();
+  const arm = (pc) => s.geometry[pc].outline.filter(p => p.edge === "armhole");
+  ok(arm("front").length === 2, "30: 앞 진동 2 span(다트 분할 형태)");
+  ok(arm("back").length === 1, "30: 뒤 진동 1 span — span 수 고정 아님");
+  ok(arm("front").every(p => p.kind === "path"), "30: span 은 primitive 종류와 무관하게 같은 role");
+  // 어깨도 다중 span 가능해야 한다(뒤어깨다트로 나뉘는 실제 형태) — 위치 무관 role 집합으로 확인
+  const shoulderScene = (mode) => {
+    const base = defaultScene(mode);
+    if (mode === "sleeve") return base;
+    return base.concat([lineEl("back", "outline", { x1: 120, y1: 60, x2: 130, y2: 55 }, "shoulder")]);
+  };
+  const s2 = makeHarness({ sceneBuilder: shoulderScene }).capture();
+  ok(s2.geometry.back.outline.filter(p => p.edge === "shoulder").length === 2, "30: 뒤 어깨 2 span 허용");
+}
+
+// 테스트 31(SV3): 신규 role 도 위치 규칙을 따른다(front/back outline 밖 금지).
+{
+  const onConstr = (mode) => defaultScene(mode).concat(
+    mode === "sleeve" ? [] : [lineEl("front", "construction", { x1: 5, y1: 5, x2: 9, y2: 9 }, "armhole")]);
+  const onSleeve = (mode) => defaultScene(mode).concat(
+    mode === "body" ? [] : [lineEl("sleeve", "outline", { x1: 5, y1: 5, x2: 9, y2: 9 }, "shoulder")]);
+  throws(() => makeHarness({ sceneBuilder: onConstr }).capture(), "edge-placement", "31: front construction armhole 불허");
+  throws(() => makeHarness({ sceneBuilder: onSleeve }).capture(), "edge-placement", "31: sleeve outline shoulder 불허");
 }
 
 // ── 결과 ──

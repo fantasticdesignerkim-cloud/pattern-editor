@@ -30,11 +30,15 @@
   //   · waist  : front/back outline 또는 construction (연장 시 waist 가 construction 으로 이동)
   //   · hem    : front/back outline (신규 hem 모서리)
   // center/side-seam 은 계속 outline 에서만(construction 금지).
+  //   · neckline/shoulder/armhole (SV3 봉제 경계 의미) : front/back outline 에만.
   const EDGE_PLACEMENT = {
     center: { outline: 1 },
     "side-seam": { outline: 1 },
     hem: { outline: 1 },
-    waist: { outline: 1, construction: 1 }
+    waist: { outline: 1, construction: 1 },
+    neckline: { outline: 1 },
+    shoulder: { outline: 1 },
+    armhole: { outline: 1 }
   };
   // 고정 순회 순서(deterministic).
   const ORDER = [

@@ -79,7 +79,12 @@
     b.outline.forEach(function (s) { if (s.edge !== "center") return; endpointsOf(s).forEach(function (p) { if (!top || p.y < top.y) top = p; }); });
     return top;
   }
-  // 진동둘레 길이: **edge 없는 곡선(path/cubic) 중 center-top(목점)에 닿지 않는** 세그먼트 합.
+  // 구조 모서리(SV2). SV3 봉제 의미(neckline/shoulder/armhole)가 붙어도 아래 **기존 휴리스틱이
+  // 고르던 세그먼트를 그대로 고르도록** 이 집합만 배제한다 — 측정 경로를 semantic 으로 교체하지
+  // 않는다(교체는 Phase 1 canonical 측정 승인 이후). 동일성은 하네스가 회귀로 비교한다.
+  var STRUCT_EDGE = { center: 1, waist: 1, "side-seam": 1, hem: 1 };
+  var isStructEdge = function (s) { return !!STRUCT_EDGE[s.edge]; };
+  // 진동둘레 길이: **구조 모서리가 아닌 곡선(path/cubic) 중 center-top(목점)에 닿지 않는** 세그먼트 합.
   //   어깨는 항상 직선·네크라인은 목점에 닿음 → 남는 곡선이 진동(앞은 다트로 2조각, 뒤는 1조각).
   //   네크라인/여밈에 무관하도록 geometry 로 측정(designOutline 아님).
   function armholeLen(geometry, piece) {
@@ -87,7 +92,7 @@
     var top = centerTop(geometry, piece); if (!top) return { ok: false, len: 0, segs: [] };
     var touchesTop = function (s) { return endpointsOf(s).some(function (p) { return dist(p, top) < 0.05; }); };
     var arcs = b.outline.filter(function (s) {
-      if ("edge" in s) return false;                    // center/waist/side-seam/hem 제외
+      if (isStructEdge(s)) return false;                // center/waist/side-seam/hem 제외
       var curve = (s.kind === "cubic") || (s.kind === "path");
       return curve && !touchesTop(s);                   // 네크라인(목점 접) 제외, 직선 어깨는 curve 아님
     });
@@ -109,7 +114,7 @@
     // 원본/미적용: center-top 에 닿는 단일 네크라인 세그먼트.
     if (!b || !Array.isArray(b.outline)) return 0;
     var top = centerTop(proj.working.geometry, piece); if (!top) return 0;
-    var seg = b.outline.find(function (s) { return !("edge" in s) && endpointsOf(s).some(function (p) { return dist(p, top) < 0.05; }); });
+    var seg = b.outline.find(function (s) { return !isStructEdge(s) && endpointsOf(s).some(function (p) { return dist(p, top) < 0.05; }); });
     return seg ? segLen(seg) : 0;
   }
 
@@ -137,6 +142,48 @@
   }
 
   function round4(v) { return Math.round(v * 1e4) / 1e4; }
+
+  // ── 봉제 의미 readiness(P0.1) ──
+  // **현재 effective outline** 의 의미 완전성을 평가한다. designProject.semanticStatus 는
+  // source block 상태라 편집 후를 대표하지 못하므로, 편집 결과는 여기서 따로 평가해 완료
+  // 스냅샷에 보존한다. ★ 이번 증분에서 이 값으로 몸판 완료를 **막지 않는다** — 이후
+  // project seam-ready 게이트가 소비할 증거만 남긴다(hash·측정 경로 무관).
+  //
+  // 필수 role(현재 effective outline 구성 기준): 신규 봉제 경계 3종 + 기존 seam-relevant 2종.
+  //   waist/hem 은 디자인 길이 상태에 따라 외곽 경계였다가 내부 기준선으로 옮겨가므로
+  //   **무조건 요구하지 않는다**(waist 를 봉제선으로 자동 분류하지 않는다).
+  //   각 role 은 **1 span 이상이면 존재**로 본다 — span 수를 고정하지 않는다.
+  var REQUIRED_ROLES = ["neckline", "shoulder", "armhole", "center", "side-seam"];
+
+  // 상호 배타적 단일 status 를 쓰지 않는다 — legacy / unresolved / missing 은 **동시에** 성립할
+  // 수 있으므로 issues 배열로 복수 원인을 전부 보존한다. summary(ready)는 issues 를 덮지 않는다.
+  function evaluateSemantics(proj) {
+    var sb = proj && proj.sourceBlock;
+    var sv = (sb && typeof sb.schemaVersion === "number") ? sb.schemaVersion : null;
+    var unresolved = [], missing = [], issues = [], seen = {}, hasUnresolved = { front: false, back: false };
+    ["front", "back"].forEach(function (piece) {
+      var outline = effectiveOutline(proj, piece) || [];
+      var have = {};
+      outline.forEach(function (s) {
+        if (s.edge) have[s.edge] = 1;                       // role 은 edge 에만
+        if (s.edgeStatus === "unresolved") {                // 명시적 unresolved 만 인정
+          hasUnresolved[piece] = true;
+          var lineId = (typeof s.edgeSourceLineId === "string") ? s.edgeSourceLineId : null;
+          var key = piece + "|" + lineId;
+          if (!seen[key]) { seen[key] = 1; unresolved.push({ piece: piece, lineId: lineId }); }
+        }
+      });
+      REQUIRED_ROLES.forEach(function (role) { if (!have[role]) missing.push({ piece: piece, role: role }); });
+    });
+    // v3 이 아닌 출처(구형 v2·미상)는 신규 봉제 의미를 보장하지 못한다.
+    if (sv !== 3) issues.push("legacy-source");
+    if (unresolved.length) issues.push("unresolved-replacement");
+    // 필수 role 이 **provenance 있는 unresolved 없이** 사라졌다면 metadata 전달 오류다
+    // (의도된 unresolved 와 구분). unresolved 로 설명되는 유실도 missing 목록에는 그대로 남긴다.
+    var unexplained = missing.filter(function (m) { return sv === 3 && !hasUnresolved[m.piece]; });
+    if (unexplained.length) issues.push("missing-required-role");
+    return { ready: issues.length === 0, sourceSchemaVersion: sv, issues: issues, unresolved: unresolved, missing: missing };
+  }
 
   // ── 검사 ──
   function check(proj) {
@@ -171,7 +218,8 @@
       sideSeam: { front: ssF, back: ssB, diff: ssDiff, status: ssStatus },
       armhole: { front: ahF.len, back: ahB.len, ok: ahF.ok && ahB.ok },
       neckline: { front: nkF, back: nkB, half: nkHalf, finished: 2 * nkHalf, ok: nkHalf > 0 },
-      previews: { neckline: !manualBad, placket: !placketBad, ok: previewOk }
+      previews: { neckline: !manualBad, placket: !placketBad, ok: previewOk },
+      semantics: evaluateSemantics(proj)          // 완료 차단 아님 — 증거만
     };
   }
 
@@ -205,6 +253,8 @@
       armholeLengths: { front: round4(c.armhole.front), back: round4(c.armhole.back) },
       necklineLengths: { front: round4(c.neckline.front), back: round4(c.neckline.back), half: round4(c.neckline.half), finished: round4(c.neckline.finished) },
       placket: proj.working.frontPlacket ? clone(proj.working.frontPlacket) : null,
+      // 편집 후 봉제 의미 readiness(복수 원인 보존). **hash signature 에 미포함** — 형상 identity 불변.
+      semantics: evaluateSemantics(proj),
       completedAt: Date.now()
     });
     proj.working.bodiceResult = result;   // 세션 전용(reload 시 소멸). reference·원본 불변.
@@ -242,5 +292,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ evaluateSemantics: evaluateSemantics, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

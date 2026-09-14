@@ -13,9 +13,14 @@
 //   - snapshot 은 deep clone + 참조 분리(반환 객체를 변형해도 state/DOM 불변).
 //   - 반환 객체에 DOM 요소·함수·CSS class·style·카메라(view) 상태를 넣지 않는다.
 //   - data-piece / data-geometry-role 은 분류에만 쓰고 snapshot 에 저장하지 않는다.
-//   - (SV2, schemaVersion 2) data-edge 는 의미 모서리(center/waist/side-seam)로,
-//     front/back outline 에만 허용하며 primitive.edge 로 snapshot 에 저장한다.
-//     중복 판정에서는 제외하고 canonical hash/identity 에는 포함된다.
+//   - data-edge 는 의미 모서리로, front/back outline 에만 허용하며 primitive.edge 로
+//     snapshot 에 저장한다. 중복 판정에서는 제외하고 canonical hash/identity 에는 포함된다.
+//     · SV2(schemaVersion 2) = 구조 모서리 center/waist/side-seam
+//     · SV3(schemaVersion 3) = 위 + 봉제 경계 의미 neckline/shoulder/armhole
+//       shoulder/armhole/neckline 은 **여러 연속 span 으로 나뉠 수 있다**(다트 intake 등).
+//       span 수를 고정하지 않고, 배열 위치·primitive 종류를 identity 로 쓰지 않는다.
+//   - v3 정상 캡처는 **필수 semantic coverage 를 강제**한다(신규 semantic 없이 통과하는
+//     optional schema 가 아니다). 구형 v2 완료본의 수용·legacy 표시는 designProject 의 몫.
 //   - 좌표는 원본 정밀도를 보존하고, 정규화는 hash/중복 판정(canonical)에서만 한다.
 //   - workMode 만 제한된 transaction 으로 all 로 바꿔 수집하고 finally 에서 원복한다.
 //     전역 state 에 snapshot source 를 임시 주입하지 않는다.
@@ -27,11 +32,17 @@
   var ALLOWED_ROLE = { outline: 1, construction: 1 };
   // shared.outline 은 A안대로 비어 있을 수 있으므로 필수에서 제외한다.
   var REQUIRED_OUTLINE = ["front", "back", "sleeve"];
-  // SV2 의미 모서리(semantic edge). front/back outline 에만 허용한다.
-  var ALLOWED_EDGE = { center: 1, waist: 1, "side-seam": 1 };
+  // 의미 모서리(semantic edge). front/back outline 에만 허용한다.
+  var ALLOWED_EDGE = {
+    center: 1, waist: 1, "side-seam": 1,           // SV2 구조 모서리
+    neckline: 1, shoulder: 1, armhole: 1           // SV3 봉제 경계 의미
+  };
   // 앞·뒤 각 조각 outline 이 반드시 가져야 하는 의미 모서리(topology junction 근거).
   var REQUIRED_EDGE_PIECES = ["front", "back"];
   var REQUIRED_EDGES = ["center", "waist", "side-seam"];
+  // SV3 정상 coverage: 위에 더해 봉제 경계 의미가 앞·뒤 각각 최소 1 span 씩 있어야 한다.
+  var REQUIRED_SEAM_EDGES = ["neckline", "shoulder", "armhole"];
+  var SCHEMA_VERSION = 3;
 
   function fail(reason, detail) {
     var e = new Error("captureBlockSnapshot 실패: " + reason);
@@ -184,12 +195,16 @@
       if (geometry[p].outline.length === 0) fail("empty-required-outline", p);
     }
     // SV2: 앞·뒤 각 조각 outline 이 center/waist/side-seam 을 모두 가지는지(coverage).
+    // SV3: 더해서 neckline/shoulder/armhole 이 각각 최소 1 span 있는지(span 수는 고정 안 함).
     for (var pi = 0; pi < REQUIRED_EDGE_PIECES.length; pi++) {
       var pc = REQUIRED_EDGE_PIECES[pi];
       var have = {};
       geometry[pc].outline.forEach(function (prm) { if (prm.edge) have[prm.edge] = 1; });
       for (var ei = 0; ei < REQUIRED_EDGES.length; ei++) {
         if (!have[REQUIRED_EDGES[ei]]) fail("missing-required-edge", pc + "/" + REQUIRED_EDGES[ei]);
+      }
+      for (var si = 0; si < REQUIRED_SEAM_EDGES.length; si++) {
+        if (!have[REQUIRED_SEAM_EDGES[si]]) fail("missing-seam-edge", pc + "/" + REQUIRED_SEAM_EDGES[si]);
       }
     }
     // SV2: 앞·뒤 각 조각의 center∩waist / side-seam∩waist junction 유일성.
@@ -255,7 +270,7 @@
       else render();
     }
 
-    return { schemaVersion: 2, source: source, geometry: geometry };
+    return { schemaVersion: SCHEMA_VERSION, source: source, geometry: geometry };
   }
 
   window.captureBlockSnapshot = captureBlockSnapshot;

@@ -48,21 +48,34 @@ const lineEl = (piece, role, c, edge) => {
   if (edge) a["data-edge"] = edge;
   return el("line", a);
 };
-const pathEl = (piece, role, d) => el("path", { "data-piece": piece, "data-geometry-role": role, d });
+const pathEl = (piece, role, d, edge) => {
+  const a = { "data-piece": piece, "data-geometry-role": role, d };
+  if (edge) a["data-edge"] = edge;
+  return el("path", a);
+};
 // SV2 의미 모서리(junction 유일).
 const F_WAIST = { x1: 240, y1: 300, x2: 140, y2: 300 };
 const F_CENTER = { x1: 140, y1: 300, x2: 140, y2: 100 };
 const B_WAIST = { x1: 240, y1: 300, x2: 60, y2: 300 };
 const B_CENTER = { x1: 60, y1: 300, x2: 60, y2: 100 };
+// SV3 봉제 경계 의미(neckline/shoulder/armhole) — v3 정상 coverage 픽스처.
+const F_NECK = { x1: 140, y1: 100, x2: 170, y2: 80 };
+const F_SHOULDER = { x1: 170, y1: 80, x2: 200, y2: 60 };
+const B_NECK = { x1: 60, y1: 100, x2: 90, y2: 80 };
+const B_SHOULDER = { x1: 90, y1: 80, x2: 120, y2: 60 };
 function defaultScene(mode) {
   const out = []; const body = mode !== "sleeve", sleeve = mode !== "body";
   if (body) {
-    out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160"));
+    out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160", "armhole"));
+    out.push(lineEl("front", "outline", F_NECK, "neckline"));
+    out.push(lineEl("front", "outline", F_SHOULDER, "shoulder"));
     out.push(lineEl("front", "outline", SIDE, "side-seam"));
     out.push(lineEl("front", "outline", F_WAIST, "waist"));
     out.push(lineEl("front", "outline", F_CENTER, "center"));
     out.push(lineEl("front", "construction", { x1: 100, y1: 60, x2: 120, y2: 80 }));
-    out.push(pathEl("back", "outline", "M60,100 C80,120 100,140 120,160"));
+    out.push(pathEl("back", "outline", "M60,100 C80,120 100,140 120,160", "armhole"));
+    out.push(lineEl("back", "outline", B_NECK, "neckline"));
+    out.push(lineEl("back", "outline", B_SHOULDER, "shoulder"));
     out.push(lineEl("back", "outline", SIDE, "side-seam"));
     out.push(lineEl("back", "outline", B_WAIST, "waist"));
     out.push(lineEl("back", "outline", B_CENTER, "center"));
@@ -247,8 +260,8 @@ function makeHarness() {
   const v1 = h.bw.complete();
   const dp = h.dw.startFromBlock(v1);
   const edgesOf = (arr) => arr.filter(p => Object.prototype.hasOwnProperty.call(p, "edge")).map(p => p.edge).sort();
-  ok(JSON.stringify(edgesOf(dp.referenceGeometry.front.outline)) === JSON.stringify(["center", "side-seam", "waist"]), "12: reference front edge");
-  ok(JSON.stringify(edgesOf(dp.working.geometry.back.outline)) === JSON.stringify(["center", "side-seam", "waist"]), "12: working back edge");
+  ok(JSON.stringify(edgesOf(dp.referenceGeometry.front.outline)) === JSON.stringify(["armhole", "center", "neckline", "shoulder", "side-seam", "waist"]), "12: reference front edge");
+  ok(JSON.stringify(edgesOf(dp.working.geometry.back.outline)) === JSON.stringify(["armhole", "center", "neckline", "shoulder", "side-seam", "waist"]), "12: working back edge");
   // 완료본 snapshot.geometry 와 reference/working 는 참조 공유 0(deep clone)
   ok(sharesRef(v1.snapshot.geometry, dp.referenceGeometry) === false, "12: reference clone 참조 0");
   ok(sharesRef(v1.snapshot.geometry, dp.working.geometry) === false, "12: working clone 참조 0");
@@ -273,6 +286,81 @@ function makeHarness() {
   dp.working.patternLines.push({ id: "line-1", piece: "front", segments: [] });
   dp.working.geometry = { replaced: true };   // 엉덩이 길이 적용 상당(geometry 통째 교체)
   ok(dp.working.patternLines.length === 1 && dp.working.patternLines[0].id === "line-1", "13: geometry 교체돼도 patternLines 유지");
+}
+
+// ══════════════════════════════════════════════
+// SV3: v3 정상 / v2 legacy 수용 · fabricated role 금지
+// ══════════════════════════════════════════════
+
+// 14. v3 완료본 = 정상 경로(semanticStatus "complete") + sourceBlock.schemaVersion 기록
+{
+  const h = makeHarness();
+  const b = h.bw.complete();
+  ok(b.snapshot.schemaVersion === 3, "14: 신규 캡처 = v3");
+  const dp = h.dw.startFromBlock(b);
+  ok(dp.semanticStatus === "complete", "14: v3 → semanticStatus=complete");
+  ok(dp.sourceBlock.schemaVersion === 3, "14: sourceBlock.schemaVersion=3");
+  ok(Object.isFrozen(dp.sourceBlock), "14: sourceBlock frozen 유지");
+}
+
+// 15. v2 완료본 = 형상 입력으로 **수용**하되 legacy-incomplete 표시,
+//     신규 role 을 fabricated data 로 주입하지 않는다(있는 edge 만 그대로).
+{
+  const h = makeHarness();
+  const v3 = h.bw.complete();
+  // v2 재현: 봉제 경계 의미(neckline/shoulder/armhole)를 제거하고 schemaVersion 2 로 내린다.
+  const stripSeam = (geom) => {
+    const out = JSON.parse(JSON.stringify(geom));
+    ["front", "back", "shared", "sleeve"].forEach(pc => {
+      out[pc].outline = out[pc].outline.map(p => {
+        if (p.edge === "neckline" || p.edge === "shoulder" || p.edge === "armhole") delete p.edge;
+        return p;
+      });
+    });
+    return out;
+  };
+  const v2like = { id: v3.id, version: v3.version, canonicalHash: v3.canonicalHash,
+    snapshot: { schemaVersion: 2, source: v3.snapshot.source, geometry: stripSeam(v3.snapshot.geometry) } };
+  const dp = h.dw.startFromBlock(v2like);
+  ok(!!dp && dp.id === "design-1", "15: v2 수용(형상 입력으로 사용)");
+  ok(dp.semanticStatus === "legacy-incomplete", "15: v2 → legacy-incomplete");
+  ok(dp.sourceBlock.schemaVersion === 2, "15: sourceBlock.schemaVersion=2");
+  // fabricated 금지: 신규 role 이 어디에도 주입되지 않았다
+  const seamRoles = ["neckline", "shoulder", "armhole"];
+  const anySeam = ["front", "back"].some(pc =>
+    ["outline", "construction"].some(rl =>
+      dp.referenceGeometry[pc][rl].concat(dp.working.geometry[pc][rl])
+        .some(p => seamRoles.indexOf(p.edge) >= 0)));
+  ok(!anySeam, "15: legacy 에 신규 role fabricated 주입 없음");
+  // 구조 모서리는 그대로 보존(형상 입력으로서 유효)
+  const structOf = (arr) => arr.filter(p => "edge" in p).map(p => p.edge).sort();
+  ok(JSON.stringify(structOf(dp.referenceGeometry.front.outline)) === JSON.stringify(["center", "side-seam", "waist"]),
+    "15: legacy 구조 모서리는 보존");
+}
+
+// 16. 그 외 schema version 은 기존대로 거부(v1 / v4 / 누락)
+{
+  const mk = (sv) => { const h = makeHarness(); const b = h.bw.complete();
+    return [h, { id: b.id, version: b.version, canonicalHash: b.canonicalHash,
+      snapshot: { schemaVersion: sv, source: b.snapshot.source, geometry: b.snapshot.geometry } }]; };
+  [1, 4, undefined].forEach(sv => {
+    const [h, blk] = mk(sv);
+    throws(() => h.dw.startFromBlock(blk), "unsupported-schema-version", "16: schemaVersion=" + sv + " 거부");
+    ok(h.dw.current() === null, "16: 거부 후 current 불변(" + sv + ")");
+  });
+}
+
+// 17. semanticStatus 는 **source block 상태 전용** — 편집 후 상태를 대표하지 않는다.
+//     편집 후 봉제 의미 readiness 는 bodiceResult.semantics 가 따로 보존한다(bodiceCheckpointCheck 11).
+{
+  const h = makeHarness();
+  const dp = h.dw.startFromBlock(h.bw.complete());
+  ok(dp.semanticStatus === "complete", "17: v3 source → complete");
+  // 디자인 편집(의미 미지정 대체 구간 포함)을 해도 source 상태는 그대로다
+  dp.working.geometry.front.outline.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 },
+    edgeStatus: "unresolved", edgeSourceLineId: "line-9" });
+  dp.working.designOutline = { front: { outline: dp.working.geometry.front.outline } };
+  ok(dp.semanticStatus === "complete", "17: 편집해도 semanticStatus(source)는 불변 — 편집 후 상태와 혼동 금지");
 }
 
 // ── 결과 ──

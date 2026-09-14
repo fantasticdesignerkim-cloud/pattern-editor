@@ -38,24 +38,37 @@ const lineEl = (piece, role, c, edge) => {
   if (edge) a["data-edge"] = edge;
   return el("line", a);
 };
-const pathEl = (piece, role, d) => el("path", { "data-piece": piece, "data-geometry-role": role, d });
+const pathEl = (piece, role, d, edge) => {
+  const a = { "data-piece": piece, "data-geometry-role": role, d };
+  if (edge) a["data-edge"] = edge;
+  return el("path", a);
+};
 
 // SV2 의미 모서리(junction 유일). front/back center·waist·side-seam.
 const F_WAIST = { x1: 240, y1: 300, x2: 140, y2: 300 };
 const F_CENTER = { x1: 140, y1: 300, x2: 140, y2: 100 };
 const B_WAIST = { x1: 240, y1: 300, x2: 60, y2: 300 };
 const B_CENTER = { x1: 60, y1: 300, x2: 60, y2: 100 };
+// SV3 봉제 경계 의미(neckline/shoulder/armhole) — v3 정상 coverage 픽스처.
+const F_NECK = { x1: 140, y1: 100, x2: 170, y2: 80 };
+const F_SHOULDER = { x1: 170, y1: 80, x2: 200, y2: 60 };
+const B_NECK = { x1: 60, y1: 100, x2: 90, y2: 80 };
+const B_SHOULDER = { x1: 90, y1: 80, x2: 120, y2: 60 };
 
 function defaultScene(mode) {
   const out = [];
   const body = mode !== "sleeve", sleeve = mode !== "body";
   if (body) {
-    out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160"));
+    out.push(pathEl("front", "outline", "M140,100 C160,120 180,140 200,160", "armhole"));
+    out.push(lineEl("front", "outline", F_NECK, "neckline"));
+    out.push(lineEl("front", "outline", F_SHOULDER, "shoulder"));
     out.push(lineEl("front", "outline", SIDE, "side-seam"));
     out.push(lineEl("front", "outline", F_WAIST, "waist"));
     out.push(lineEl("front", "outline", F_CENTER, "center"));
     out.push(lineEl("front", "construction", { x1: 100, y1: 60, x2: 120, y2: 80 }));
-    out.push(pathEl("back", "outline", "M60,100 C80,120 100,140 120,160"));
+    out.push(pathEl("back", "outline", "M60,100 C80,120 100,140 120,160", "armhole"));
+    out.push(lineEl("back", "outline", B_NECK, "neckline"));
+    out.push(lineEl("back", "outline", B_SHOULDER, "shoulder"));
     out.push(lineEl("back", "outline", SIDE, "side-seam"));
     out.push(lineEl("back", "outline", B_WAIST, "waist"));
     out.push(lineEl("back", "outline", B_CENTER, "center"));
@@ -135,7 +148,7 @@ function makeHarness(cfg) {
   ok(b.version === 1, "1: v1");
   ok(typeof b.completedAt === "string" && b.completedAt.length > 0, "1: completedAt metadata");
   ok(typeof b.canonicalHash === "string" && /^[0-9a-f]{8}$/.test(b.canonicalHash), "1: canonicalHash 8hex");
-  ok(b.snapshot && b.snapshot.schemaVersion === 2 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
+  ok(b.snapshot && b.snapshot.schemaVersion === 3 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
   ok(h.wf.versions().length === 1 && h.wf.hasCompleted(), "1: 이력 1건");
 }
 
@@ -351,8 +364,8 @@ function makeHarness(cfg) {
   const h = makeHarness();
   const b = h.wf.complete();
   const edgesOf = (arr) => arr.filter(p => Object.prototype.hasOwnProperty.call(p, "edge")).map(p => p.edge).sort();
-  ok(JSON.stringify(edgesOf(b.snapshot.geometry.front.outline)) === JSON.stringify(["center", "side-seam", "waist"]), "W1: front edge 보존");
-  ok(JSON.stringify(edgesOf(b.snapshot.geometry.back.outline)) === JSON.stringify(["center", "side-seam", "waist"]), "W1: back edge 보존");
+  ok(JSON.stringify(edgesOf(b.snapshot.geometry.front.outline)) === JSON.stringify(["armhole", "center", "neckline", "shoulder", "side-seam", "waist"]), "W1: front edge 보존");
+  ok(JSON.stringify(edgesOf(b.snapshot.geometry.back.outline)) === JSON.stringify(["armhole", "center", "neckline", "shoulder", "side-seam", "waist"]), "W1: back edge 보존");
   const centerPrim = b.snapshot.geometry.front.outline.find(p => p.edge === "center");
   ok(Object.isFrozen(centerPrim), "W1: edge 프리미티브 frozen");
   try { centerPrim.edge = "waist"; } catch (e) {}

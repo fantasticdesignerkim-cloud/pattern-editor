@@ -351,7 +351,10 @@
     const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
     return b.outline.filter(pr => pr.edge === "side-seam").reduce((s, pr) => s + primArcLen(pr), 0);
   }
-  // 한 piece 의 네크라인 호 길이: center 목점(top=FNP/BNP)에 닿는 edge 없는 outline seg.
+  // 구조 모서리(SV2). SV3 봉제 의미(neckline/shoulder/armhole)가 붙어도 아래 fallback 이
+  // 기존과 같은 세그먼트를 고르도록 이 집합만 배제한다(측정 경로 교체 아님).
+  const STRUCT_EDGE = { center: 1, waist: 1, "side-seam": 1, hem: 1 };
+  // 한 piece 의 네크라인 호 길이: center 목점(top=FNP/BNP)에 닿는 비구조 outline seg.
   function necklineLen(geometry, piece) {
     const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
     // parametric 결과: computeGeometry 가 designBodice.measureNeckline 으로 측정해 실은 piece 스칼라
@@ -360,7 +363,7 @@
     const center = b.outline.find(pr => pr.edge === "center"); if (!center) return 0;
     const ce = primEnds(center); const FNP = ce[0].y < ce[1].y ? ce[0] : ce[1];
     const near = (a, c) => Math.hypot(a.x - c.x, a.y - c.y) < 0.02;
-    const seg = b.outline.find(pr => !("edge" in pr) && (() => { const e = primEnds(pr); return near(e[0], FNP) || near(e[1], FNP); })());
+    const seg = b.outline.find(pr => !STRUCT_EDGE[pr.edge] && (() => { const e = primEnds(pr); return near(e[0], FNP) || near(e[1], FNP); })());
     return seg ? primArcLen(seg) : 0;
   }
   function neckLenNote(project) {

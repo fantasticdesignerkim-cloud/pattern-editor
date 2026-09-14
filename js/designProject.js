@@ -21,7 +21,10 @@
 //  - `working.geometry`·`working.parameters` 는 디자인의 **실제 편집 대상**(mutable) —
 //    캐시가 아니다. 향후 편집은 이 둘만 바꾼다.
 //  - completed 와 **참조 공유 0**(deep clone). localStorage/autoSave/testSeed 미연결.
-//  - (SV2) snapshot.schemaVersion 이 2 가 아니면 `unsupported-schema-version` 으로 거부.
+//  - schemaVersion 수용: **3 = 정상**(봉제 경계 의미 neckline/shoulder/armhole 포함),
+//    **2 = legacy 수용**(형상 입력으로는 쓰되 `semanticStatus:"legacy-incomplete"` 로 표시 —
+//    신규 semantic 을 fabricated data 로 주입하지 않는다). 그 외 버전은
+//    `unsupported-schema-version` 으로 거부(기존과 동일).
 //  - **design 하나만**(design-1). 기존 design 이 있으면 **다른 원형 version 으로 자동 교체
 //    금지**: 같은 완료본(id+version+canonicalHash) 재시작 → 기존 project 반환(idempotent),
 //    다른 version → `Error("design-project-exists")`.
@@ -66,9 +69,13 @@
 
   function startFromBlock(completed) {
     if (!validCompleted(completed)) fail("invalid-completed-block");
-    // SV2: 디자인은 의미 모서리(edge)를 실은 schemaVersion 2 완료본만 소비한다.
+    // 디자인은 의미 모서리(edge)를 실은 snapshot 만 소비한다. v3=정상 / v2=legacy 수용.
     // 구형 v1(모서리 없음) snapshot 은 명시적으로 거부한다(조용히 edge 없는 디자인 생성 금지).
-    if (completed.snapshot.schemaVersion !== 2) fail("unsupported-schema-version", completed.snapshot.schemaVersion);
+    const sv = completed.snapshot.schemaVersion;
+    if (sv !== 2 && sv !== 3) fail("unsupported-schema-version", sv);
+    // v2 = 신규 봉제 경계 의미가 없는 구형 완료본. 형상은 쓰되 legacy 로 표시하고
+    // role 을 지어내지 않는다(좌표 휴리스틱 재태깅 금지).
+    const semanticStatus = (sv === 3) ? "complete" : "legacy-incomplete";
     if (_project) {
       const sb = _project.sourceBlock;
       const same = sb.id === completed.id
@@ -83,8 +90,12 @@
       sourceBlock: Object.freeze({
         id: completed.id,
         version: completed.version,
-        canonicalHash: completed.canonicalHash
+        canonicalHash: completed.canonicalHash,
+        schemaVersion: sv
       }),
+      // 봉제 경계 의미 수용 상태: "complete"(v3) | "legacy-incomplete"(v2, 신규 semantic 없음).
+      // legacy 는 형상만 유효하며 neckline/shoulder/armhole role 을 지어내지 않는다.
+      semanticStatus: semanticStatus,
       createdAt: new Date().toISOString(),                              // 표시 metadata
       baseSource: deepFrozenClone(completed.snapshot.source),          // 동결 근거(불변)
       referenceGeometry: deepFrozenClone(completed.snapshot.geometry), // 불변 reference

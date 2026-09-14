@@ -138,6 +138,212 @@ function fakeProject(backSideTopY, opts) {
   ok(BC.isCurrentBodiceChanged() === true, "9: 여밈 파라미터 변경 → changed");
 }
 
+// ══════════════════════════════════════════════
+// 10(SV3). 봉제 경계 의미(neckline/shoulder/armhole)를 실어도 **기존 측정 경로가 고르는
+//   구간·값·hash 가 그대로**여야 한다. semantic 으로 측정을 교체하지 않았음을 회귀로 고정한다
+//   (실제 교체는 Phase 1 canonical 측정 승인 이후).
+// ══════════════════════════════════════════════
+{
+  // 같은 fixture 에 v3 role 만 부여한 쌍을 만든다(좌표·개수·순서 동일, 메타만 추가).
+  const tagSeamRoles = (proj) => {
+    ["front", "back"].forEach(pc => {
+      const o = proj.working.geometry[pc].outline;
+      o.forEach(s => {
+        if ("edge" in s) return;                       // center/side-seam 은 그대로
+        if (s.kind === "line") s.edge = "shoulder";    // 직선 = 어깨
+        else s.edge = (s === o[2]) ? "neckline" : "armhole";   // [2]=목선 곡선, 나머지 곡선=진동
+      });
+    });
+    return proj;
+  };
+
+  RING_OK = true;
+  PROJECT = fakeProject(20);
+  const plain = BC.check();
+  const plainRes = BC.complete();
+
+  PROJECT = tagSeamRoles(fakeProject(20));
+  const tagged = BC.check();
+  const taggedRes = BC.complete();
+
+  // (a) role 부여가 실제로 됐는지(대조군이 유효한 테스트인지) 확인
+  const roles = PROJECT.working.geometry.front.outline.map(s => s.edge).sort();
+  ok(JSON.stringify(roles) === JSON.stringify(["armhole", "center", "neckline", "shoulder", "side-seam"]),
+    "10: 대조군에 v3 role 부여됨");
+
+  // (b) 진동 휴리스틱이 **같은 세그먼트를 고르고 같은 길이**를 낸다
+  ok(near(plain.armhole.front, tagged.armhole.front, 1e-12) &&
+     near(plain.armhole.back, tagged.armhole.back, 1e-12), "10: 진동둘레 reported 값 불변");
+  ok(plain.armhole.ok === tagged.armhole.ok, "10: 진동 측정 가능 여부 불변");
+  // 선택 구간 자체(저장된 armhole primitive)가 동일해야 한다 = semantic span ↔ 휴리스틱 선택 일치
+  const stripEdge = (v) => JSON.stringify(v, (k, x) => k === "edge" ? undefined : x);
+  ok(stripEdge(plainRes.result.armhole) === stripEdge(taggedRes.result.armhole),
+    "10: 휴리스틱이 고른 진동 구간 == semantic armhole span");
+  ok(taggedRes.result.armhole.front.every(s => s.edge === "armhole") &&
+     taggedRes.result.armhole.back.every(s => s.edge === "armhole"),
+    "10: 선택된 구간이 실제로 armhole role 을 갖는다(동일성 확인)");
+
+  // (c) 목둘레·옆선 reported 값 불변
+  ok(near(plain.neckline.front, tagged.neckline.front, 1e-12) &&
+     near(plain.neckline.back, tagged.neckline.back, 1e-12) &&
+     near(plain.neckline.half, tagged.neckline.half, 1e-12), "10: 목둘레 reported 값 불변");
+  ok(near(plain.sideSeam.front, tagged.sideSeam.front, 1e-12) &&
+     near(plain.sideSeam.back, tagged.sideSeam.back, 1e-12), "10: 옆선 reported 값 불변");
+
+  // (d) 완료본 hash 불변 — hash signature 에 metadata 가 들어가지 않는다
+  ok(plainRes.ok && taggedRes.ok, "10: 양쪽 완료 성공");
+  ok(plainRes.result.hash === taggedRes.result.hash, "10: bodiceResult.hash 불변(metadata 미포함)");
+  ok(JSON.stringify(plainRes.result.armholeLengths) === JSON.stringify(taggedRes.result.armholeLengths) &&
+     JSON.stringify(plainRes.result.necklineLengths) === JSON.stringify(taggedRes.result.necklineLengths),
+    "10: 저장된 reported 길이 불변");
+
+  // (e) 스테일 판정도 metadata 에 반응하지 않는다(형상 동일 → 변경 아님)
+  ok(BC.isCurrentBodiceChanged() === false, "10: role 부여 상태에서 스테일 아님");
+
+  // (f) 원본 fixture 에 role 이 없어도(legacy) 측정은 그대로 동작한다
+  PROJECT = fakeProject(20);
+  ok(BC.check().armhole.ok, "10: legacy(무-role) 입력도 기존대로 측정");
+}
+
+// ══════════════════════════════════════════════
+// 11(P0.1 보완). 편집 후 semantic readiness — **복수 원인 보존**.
+//   상호 배타적 단일 status 를 쓰지 않는다: legacy / unresolved / missing 은 동시에 성립할 수 있다.
+//   ready=true 는 issues 가 비었을 때만이며, summary 가 issues 를 덮거나 하나만 고르지 않는다.
+// ══════════════════════════════════════════════
+{
+  // v3 형태 piece: 필수 role 5종(neckline/shoulder/armhole/center/side-seam) 부여.
+  //   waist/hem 은 필수가 아니므로 픽스처에도 넣지 않는다(무조건 요구하지 않음을 함께 고정).
+  const taggedPiece = (cx, topY, sideTopY, sideBotY) => {
+    const p = piece(cx, topY, sideTopY, sideBotY);
+    p.outline[2].edge = "neckline"; p.outline[3].edge = "shoulder"; p.outline[4].edge = "armhole";
+    return p;
+  };
+  const mkProject = (opts) => {
+    opts = opts || {};
+    const proj = fakeProject(20);
+    proj.sourceBlock = { version: 1, schemaVersion: opts.schemaVersion };
+    if (opts.tagged !== false) {
+      proj.working.geometry.front = taggedPiece(47.5, 3, 20, 38);
+      proj.working.geometry.back = taggedPiece(24, 0, 20, 38);
+    }
+    if (opts.designOutline) proj.working.designOutline = opts.designOutline;
+    return proj;
+  };
+  // 유효 외곽을 designOutline 으로 대체(= manual 경로). replacement 구간의 표식을 직접 지정.
+  const withOutline = (proj, frontOutline) => {
+    proj.working.designOutline = { front: { outline: frontOutline }, back: { outline: proj.working.geometry.back.outline } };
+    return proj;
+  };
+  const sem = (proj) => { PROJECT = proj; return BC.check().semantics; };
+  const has = (r, code) => r.issues.indexOf(code) >= 0;
+
+  RING_OK = true;
+
+  // (a) 손대지 않은 v3 → ready=true, issues 없음
+  {
+    const r = sem(mkProject({ schemaVersion: 3 }));
+    ok(r.ready === true && r.issues.length === 0, "11a: untouched v3 → ready, issues 없음");
+    ok(r.sourceSchemaVersion === 3 && r.unresolved.length === 0 && r.missing.length === 0, "11a: 목록 비어있음");
+  }
+
+  // (b) v2 source → legacy-source issue, ready=false (role 은 그대로 있어도)
+  {
+    const r = sem(mkProject({ schemaVersion: 2 }));
+    ok(r.ready === false && has(r, "legacy-source"), "11b: v2 → legacy-source");
+    ok(!has(r, "missing-required-role"), "11b: v2 의 role 부재를 metadata 오류로 오인하지 않음");
+  }
+
+  // (c) v3 + 일반 replacement → 명시 unresolved + provenance, ready=false
+  {
+    const base = mkProject({ schemaVersion: 3 });
+    const fo = base.working.geometry.front.outline.map(x => JSON.parse(JSON.stringify(x)));
+    fo.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edgeStatus: "unresolved", edgeSourceLineId: "line-8" });
+    const r = sem(withOutline(base, fo));
+    ok(r.ready === false && has(r, "unresolved-replacement"), "11c: generic replacement → unresolved-replacement");
+    ok(r.unresolved.length === 1 && r.unresolved[0].piece === "front" && r.unresolved[0].lineId === "line-8",
+      "11c: lineId provenance 보존");
+    ok(!has(r, "legacy-source") && !has(r, "missing-required-role"), "11c: 다른 원인으로 번지지 않음");
+    // 유지 구간의 role 은 그대로 → missing 없음
+    ok(r.missing.length === 0, "11c: 유지 구간 role 보존(missing 없음)");
+  }
+
+  // (d) v2 + unresolved replacement → **두 issue 동시 보존**
+  {
+    const base = mkProject({ schemaVersion: 2 });
+    const fo = base.working.geometry.front.outline.map(x => JSON.parse(JSON.stringify(x)));
+    fo.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edgeStatus: "unresolved", edgeSourceLineId: "line-9" });
+    const r = sem(withOutline(base, fo));
+    ok(has(r, "legacy-source") && has(r, "unresolved-replacement"), "11d: legacy 와 unresolved 가 동시에 보존");
+    ok(r.unresolved[0].lineId === "line-9", "11d: 동시 상황에서도 provenance 유지");
+    ok(r.issues.length === 2 && r.ready === false, "11d: summary 가 issues 를 하나로 덮지 않음");
+  }
+
+  // (e) v3 metadata 전달 오류(표식 없이 필수 role 소실) → missing-required-role
+  {
+    const base = mkProject({ schemaVersion: 3 });
+    const fo = base.working.geometry.front.outline
+      .map(x => JSON.parse(JSON.stringify(x)))
+      .filter(x => x.edge !== "shoulder");            // 표식 없이 사라짐 = 전달 버그
+    const r = sem(withOutline(base, fo));
+    ok(has(r, "missing-required-role"), "11e: 무표식 role 소실 → missing-required-role");
+    ok(!has(r, "unresolved-replacement"), "11e: 의도된 unresolved 와 구분됨");
+    ok(r.missing.some(m => m.piece === "front" && m.role === "shoulder"), "11e: 어떤 role 이 빠졌는지 보존");
+  }
+
+  // (f) v3 + unresolved replacement 가 필수 role 을 삼킨 경우
+  //     → provenance·missing 증거를 잃지 않고, 무표식 유실(missing-required-role)로 오분류하지 않는다
+  {
+    const base = mkProject({ schemaVersion: 3 });
+    const fo = base.working.geometry.front.outline
+      .map(x => JSON.parse(JSON.stringify(x)))
+      .filter(x => x.edge !== "shoulder");
+    fo.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edgeStatus: "unresolved", edgeSourceLineId: "line-10" });
+    const r = sem(withOutline(base, fo));
+    ok(has(r, "unresolved-replacement"), "11f: unresolved issue 유지");
+    ok(r.unresolved[0].lineId === "line-10", "11f: provenance 유실 없음");
+    ok(r.missing.some(m => m.role === "shoulder"), "11f: 사라진 필수 role 증거 유지");
+    ok(!has(r, "missing-required-role"), "11f: unresolved 로 설명되는 유실은 전달 버그로 오분류하지 않음");
+  }
+
+  // (g) 평가 대상이 아닌 primitive(다트 다리·구성선)를 unresolved 로 오인하지 않는다
+  {
+    const base = mkProject({ schemaVersion: 3 });
+    ok(base.working.geometry.front.construction.length > 0, "11g: construction 더미 다트 존재");
+    const r = sem(base);
+    ok(r.unresolved.length === 0 && r.ready === true, "11g: role 없는 construction 을 unresolved 로 세지 않음");
+  }
+
+  // (h) 완료 스냅샷에 보존 + deepFreeze + 공유 참조 없음 + 결정론
+  {
+    const base = mkProject({ schemaVersion: 3 });
+    const fo = base.working.geometry.front.outline.map(x => JSON.parse(JSON.stringify(x)));
+    fo.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edgeStatus: "unresolved", edgeSourceLineId: "line-11" });
+    PROJECT = withOutline(base, fo);
+    const res = BC.complete();
+    ok(res.ok, "11h: readiness 는 완료를 막지 않는다(증거만)");
+    const sm = res.result.semantics;
+    ok(sm && sm.ready === false && sm.issues.indexOf("unresolved-replacement") >= 0, "11h: 스냅샷에 readiness 보존");
+    ok(Object.isFrozen(sm) && Object.isFrozen(sm.issues) && Object.isFrozen(sm.unresolved[0]), "11h: 중첩까지 deepFrozen");
+    // 공유 참조 없음: 두 번 평가한 결과가 서로 다른 객체
+    const a = BC.evaluateSemantics(PROJECT), b = BC.evaluateSemantics(PROJECT);
+    ok(a !== b && a.issues !== b.issues && a.unresolved !== b.unresolved, "11h: 매 호출 새 객체(공유 참조 없음)");
+    ok(JSON.stringify(a) === JSON.stringify(b), "11h: 결정론");
+    ok(a.unresolved[0] !== sm.unresolved[0], "11h: 스냅샷과 새 평가가 참조를 공유하지 않음");
+  }
+
+  // (i) readiness 는 hash·reported 값에 영향을 주지 않는다
+  {
+    const clean = mkProject({ schemaVersion: 3 });
+    PROJECT = clean; const r1 = BC.complete();
+    const withFlag = mkProject({ schemaVersion: 3 });
+    const fo = withFlag.working.geometry.front.outline.map(x => JSON.parse(JSON.stringify(x)));
+    PROJECT = withOutline(withFlag, fo); const r2 = BC.complete();
+    ok(r1.result.hash === r2.result.hash, "11i: readiness 필드가 hash 에 영향 없음");
+    ok(JSON.stringify(r1.result.armholeLengths) === JSON.stringify(r2.result.armholeLengths) &&
+       JSON.stringify(r1.result.necklineLengths) === JSON.stringify(r2.result.necklineLengths), "11i: reported 값 불변");
+  }
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);
