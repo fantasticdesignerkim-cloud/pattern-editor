@@ -190,7 +190,7 @@
       var attachments = legs.map(function (l) {
         var at = l.dart.attach;
         if (!at) return { root: null, t: null, status: "missing" };
-        var st = attachmentStatus(proj, at, piece, l.dart.boundary);
+        var st = attachmentStatus(proj, at, piece, l.dart.boundary, dartEndsOf(l).leg);
         return { root: (typeof at.root === "string") ? at.root : null, t: isFinite(at.t) ? round4(at.t) : null, status: st };
       });
       var attachment = attachments.some(function (a) { return a.status === "misaligned"; }) ? "misaligned"
@@ -254,7 +254,30 @@
   // P0.3b: attachment 판정. root 는 앞/뒤 root 여야 하고(shared 다트는 어느 쪽이든), root 의미가 다트
   //   boundary 와 같고, t 가 [0,1] 이며, 그 root piece 의 effective outline ∪ construction(허리처럼 기준선으로
   //   옮겨간 경계 lineage 포함)에서 **정렬된 선언 구간이 t 를 덮어야** 한다. 아니면 misaligned.
-  function attachmentStatus(proj, at, piece, boundary) {
+  // ★ P0.3b 보완: coverage 만으로는 경계만 움직이고 다리는 제자리인 경우를 못 잡는다. 선언된 {root,t} 를
+  //   좌표로 복원하지 않고 **그 참조의 무결성만** 검증한다 — t 를 덮는 모든 후보 구간에서 t 의 실제 점을
+  //   평가해 다리 경계 끝점과 계산 허용치 안에서 일치하는 후보가 하나라도 있어야 complete.
+  //   local 파라미터는 명령별 선언 구간·방향에 affine(호길이·봉제 허용오차·다트 닫힘 아님).
+  //   ATTACH_POINT_EPS(cm)는 부동소수 계산 허용치이며 봉제 허용오차(MATCH/CHECK)와 분리한다.
+  var ATTACH_POINT_EPS = 1e-3;
+  function cubicPt(p0, p1, p2, p3, u) {
+    var v = 1 - u;
+    return { x: v * v * v * p0.x + 3 * v * v * u * p1.x + 3 * v * u * u * p2.x + u * u * u * p3.x,
+             y: v * v * v * p0.y + 3 * v * v * u * p1.y + 3 * v * u * u * p2.y + u * u * u * p3.y };
+  }
+  function commandEvaluators(prm) {
+    if (prm.kind === "line") return [function (u) { return { x: prm.from.x + (prm.to.x - prm.from.x) * u, y: prm.from.y + (prm.to.y - prm.from.y) * u }; }];
+    if (prm.kind === "cubic") return [function (u) { return cubicPt(prm.from, prm.c1, prm.c2, prm.to, u); }];
+    var out = [], cur = null;
+    (prm.commands || []).forEach(function (c) {
+      if (c.type === "M") { cur = c.points[0]; return; }
+      if (c.type !== "C") return;
+      var st = cur, q = c.points; cur = q[2];
+      out.push(function (u) { return cubicPt(st, q[0], q[1], q[2], u); });
+    });
+    return out;
+  }
+  function attachmentStatus(proj, at, piece, boundary, legPt) {
     if (!at || typeof at.root !== "string" || !inRootRange(at.t)) return "misaligned";
     var slash = at.root.indexOf("/"), rp = at.root.slice(0, slash), rn = at.root.slice(slash + 1);
     if (slash < 0 || !(rp === "front" || rp === "back") || !BOUNDARY_ROOT_EDGE[rn]) return "misaligned";
@@ -262,13 +285,17 @@
     if (boundary && BOUNDARY_ROOT_EDGE[rn] !== boundary) return "misaligned";
     var g = proj.working.geometry && proj.working.geometry[rp];
     var prims = (effectiveOutline(proj, rp) || []).concat((g && Array.isArray(g.construction)) ? g.construction : []);
-    var covered = prims.some(function (prm) {
+    var matched = !!legPt && prims.some(function (prm) {
       if (!prm || !prm.boundary || prm.boundary.root !== at.root || !boundaryDeclOk(prm, rp)) return false;
-      return prm.boundary.ranges.some(function (r) {
-        return at.t >= Math.min(r[0], r[1]) - BOUNDARY_RANGE_EPS && at.t <= Math.max(r[0], r[1]) + BOUNDARY_RANGE_EPS;
+      var evals = commandEvaluators(prm);
+      return prm.boundary.ranges.some(function (r, k) {
+        if (!evals[k] || at.t < Math.min(r[0], r[1]) - BOUNDARY_RANGE_EPS || at.t > Math.max(r[0], r[1]) + BOUNDARY_RANGE_EPS) return false;
+        var u = Math.max(0, Math.min(1, (at.t - r[0]) / (r[1] - r[0])));
+        var q = evals[k](u);
+        return Math.hypot(q.x - legPt.x, q.y - legPt.y) <= ATTACH_POINT_EPS;   // 이 다리 좌표와 맞는 후보 하나면 충분
       });
     });
-    return covered ? "complete" : "misaligned";
+    return matched ? "complete" : "misaligned";
   }
   function makeBoundaryChain(spans) {
     if (!Array.isArray(spans) || !spans.length) return { ok: false, reason: "empty-chain" };

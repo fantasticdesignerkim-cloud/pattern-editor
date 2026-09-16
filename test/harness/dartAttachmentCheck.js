@@ -3,7 +3,8 @@
 //
 // 계약: 각 다트 다리의 apex 반대 끝은 생산자가 선언한 { root, t } 로 최종 경계에 붙는다.
 // gen-0 은 다트를 만든 지점, 새 다트는 cut 시점 cut 구간의 root·t, source 잔여 다트는 원래 선언.
-// 좌표·배열 순서로 복원하지 않고, 최종 effective 경계 구간이 t 를 덮지 않으면 misaligned 로 남는다.
+// 좌표·배열 순서로 복원하지 않고, 최종 effective 경계 구간이 t 를 덮지 않거나 그 t 의 실제 점이 다리 끝과
+// 계산 허용치 안에서 일치하지 않으면 misaligned 로 남는다.
 //
 //   node test/harness/dartAttachmentCheck.js
 // ══════════════════════════════════════════════
@@ -123,8 +124,9 @@ function geom(ids, withAttach) {
     P([[33, -4], [35, 0], [38, 3], [40, 3]], "neckline", fx("neckline"))],
     construction: [dleg([31, 38], [30, 25], "front-waist-a", "waist", "to", withAttach && { root: "front/waist", t: 9 / 24 }),
       dleg([29, 38], [30, 25], "front-waist-a", "waist", "to", withAttach && { root: "front/waist", t: 11 / 24 }),
-      dleg([18, 12], [28, 18], "front-bust", "armhole", "to", withAttach && { root: "front/armhole", t: 0.5 }),
-      dleg([28, 18], [18.5, 11], "front-bust", "armhole", "from", withAttach && { root: "front/armhole", t: 0.5 })] };
+      // 진동 cubic (16,20)(18,12)(20,5)(22,0): t=0.5 → (19,8.875), t=0.25 → (17.5,14.203125)
+      dleg([19, 8.875], [28, 18], "front-bust", "armhole", "to", withAttach && { root: "front/armhole", t: 0.5 }),
+      dleg([28, 18], [17.5, 14.203125], "front-bust", "armhole", "from", withAttach && { root: "front/armhole", t: 0.25 })] };
   const back = JSON.parse(JSON.stringify(front));
   const mirror = (q) => { q.x = 56 - q.x; };
   back.outline.concat(back.construction).forEach(pr => { if (pr.kind === "line") { mirror(pr.from); mirror(pr.to); } else pr.commands.forEach(c => c.points.forEach(mirror)); if (pr.boundary) pr.boundary.root = pr.boundary.root.replace("front/", "back/"); });
@@ -143,15 +145,40 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   ok(att(r, "front-waist-a").attachments.map(a => a.root + "@" + a.t).join(",") === "front/waist@0.375,front/waist@0.4583", "5: evidence 는 다리별 root·t");
 }
 
-// 6. 디자인 변환(여유량·길이·허리 이동): 허리 경계가 기준선으로 옮겨가도 lineage 로 포함, 좌표·hash 불변
+// 5b. 무결성: coverage 는 되지만 선언 점이 다리 끝과 다르면 complete 가 아니다
+{
+  const legMoved = geom(true, true); legMoved.front.construction[0].from = { x: 31.2, y: 38 };
+  ok(att(sem(proj(6, legMoved)), "front-waist-a").attachment === "misaligned", "5b: 다리만 이동 → misaligned");
+  const wrongT = geom(true, true); wrongT.front.construction[0].dart.attach.t = 0.3;
+  const rw = sem(proj(6, wrongT));
+  ok(att(rw, "front-waist-a").attachment === "misaligned" && !rw.ready && rw.issues.indexOf("dart-attachment-misaligned") >= 0, "5b: 잘못된 t(coverage 됨) → misaligned·not ready");
+  const boundaryMoved = geom(true, true); boundaryMoved.front.outline[1].from = { x: 41, y: 38 };
+  ok(att(sem(proj(6, boundaryMoved)), "front-waist-a").attachment === "misaligned", "5b: 경계만 이동 → misaligned");
+  // 열린 다트형: 같은 root+t(0.5) 가 서로 떨어진 두 구간에 있고 각 다리가 자기 좌표 후보와 일치
+  const open = geom(true, true);
+  const wA = { kind: "line", from: { x: 40, y: 38 }, to: { x: 28, y: 38 }, edge: "waist", boundary: { root: "front/waist", ranges: [[0, 0.5]] } };
+  const wB = { kind: "line", from: { x: 28.4, y: 36 }, to: { x: 16.4, y: 36 }, edge: "waist", boundary: { root: "front/waist", ranges: [[0.5, 1]] } };
+  open.front.outline.splice(1, 1, wA, wB);
+  open.front.construction = [dleg([28, 38], [28.2, 25], "moved", "waist", "to", { root: "front/waist", t: 0.5 }),
+    dleg([28.4, 36], [28.2, 25], "moved", "waist", "to", { root: "front/waist", t: 0.5 })];
+  const ro = sem(proj(6, open));
+  ok(att(ro, "moved").attachment === "complete" && ro.darts.front.find(d => d.id === "moved").attachments.every(a => a.status === "complete"),
+    "5b: 같은 root+t 두 좌표(열린 다트) → 각 다리 자기 후보와 일치·complete");
+}
+
+// 6. 디자인 변환: 길이 연장(허리 좌표 불변, 기준선으로 이동) → complete 유지 / 여유량(경계 점 이동, 다리 제자리) → misaligned
 {
   const g = geom(true, true);
-  const out = DB.computeGeometry(g, { body: { bustEaseCm: 4, hemExtensionBelowWaistCm: 10, waistSideOffsetCm: -1 } });
+  const out = DB.computeGeometry(g, { body: { hemExtensionBelowWaistCm: 10 } });
   const r = sem(proj(6, out));
-  ok(att(r, "front-waist-a").attachment === "complete" && att(r, "front-bust").attachment === "complete", "6: 변환 후 attachment 포함 유지(허리는 construction lineage)");
+  ok(att(r, "front-waist-a").attachment === "complete" && att(r, "front-bust").attachment === "complete", "6: 길이 연장 후 attachment 정합 유지(허리는 construction lineage)");
+  const eased = DB.computeGeometry(geom(true, true), { body: { bustEaseCm: 4, hemExtensionBelowWaistCm: 10 } });
+  const re = sem(proj(6, eased));
+  ok(att(re, "front-waist-a").attachment === "misaligned" && att(re, "front-bust").attachment === "misaligned" && !re.ready,
+    "6: 여유량이 경계만 옮기고 다리는 제자리 → misaligned·not ready");
   const legs = out.front.construction.filter(p => p.dart);
   ok(legs.every(p => p.dart.attach) && legs[0].dart.attach !== g.front.construction[0].dart.attach, "6: 변환 결과 attachment 값 복제(참조 공유 없음)");
-  const outNo = DB.computeGeometry(geom(true, false), { body: { bustEaseCm: 4, hemExtensionBelowWaistCm: 10, waistSideOffsetCm: -1 } });
+  const outNo = DB.computeGeometry(geom(true, false), { body: { hemExtensionBelowWaistCm: 10 } });
   const strip = (x) => JSON.stringify(x, (k, v) => (k === "attach" ? undefined : v));
   ok(strip(out) === strip(outNo), "6: attachment 가 형상·개수·순서를 바꾸지 않음");
   PROJECT = proj(6, out); const c1 = BC.complete();
@@ -178,7 +205,7 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   const replaced = kept.filter(s => s !== armSeg).concat(LT.boundarySegsOf({ id: "line-2", segments: [{ kind: "line", from: { x: 16, y: 20 }, to: { x: 22, y: 0 } }] }));
   const rr = sem(withOutline(replaced));
   ok(att(rr, "front-bust").attachment === "misaligned" && rr.ready === false, "7: 대체로 root 소실 → misaligned");
-  ok(att(rr, "front-bust").attachments.every(a => a.root === "front/armhole" && a.t === 0.5), "7: 사라져도 선언값을 지어내거나 바꾸지 않음");
+  ok(att(rr, "front-bust").attachments.every(a => a.root === "front/armhole") && att(rr, "front-bust").attachments.map(a => a.t).join(",") === "0.5,0.25", "7: 사라져도 선언값을 지어내거나 바꾸지 않음");
 }
 
 // 8. 잘못된 선언 차단 · 누락 · legacy 무조작
@@ -197,7 +224,8 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   ok(rl.darts.front.every(d => d.attachments.every(a => a.root === null && a.t === null)), "8: legacy attachment 를 만들어 넣지 않음");
   // shared 다트: 앞/뒤 서로 다른 root 허용
   const gs = geom(true, true);
-  gs.shared.construction = [dleg([15, 38], [16, 25], "shared-waist-c", "waist", "to", { root: "back/waist", t: 0.95 }), dleg([17, 38], [16, 25], "shared-waist-c", "waist", "to", { root: "front/waist", t: 0.98 })];
+  // 뒤 허리(거울) x = 16+24t · 앞 허리 x = 40-24t
+  gs.shared.construction = [dleg([38.8, 38], [27, 25], "shared-waist-c", "waist", "to", { root: "back/waist", t: 0.95 }), dleg([16.48, 38], [27, 25], "shared-waist-c", "waist", "to", { root: "front/waist", t: 0.98 })];
   const rs = sem(proj(6, gs));
   ok(rs.darts.shared[0].attachment === "complete", "8: shared 다트 앞·뒤 서로 다른 root → complete");
 }

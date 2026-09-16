@@ -367,7 +367,7 @@ function fakeProject(backSideTopY, opts) {
     p.outline[2].edge = "neckline"; p.outline[3].edge = "shoulder"; p.outline[4].edge = "armhole";
     return p;
   };
-  const mk = (sv, darts) => {
+  const mk = (sv, darts, opts) => {
     const proj = fakeProject(20);
     proj.sourceBlock = { version: 1, schemaVersion: sv };
     proj.working.geometry.front = v4piece(47.5, 3, 20, 38);
@@ -375,8 +375,17 @@ function fakeProject(backSideTopY, opts) {
     if (sv >= 5) { withIds(proj.working.geometry.front, "front"); withIds(proj.working.geometry.back, "back"); }
     proj.working.geometry.shared = { outline: [], construction: [] };
     proj.working.geometry.front.construction = darts || [];
-    // P0.3b(v6): 선언이 없는 fixture 다리엔 그 boundary 의 front root 중간 t 를 attachment 로 선언한다.
-    if (sv >= 6) (darts || []).forEach(l => { if (l.dart && !l.dart.attach && l.dart.boundary) l.dart.attach = { root: "front/" + l.dart.boundary, t: 0.5 }; });
+    // P0.3b(v6): 이 절은 P0.2 다트 레코드 검사다. fixture 생산자가 각 다리의 경계 끝에서 시작하는 짧은
+    //   기준 경계 구간(construction, root=front/<boundary>, t 0→1)을 함께 두고, 다리를 그 t=0 에 붙인다 —
+    //   선언 {root,t} 가 실제 점과 일치하는 정합 fixture(attachment 세부 검사는 dartAttachmentCheck).
+    if (sv >= 6 && !(opts && opts.refs === false)) (darts || []).forEach(l => {
+      if (!l.dart || l.dart.attach || !l.dart.boundary) return;
+      const e = l.dart.apexAt === "from" ? l.to : l.from;
+      const ref = line([e.x, e.y], [e.x + 1, e.y], l.dart.boundary);
+      ref.boundary = { root: "front/" + l.dart.boundary, ranges: [[0, 1]] };
+      proj.working.geometry.front.construction.push(ref);
+      l.dart.attach = { root: "front/" + l.dart.boundary, t: 0 };
+    });
     return proj;
   };
   const semOf = (proj) => { PROJECT = proj; return BC.check().semantics; };
@@ -428,7 +437,7 @@ function fakeProject(backSideTopY, opts) {
   {
     const darts = [dleg([40, 20], [44, 38], "front-bust", "armhole", "to"),
                    dleg([48, 20], [44, 38], "front-bust", "armhole", "to")];
-    const base = mk(6, darts);
+    const base = mk(6, darts, { refs: false });   // 기준 경계 fixture 없이 — 경계 끊김만 본다
     // armhole role 을 유효 외곽에서 제거(대체선이 진동 구간을 삼킨 상황)
     const fo = base.working.geometry.front.outline.filter(x => x.edge !== "armhole")
       .concat([{ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edgeStatus: "unresolved", edgeSourceLineId: "line-5" }]);
@@ -468,9 +477,9 @@ function fakeProject(backSideTopY, opts) {
 
   // (h) 다트 의미가 좌표·kind·개수·순서를 바꾸지 않는다
   {
-    const bare = mk(6, [line([40, 20], [44, 38]), line([48, 20], [44, 38])]);
+    const bare = mk(6, [line([40, 20], [44, 38]), line([48, 20], [44, 38])], { refs: false });
     const tagged = mk(6, [dleg([40, 20], [44, 38], "front-waist-a", "armhole", "to"),
-                          dleg([48, 20], [44, 38], "front-waist-a", "armhole", "to")]);
+                          dleg([48, 20], [44, 38], "front-waist-a", "armhole", "to")], { refs: false });
     const strip = (p) => JSON.stringify(p.working.geometry, (k, v) => (k === "dart" ? undefined : v));
     ok(strip(bare) === strip(tagged), "12h: 의미 추가가 형상·개수·순서를 바꾸지 않음");
   }
