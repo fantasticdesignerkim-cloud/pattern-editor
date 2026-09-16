@@ -310,6 +310,11 @@ const DB = loadInto(["designBodice.js"]).window.designBodice;
   ok(ch.ok && ch.chain.spans.length === 2 && ch.chain.spans[1].direction === "reverse" && Object.isFrozen(ch.chain.spans[0]), "9: chain 순서·방향·불변");
   ok(!BC.makeBoundaryChain([{ root: "front/waist", from: 0.5, to: 0.5 }]).ok && !BC.makeBoundaryChain([{ from: 0, to: 1 }]).ok && !BC.makeBoundaryChain([]).ok,
     "9: 무효 참조가 있으면 chain 을 만들지 않음");
+  // [0,1]±1e-6 계약: 범위 밖 span 은 거부, 허용치 이내 부동소수 오차는 수용
+  const oobC = BC.makeBoundaryChain([{ root: "front/waist", from: 0, to: 1.01 }]);
+  ok(!oobC.ok && oobC.reason === "span-out-of-range" && oobC.index === 0, "9: chain span 범위 밖(1.01) 거부");
+  ok(!BC.makeBoundaryChain([{ root: "front/waist", from: 0, to: 0.5 }, { root: "front/waist", from: -0.001, to: 0.5 }]).ok, "9: chain span 범위 밖(-0.001) 거부");
+  ok(BC.makeBoundaryChain([{ root: "front/waist", from: -5e-7, to: 1 + 5e-7 }]).ok, "9: chain 허용치 이내 수용");
 }
 
 console.log("══════════════════════════════════════════════");

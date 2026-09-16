@@ -247,6 +247,7 @@
     for (var i = 0; i < spans.length; i++) {
       var sp = spans[i];
       if (!sp || typeof sp.root !== "string" || !isFinite(sp.from) || !isFinite(sp.to) || sp.from === sp.to) return { ok: false, reason: "invalid-span", index: i };
+      if (!inRootRange(sp.from) || !inRootRange(sp.to)) return { ok: false, reason: "span-out-of-range", index: i };
       out.push(Object.freeze({ root: sp.root, from: sp.from, to: sp.to, direction: sp.to > sp.from ? "forward" : "reverse" }));
     }
     return { ok: true, chain: Object.freeze({ spans: Object.freeze(out) }) };
