@@ -128,6 +128,22 @@ ok(partialPrims && pivotDegree(partialPrims, partialPivot) === 4, "1: 부분 이
   ok(connected(noMeta) === false && connected(flip) === false, "3: gate(check) 에서도 not-connected");
 }
 
+// 3b. path primitive 는 정확히 하나의 연속 subpath(M 1개 + 유효 C ≥1)일 때만 edge 로 인정
+{
+  const P = JSON.parse(JSON.stringify(partialPrims));
+  const pi = P.findIndex(p => p.kind === "path" && p.commands.length >= 3);
+  ok(pi >= 0 && BC.closedOutlineWithDeclaredDartJunctions(P) === true, "3b: 정상 single-M multi-C path 통과");
+  const variant = (fn) => { const Q = JSON.parse(JSON.stringify(P)); fn(Q[pi].commands); return BC.closedOutlineWithDeclaredDartJunctions(Q); };
+  // 숨겨진 두 번째 subpath: 중간 C 를 M 으로 바꾸면 첫 시작·마지막 끝은 같아도 실제로는 끊긴 형상
+  ok(variant(c => { const mid = Math.floor(c.length / 2); c[mid] = { type: "M", points: [c[mid].points[2]] }; }) === false, "3b: 숨겨진 두 번째 M subpath 거부");
+  ok(variant(c => { c.splice(1, 0, { type: "M", points: [c[0].points[0]] }); }) === false, "3b: 같은 점에서 다시 시작하는 추가 M 도 거부");
+  ok(variant(c => { c[0] = { type: "C", points: [c[0].points[0], c[0].points[0], c[0].points[0]] }; }) === false, "3b: 첫 명령이 M 아님 거부");
+  ok(variant(c => { c[c.length - 1] = { type: "L", points: [c[c.length - 1].points[2]] }; }) === false, "3b: 마지막 명령이 C 아님 거부");
+  ok(variant(c => { c[0].points.push({ x: 0, y: 0 }); }) === false, "3b: M 점 수 오류 거부");
+  ok(variant(c => { c[1].points = c[1].points.slice(0, 2); }) === false, "3b: C 점 수 오류 거부");
+  ok(variant(c => { c.splice(1); }) === false, "3b: C 없는 path 거부");
+}
+
 // 4. waist carry 유무와 무관(연결성은 외곽만 본다) · hash/측정 불변(fallback 은 gate 만 바꾼다)
 {
   const { engine } = createEngine();

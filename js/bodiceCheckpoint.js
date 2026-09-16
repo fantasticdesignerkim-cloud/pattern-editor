@@ -146,9 +146,18 @@
   var CONNECT_EPS = 1e-4;
   function primEnds(prm) {
     if (prm.kind === "line" || prm.kind === "cubic") return [prm.from, prm.to];
-    if (prm.kind === "path" && Array.isArray(prm.commands) && prm.commands.length) {
-      var first = prm.commands[0].points[0], lastC = prm.commands[prm.commands.length - 1];
-      return [first, lastC.points[lastC.points.length - 1]];
+    if (prm.kind === "path" && Array.isArray(prm.commands) && prm.commands.length >= 2) {
+      // 정확히 하나의 연속 subpath 만 한 edge 로 본다: 첫 명령은 점 1개의 M, 이후는 점 3개의 C 만(추가 M 금지).
+      //   어긋나면 끝점을 이어 붙이거나 추론하지 않고 연결 판정을 거부한다(null).
+      var validPt = function (q) { return !!q && isFinite(q.x) && isFinite(q.y); };
+      var c0 = prm.commands[0];
+      if (!c0 || c0.type !== "M" || !Array.isArray(c0.points) || c0.points.length !== 1 || !validPt(c0.points[0])) return null;
+      for (var ci = 1; ci < prm.commands.length; ci++) {
+        var cc = prm.commands[ci];
+        if (!cc || cc.type !== "C" || !Array.isArray(cc.points) || cc.points.length !== 3 || !cc.points.every(validPt)) return null;
+      }
+      var lastC = prm.commands[prm.commands.length - 1];
+      return [c0.points[0], lastC.points[2]];
     }
     return null;
   }
