@@ -127,8 +127,74 @@
     var constr = (g && Array.isArray(g.construction)) ? g.construction.filter(function (s) { return s.kind === "line"; }).map(function (s) { return { from: cp(s.from), to: cp(s.to) }; }) : [];
     // shared(허리다트 c 다리)은 front 에 귀속 — front 링에 함께.
     if (piece === "front" && proj.working.geometry.shared) (proj.working.geometry.shared.construction || []).forEach(function (s) { if (s.kind === "line") constr.push({ from: cp(s.from), to: cp(s.to) }); });
-    try { var r = window.designLineTool.buildPieceRing(ring, constr); return !!(r && r.ok); }
-    catch (e) { return false; }
+    var ringOk = false;
+    try { var r = window.designLineTool.buildPieceRing(ring, constr); ringOk = !!(r && r.ok); }
+    catch (e) { ringOk = false; }
+    if (ringOk) return true;
+    // 기존 경로(열린 입구 1개 + construction 다리)가 실패하면, 다트이동 후처럼 **열린 다트가 외곽선에 포함돼
+    // pivot 에서 닫힌** 형상인지 선언 기반으로만 추가 판정한다(연결성만 — 다른 게이트는 우회하지 않는다).
+    return closedOutlineWithDeclaredDartJunctions(outline);
+  }
+
+  // ── dart-moved 닫힌 외곽 연결성(fallback) ──
+  // 외곽 primitive(line/cubic/path)를 끝점 그래프로 보고: 모든 primitive 가 한 연결 성분 · 자유 끝점 0 ·
+  // 모든 정점 차수 짝수. 차수>2 정점은 그 점에 닿는 **모든** branch 가 선언된 외곽 다트 다리이고 각 다리의
+  // 선언 apex(dart.apexAt) 끝이 그 정점이어야 한다. 같은 dart id 의 다리들은 선언 apex 가 한 정점으로 모여야
+  // 한다(서로 다른 id 가 같은 pivot 에 모이는 부분 이동은 각 id 의 apex 가 그 정점일 때만 허용).
+  // 선언 없는 branch · apex 반대 끝의 모임 · 홀수 차수 · 복수 성분 · 실제 gap 은 not-connected.
+  // CONNECT_EPS 는 끝점 동일성 계산 허용치(cm)이며 ring 구성 허용치(RING_EPS)와 별개다 — 느슨하게 잇지 않는다.
+  var CONNECT_EPS = 1e-4;
+  function primEnds(prm) {
+    if (prm.kind === "line" || prm.kind === "cubic") return [prm.from, prm.to];
+    if (prm.kind === "path" && Array.isArray(prm.commands) && prm.commands.length) {
+      var first = prm.commands[0].points[0], lastC = prm.commands[prm.commands.length - 1];
+      return [first, lastC.points[lastC.points.length - 1]];
+    }
+    return null;
+  }
+  function closedOutlineWithDeclaredDartJunctions(outline) {
+    if (!Array.isArray(outline) || !outline.length) return false;
+    var verts = [];
+    var vertexOf = function (pt) {
+      for (var i = 0; i < verts.length; i++) if (Math.hypot(verts[i].x - pt.x, verts[i].y - pt.y) <= CONNECT_EPS) return i;
+      verts.push({ x: pt.x, y: pt.y, inc: [] }); return verts.length - 1;
+    };
+    var edges = [];
+    for (var k = 0; k < outline.length; k++) {
+      var prm = outline[k], ends = prm && primEnds(prm);
+      if (!ends || !ends[0] || !ends[1]) return false;
+      var a = vertexOf(ends[0]), b = vertexOf(ends[1]);
+      edges.push({ prm: prm, a: a, b: b });
+      verts[a].inc.push({ e: edges.length - 1, at: "from" });
+      verts[b].inc.push({ e: edges.length - 1, at: "to" });
+    }
+    // 연결 성분(union-find)
+    var parent = verts.map(function (_, i) { return i; });
+    var find = function (i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    edges.forEach(function (ed) { parent[find(ed.a)] = find(ed.b); });
+    var root0 = find(edges[0].a);
+    if (!verts.every(function (_, i) { return find(i) === root0; })) return false;
+    var apexVertexById = {};
+    for (var v = 0; v < verts.length; v++) {
+      var deg = verts[v].inc.length;
+      if (deg === 0 || deg % 2 !== 0) return false;             // 자유 끝점(차수 1)·홀수 차수
+      if (deg <= 2) continue;
+      for (var j = 0; j < deg; j++) {
+        var hit = verts[v].inc[j], dp = edges[hit.e].prm.dart;
+        // 이 정점에 닿는 끝이 선언 apex 끝이어야 한다(apex 반대 끝의 모임·선언 없는 branch 는 설명 불가)
+        if (!dp || !dp.id || (dp.apexAt !== "from" && dp.apexAt !== "to") || dp.apexAt !== hit.at) return false;
+        if (apexVertexById[dp.id] === undefined) apexVertexById[dp.id] = v;
+        else if (apexVertexById[dp.id] !== v) return false;
+      }
+    }
+    // 차수>2 정점에서 쓰인 dart id 의 외곽 다리 전부가 같은 선언 apex 정점으로 정합해야 한다
+    for (var q = 0; q < edges.length; q++) {
+      var d2 = edges[q].prm.dart;
+      if (!d2 || apexVertexById[d2.id] === undefined) continue;
+      var apexV = d2.apexAt === "from" ? edges[q].a : d2.apexAt === "to" ? edges[q].b : -1;
+      if (apexV !== apexVertexById[d2.id]) return false;
+    }
+    return true;
   }
   // 외곽을 buildPieceRing 이 받는 {line|cubic} 로 정규화(path→cubic).
   function ringSegs(outline) {
@@ -519,5 +585,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

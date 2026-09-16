@@ -54,6 +54,8 @@ const suites = [
   { file: "dartAttachmentCheck.js",     golden: false },
   // P0.3b: draft 다트이동의 gen-0 허리다트 강체 carry(조각 소유권·누적·미해결 고정·공용 c 제외).
   { file: "waistDartCarryCheck.js",     golden: false },
+  // seam-ready 연결성 gate: dart-moved 닫힌 외곽의 선언 기반 fallback(기존 ring 경로 우선·malformed 차단).
+  { file: "connectivityFallbackCheck.js", golden: false },
   // 소매산 봉제선 순수 측정(읽기 전용): cap 곡선 apex 분할·앞/뒤 호길이·실패 계약.
   { file: "sleeveMeasureCheck.js",      golden: false },
   // 소매 모양 S1 파생: cap 고정·하부 실루엣·초기값 재현·착용 경고·실패/불변.
