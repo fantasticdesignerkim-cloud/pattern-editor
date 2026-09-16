@@ -157,8 +157,10 @@
 
   // ── 구조화 다트 의미(P0.2) ──
   // 다트 레코드는 **선언된 metadata + 그 primitive 자신의 좌표**로만 만든다. 좌표 근접/배열
-  // 순서로 apex·leg·intake·target boundary 를 찾아내지 않는다. 좌표를 primitive 에서 바로
-  // 읽으므로 디자인 변환을 거쳐도 **최종 effective geometry 와 자동으로 정렬**된다(드리프트 불가).
+  // 순서로 apex·leg·intake·target boundary 를 찾아내지 않는다.
+  // ⚠️ 자동 정렬이 보장되지 않는다: primitive 좌표와 선언 attachment({root,t})는 **서로 다른 데이터**이고
+  //   디자인 변환·다트 이동이 둘 중 하나만 바꾸면 어긋난다. 그래서 seam-ready gate(attachmentStatus)가
+  //   둘의 정합을 별도로 검증하며, 경계나 다리를 바꾸는 **변환 생산자가 정합을 보존할 책임**을 진다.
   function dartEndsOf(prim) {
     var e = endpointsOf(prim);
     var a = e[0], z = e[e.length - 1];

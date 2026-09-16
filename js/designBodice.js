@@ -294,7 +294,49 @@
     if (hemOff !== 0 && sideHemE) { var mh = [{ pt: sideHemE, d: mul(p, hemOff) }]; out2 = out2.map(function (pr) { return movePrimPoints(pr, mh); }); con2 = con2.map(function (pr) { return movePrimPoints(pr, mh); }); }
     // 5. 옆선 곡선화(curve>0, side-seam 2세그먼트=hem 있을 때). 세 점 통과·허리 접선 연속.
     if (curve > 0) out2 = curveSideSeam(out2, curve);
+    // 6. (P0.3b 증분 1) 허리 root 가 중심→옆 방향으로 늘거나 줄면 허리다트 다리의 선언 t 만 같은 물리점에 맞춘다.
+    //    이 함수가 계산한 C·S(원래)·S'(여유량+허리 이동 반영)만 쓴다 — 좌표 근접으로 다트/root 를 찾지 않는다.
+    if (delta !== 0 || waistOff !== 0) remapWaistDartAttach(piece.outline, out2, con2, C, S, add(Se, mul(p, waistOff)));
     return { outline: out2, construction: con2 };
+  }
+
+  // ── 허리다트 attachment t 재매개변수화 ──
+  // 허용: gen-0 앞 허리다트 a·b, 뒤 허리다트 d·e·f(접어재단 포함). 공유 옆 다트 c·dartMove 새 다트는 범위 밖.
+  // 조건(하나라도 어긋나면 **갱신하지 않고 선언 유지** → seam-ready gate 가 misaligned 로 남긴다):
+  //   · 원래·최종 허리 root 가 각각 **단일 직선** primitive 이고 선언 구간이 [0,1] 전체(방향 무관)
+  //   · 원래 root t=0/1 점이 C/S, 최종 root t=0/1 점이 C/S' 와 일치(계산 허용치)
+  //   · S→S' 이동이 C→S 직선과 같은 축
+  //   · 새 t 가 [0,1] 안(다리가 새 옆 점을 넘어가지 않음)
+  // 매핑: 원래 점 X = C + t(S−C) 를 유지하는 t' = (X−C)·(S'−C) / |S'−C|² (공선이라 정확).
+  var WAIST_DART_IDS = { "front-waist-a": 1, "front-waist-b": 1, "back-waist-d": 1, "back-waist-e": 1, "back-waist-f": 1 };
+  var REMAP_EPS = 1e-6;   // 계산 허용치(cm·파라미터) — 봉제 허용오차 아님
+  function rootLineOf(prims, root) {
+    var hits = prims.filter(function (pr) { return pr && pr.boundary && pr.boundary.root === root; });
+    if (hits.length !== 1) return null;
+    var pr = hits[0], r = pr.boundary.ranges;
+    if (pr.kind !== "line" || !Array.isArray(r) || r.length !== 1 || r[0][0] === r[0][1]) return null;
+    if (Math.abs(Math.min(r[0][0], r[0][1])) > REMAP_EPS || Math.abs(Math.max(r[0][0], r[0][1]) - 1) > REMAP_EPS) return null;
+    var at = function (t) { return add(pr.from, mul(sub(pr.to, pr.from), (t - r[0][0]) / (r[0][1] - r[0][0]))); };
+    return { p0: at(0), p1: at(1) };
+  }
+  function remapWaistDartAttach(origOutline, finalOutline, finalConstruction, C, S, Snew) {
+    var waist = origOutline.filter(function (pr) { return pr.edge === "waist"; });
+    if (waist.length !== 1 || !waist[0].boundary || typeof waist[0].boundary.root !== "string") return;
+    var root = waist[0].boundary.root;
+    var near = function (a, b) { return len(sub(a, b)) <= REMAP_EPS; };
+    var oldL = rootLineOf(origOutline, root), newL = rootLineOf(finalOutline.concat(finalConstruction), root);
+    if (!oldL || !newL || !near(oldL.p0, C) || !near(oldL.p1, S) || !near(newL.p0, C) || !near(newL.p1, Snew)) return;
+    var axis = sub(S, C), move = sub(Snew, S), wOld = len(axis), wNew2 = dot(sub(Snew, C), sub(Snew, C));
+    if (wOld <= EPS || wNew2 <= EPS * EPS) return;
+    if (len(move) > REMAP_EPS && Math.abs(axis.x * move.y - axis.y * move.x) / (wOld * len(move)) > REMAP_EPS) return;   // 축 불일치
+    finalConstruction.forEach(function (pr) {
+      var d = pr && pr.dart, at = d && d.attach;
+      if (!at || !WAIST_DART_IDS[d.id] || at.root !== root || typeof at.t !== "number" || !isFinite(at.t)) return;
+      var X = add(C, mul(axis, at.t));
+      var t2 = dot(sub(X, C), sub(Snew, C)) / wNew2;
+      if (t2 < -REMAP_EPS || t2 > 1 + REMAP_EPS) return;   // 새 옆 점을 넘어감 — 선언 유지
+      d.attach = { root: root, t: t2 };
+    });
   }
 
   function transformPiece(piece, L) {

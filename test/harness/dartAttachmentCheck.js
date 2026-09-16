@@ -174,8 +174,9 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   ok(att(r, "front-waist-a").attachment === "complete" && att(r, "front-bust").attachment === "complete", "6: 길이 연장 후 attachment 정합 유지(허리는 construction lineage)");
   const eased = DB.computeGeometry(geom(true, true), { body: { bustEaseCm: 4, hemExtensionBelowWaistCm: 10 } });
   const re = sem(proj(6, eased));
-  ok(att(re, "front-waist-a").attachment === "misaligned" && att(re, "front-bust").attachment === "misaligned" && !re.ready,
-    "6: 여유량이 경계만 옮기고 다리는 제자리 → misaligned·not ready");
+  ok(att(re, "front-waist-a").attachment === "complete", "6: 여유량 — 허리다트는 생산자가 t 를 재매개변수화해 정합 유지");
+  ok(att(re, "front-bust").attachment === "misaligned" && !re.ready,
+    "6: 여유량이 진동 중간 t 의 경계만 옮기고 다리는 제자리 → misaligned·not ready(범위 밖 다트)");
   const legs = out.front.construction.filter(p => p.dart);
   ok(legs.every(p => p.dart.attach) && legs[0].dart.attach !== g.front.construction[0].dart.attach, "6: 변환 결과 attachment 값 복제(참조 공유 없음)");
   const outNo = DB.computeGeometry(geom(true, false), { body: { hemExtensionBelowWaistCm: 10 } });
@@ -250,6 +251,80 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   const cl = LT.subSegment(src, 0, 1), rv = LT.reverseSeg(src);
   cl.dart.attach.t = 9; rv.dart.attach.root = "x";
   ok(src.dart.attach.t === 0.4 && src.dart.attach.root === "front/waist", "10: 복제·반전 결과 변형이 원본에 새지 않음");
+}
+
+// 11. (P0.3b 증분 1) 허리 root 연장·축소 시 허리다트 attach.t 재매개변수화
+{
+  // 앞: C=(40,38)→S=(16,38) · 뒤(거울): C=(16,38)→S=(40,38). 다리 좌표 x 에서 t = |x−Cx|/24.
+  const legW = (x, apexX, id, root, t, onFold) => { const o = dleg([x, 38], [apexX, 25], id, "waist", "to", { root, t }); if (onFold) o.dart.onFold = true; return o; };
+  function geomW() {
+    const g = geom(true, false);
+    g.front.construction = [legW(31, 30, "front-waist-a", "front/waist", 9 / 24), legW(29, 30, "front-waist-a", "front/waist", 11 / 24),
+      legW(22, 21, "front-waist-b", "front/waist", 18 / 24), legW(20, 21, "front-waist-b", "front/waist", 20 / 24),
+      legW(35, 34, "dart-1700000000000-moved", "front/waist", 5 / 24), legW(33, 34, "dart-1700000000000-moved", "front/waist", 7 / 24)];
+    g.back.construction = [legW(29, 30, "back-waist-d", "back/waist", 13 / 24), legW(31, 30, "back-waist-d", "back/waist", 15 / 24),
+      legW(22, 23, "back-waist-e", "back/waist", 6 / 24), legW(24, 23, "back-waist-e", "back/waist", 8 / 24),
+      legW(17, 16, "back-waist-f", "back/waist", 1 / 24, true)];
+    g.shared.construction = [legW(38.8, 40, "shared-waist-c", "back/waist", 0.95), legW(16.48, 40, "shared-waist-c", "front/waist", 0.98)];
+    return g;
+  }
+  const dartsOf = (r) => r.darts.front.concat(r.darts.back);
+  const ALLOWED = ["front-waist-a", "front-waist-b", "back-waist-d", "back-waist-e", "back-waist-f"];
+  const tOf = (g, pc, id) => g[pc].construction.filter(p => p.dart && p.dart.id === id).map(p => p.dart.attach.t);
+  const run = (body) => { const g = geomW(); const before = JSON.stringify(g); const out = DB.computeGeometry(g, { body }); return { g, before, out, r: sem(proj(6, out)) }; };
+
+  // outward ease: 허용 다트 전부 complete, 좌표 불변, t 만 변경(같은 물리점)
+  const e = run({ bustEaseCm: 4 });
+  ok(JSON.stringify(e.g) === e.before, "11: 입력 불변");
+  ok(ALLOWED.every(id => dartsOf(e.r).find(d => d.id === id).attachment === "complete"), "11: outward ease → a,b,d,e,f(fold) complete");
+  ok(near(tOf(e.out, "front", "front-waist-a")[0], 9 / 25) && near(tOf(e.out, "back", "back-waist-f")[0], 1 / 25), "11: t' = 원래 점 유지(앞 a 9/25 · 뒤 fold f 1/25)");
+  ok(e.out.front.construction[0].dart.attach !== e.g.front.construction[0].dart.attach, "11: attach 값 복제(참조 공유 없음)");
+  // 범위 밖: 공유 c·dartMove 새 다트는 조작하지 않는다
+  ok(JSON.stringify(e.out.shared.construction) === JSON.stringify(e.g.shared.construction), "11: 공유 옆 다트 c 무조작");
+  ok(JSON.stringify(tOf(e.out, "front", "dart-1700000000000-moved")) === JSON.stringify([5 / 24, 7 / 24]) &&
+     dartsOf(e.r).find(d => d.id === "dart-1700000000000-moved").attachment === "misaligned", "11: 새 moved 다트 무조작(misaligned 로 남음)");
+
+  // moderate inward waist offset(−3): S'=(19,38) · b 다리 x=20 → 20/21 여전히 안
+  const w = run({ waistSideOffsetCm: -3 });
+  ok(["front-waist-a", "front-waist-b"].every(id => dartsOf(w.r).find(d => d.id === id).attachment === "complete") &&
+     ["back-waist-d", "back-waist-e", "back-waist-f"].every(id => dartsOf(w.r).find(d => d.id === id).attachment === "complete"), "11: moderate inward waist offset → complete");
+  // inward past-leg(−5): 앞 S'=(21,38) → b 다리 x=20 은 새 옆 점을 넘음 → 그 다리 선언 유지 → misaligned
+  const past = run({ waistSideOffsetCm: -5 });
+  const pb = dartsOf(past.r).find(d => d.id === "front-waist-b");
+  ok(pb.attachment === "misaligned" && !past.r.ready, "11: inward past-leg → misaligned·not ready");
+  ok(near(tOf(past.out, "front", "front-waist-b")[1], 20 / 24), "11: 넘어간 다리는 선언 t 유지(조작 없음)");
+  ok(dartsOf(past.r).find(d => d.id === "front-waist-a").attachment === "complete", "11: 넘지 않은 다트는 갱신·complete");
+
+  // hem-only 불변
+  const h = run({ hemExtensionBelowWaistCm: 10 });
+  ok(JSON.stringify(h.out.front.construction.filter(p => p.dart).map(p => p.dart.attach)) === JSON.stringify(h.g.front.construction.map(p => p.dart.attach)), "11: hem-only → attach 불변");
+
+  // 결정론 · 형상/hash/측정 불변 · fingerprint 변화는 의도
+  ok(JSON.stringify(run({ bustEaseCm: 4 }).out) === JSON.stringify(e.out), "11: 같은 입력 반복 → 동일 결과");
+  const strip = (x) => JSON.stringify(x, (k, v) => (k === "attach" ? undefined : v));
+  const noAtt = geomW(); ["front", "back", "shared"].forEach(pc => noAtt[pc].construction.forEach(p => { delete p.dart.attach; }));
+  const eNo = DB.computeGeometry(noAtt, { body: { bustEaseCm: 4 } });
+  ok(strip(e.out) === strip(eNo), "11: 좌표·kind·개수·순서 불변(attach 외 차이 없음)");
+  ok(!JSON.stringify(eNo).includes("\"attach\""), "11: attach 없는 데이터는 만들지 않음");
+  PROJECT = proj(6, e.out); const c1 = BC.complete();
+  const stale = JSON.parse(JSON.stringify(e.out)); stale.front.construction.forEach((p, i) => { p.dart.attach = e.g.front.construction[i].dart.attach; });
+  PROJECT = proj(6, stale); const c2 = BC.complete();
+  ok(c1.ok && c2.ok && c1.result.hash === c2.result.hash && JSON.stringify(c1.result.armholeLengths) === JSON.stringify(c2.result.armholeLengths),
+    "11: bodiceResult.hash·reported 측정 불변");
+  ok(c1.result.semantics.fingerprint !== c2.result.semantics.fingerprint, "11: t 갱신으로 dart fingerprint 변화(의도)");
+  // legacy v5(attach 없음·boundary 있음)·boundary 없는 입력: 조작 없음
+  const leg5 = DB.computeGeometry(geom(true, false), { body: { bustEaseCm: 4, waistSideOffsetCm: -1 } });
+  const legNoIds = DB.computeGeometry(geom(false, false), { body: { bustEaseCm: 4 } });
+  ok(!JSON.stringify(leg5).includes("\"attach\"") && !JSON.stringify(legNoIds).includes("\"attach\"") && ["front", "back"].every(pc => legNoIds[pc].outline.concat(legNoIds[pc].construction).every(pr => !("boundary" in pr))), "11: legacy·무 identity 입력 무조작");
+  // 단일 직선 아님 / 축 불일치 → 갱신 금지
+  const split = geomW(); const wl = split.front.outline[1];
+  split.front.outline.splice(1, 1, L([40, 38], [28, 38], "waist", "front/waist", [0, 0.5]), L([28, 38], [16, 38], "waist", "front/waist", [0.5, 1]));
+  const so = DB.computeGeometry(split, { body: { bustEaseCm: 4 } });
+  ok(near(tOf(so, "front", "front-waist-a")[0], 9 / 24) && wl.kind === "line", "11: waist root 가 단일 직선 아님 → 갱신 안 함");
+  const slant = geomW(); slant.front.outline[1] = L([40, 38], [16, 39], "waist", "front/waist");
+  slant.front.outline[2] = L([16, 39], [16, 20], "side-seam", "front/side-seam", [1, 0]);
+  const sl = DB.computeGeometry(slant, { body: { bustEaseCm: 4 } });
+  ok(near(tOf(sl, "front", "front-waist-a")[0], 9 / 24), "11: 옆 이동 축 ≠ 허리 직선 → 갱신 안 함");
 }
 
 console.log("══════════════════════════════════════════════");
