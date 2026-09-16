@@ -107,7 +107,18 @@ function withReversedDartApex(out, src) {
 //   다리다. 선언된 apex 방향이 "바깥 끝에서 들어온다"와 맞을 때만 채택한다(좌표 추론 아님).
 function sourceDartOfSuccessor(leg, joinAt) {
   if (!leg || !leg.dartId || leg.dartApexAt !== (joinAt === "from" ? "to" : "from")) return null;
-  return { id: leg.dartId, boundary: leg.dartBoundary || null };
+  const src = { id: leg.dartId, boundary: leg.dartBoundary || null };
+  // P0.3b: source 다리가 선언한 경계 attachment 도 그대로 넘긴다(재계산하지 않는다).
+  if (typeof leg.dartAttachRoot === "string" && typeof leg.dartAttachT === "number") { src.attachRoot = leg.dartAttachRoot; src.attachT = leg.dartAttachT; }
+  return src;
+}
+// ── P0.3b: 다트 다리 경계 attachment ──
+//   dartAttachRoot / dartAttachT = 이 다리의 **경계 쪽 끝(apex 반대 끝)**이 붙는 root 경계와 그 root 파라미터.
+//   생산자가 선언한다: gen-0 는 다트를 만든 지점, 새 다트는 cut 시점 cut 세그먼트의 lineage 구간,
+//   source 잔여 다트는 원래 선언을 보존. 좌표 근접·배열 순서로 복원하지 않는다.
+function withDartAttach(leg, root, t) {
+  if (typeof root === "string" && typeof t === "number" && isFinite(t)) { leg.dartAttachRoot = root; leg.dartAttachT = t; }
+  return leg;
 }
 // 방금 만든 세그먼트 out(src 의 복사/반전/절단본)에 lineage 구간을 설정한다.
 //   reversed = out 이 src 를 뒤집은 것 · cutFromPt = out.from 을 절단점으로 바꿨을 때 그 점.
@@ -494,12 +505,17 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle, cutBoundary 
   // ★ P0.2: 다트 의미를 **생산 지점에서 선언**한다(사후 추론·사후 변형 없음).
   //   apex = pivot. pair 규약상 A 는 pivot→cutA(apex=from), B 는 cutB→pivot(apex=to).
   //   dartBoundary = 자를 당시 세그먼트 타입에서 온 값(모르면 null — 지어내지 않는다).
-  const legOut = { type: "dart-leg-new", role: "dart-leg", dartId, pair: "A",
+  // P0.3b: 새 다트 attachment = cut 시점 cut 반쪽 세그먼트가 실은 root 와 그 시작(=cutPoint) 파라미터.
+  //   두 다리는 같은 cut 지점에서 나오므로 같은 root+t 를 가진다(회전은 lineage 를 바꾸지 않는다).
+  const cutHalfA = segsAFull[0], cutHalfB = segsBFull[0];
+  const legOut = withDartAttach({ type: "dart-leg-new", role: "dart-leg", dartId, pair: "A",
                    dartBoundary: cutBoundary, dartApexAt: "from",
-                   from: { ...pivot }, to: { ...cutA }, disabled: true };
-  const legIn  = { type: "dart-leg-new", role: "dart-leg", dartId, pair: "B",
+                   from: { ...pivot }, to: { ...cutA }, disabled: true },
+                   hasBoundaryId(cutHalfA) ? cutHalfA.boundaryRoot : null, hasBoundaryId(cutHalfA) ? cutHalfA.boundaryFromT : null);
+  const legIn  = withDartAttach({ type: "dart-leg-new", role: "dart-leg", dartId, pair: "B",
                    dartBoundary: cutBoundary, dartApexAt: "to",
-                   from: { ...cutB }, to: { ...pivot }, disabled: true };
+                   from: { ...cutB }, to: { ...pivot }, disabled: true },
+                   hasBoundaryId(cutHalfB) ? cutHalfB.boundaryRoot : null, hasBoundaryId(cutHalfB) ? cutHalfB.boundaryFromT : null);
 
   // 기존 다트 잔여선: trailing이 없을 때만 새로 생성 (있으면 원래 다트선을 그대로 사용)
   // ★ P0.2 보완: 잔여선은 **새 다트가 아니라 source 다트의 아직 열린 다리**다(부분 회전이면 열린 채
@@ -509,13 +525,13 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle, cutBoundary 
   const srcA = segsAFull[outlineEndIdxA].sourceDart || null;
   const srcB = segsBFull[outlineEndIdxB].sourceDart || null;
   const legOldA = srcA
-    ? { type: "dart-leg-old", role: "dart-leg-old", dartId: srcA.id, pair: "oldA", dartBoundary: srcA.boundary, dartApexAt: "to",
-        from: { ...endA }, to: { ...pivot }, disabled: true }
+    ? withDartAttach({ type: "dart-leg-old", role: "dart-leg-old", dartId: srcA.id, pair: "oldA", dartBoundary: srcA.boundary, dartApexAt: "to",
+        from: { ...endA }, to: { ...pivot }, disabled: true }, srcA.attachRoot, srcA.attachT)
     : { type: "dart-leg-old", role: "dart-leg-old", dartId, pair: "oldA",
         from: { ...endA }, to: { ...pivot }, disabled: true };
   const legOldB = srcB
-    ? { type: "dart-leg-old", role: "dart-leg-old", dartId: srcB.id, pair: "oldB", dartBoundary: srcB.boundary, dartApexAt: "from",
-        from: { ...pivot }, to: { ...endB }, disabled: true }
+    ? withDartAttach({ type: "dart-leg-old", role: "dart-leg-old", dartId: srcB.id, pair: "oldB", dartBoundary: srcB.boundary, dartApexAt: "from",
+        from: { ...pivot }, to: { ...endB }, disabled: true }, srcB.attachRoot, srcB.attachT)
     : { type: "dart-leg-old", role: "dart-leg-old", dartId, pair: "oldB",
         from: { ...pivot }, to: { ...endB }, disabled: true };
 
@@ -1016,8 +1032,9 @@ function buildFrontOutline(p, f, B) {
   }
   // ★ P0.2: 가슴다트 의미를 **생산 지점에서 선언**한다(좌표·배열 순서로 추론하지 않는다).
   //   apex = BP(두 다리가 만나는 꼭짓점) · 두 boundary leg endpoint = G·GG · 열린 경계 = 진동.
-  addLineSegment(segments, p.G,        p.BP,        { type: "old-dart", disabled: true, dartId: "front-bust", dartBoundary: "armhole", dartApexAt: "to" });
-  addLineSegment(segments, p.BP,       GG,          { type: "old-dart", disabled: true, dartId: "front-bust", dartBoundary: "armhole", dartApexAt: "from" });
+  //   P0.3b attachment: G = 진동 하부 root 끝(t=1) · GG = 진동 상부 root 시작(t=0) — 두 다리가 서로 다른 root.
+  addLineSegment(segments, p.G,        p.BP,        { type: "old-dart", disabled: true, dartId: "front-bust", dartBoundary: "armhole", dartApexAt: "to", dartAttachRoot: "front/armhole-lower", dartAttachT: 1 });
+  addLineSegment(segments, p.BP,       GG,          { type: "old-dart", disabled: true, dartId: "front-bust", dartBoundary: "armhole", dartApexAt: "from", dartAttachRoot: "front/armhole-upper", dartAttachT: 0 });
   addSampledSegments(segments, frontArm,             { type: "front-armhole-upper", boundaryRoot: "front/armhole-upper", boundaryFromT: 0, boundaryToT: 1 });
   addLineSegment(segments, FSP,        nTL,         { type: "front-shoulder", boundaryRoot: "front/shoulder", boundaryFromT: 1, boundaryToT: 0 });
   addSampledSegments(segments, [...neckAll].reverse(),{ type: "front-neckline", boundaryRoot: "front/neckline", boundaryFromT: 1, boundaryToT: 0 });
@@ -1220,8 +1237,9 @@ function buildBackOutline(p, f, B) {
 
   // ── 어깨 다트 (disabled): dartEnd_ → E → dartCenter ──
   // ★ P0.2: 뒤어깨다트 의미 선언. apex = E · leg endpoint = dartEnd_·dartCenter · 열린 경계 = 어깨.
-  addLineSegment(segments, dartEnd_,  p.E,        { type: "back-shoulder-dart", disabled: true, dartId: "back-shoulder", dartBoundary: "shoulder", dartApexAt: "to" });
-  addLineSegment(segments, p.E,       dartCenter, { type: "back-shoulder-dart", disabled: true, dartId: "back-shoulder", dartBoundary: "shoulder", dartApexAt: "from" });
+  //   P0.3b attachment: dartEnd_ = 어깨(다트→어깨끝) root 시작(t=0) · dartCenter = 어깨(목→다트) root 끝(t=1).
+  addLineSegment(segments, dartEnd_,  p.E,        { type: "back-shoulder-dart", disabled: true, dartId: "back-shoulder", dartBoundary: "shoulder", dartApexAt: "to", dartAttachRoot: "back/shoulder-armhole", dartAttachT: 0 });
+  addLineSegment(segments, p.E,       dartCenter, { type: "back-shoulder-dart", disabled: true, dartId: "back-shoulder", dartBoundary: "shoulder", dartApexAt: "from", dartAttachRoot: "back/shoulder-neck", dartAttachT: 1 });
 
   // ── DEBUG 검증 ──────────────────────────────
   // buildBackOutline은 렌더/호버마다 호출되는 hot path라, map/filter/join은

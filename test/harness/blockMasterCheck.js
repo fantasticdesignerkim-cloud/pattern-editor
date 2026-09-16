@@ -185,7 +185,7 @@ function makeHarness(cfg) {
 {
   const h = makeHarness();
   const s = h.capture();
-  ok(s.schemaVersion === 5, "1: schemaVersion=5");
+  ok(s.schemaVersion === 6, "1: schemaVersion=6");
   ok(deepEqual(Object.keys(s).sort(), ["geometry", "schemaVersion", "source"]), "1: 최상위 키");
   const dist = {};
   ["front", "back", "shared", "sleeve"].forEach(pc => ["outline", "construction"].forEach(rl => { dist[pc + "/" + rl] = s.geometry[pc][rl].length; }));
@@ -472,6 +472,7 @@ function makeHarness(cfg) {
       "data-dart-id": meta.id, "data-dart-apex-at": meta.apexAt };
     if (meta.boundary) a["data-dart-boundary"] = meta.boundary;
     if (meta.onFold) a["data-dart-on-fold"] = "true";
+    if (meta.attach) { a["data-dart-attach-root"] = meta.attach.root; a["data-dart-attach-t"] = String(meta.attach.t); }
     return el("line", a);
   };
   // apex=(200,200) 공유, leg=(180,260)·(220,260)
@@ -479,9 +480,9 @@ function makeHarness(cfg) {
     const base = defaultScene(mode);
     if (mode === "sleeve") return base;
     return base.concat([
-      dartEl("front", "construction", { x1: 180, y1: 260, x2: 200, y2: 200 }, { id: "front-bust", boundary: "armhole", apexAt: "to" }),
-      dartEl("front", "construction", { x1: 220, y1: 260, x2: 200, y2: 200 }, { id: "front-bust", boundary: "armhole", apexAt: "to" }),
-      dartEl("back", "construction", { x1: 80, y1: 260, x2: 100, y2: 200 }, { id: "back-waist-f", boundary: "waist", apexAt: "to", onFold: true })
+      dartEl("front", "construction", { x1: 180, y1: 260, x2: 200, y2: 200 }, { id: "front-bust", boundary: "armhole", apexAt: "to", attach: { root: "front/armhole", t: 1 } }),
+      dartEl("front", "construction", { x1: 220, y1: 260, x2: 200, y2: 200 }, { id: "front-bust", boundary: "armhole", apexAt: "to", attach: { root: "front/armhole", t: 0 } }),
+      dartEl("back", "construction", { x1: 80, y1: 260, x2: 100, y2: 200 }, { id: "back-waist-f", boundary: "waist", apexAt: "to", onFold: true, attach: { root: "back/waist", t: 0.3 } })
     ]);
   };
   const s4 = makeHarness({ sceneBuilder: withDarts }).capture();
@@ -522,6 +523,45 @@ function makeHarness(cfg) {
     "data-dart-id": "d3", "data-dart-apex-at": "to" });
   throws(() => makeHarness({ sceneBuilder: (mode) => mode === "body" ? defaultScene(mode) : defaultScene(mode).concat([sl]) }).capture(),
     "dart-placement", "33: sleeve 다트 의미 거부");
+}
+
+// 테스트 34(SV6, P0.3b): 다트 다리 경계 attachment — 선언 그대로 보존, 잘못된 선언·미포함은 명시적 거부.
+{
+  const leg = (piece, c, meta) => {
+    const a = { "data-piece": piece, "data-geometry-role": "construction", x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2,
+      "data-dart-id": meta.id, "data-dart-apex-at": "to", "data-dart-boundary": meta.boundary };
+    if (meta.root !== undefined) a["data-dart-attach-root"] = meta.root;
+    if (meta.t !== undefined) a["data-dart-attach-t"] = String(meta.t);
+    return el("line", a);
+  };
+  const scene = (legs, mutateBase) => (mode) => {
+    let base = defaultScene(mode); if (mutateBase) base = base.map(mutateBase);
+    return mode === "sleeve" ? base : base.concat(legs);
+  };
+  const two = (m1, m2) => [leg("front", { x1: 180, y1: 260, x2: 200, y2: 200 }, m1), leg("front", { x1: 220, y1: 260, x2: 200, y2: 200 }, m2)];
+  const good = { id: "dx", boundary: "armhole", root: "front/armhole", t: 0.25 };
+  const s = makeHarness({ sceneBuilder: scene(two(good, Object.assign({}, good, { t: 0.75 }))) }).capture();
+  const legs = s.geometry.front.construction.filter(p => p.dart);
+  ok(legs.length === 2 && legs[0].dart.attach.root === "front/armhole" && legs[0].dart.attach.t === 0.25 && legs[1].dart.attach.t === 0.75,
+    "34: attachment 선언값 그대로(root·t)");
+  ok(legs[0].dart.attach !== makeHarness({ sceneBuilder: scene(two(good, good)) }).capture().geometry.front.construction.find(p => p.dart).dart.attach,
+    "34: 캡처 간 attachment 참조 공유 없음");
+  // 같은 root+t 두 다리(이동 다트형) 허용 · shared 다트의 앞/뒤 서로 다른 root 허용
+  ok(!!makeHarness({ sceneBuilder: scene(two(good, good)) }).capture(), "34: 두 다리 같은 root+t 허용");
+  const sharedLegs = [leg("shared", { x1: 230, y1: 300, x2: 240, y2: 200 }, { id: "sc", boundary: "waist", root: "back/waist", t: 0.9 }),
+    leg("shared", { x1: 250, y1: 300, x2: 240, y2: 200 }, { id: "sc", boundary: "waist", root: "front/waist", t: 0.05 })];
+  const ss = makeHarness({ sceneBuilder: scene(sharedLegs) }).capture();
+  ok(ss.geometry.shared.construction.filter(p => p.dart).map(p => p.dart.attach.root).join(",") === "back/waist,front/waist", "34: shared 다트 서로 다른 root 허용");
+  throws(() => makeHarness({ sceneBuilder: scene(two({ id: "dx", boundary: "armhole" }, good)) }).capture(), "missing-dart-attachment", "34: attachment 누락 거부");
+  throws(() => makeHarness({ sceneBuilder: scene(two(Object.assign({}, good, { t: 1.2 }), good)) }).capture(), "bad-dart-attachment", "34: t 범위 밖 거부");
+  throws(() => makeHarness({ sceneBuilder: scene(two(Object.assign({}, good, { root: "front/nope" }), good)) }).capture(), "bad-dart-attachment", "34: 모르는 root 거부");
+  throws(() => makeHarness({ sceneBuilder: scene(two(Object.assign({}, good, { root: "back/armhole" }), good)) }).capture(), "dart-attachment-mismatch", "34: 다른 piece root 거부");
+  throws(() => makeHarness({ sceneBuilder: scene(two(Object.assign({}, good, { root: "front/center" }), good)) }).capture(), "dart-attachment-mismatch", "34: root 의미 ≠ 다트 boundary 거부");
+  throws(() => makeHarness({ sceneBuilder: scene(two(Object.assign({}, good, { root: "front/armhole-upper" }), good)) }).capture(), "dart-attachment-uncovered", "34: 캡처에 없는 root 거부");
+  // 경계 구간이 t 를 덮지 않음(앞 진동 선언 구간을 0~0.5 로 좁힘)
+  const narrowArm = (e) => (e.getAttribute("data-piece") === "front" && e.getAttribute("data-edge") === "armhole")
+    ? { tagName: e.tagName, getAttribute(k) { return k === "data-boundary-ranges" ? "0,0.5" : e.getAttribute(k); } } : e;
+  throws(() => makeHarness({ sceneBuilder: scene(two(good, Object.assign({}, good, { t: 0.75 })), narrowArm) }).capture(), "dart-attachment-uncovered", "34: 구간 밖 t 거부");
 }
 
 // 테스트 29(SV3): 봉제 경계 의미가 하나라도 빠지면 정상 v3 로 통과하지 않는다.

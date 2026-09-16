@@ -26,6 +26,9 @@
 //     ranges 는 **그리기 명령마다 하나**(line 1 · path 의 C 수)이며 root 위 [from,to] 구간이다.
 //     좌표·배열 index 로 root 를 만들거나 없는 identity 를 채우지 않는다. v5 정상 캡처는 front/back
 //     outline 의 모든 의미 모서리 primitive 가 root 와 일치하는 boundary 를 가져야 한다.
+//   - SV6(schemaVersion 6, P0.3b) = 위 + 다트 다리 경계 attachment. 다리마다 생산자가 선언한
+//     data-dart-attach-root / -t 를 dart.attach = { root, t } 로 싣고, root 의미가 다트 boundary 와
+//     같으며 t 가 [0,1] 이고 **같은 캡처의 그 root 경계 구간이 t 를 덮는지** 검증한다(좌표 복원 없음).
 //   - 좌표는 원본 정밀도를 보존하고, 정규화는 hash/중복 판정(canonical)에서만 한다.
 //   - workMode 만 제한된 transaction 으로 all 로 바꿔 수집하고 finally 에서 원복한다.
 //     전역 state 에 snapshot source 를 임시 주입하지 않는다.
@@ -59,7 +62,7 @@
     armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole"
   };
   var BOUNDARY_RANGE_EPS = 1e-6;   // root 구간 [0,1] 계약의 수치 허용치
-  var SCHEMA_VERSION = 5;
+  var SCHEMA_VERSION = 6;
 
   function fail(reason, detail) {
     var e = new Error("captureBlockSnapshot 실패: " + reason);
@@ -148,6 +151,12 @@
       var bnd = el.getAttribute("data-dart-boundary"); if (bnd) dart.boundary = bnd;
       var ax = el.getAttribute("data-dart-apex-at"); if (ax) dart.apexAt = ax;
       if (el.getAttribute("data-dart-on-fold") === "true") dart.onFold = true;
+      var atRoot = el.getAttribute("data-dart-attach-root"), atT = el.getAttribute("data-dart-attach-t");
+      if (atRoot !== null || atT !== null) {
+        var tv = Number(atT);
+        if (!atRoot || atT === null || !isFinite(tv) || tv < -BOUNDARY_RANGE_EPS || tv > 1 + BOUNDARY_RANGE_EPS) fail("bad-dart-attachment", String(atRoot) + "@" + String(atT));
+        dart.attach = { root: atRoot, t: tv };
+      }
       prim.dart = dart;
     }
     return prim;
@@ -210,6 +219,34 @@
   function dartEnds(prim) {
     var ks = edgeEndpointKeys(prim);
     return (prim.dart.apexAt === "from") ? { apex: ks[0], leg: ks[1] } : { apex: ks[1], leg: ks[0] };
+  }
+  // SV6: 다트 다리 attachment — 선언 존재 · root 의미 = 다트 boundary · root piece 가 다리 piece 와 정합
+  //   (shared 다트는 앞/뒤 어느 쪽 root 든 가능) · 같은 캡처에서 그 root 의 경계 구간이 t 를 덮는다.
+  function rootCoversT(geometry, root, t) {
+    var pc = root.slice(0, root.indexOf("/"));
+    if (!geometry[pc]) return false;
+    return geometry[pc].outline.some(function (prm) {
+      if (!prm.boundary || prm.boundary.root !== root) return false;
+      return prm.boundary.ranges.some(function (r) {
+        return t >= Math.min(r[0], r[1]) - BOUNDARY_RANGE_EPS && t <= Math.max(r[0], r[1]) + BOUNDARY_RANGE_EPS;
+      });
+    });
+  }
+  function validateDartAttachments(geometry) {
+    ["front", "back", "shared"].forEach(function (pc) {
+      ["outline", "construction"].forEach(function (rl) {
+        geometry[pc][rl].forEach(function (prm) {
+          if (!prm.dart) return;
+          var at = prm.dart.attach;
+          if (!at) fail("missing-dart-attachment", pc + "/" + prm.dart.id);
+          var slash = at.root.indexOf("/"), rp = at.root.slice(0, slash), rn = at.root.slice(slash + 1);
+          if (slash < 0 || !(rp === "front" || rp === "back") || !BOUNDARY_ROOT_EDGE[rn]) fail("bad-dart-attachment", at.root);
+          if (pc !== "shared" && rp !== pc) fail("dart-attachment-mismatch", pc + "/" + prm.dart.id + " root=" + at.root);
+          if (prm.dart.boundary && BOUNDARY_ROOT_EDGE[rn] !== prm.dart.boundary) fail("dart-attachment-mismatch", prm.dart.id + " boundary=" + String(prm.dart.boundary) + " root=" + at.root);
+          if (!rootCoversT(geometry, at.root, at.t)) fail("dart-attachment-uncovered", prm.dart.id + " " + at.root + "@" + at.t);
+        });
+      });
+    });
   }
   // SV4: piece × dartId 그룹의 다리 수와 apex 일치를 검증한다.
   function validateDarts(geometry) {
@@ -305,6 +342,7 @@
     // SV4: 다트 그룹 일관성 — 같은 id 의 다리들이 **선언한 apex 끝점이 실제로 일치**하는지 확인한다
     //   (일치 여부 검증이지, 좌표로 apex 를 찾아내는 추론이 아니다). onFold 면 다리 1개, 아니면 2개.
     validateDarts(geometry);
+    validateDartAttachments(geometry);
     // SV2: 앞·뒤 각 조각의 center∩waist / side-seam∩waist junction 유일성.
     for (var pj = 0; pj < REQUIRED_EDGE_PIECES.length; pj++) {
       validateJunctions(geometry[REQUIRED_EDGE_PIECES[pj]].outline, REQUIRED_EDGE_PIECES[pj]);

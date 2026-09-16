@@ -30,24 +30,34 @@ function _tagBoundary(el, root, ranges){
 //   data-dart-boundary : intake 가 열리는 봉제 경계 role
 //   data-dart-apex-at  : 이 다리의 **어느 끝이 apex 인지**("from"|"to") — 반대 끝이 boundary leg endpoint
 //   data-dart-on-fold  : 접어재단 중심선에 걸쳐 한쪽 다리만 그리는 다트(뒤중심 f)
+//   data-dart-attach-root / -t : (P0.3b) apex 반대 끝이 붙는 root 경계와 root 파라미터 t
 function _tagDartMeta(el, meta){
   if (!el || !el.setAttribute || !meta || !meta.id) return el;
   el.setAttribute("data-dart-id", meta.id);
   if (meta.boundary) el.setAttribute("data-dart-boundary", meta.boundary);
   if (meta.apexAt) el.setAttribute("data-dart-apex-at", meta.apexAt);
   if (meta.onFold) el.setAttribute("data-dart-on-fold", "true");
+  // P0.3b: 경계 쪽 끝이 붙는 root 경계 attachment(생산자 선언값만).
+  if (typeof meta.attachRoot === "string" && typeof meta.attachT === "number" && isFinite(meta.attachT)) {
+    el.setAttribute("data-dart-attach-root", meta.attachRoot);
+    el.setAttribute("data-dart-attach-t", String(meta.attachT));
+  }
   return el;
 }
 
-function _tagDart(g, dart, piece, dartId){
+// attach(선택): { left:{root,t}, right:{root,t} } — 허리선 위 다리 끝의 root attachment(생산자 계산).
+function _tagDart(g, dart, piece, dartId, attach){
   const start = g.childNodes.length;
   drawDart(g, dart, "dart-waist");
+  let legNo = 0;   // drawDart 는 left 다리 → right 다리 순으로 만든다(dart-guide 는 다리 아님).
   for (let i = start; i < g.childNodes.length; i++){
     const el = g.childNodes[i];
     if (el && el.getAttribute && (el.getAttribute("class") || "").split(/\s+/).indexOf("dart-waist") !== -1){
       _tagGeom(el, piece, "construction");
       // drawDart 는 Ln(left, apex) · Ln(right, apex) 순으로 다리를 만든다 → apex 는 항상 "to".
-      _tagDartMeta(el, { id: dartId, boundary: "waist", apexAt: "to" });
+      const side = (legNo++ === 0) ? "left" : "right";
+      const at = attach && attach[side];
+      _tagDartMeta(el, { id: dartId, boundary: "waist", apexAt: "to", attachRoot: at && at.root, attachT: at && at.t });
     }
   }
 }
@@ -718,7 +728,7 @@ function drawAppliedSegments(g, segs, cls, color, side) {
       const lb = bndOf(seg);
       // baked 세그먼트가 **생산 지점에서 실어 온** 다트 의미를 그대로 전달한다(재추론 없음).
       g.appendChild(_tagBoundary(_tagDartMeta(_tagGeom(LnC(seg.from, seg.to, cls, color), side, "outline", SEG_EDGE[seg.type]),
-        { id: seg.dartId, boundary: seg.dartBoundary, apexAt: seg.dartApexAt }), lb && lb.root, lb && [[lb.from, lb.to]]));
+        { id: seg.dartId, boundary: seg.dartBoundary, apexAt: seg.dartApexAt, attachRoot: seg.dartAttachRoot, attachT: seg.dartAttachT }), lb && lb.root, lb && [[lb.from, lb.to]]));
     }
   }
   flushSmoothPath(curvePts);
@@ -855,9 +865,9 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
     // ─ G점 → BP 직선 + 다트선 ──────────────────
     // apex = BP · leg endpoint = G·GG · intake 는 진동으로 열린다(생산 지점 선언).
     gPat.appendChild(_tagDartMeta(_tagGeom(Ln(p.G,  p.BP, "dart dart-struct"), "front", "construction"),
-      { id: "front-bust", boundary: "armhole", apexAt: "to" }));   // 가슴다트 하부
+      { id: "front-bust", boundary: "armhole", apexAt: "to", attachRoot: "front/armhole-lower", attachT: 1 }));   // 가슴다트 하부(G = 진동하부 끝)
     gPat.appendChild(_tagDartMeta(_tagGeom(Ln(p.BP, GG,  "dart dart-struct"), "front", "construction"),
-      { id: "front-bust", boundary: "armhole", apexAt: "from" })); // 가슴다트 상부
+      { id: "front-bust", boundary: "armhole", apexAt: "from", attachRoot: "front/armhole-upper", attachT: 0 })); // 가슴다트 상부(GG = 진동상부 시작)
     gPat.appendChild(dot(GG, "pt-main", 3));
     gPat.appendChild(lbl(GG, "GG", "txt-dark", 6, -6));
 }
@@ -1009,9 +1019,9 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
     gPat.appendChild(lbl(dartEnd_, "다트끝", "txt-dark", 4, -6));
     // apex = E · leg endpoint = dartCenter·dartEnd_ · intake 는 어깨로 열린다(생산 지점 선언).
     gPat.appendChild(_tagDartMeta(_tagGeom(LnC(dartCenter, p.E,    "dart dart-struct", _DC_B), "back", "construction"),
-      { id: "back-shoulder", boundary: "shoulder", apexAt: "to" }));
+      { id: "back-shoulder", boundary: "shoulder", apexAt: "to", attachRoot: "back/shoulder-neck", attachT: 1 }));      // dartCenter = 목쪽 어깨 끝
     gPat.appendChild(_tagDartMeta(_tagGeom(LnC(p.E,        dartEnd_, "dart dart-struct", _DC_B), "back", "construction"),
-      { id: "back-shoulder", boundary: "shoulder", apexAt: "from" }));
+      { id: "back-shoulder", boundary: "shoulder", apexAt: "from", attachRoot: "back/shoulder-armhole", attachT: 0 })); // dartEnd_ = 어깨끝쪽 시작
     if(showDim) gPat.appendChild(dimLine(bND, bSP, 12));
 
     gPat.appendChild(Ln(p.F, fAux, "dep"));
@@ -1377,14 +1387,22 @@ function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatter
   // ── 다트 a~f ─────────────────────────────────
   const gDart=E("g");
   gDart.setAttribute("id","layer-dart");
-  _tagDart(gDart, darts_.a, "front", "front-waist-a");   // BP 아래 (앞판)
-  _tagDart(gDart, darts_.b, "front", "front-waist-b");   // F점 앞 (앞판)
-  _tagDart(gDart, darts_.c, "shared", "shared-waist-c");  // 옆선 (앞뒤 공용)
-  _tagDart(gDart, darts_.d, "back", "back-waist-d");    // 뒤품~옆선 (뒤판)
-  _tagDart(gDart, darts_.e, "back", "back-waist-e");    // E점 (뒤판)
+  // P0.3b: 허리다트 다리 끝은 허리 root 위에 있다. 허리 root 의 파라미터는 생산자가 그린 허리선 그대로
+  //   (앞 = 앞중심 FRONT_WL(0) → 옆 SIDE_BTM(1), 뒤 = 뒤중심 BACK_WL(0) → 옆 SIDE_BTM(1))이고, 다리 끝은
+  //   makeDart 가 같은 허리 y 위에 apex.x ± 분량/2 로 정의한 점이다 → 선 위 선형 파라미터로 선언한다.
+  //   옆선 다트 c 는 옆선 양쪽에 걸쳐 left 는 뒤 허리, right 는 앞 허리 root 에 붙는다.
+  const _wT = (pc, x) => pc === "front"
+    ? (p.FRONT_WL.x - x) / (p.FRONT_WL.x - p.SIDE_BTM.x)
+    : (x - p.BACK_WL.x) / (p.SIDE_BTM.x - p.BACK_WL.x);
+  const _wA = (lp, rp, d) => ({ left: { root: lp + "/waist", t: _wT(lp, d.left.x) }, right: { root: rp + "/waist", t: _wT(rp, d.right.x) } });
+  _tagDart(gDart, darts_.a, "front", "front-waist-a", _wA("front", "front", darts_.a));   // BP 아래 (앞판)
+  _tagDart(gDart, darts_.b, "front", "front-waist-b", _wA("front", "front", darts_.b));   // F점 앞 (앞판)
+  _tagDart(gDart, darts_.c, "shared", "shared-waist-c", _wA("back", "front", darts_.c));  // 옆선 (앞뒤 공용)
+  _tagDart(gDart, darts_.d, "back", "back-waist-d", _wA("back", "back", darts_.d));    // 뒤품~옆선 (뒤판)
+  _tagDart(gDart, darts_.e, "back", "back-waist-e", _wA("back", "back", darts_.e));    // E점 (뒤판)
   // f 다트: 뒤중심선이라 오른쪽만
   gDart.appendChild(_tagDartMeta(_tagGeom(Ln(darts_.f.right, darts_.f.apex, "dart-waist"), "back", "construction"),
-    { id: "back-waist-f", boundary: "waist", apexAt: "to", onFold: true }));
+    { id: "back-waist-f", boundary: "waist", apexAt: "to", onFold: true, attachRoot: "back/waist", attachT: _wT("back", darts_.f.right.x) }));
   gDart.appendChild(dot(darts_.f.apex, "pt-main", 4));
   if(showDart)svg.appendChild(gDart);
 }

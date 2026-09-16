@@ -251,9 +251,9 @@ function fakeProject(backSideTopY, opts) {
 
   // (a) 손대지 않은 v3 → ready=true, issues 없음
   {
-    const r = sem(mkProject({ schemaVersion: 5 }));
-    ok(r.ready === true && r.issues.length === 0, "11a: untouched v5 → ready, issues 없음");
-    ok(r.sourceSchemaVersion === 5 && r.unresolved.length === 0 && r.missing.length === 0, "11a: 목록 비어있음");
+    const r = sem(mkProject({ schemaVersion: 6 }));
+    ok(r.ready === true && r.issues.length === 0, "11a: untouched v6 → ready, issues 없음");
+    ok(r.sourceSchemaVersion === 6 && r.unresolved.length === 0 && r.missing.length === 0, "11a: 목록 비어있음");
   }
 
   // (b) v2 source → legacy-source issue, ready=false (role 은 그대로 있어도)
@@ -265,7 +265,7 @@ function fakeProject(backSideTopY, opts) {
 
   // (c) v3 + 일반 replacement → 명시 unresolved + provenance, ready=false
   {
-    const base = mkProject({ schemaVersion: 5 });
+    const base = mkProject({ schemaVersion: 6 });
     const fo = base.working.geometry.front.outline.map(x => JSON.parse(JSON.stringify(x)));
     fo.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edgeStatus: "unresolved", edgeSourceLineId: "line-8" });
     const r = sem(withOutline(base, fo));
@@ -290,7 +290,7 @@ function fakeProject(backSideTopY, opts) {
 
   // (e) v3 metadata 전달 오류(표식 없이 필수 role 소실) → missing-required-role
   {
-    const base = mkProject({ schemaVersion: 5 });
+    const base = mkProject({ schemaVersion: 6 });
     const fo = base.working.geometry.front.outline
       .map(x => JSON.parse(JSON.stringify(x)))
       .filter(x => x.edge !== "shoulder");            // 표식 없이 사라짐 = 전달 버그
@@ -303,7 +303,7 @@ function fakeProject(backSideTopY, opts) {
   // (f) v3 + unresolved replacement 가 필수 role 을 삼킨 경우
   //     → provenance·missing 증거를 잃지 않고, 무표식 유실(missing-required-role)로 오분류하지 않는다
   {
-    const base = mkProject({ schemaVersion: 5 });
+    const base = mkProject({ schemaVersion: 6 });
     const fo = base.working.geometry.front.outline
       .map(x => JSON.parse(JSON.stringify(x)))
       .filter(x => x.edge !== "shoulder");
@@ -317,7 +317,7 @@ function fakeProject(backSideTopY, opts) {
 
   // (g) 평가 대상이 아닌 primitive(다트 다리·구성선)를 unresolved 로 오인하지 않는다
   {
-    const base = mkProject({ schemaVersion: 5 });
+    const base = mkProject({ schemaVersion: 6 });
     ok(base.working.geometry.front.construction.length > 0, "11g: construction 더미 다트 존재");
     const r = sem(base);
     ok(r.unresolved.length === 0 && r.ready === true, "11g: role 없는 construction 을 unresolved 로 세지 않음");
@@ -325,7 +325,7 @@ function fakeProject(backSideTopY, opts) {
 
   // (h) 완료 스냅샷에 보존 + deepFreeze + 공유 참조 없음 + 결정론
   {
-    const base = mkProject({ schemaVersion: 5 });
+    const base = mkProject({ schemaVersion: 6 });
     const fo = base.working.geometry.front.outline.map(x => JSON.parse(JSON.stringify(x)));
     fo.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edgeStatus: "unresolved", edgeSourceLineId: "line-11" });
     PROJECT = withOutline(base, fo);
@@ -343,9 +343,9 @@ function fakeProject(backSideTopY, opts) {
 
   // (i) readiness 는 hash·reported 값에 영향을 주지 않는다
   {
-    const clean = mkProject({ schemaVersion: 5 });
+    const clean = mkProject({ schemaVersion: 6 });
     PROJECT = clean; const r1 = BC.complete();
-    const withFlag = mkProject({ schemaVersion: 5 });
+    const withFlag = mkProject({ schemaVersion: 6 });
     const fo = withFlag.working.geometry.front.outline.map(x => JSON.parse(JSON.stringify(x)));
     PROJECT = withOutline(withFlag, fo); const r2 = BC.complete();
     ok(r1.result.hash === r2.result.hash, "11i: readiness 필드가 hash 에 영향 없음");
@@ -375,6 +375,8 @@ function fakeProject(backSideTopY, opts) {
     if (sv >= 5) { withIds(proj.working.geometry.front, "front"); withIds(proj.working.geometry.back, "back"); }
     proj.working.geometry.shared = { outline: [], construction: [] };
     proj.working.geometry.front.construction = darts || [];
+    // P0.3b(v6): 선언이 없는 fixture 다리엔 그 boundary 의 front root 중간 t 를 attachment 로 선언한다.
+    if (sv >= 6) (darts || []).forEach(l => { if (l.dart && !l.dart.attach && l.dart.boundary) l.dart.attach = { root: "front/" + l.dart.boundary, t: 0.5 }; });
     return proj;
   };
   const semOf = (proj) => { PROJECT = proj; return BC.check().semantics; };
@@ -385,20 +387,20 @@ function fakeProject(backSideTopY, opts) {
     const darts = [dleg([40, 20], [44, 38], "front-waist-a", "armhole", "from"),
                    dleg([48, 20], [44, 38], "front-waist-a", "armhole", "from")];
     // apexAt "from" → 첫 끝점이 apex. 두 다리의 apex 가 달라 불완전해야 한다(대조).
-    const bad = semOf(mk(5, darts));
+    const bad = semOf(mk(6, darts));
     ok(bad.issues.indexOf("dart-semantics-incomplete") >= 0, "12a: apex 불일치 → 불완전 선언 감지");
   }
   {
     // 올바른 선언: apex=(44,38) 공유, leg=(40,20)·(48,20)
     const darts = [dleg([40, 20], [44, 38], "front-waist-a", "armhole", "to"),
                    dleg([48, 20], [44, 38], "front-waist-a", "armhole", "to")];
-    const r = semOf(mk(5, darts));
+    const r = semOf(mk(6, darts));
     const d = r.darts.front[0];
     ok(r.darts.front.length === 1 && d.id === "front-waist-a", "12b: 다트 레코드 생성");
     ok(d.apex.x === 44 && d.apex.y === 38, "12b: apex 는 선언된 끝점");
     ok(d.legs.length === 2 && d.intakeCm === 8, "12b: 두 leg endpoint + intake(=8)");
     ok(d.boundary === "armhole" && d.complete === true, "12b: target boundary 선언 + complete");
-    ok(r.ready === true && r.issues.length === 0, "12b: v5 + 완전 다트 → ready");
+    ok(r.ready === true && r.issues.length === 0, "12b: v6 + 완전 다트 → ready");
   }
 
   // (c) 한 파트 다중 다트 — ID 충돌 없음
@@ -407,7 +409,7 @@ function fakeProject(backSideTopY, opts) {
                    dleg([48, 20], [44, 38], "front-waist-a", "armhole", "to"),
                    dleg([30, 22], [33, 38], "front-waist-b", "shoulder", "to"),
                    dleg([36, 22], [33, 38], "front-waist-b", "shoulder", "to")];
-    const r = semOf(mk(5, darts));
+    const r = semOf(mk(6, darts));
     ok(r.darts.front.length === 2, "12c: 한 파트 다중 다트 지원");
     ok(r.darts.front.map(d => d.id).join(",") === "front-waist-a,front-waist-b", "12c: ID 비충돌·결정론 정렬");
     ok(r.ready === true, "12c: 다중 다트 모두 완전 → ready");
@@ -416,7 +418,7 @@ function fakeProject(backSideTopY, opts) {
   // (d) 접어재단 반쪽 다트 — 다리 1개, intake 는 **지어내지 않고 null**
   {
     const darts = [dleg([48, 20], [44, 38], "back-waist-f", "armhole", "to", true)];
-    const r = semOf(mk(5, darts));
+    const r = semOf(mk(6, darts));
     const d = r.darts.front[0];
     ok(d.onFold === true && d.legCount === 1 && d.intakeCm === null, "12d: onFold 반쪽 다트 intake=null");
     ok(d.complete === true && r.ready === true, "12d: 반쪽 다트도 완전으로 인정");
@@ -426,7 +428,7 @@ function fakeProject(backSideTopY, opts) {
   {
     const darts = [dleg([40, 20], [44, 38], "front-bust", "armhole", "to"),
                    dleg([48, 20], [44, 38], "front-bust", "armhole", "to")];
-    const base = mk(5, darts);
+    const base = mk(6, darts);
     // armhole role 을 유효 외곽에서 제거(대체선이 진동 구간을 삼킨 상황)
     const fo = base.working.geometry.front.outline.filter(x => x.edge !== "armhole")
       .concat([{ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edgeStatus: "unresolved", edgeSourceLineId: "line-5" }]);
@@ -450,24 +452,24 @@ function fakeProject(backSideTopY, opts) {
   {
     const d1 = [dleg([40, 20], [44, 38], "front-waist-a", "armhole", "to"),
                 dleg([48, 20], [44, 38], "front-waist-a", "armhole", "to")];
-    const p1 = mk(5, d1); PROJECT = p1; const r1 = BC.complete();
+    const p1 = mk(6, d1); PROJECT = p1; const r1 = BC.complete();
     // 좌표·개수·순서 동일, **boundary 선언만** 변경
     const d2 = [dleg([40, 20], [44, 38], "front-waist-a", "shoulder", "to"),
                 dleg([48, 20], [44, 38], "front-waist-a", "shoulder", "to")];
-    const p2 = mk(5, d2); PROJECT = p2; const r2 = BC.complete();
+    const p2 = mk(6, d2); PROJECT = p2; const r2 = BC.complete();
     ok(r1.result.hash === r2.result.hash, "12g: 의미 변경이 기존 형상 hash 를 바꾸지 않음");
     ok(r1.result.semantics.fingerprint !== r2.result.semantics.fingerprint, "12g: 의미만 바뀌면 fingerprint 변경");
     ok(JSON.stringify(r1.result.armholeLengths) === JSON.stringify(r2.result.armholeLengths), "12g: reported 불변");
     // 결정론
     ok(BC.evaluateSemantics(p2).fingerprint === BC.evaluateSemantics(p2).fingerprint, "12g: fingerprint 결정론");
     // 같은 의미·같은 좌표면 동일
-    const p3 = mk(5, d1); ok(BC.evaluateSemantics(p3).fingerprint === r1.result.semantics.fingerprint, "12g: 동일 의미 → 동일 fingerprint");
+    const p3 = mk(6, d1); ok(BC.evaluateSemantics(p3).fingerprint === r1.result.semantics.fingerprint, "12g: 동일 의미 → 동일 fingerprint");
   }
 
   // (h) 다트 의미가 좌표·kind·개수·순서를 바꾸지 않는다
   {
-    const bare = mk(5, [line([40, 20], [44, 38]), line([48, 20], [44, 38])]);
-    const tagged = mk(5, [dleg([40, 20], [44, 38], "front-waist-a", "armhole", "to"),
+    const bare = mk(6, [line([40, 20], [44, 38]), line([48, 20], [44, 38])]);
+    const tagged = mk(6, [dleg([40, 20], [44, 38], "front-waist-a", "armhole", "to"),
                           dleg([48, 20], [44, 38], "front-waist-a", "armhole", "to")]);
     const strip = (p) => JSON.stringify(p.working.geometry, (k, v) => (k === "dart" ? undefined : v));
     ok(strip(bare) === strip(tagged), "12h: 의미 추가가 형상·개수·순서를 바꾸지 않음");

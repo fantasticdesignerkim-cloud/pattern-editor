@@ -186,11 +186,21 @@
       // 전체 intake 를 알 수 없으므로 **null 로 남긴다**(지어내지 않는다).
       var intake = (legPts.length === 2) ? round4(dist(legPts[0], legPts[1])) : null;
       var apexOk = ends.every(function (x) { return dist(x.apex, apex) < 1e-4; });
+      // P0.3b: 다리마다 선언된 경계 attachment 를 **최종 effective 경계 구간**에 대조한다(복원·보정 없음).
+      var attachments = legs.map(function (l) {
+        var at = l.dart.attach;
+        if (!at) return { root: null, t: null, status: "missing" };
+        var st = attachmentStatus(proj, at, piece, l.dart.boundary);
+        return { root: (typeof at.root === "string") ? at.root : null, t: isFinite(at.t) ? round4(at.t) : null, status: st };
+      });
+      var attachment = attachments.some(function (a) { return a.status === "misaligned"; }) ? "misaligned"
+        : attachments.some(function (a) { return a.status === "missing"; }) ? "missing" : "complete";
       return {
         id: id, boundary: legs[0].dart.boundary || null, onFold: onFold,
         apex: { x: round4(apex.x), y: round4(apex.y) },
         legs: legPts.map(function (q) { return { x: round4(q.x), y: round4(q.y) }; }),
         intakeCm: intake, legCount: legs.length,
+        attachments: attachments, attachment: attachment,
         complete: apexOk && legs.length === (onFold ? 1 : 2) && !!legs[0].dart.boundary
       };
     });
@@ -202,7 +212,7 @@
       perPiece[piece].forEach(function (d) {
         parts.push([piece, d.id, d.boundary, d.onFold ? "fold" : "-", d.legCount,
           d.apex.x, d.apex.y,
-          d.legs.map(function (q) { return q.x + ":" + q.y; }).sort().join("/"),
+          d.legs.map(function (q, i) { var a = d.attachments[i]; return q.x + ":" + q.y + "@" + a.root + ":" + a.t + ":" + a.status; }).sort().join("/"),
           d.intakeCm].join("|"));
       });
     });
@@ -241,6 +251,25 @@
   }
   // 안정 span reference 를 순서·방향과 함께 담는 ordered chain(기반만). 입력은 {root, from, to} 목록.
   // 유효하지 않은 참조가 하나라도 있으면 chain 을 만들지 않는다(부분 chain 을 ready 로 위장하지 않음).
+  // P0.3b: attachment 판정. root 는 앞/뒤 root 여야 하고(shared 다트는 어느 쪽이든), root 의미가 다트
+  //   boundary 와 같고, t 가 [0,1] 이며, 그 root piece 의 effective outline ∪ construction(허리처럼 기준선으로
+  //   옮겨간 경계 lineage 포함)에서 **정렬된 선언 구간이 t 를 덮어야** 한다. 아니면 misaligned.
+  function attachmentStatus(proj, at, piece, boundary) {
+    if (!at || typeof at.root !== "string" || !inRootRange(at.t)) return "misaligned";
+    var slash = at.root.indexOf("/"), rp = at.root.slice(0, slash), rn = at.root.slice(slash + 1);
+    if (slash < 0 || !(rp === "front" || rp === "back") || !BOUNDARY_ROOT_EDGE[rn]) return "misaligned";
+    if (piece !== "shared" && rp !== piece) return "misaligned";
+    if (boundary && BOUNDARY_ROOT_EDGE[rn] !== boundary) return "misaligned";
+    var g = proj.working.geometry && proj.working.geometry[rp];
+    var prims = (effectiveOutline(proj, rp) || []).concat((g && Array.isArray(g.construction)) ? g.construction : []);
+    var covered = prims.some(function (prm) {
+      if (!prm || !prm.boundary || prm.boundary.root !== at.root || !boundaryDeclOk(prm, rp)) return false;
+      return prm.boundary.ranges.some(function (r) {
+        return at.t >= Math.min(r[0], r[1]) - BOUNDARY_RANGE_EPS && at.t <= Math.max(r[0], r[1]) + BOUNDARY_RANGE_EPS;
+      });
+    });
+    return covered ? "complete" : "misaligned";
+  }
   function makeBoundaryChain(spans) {
     if (!Array.isArray(spans) || !spans.length) return { ok: false, reason: "empty-chain" };
     var out = [];
@@ -324,9 +353,18 @@
     var bnd = { front: boundarySpans(proj, "front"), back: boundarySpans(proj, "back") };
     var bMissing = bnd.front.missing.concat(bnd.back.missing), bMisaligned = bnd.front.misaligned.concat(bnd.back.misaligned);
     // v5 가 아닌 출처(구형 v2/v3/v4·미상)는 신규 의미를 보장하지 못한다.
-    if (sv !== 5) issues.push("legacy-source");
+    if (sv !== 6) issues.push("legacy-source");
     // legacy 는 identity 가 없는 것이 정상이라 legacy-source 로 이미 not-ready 다(누락을 지어내지 않음).
-    if (sv === 5 && bMissing.length) issues.push("boundary-identity-missing");
+    if (sv >= 5 && bMissing.length) issues.push("boundary-identity-missing");
+    // P0.3b 다트 attachment: v6 에서 선언이 없으면 incomplete, 선언이 최종 경계와 정렬되지 않으면 misaligned.
+    //   legacy(v2~v5)는 선언이 없는 것이 정상 — legacy-source 로 이미 not-ready 이므로 누락을 오류로 만들지 않는다.
+    var attMissing = false, attMisaligned = false;
+    ["front", "back", "shared"].forEach(function (pc) { darts[pc].forEach(function (d) {
+      if (d.attachment === "misaligned") attMisaligned = true;
+      if (d.attachment === "missing" || d.attachments.some(function (a) { return a.status === "missing"; })) attMissing = true;
+    }); });
+    if (sv >= 6 && attMissing) issues.push("dart-attachment-missing");
+    if (attMisaligned) issues.push("dart-attachment-misaligned");
     if (bMisaligned.length) issues.push("boundary-identity-misaligned");
     if (dartIssue) issues.push("dart-semantics-incomplete");
     if (dartBoundaryMissing) issues.push("dart-boundary-missing");
