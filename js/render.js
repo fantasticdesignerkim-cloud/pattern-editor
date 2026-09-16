@@ -442,7 +442,7 @@ function render(){
 
   // ── 다트 미리 계산 ───────────────────────────
   // gen-0 허리다트는 엔진 단일 원천(buildGen0WaistDarts). 다트이동이 적용된 side 는 엔진이 carry 한
-  //   payload(a,b / d,e,f)를 대신 쓴다 — base 를 중복 그리지 않는다. 미적용 side·공용 c 는 base 그대로.
+  //   payload(a,b / d,e,f)를 대신 쓴다 — base 를 중복 그리지 않는다. 미적용 side 는 base 그대로(c 는 다트가 아니라 그리지 않는다).
   const darts_ = buildGen0WaistDarts(f, p, dr);
   const waistCarry_ = {};
   [dartMoveState?.appliedFront?.waistDarts, dartMoveState?.appliedBack?.waistDarts].forEach(pl => {
@@ -1388,9 +1388,10 @@ function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatter
   const gDart=E("g");
   gDart.setAttribute("id","layer-dart");
   // P0.3b: 허리다트 다리 끝은 허리 root 위에 있다. 허리 root 의 파라미터는 생산자가 그린 허리선 그대로
-  //   (앞 = 앞중심 FRONT_WL(0) → 옆 SIDE_BTM(1), 뒤 = 뒤중심 BACK_WL(0) → 옆 SIDE_BTM(1))이고, 다리 끝은
-  //   makeDart 가 같은 허리 y 위에 apex.x ± 분량/2 로 정의한 점이다 → 선 위 선형 파라미터로 선언한다.
-  //   옆선 다트 c 는 옆선 양쪽에 걸쳐 left 는 뒤 허리, right 는 앞 허리 root 에 붙는다.
+  //   (앞 = 앞중심 FRONT_WL(0) → 앞 옆선 허리점 FRONT_SIDE_WL(1), 뒤 = 뒤중심 BACK_WL(0) → 뒤 옆선 허리점
+  //   BACK_SIDE_WL(1))이고, 다리 끝은 makeDart 가 같은 허리 y 위에 apex.x ± 분량/2 로 정의한 점이다 → 선 위
+  //   선형 파라미터로 선언한다. c 는 앞·뒤 옆선에 분배된 허리 조임(side-waist suppression)이며 구조화 다트가
+  //   아니다 — 여기서 그리거나 태깅하지 않는다.
   //   attachment 는 엔진 단일 원천(gen0WaistDartAttach); carried payload 는 엔진이 보존한 선언값을 그대로 쓴다.
   const _wA = (k) => (darts_._carry && darts_._carry[k]) || gen0WaistDartAttach(p, k, darts_[k]);
   _tagDart(gDart, darts_.a, "front", "front-waist-a", _wA("a"));   // BP 아래 (앞판)

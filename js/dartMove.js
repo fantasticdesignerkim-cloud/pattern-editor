@@ -2511,7 +2511,7 @@ function gen0WaistDartAttach(p, key, dart) {
 }
 
 // ── P0.3b 증분 2: gen-0 허리다트 강체 carry payload ─────────────
-// 다트이동 생산 경로가 소유·누적한다(appliedFront/appliedBack.waistDarts). 공용 옆 다트 c 는 포함하지 않는다.
+// 다트이동 생산 경로가 소유·누적한다(appliedFront/appliedBack.waistDarts). c 는 다트가 아니라 옆선 허리 조임이라 포함하지 않는다.
 const CARRY_WAIST_KEYS = { front: ["a", "b"], back: ["d", "e", "f"] };
 function gen0WaistDartPayload(side, f, p, dr) {
   const darts = buildGen0WaistDarts(f, p, dr), out = {};
