@@ -321,6 +321,23 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   split.front.outline.splice(1, 1, L([40, 38], [28, 38], "waist", "front/waist", [0, 0.5]), L([28, 38], [16, 38], "waist", "front/waist", [0.5, 1]));
   const so = DB.computeGeometry(split, { body: { bustEaseCm: 4 } });
   ok(near(tOf(so, "front", "front-waist-a")[0], 9 / 24) && wl.kind === "line", "11: waist root 가 단일 직선 아님 → 갱신 안 함");
+  // ID ↔ root 교차 태깅: back-waist-d 가 front/waist 에, front-waist-a 가 back/waist 에 선언 → 갱신 안 함
+  const cross = geomW();
+  cross.front.construction.push(legW(26, 27, "back-waist-d", "front/waist", 14 / 24), legW(24, 27, "back-waist-d", "front/waist", 16 / 24));
+  cross.back.construction.push(legW(26, 27, "front-waist-a", "back/waist", 10 / 24), legW(28, 27, "front-waist-a", "back/waist", 12 / 24));
+  const co = DB.computeGeometry(cross, { body: { bustEaseCm: 4 } });
+  ok(JSON.stringify(tOf(co, "front", "back-waist-d")) === JSON.stringify([14 / 24, 16 / 24]) &&
+     JSON.stringify(tOf(co, "back", "front-waist-a")) === JSON.stringify([10 / 24, 12 / 24]), "11: ID·root 교차 태깅 → 선언 t 유지");
+  ok(near(tOf(co, "front", "front-waist-a")[0], 9 / 25) && near(tOf(co, "back", "back-waist-d")[0], 13 / 25), "11: 올바른 ID·root 다리는 같은 입력에서 갱신");
+  // 방향 반전: 허리 폭 24 를 넘는 안쪽 이동(−30)으로 S' 가 C 를 지나 반대편 → 갱신 안 함
+  const flip = DB.computeGeometry(geomW(), { body: { waistSideOffsetCm: -30 } });
+  ok(near(tOf(flip, "front", "front-waist-a")[0], 9 / 24) && near(tOf(flip, "back", "back-waist-f")[0], 1 / 24), "11: S' 가 C 를 지나 뒤집힘 → 선언 t 유지");
+  // 비파괴: attach 의 다른 선언 키는 보존, t 만 교체
+  const extra = geomW(); extra.front.construction[0].dart.attach.note = { keep: [1, 2] };
+  const xo = DB.computeGeometry(extra, { body: { bustEaseCm: 4 } });
+  const xa = xo.front.construction[0].dart.attach;
+  ok(near(xa.t, 9 / 25) && xa.root === "front/waist" && JSON.stringify(xa.note) === JSON.stringify({ keep: [1, 2] }) && xa.note !== extra.front.construction[0].dart.attach.note,
+    "11: 갱신은 t 만 교체 — 다른 키 값 복사 보존");
   const slant = geomW(); slant.front.outline[1] = L([40, 38], [16, 39], "waist", "front/waist");
   slant.front.outline[2] = L([16, 39], [16, 20], "side-seam", "front/side-seam", [1, 0]);
   const sl = DB.computeGeometry(slant, { body: { bustEaseCm: 4 } });

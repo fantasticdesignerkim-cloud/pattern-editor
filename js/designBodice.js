@@ -308,7 +308,9 @@
   //   · S→S' 이동이 C→S 직선과 같은 축
   //   · 새 t 가 [0,1] 안(다리가 새 옆 점을 넘어가지 않음)
   // 매핑: 원래 점 X = C + t(S−C) 를 유지하는 t' = (X−C)·(S'−C) / |S'−C|² (공선이라 정확).
-  var WAIST_DART_IDS = { "front-waist-a": 1, "front-waist-b": 1, "back-waist-d": 1, "back-waist-e": 1, "back-waist-f": 1 };
+  //   다트 ID 마다 붙어야 할 허리 root 가 정해져 있다 — ID·선언 root·이 조각의 허리 root 가 모두 같을 때만 갱신한다.
+  var WAIST_DART_ROOT = { "front-waist-a": "front/waist", "front-waist-b": "front/waist",
+    "back-waist-d": "back/waist", "back-waist-e": "back/waist", "back-waist-f": "back/waist" };
   var REMAP_EPS = 1e-6;   // 계산 허용치(cm·파라미터) — 봉제 허용오차 아님
   function rootLineOf(prims, root) {
     var hits = prims.filter(function (pr) { return pr && pr.boundary && pr.boundary.root === root; });
@@ -328,14 +330,17 @@
     if (!oldL || !newL || !near(oldL.p0, C) || !near(oldL.p1, S) || !near(newL.p0, C) || !near(newL.p1, Snew)) return;
     var axis = sub(S, C), move = sub(Snew, S), wOld = len(axis), wNew2 = dot(sub(Snew, C), sub(Snew, C));
     if (wOld <= EPS || wNew2 <= EPS * EPS) return;
+    // "연장·축소"는 C→S 방향 보존이다. S' 가 C 를 지나 반대편으로 뒤집히면 자동 갱신하지 않는다.
+    if (dot(axis, sub(Snew, C)) <= REMAP_EPS) return;
     if (len(move) > REMAP_EPS && Math.abs(axis.x * move.y - axis.y * move.x) / (wOld * len(move)) > REMAP_EPS) return;   // 축 불일치
     finalConstruction.forEach(function (pr) {
       var d = pr && pr.dart, at = d && d.attach;
-      if (!at || !WAIST_DART_IDS[d.id] || at.root !== root || typeof at.t !== "number" || !isFinite(at.t)) return;
+      if (!at || WAIST_DART_ROOT[d.id] !== root || at.root !== root || typeof at.t !== "number" || !isFinite(at.t)) return;
       var X = add(C, mul(axis, at.t));
       var t2 = dot(sub(X, C), sub(Snew, C)) / wNew2;
       if (t2 < -REMAP_EPS || t2 > 1 + REMAP_EPS) return;   // 새 옆 점을 넘어감 — 선언 유지
-      d.attach = { root: root, t: t2 };
+      var next = deepClone(at); next.t = t2;   // 값 복사 후 t 만 교체(다른 선언 키 보존)
+      d.attach = next;
     });
   }
 
