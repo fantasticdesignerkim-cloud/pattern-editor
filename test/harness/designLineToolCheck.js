@@ -537,6 +537,75 @@ const curved = (x, y, hx, hy) => ({ p: { x, y }, h: { x: hx, y: hy } });
   }
 }
 
+// ══════════════════════════════════════════════
+// 20(P0.2 보완). 중첩 dart metadata 는 **값 복제**로 옮긴다 — 작업 형상 간 참조 공유 금지.
+//   참조로 옮기면 잘라낸/뒤집은/합성한 결과와 원본 geometry 가 같은 객체를 공유해
+//   한쪽 변형이 다른 쪽을 오염시킨다. 좌표·kind·개수·순서는 그대로여야 한다.
+// ══════════════════════════════════════════════
+{
+  const P = (x, y) => ({ x, y });
+  const mkDart = () => ({ id: "front-bust", boundary: "armhole", apexAt: "to" });
+  const srcLine = () => ({ kind: "line", from: P(0, 0), to: P(10, 0), dart: mkDart() });
+  const srcCubic = () => ({ kind: "cubic", from: P(0, 0), c1: P(1, 2), c2: P(3, 2), to: P(4, 0), dart: mkDart() });
+
+  // (a) 네 경로 전부 참조 비공유
+  [["line", srcLine], ["cubic", srcCubic]].forEach(([label, mk]) => {
+    const src = mk();
+    const outs = {
+      subSegment: T.subSegment(src, 0.2, 0.8),
+      reverseSeg: T.reverseSeg(src),
+      boundarySegsOf: T.boundarySegsOf({ id: "L1", segments: [src] })[0],
+      outlinePrimsToSegs: T.outlinePrimsToSegs([src])[0]
+    };
+    Object.keys(outs).forEach(k => {
+      ok(outs[k].dart !== src.dart, "20a: " + k + " dart 참조 비공유(" + label + ")");
+      ok(JSON.stringify(outs[k].dart) === JSON.stringify(src.dart), "20a: " + k + " dart 값 동일(" + label + ")");
+    });
+  });
+
+  // (b) 변형 격리 — 복제본을 바꿔도 원본이 오염되지 않는다(양방향)
+  {
+    const src = srcLine();
+    const cut = T.subSegment(src, 0.1, 0.9);
+    cut.dart.boundary = "MUTATED";
+    ok(src.dart.boundary === "armhole", "20b: 복제본 변형이 원본을 오염시키지 않음");
+    src.dart.id = "CHANGED";
+    ok(cut.dart.id === "front-bust", "20b: 원본 변형이 복제본에 새지 않음");
+  }
+
+  // (c) 합성 경로에서도 원본 ring 세그먼트와 결과가 dart 객체를 공유하지 않는다
+  {
+    const L = (a, b2, edge) => { const o = { kind: "line", from: a, to: b2 }; if (edge) o.edge = edge; return o; };
+    const outline = [
+      L(P(0, 0), P(10, 0), "waist"), L(P(10, 0), P(10, 10), "side-seam"),
+      L(P(10, 10), P(6, 10), "shoulder"), L(P(4, 10), P(0, 10), "neckline"), L(P(0, 10), P(0, 0), "center")
+    ];
+    outline[0].dart = mkDart();                       // 유지 구간에 다트 의미가 실려 있는 상황
+    const constr = [{ from: P(4, 10), to: P(5, 6) }, { from: P(5, 6), to: P(6, 10) }];
+    const rb = T.buildPieceRing(outline, constr);
+    ok(rb.ok, "20c: ring 구성");
+    const comp = T.composeDesignOutline(rb.ring, [T.boundarySegsOf({ id: "L9", segments: [L(P(0, 3), P(3, 0))] })]);
+    ok(comp.ok, "20c: 합성 성공");
+    if (comp.ok) {
+      const carried = comp.outline.filter(x => x.dart);
+      ok(carried.length >= 1, "20c: 유지 구간 dart 의미 보존");
+      ok(carried.every(x => x.dart !== outline[0].dart), "20c: 합성 결과가 원본 dart 객체를 공유하지 않음");
+      carried[0].dart.id = "MUTATED";
+      ok(outline[0].dart.id === "front-bust", "20c: 합성 결과 변형이 원본 outline 을 오염시키지 않음");
+    }
+  }
+
+  // (d) 값 복제가 좌표·kind·개수·순서를 바꾸지 않는다(무-dart 대조군과 동일)
+  {
+    const withD = { kind: "line", from: P(0, 0), to: P(10, 0), dart: mkDart() };
+    const bare = { kind: "line", from: P(0, 0), to: P(10, 0) };
+    const strip = (o) => JSON.stringify({ k: o.kind, f: o.from, t: o.to, c1: o.c1, c2: o.c2 });
+    ok(strip(T.subSegment(withD, 0.2, 0.8)) === strip(T.subSegment(bare, 0.2, 0.8)), "20d: subSegment 형상 동일");
+    ok(strip(T.reverseSeg(withD)) === strip(T.reverseSeg(bare)), "20d: reverseSeg 형상 동일");
+    ok(T.outlinePrimsToSegs([withD]).length === T.outlinePrimsToSegs([bare]).length, "20d: primitive 개수 동일");
+  }
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

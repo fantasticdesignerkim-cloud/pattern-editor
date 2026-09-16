@@ -260,8 +260,15 @@
   //                        **중첩 객체가 아니라 평문 문자열** — clone/freeze 경로에서 공유
   //                        참조가 생길 여지를 아예 없앤다.
   const SEMANTIC_KEYS = ["edge", "edgeStatus", "edgeSourceLineId", "dart"];
+  //   ★ 중첩 객체(dart)는 **값 복제**한다 — 참조로 옮기면 잘라낸/뒤집은/합성한 작업 형상과
+  //   원본 working.geometry 가 같은 객체를 공유해, 한쪽 변형이 다른 쪽을 오염시킨다.
+  //   문자열 값(edge·edgeStatus·edgeSourceLineId)은 불변이라 그대로 옮긴다.
+  function _copySemanticValue(v) {
+    if (v === null || typeof v !== "object") return v;
+    return (typeof structuredClone === "function") ? structuredClone(v) : JSON.parse(JSON.stringify(v));
+  }
   function _carryEdge(src, dst) {
-    if (src) SEMANTIC_KEYS.forEach(k => { if (k in src) dst[k] = src[k]; });
+    if (src) SEMANTIC_KEYS.forEach(k => { if (k in src) dst[k] = _copySemanticValue(src[k]); });
     return dst;
   }
   // 대체선(boundary patternLine)의 세그먼트를 합성 입력으로 변환한다.
