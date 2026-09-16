@@ -52,6 +52,17 @@ function sampleCubic(p0, c0, c1, p1, n = 14) {
   return pts;
 }
 
+// ★ P0.2: baked 세그먼트 타입 → 봉제 경계 role. 새 다트 다리가 "어느 경계로 열리는지"를
+//   컨트롤러가 **자를 당시의 세그먼트 타입으로 선언**할 때 쓴다(좌표 근접 추론 아님).
+const DART_BOUNDARY_BY_SEG_TYPE = {
+  "front-neckline": "neckline", "back-neckline": "neckline",
+  "front-shoulder": "shoulder", "back-shoulder": "shoulder",
+  "front-armhole-lower": "armhole", "front-armhole-upper": "armhole", "back-armhole": "armhole",
+  "front-waist": "waist", "back-waist": "waist",
+  "front-center": "center", "back-center": "center",
+  "side-seam": "side-seam",
+};
+
 function addLineSegment(segments, from, to, meta = {}) {
   segments.push({ from: { ...from }, to: { ...to }, ...meta });
 }
@@ -356,7 +367,7 @@ function validateBakedSegments(segs, label, pivot) {
     crossings.length ? crossings.slice(0, 5) : '');
 }
 
-function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle }) {
+function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle, cutBoundary = null }) {
   // 외곽선 판별 (다트선 제외)
   const _isOutlineSeg = (s) => s?.from && s?.to &&
     s.type !== "dart-leg" && s.type !== "dart-leg-new" &&
@@ -430,9 +441,14 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle }) {
   const dartId = `dart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   // 새 V자 다트: pivot → cutA, cutB → pivot (입구=cut*, 꼭지점=pivot)
+  // ★ P0.2: 다트 의미를 **생산 지점에서 선언**한다(사후 추론·사후 변형 없음).
+  //   apex = pivot. pair 규약상 A 는 pivot→cutA(apex=from), B 는 cutB→pivot(apex=to).
+  //   dartBoundary = 자를 당시 세그먼트 타입에서 온 값(모르면 null — 지어내지 않는다).
   const legOut = { type: "dart-leg-new", role: "dart-leg", dartId, pair: "A",
+                   dartBoundary: cutBoundary, dartApexAt: "from",
                    from: { ...pivot }, to: { ...cutA }, disabled: true };
   const legIn  = { type: "dart-leg-new", role: "dart-leg", dartId, pair: "B",
+                   dartBoundary: cutBoundary, dartApexAt: "to",
                    from: { ...cutB }, to: { ...pivot }, disabled: true };
 
   // 기존 다트 잔여선: trailing이 없을 때만 새로 생성 (있으면 원래 다트선을 그대로 사용)
@@ -920,8 +936,10 @@ function buildFrontOutline(p, f, B) {
       addSampledSegments(segments, fallbackArm, { type: "front-armhole-lower" });
     }
   }
-  addLineSegment(segments, p.G,        p.BP,        { type: "old-dart", disabled: true });
-  addLineSegment(segments, p.BP,       GG,          { type: "old-dart", disabled: true });
+  // ★ P0.2: 가슴다트 의미를 **생산 지점에서 선언**한다(좌표·배열 순서로 추론하지 않는다).
+  //   apex = BP(두 다리가 만나는 꼭짓점) · 두 boundary leg endpoint = G·GG · 열린 경계 = 진동.
+  addLineSegment(segments, p.G,        p.BP,        { type: "old-dart", disabled: true, dartId: "front-bust", dartBoundary: "armhole", dartApexAt: "to" });
+  addLineSegment(segments, p.BP,       GG,          { type: "old-dart", disabled: true, dartId: "front-bust", dartBoundary: "armhole", dartApexAt: "from" });
   addSampledSegments(segments, frontArm,             { type: "front-armhole-upper" });
   addLineSegment(segments, FSP,        nTL,         { type: "front-shoulder" });
   addSampledSegments(segments, [...neckAll].reverse(),{ type: "front-neckline" });
@@ -1112,8 +1130,9 @@ function buildBackOutline(p, f, B) {
   addLineSegment(segments, bSP,      dartEnd_,  { type: "back-shoulder" });
 
   // ── 어깨 다트 (disabled): dartEnd_ → E → dartCenter ──
-  addLineSegment(segments, dartEnd_,  p.E,        { type: "back-shoulder-dart", disabled: true });
-  addLineSegment(segments, p.E,       dartCenter, { type: "back-shoulder-dart", disabled: true });
+  // ★ P0.2: 뒤어깨다트 의미 선언. apex = E · leg endpoint = dartEnd_·dartCenter · 열린 경계 = 어깨.
+  addLineSegment(segments, dartEnd_,  p.E,        { type: "back-shoulder-dart", disabled: true, dartId: "back-shoulder", dartBoundary: "shoulder", dartApexAt: "to" });
+  addLineSegment(segments, p.E,       dartCenter, { type: "back-shoulder-dart", disabled: true, dartId: "back-shoulder", dartBoundary: "shoulder", dartApexAt: "from" });
 
   // ── DEBUG 검증 ──────────────────────────────
   // buildBackOutline은 렌더/호버마다 호출되는 hot path라, map/filter/join은
@@ -1378,6 +1397,7 @@ function findPhysicalSweepLimit(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle,
 function prepareDartMoveCandidate({
   pivot, budgetRad, rawBaseAngleRad, cutPoint, rotatePiece, fixedPiece,
   prevBakedSegments = null, minDartAngleRad = MIN_DART_ANGLE_RAD,
+  cutBoundary = null,   // ★ P0.2: 새 다트가 열릴 경계(선택 시점 선언값). 모르면 null.
 }) {
   // 고정 조각은 rest(항상-고정 영역)까지 포함한 전체 체인 사용 (baked 다중다트).
   // 1차(splitFront/BackOutline)는 segsFull이 없으므로 기존 segs 그대로 사용.
@@ -1391,7 +1411,7 @@ function prepareDartMoveCandidate({
   // selectRotationSign의 withSelfXBaseline은 이미 채워진 ctx를 그대로 통과시킨다 —
   // 값의 출처는 여전히 prevBakedSegments 하나다.
   const evalCtx = withSelfXBaseline({
-    fixedSegs, rotateSegs, pivot, budgetRad, prevBakedSegments, sourceNotch,
+    fixedSegs, rotateSegs, pivot, budgetRad, prevBakedSegments, sourceNotch, cutBoundary,
   });
 
   let geomSign;
@@ -1481,7 +1501,8 @@ function evaluateEndpoint(ctx, angleRad) {
   const pivot = ctx.pivot;
 
   const shape = normalizeBakedSegments(
-    bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle: angleRad }),
+    bakeFromSplitPieces({ fixedSegs: fixedClean, rotateSegs: rotateClean, pivot, angle: angleRad,
+      cutBoundary: ctx.cutBoundary || null }),
     pivot);
 
   const reasons = [];
@@ -1922,7 +1943,7 @@ const dartMoveState = {
   side:          null,
   mode:          "idle",
   cutPoint:      null,
-  cutSegIndex:   -1,
+  cutBoundary: null, cutSegIndex:   -1,
   hoverPoint:    null,
   hoverSegIndex: -1,
   pieceA:        null,
@@ -2589,6 +2610,7 @@ function initDartMoveClickHandler() {
         cutPoint: dartMoveState.cutPoint,
         rotatePiece, fixedPiece,
         prevBakedSegments: _prevBakedForSide,
+        cutBoundary: dartMoveState.cutBoundary || null,
       });
       const closeAngle = _candidate.closeAngleRad;
 
@@ -2641,6 +2663,8 @@ function initDartMoveClickHandler() {
       if (resultB) {
         dartMoveState.cutPoint    = resultB.point;
         dartMoveState.cutSegIndex = resultB.segIndex;
+        // ★ P0.2: 새 다트가 열릴 경계를 **자를 당시의 세그먼트 타입**으로 선언(좌표 추론 아님).
+        dartMoveState.cutBoundary = DART_BOUNDARY_BY_SEG_TYPE[segsBack[resultB.segIndex]?.type] || null;
 
         const _isBakedB = !!dartMoveState.appliedBack?.bakedSegments;
         const splitB = _isBakedB
@@ -2678,6 +2702,8 @@ function initDartMoveClickHandler() {
     if (result) {
       dartMoveState.cutPoint    = result.point;
       dartMoveState.cutSegIndex = result.segIndex;
+      // ★ P0.2: 새 다트가 열릴 경계를 **자를 당시의 세그먼트 타입**으로 선언(좌표 추론 아님).
+      dartMoveState.cutBoundary = DART_BOUNDARY_BY_SEG_TYPE[segments[result.segIndex]?.type] || null;
 
       // bakedSegments가 있으면 splitBakedOutline, 없으면 splitFrontOutline
       const _isBakedF = !!dartMoveState.appliedFront?.bakedSegments;

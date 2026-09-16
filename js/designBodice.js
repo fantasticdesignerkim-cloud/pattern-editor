@@ -199,6 +199,7 @@
       var ln = { kind: "line", from: df ? add(prim.from, df) : { x: prim.from.x, y: prim.from.y },
         to: dt ? add(prim.to, dt) : { x: prim.to.x, y: prim.to.y } };
       if ("edge" in prim) ln.edge = prim.edge;   // edge 없는 세그먼트에 own-property 추가 금지(SV2)
+      if ("dart" in prim) ln.dart = deepClone(prim.dart);   // SV4 다트 의미 보존(참조 공유 없음)
       return ln;
     }
     // path: 명령 복제 후 on-curve 이동 + 인접 제어점 보정
@@ -216,6 +217,7 @@
     }
     var out = { kind: "path", commands: cmds };
     if ("edge" in prim) out.edge = prim.edge;
+    if ("dart" in prim) out.dart = deepClone(prim.dart);
     return out;
   }
 

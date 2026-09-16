@@ -42,7 +42,11 @@
   var REQUIRED_EDGES = ["center", "waist", "side-seam"];
   // SV3 정상 coverage: 위에 더해 봉제 경계 의미가 앞·뒤 각각 최소 1 span 씩 있어야 한다.
   var REQUIRED_SEAM_EDGES = ["neckline", "shoulder", "armhole"];
-  var SCHEMA_VERSION = 3;
+  // SV4: 구조화 다트 의미(P0.2). 다리 primitive 가 **생산 지점에서 선언한** 값만 싣는다 —
+  //   좌표·배열 순서로 apex/leg/intake/target boundary 를 추론하지 않는다.
+  var ALLOWED_DART_BOUNDARY = { neckline: 1, shoulder: 1, armhole: 1, waist: 1, "side-seam": 1, center: 1, hem: 1 };
+  var ALLOWED_APEX_AT = { from: 1, to: 1 };
+  var SCHEMA_VERSION = 4;
 
   function fail(reason, detail) {
     var e = new Error("captureBlockSnapshot 실패: " + reason);
@@ -108,6 +112,15 @@
     // SV2: data-edge 가 있을 때만 조건부로 담는다(없으면 own-property 자체가 없다).
     var edge = el.getAttribute("data-edge");
     if (edge) prim.edge = edge;
+    // SV4: 다트 의미도 선언돼 있을 때만 담는다(없으면 만들어 넣지 않는다).
+    var dartId = el.getAttribute("data-dart-id");
+    if (dartId) {
+      var dart = { id: dartId };
+      var bnd = el.getAttribute("data-dart-boundary"); if (bnd) dart.boundary = bnd;
+      var ax = el.getAttribute("data-dart-apex-at"); if (ax) dart.apexAt = ax;
+      if (el.getAttribute("data-dart-on-fold") === "true") dart.onFold = true;
+      prim.dart = dart;
+    }
     return prim;
   }
 
@@ -164,6 +177,32 @@
     }
   }
 
+  // primitive 의 선언된 apex / boundary leg endpoint 를 돌려준다(선언 기반, 추론 아님).
+  function dartEnds(prim) {
+    var ks = edgeEndpointKeys(prim);
+    return (prim.dart.apexAt === "from") ? { apex: ks[0], leg: ks[1] } : { apex: ks[1], leg: ks[0] };
+  }
+  // SV4: piece × dartId 그룹의 다리 수와 apex 일치를 검증한다.
+  function validateDarts(geometry) {
+    ["front", "back", "shared", "sleeve"].forEach(function (pc) {
+      var groups = {};
+      ["outline", "construction"].forEach(function (rl) {
+        geometry[pc][rl].forEach(function (prm) {
+          if (!prm.dart) return;
+          (groups[prm.dart.id] = groups[prm.dart.id] || []).push(prm);
+        });
+      });
+      Object.keys(groups).forEach(function (id) {
+        var legs = groups[id], onFold = legs.some(function (l) { return l.dart.onFold; });
+        var want = onFold ? 1 : 2;
+        if (legs.length !== want) fail("dart-legs-invalid", pc + "/" + id + " legs=" + legs.length + " want=" + want);
+        var apexKeys = {};
+        legs.forEach(function (l) { apexKeys[dartEnds(l).apex] = 1; });
+        if (Object.keys(apexKeys).length !== 1) fail("dart-apex-mismatch", pc + "/" + id);
+      });
+    });
+  }
+
   // all 상태 DOM 에서 봉제 형상 표식 요소를 수집·검증한다. 실패 시 throw(부분 반환 없음).
   function collectGeometry() {
     var svg = document.getElementById("cv");
@@ -182,6 +221,15 @@
         if (!ALLOWED_EDGE[edgeAttr]) fail("bad-edge", edgeAttr);
         var frontOrBack = (piece === "front" || piece === "back");
         if (!(frontOrBack && role === "outline")) fail("edge-placement", piece + "/" + role);
+      }
+      // SV4: 다트 의미 값 검증(위치는 outline=적용 다트 다리 / construction=gen-0 다트 둘 다 허용).
+      var dIdAttr = el.getAttribute("data-dart-id");
+      if (dIdAttr !== null) {
+        if (piece === "sleeve") fail("dart-placement", piece);
+        var bAttr = el.getAttribute("data-dart-boundary");
+        if (bAttr !== null && !ALLOWED_DART_BOUNDARY[bAttr]) fail("bad-dart-boundary", bAttr);
+        var aAttr = el.getAttribute("data-dart-apex-at");
+        if (aAttr === null || !ALLOWED_APEX_AT[aAttr]) fail("bad-dart-apex-at", String(aAttr));
       }
       var prim = primitiveOf(el);
       // 중복 판정 키는 edge 를 제외한다(같은 형상·다른 edge 는 중복으로 잡는다).
@@ -207,6 +255,9 @@
         if (!have[REQUIRED_SEAM_EDGES[si]]) fail("missing-seam-edge", pc + "/" + REQUIRED_SEAM_EDGES[si]);
       }
     }
+    // SV4: 다트 그룹 일관성 — 같은 id 의 다리들이 **선언한 apex 끝점이 실제로 일치**하는지 확인한다
+    //   (일치 여부 검증이지, 좌표로 apex 를 찾아내는 추론이 아니다). onFold 면 다리 1개, 아니면 2개.
+    validateDarts(geometry);
     // SV2: 앞·뒤 각 조각의 center∩waist / side-seam∩waist junction 유일성.
     for (var pj = 0; pj < REQUIRED_EDGE_PIECES.length; pj++) {
       validateJunctions(geometry[REQUIRED_EDGE_PIECES[pj]].outline, REQUIRED_EDGE_PIECES[pj]);

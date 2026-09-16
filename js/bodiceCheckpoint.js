@@ -155,6 +155,60 @@
   //   각 role 은 **1 span 이상이면 존재**로 본다 — span 수를 고정하지 않는다.
   var REQUIRED_ROLES = ["neckline", "shoulder", "armhole", "center", "side-seam"];
 
+  // ── 구조화 다트 의미(P0.2) ──
+  // 다트 레코드는 **선언된 metadata + 그 primitive 자신의 좌표**로만 만든다. 좌표 근접/배열
+  // 순서로 apex·leg·intake·target boundary 를 찾아내지 않는다. 좌표를 primitive 에서 바로
+  // 읽으므로 디자인 변환을 거쳐도 **최종 effective geometry 와 자동으로 정렬**된다(드리프트 불가).
+  function dartEndsOf(prim) {
+    var e = endpointsOf(prim);
+    var a = e[0], z = e[e.length - 1];
+    return (prim.dart.apexAt === "from") ? { apex: a, leg: z } : { apex: z, leg: a };
+  }
+  // effective outline + construction 에서 piece 별 다트 레코드를 모은다(다중 다트 지원).
+  function dartRecords(proj, piece) {
+    var eff = effectiveOutline(proj, piece) || [];
+    var g = proj.working.geometry && proj.working.geometry[piece];
+    var constr = (g && Array.isArray(g.construction)) ? g.construction : [];
+    var groups = {}, order = [];
+    eff.concat(constr).forEach(function (prm) {
+      if (!prm || !prm.dart || !prm.dart.id) return;
+      var id = prm.dart.id;
+      if (!groups[id]) { groups[id] = []; order.push(id); }
+      groups[id].push(prm);
+    });
+    return order.sort().map(function (id) {
+      var legs = groups[id];
+      var onFold = legs.some(function (l) { return !!l.dart.onFold; });
+      var ends = legs.map(dartEndsOf);
+      var apex = ends[0].apex;
+      var legPts = ends.map(function (x) { return x.leg; });
+      // intake = 경계 위 두 leg endpoint 사이 열린 분량. 접어재단 반쪽 다트는 다리가 하나라
+      // 전체 intake 를 알 수 없으므로 **null 로 남긴다**(지어내지 않는다).
+      var intake = (legPts.length === 2) ? round4(dist(legPts[0], legPts[1])) : null;
+      var apexOk = ends.every(function (x) { return dist(x.apex, apex) < 1e-4; });
+      return {
+        id: id, boundary: legs[0].dart.boundary || null, onFold: onFold,
+        apex: { x: round4(apex.x), y: round4(apex.y) },
+        legs: legPts.map(function (q) { return { x: round4(q.x), y: round4(q.y) }; }),
+        intakeCm: intake, legCount: legs.length,
+        complete: apexOk && legs.length === (onFold ? 1 : 2) && !!legs[0].dart.boundary
+      };
+    });
+  }
+  // 의미 전용 deterministic fingerprint. **기존 형상 hash 와 분리** — 의미만 바뀌어도 바뀐다.
+  function semanticFingerprint(perPiece) {
+    var parts = [];
+    Object.keys(perPiece).sort().forEach(function (piece) {
+      perPiece[piece].forEach(function (d) {
+        parts.push([piece, d.id, d.boundary, d.onFold ? "fold" : "-", d.legCount,
+          d.apex.x, d.apex.y,
+          d.legs.map(function (q) { return q.x + ":" + q.y; }).sort().join("/"),
+          d.intakeCm].join("|"));
+      });
+    });
+    return hashStr(parts.sort().join(";"));
+  }
+
   // 상호 배타적 단일 status 를 쓰지 않는다 — legacy / unresolved / missing 은 **동시에** 성립할
   // 수 있으므로 issues 배열로 복수 원인을 전부 보존한다. summary(ready)는 issues 를 덮지 않는다.
   function evaluateSemantics(proj) {
@@ -175,14 +229,34 @@
       });
       REQUIRED_ROLES.forEach(function (role) { if (!have[role]) missing.push({ piece: piece, role: role }); });
     });
-    // v3 이 아닌 출처(구형 v2·미상)는 신규 봉제 의미를 보장하지 못한다.
-    if (sv !== 3) issues.push("legacy-source");
+    // 구조화 다트 의미(P0.2)
+    var darts = { front: dartRecords(proj, "front"), back: dartRecords(proj, "back"), shared: dartRecords(proj, "shared") };
+    var dartIssue = false, dartBoundaryMissing = false;
+    ["front", "back", "shared"].forEach(function (piece) {
+      var roleHost = (piece === "shared") ? "front" : piece;   // shared 다트는 앞판 경계로 열린다
+      // ★ 경계 존재 판정은 **유효 외곽 ∪ construction** 으로 본다. waist/hem 은 디자인 길이 상태에
+      //   따라 외곽 경계였다가 내부 기준선으로 옮겨가므로(hem 연장), 그 이동을 "끊김"으로 오판하지
+      //   않는다. 실제로 사라진 경우(대체선이 구간을 삼킴)만 잡는다.
+      var have = {}, hg = proj.working.geometry && proj.working.geometry[roleHost];
+      (effectiveOutline(proj, roleHost) || []).forEach(function (s2) { if (s2.edge) have[s2.edge] = 1; });
+      if (hg && Array.isArray(hg.construction)) hg.construction.forEach(function (s2) { if (s2.edge) have[s2.edge] = 1; });
+      darts[piece].forEach(function (d) {
+        if (!d.complete) dartIssue = true;
+        // manual replacement 가 다트가 열리는 경계를 끊었으면 complete 로 두지 않는다.
+        if (d.boundary && !have[d.boundary]) dartBoundaryMissing = true;
+      });
+    });
+    // v4 가 아닌 출처(구형 v2/v3·미상)는 신규 의미를 보장하지 못한다.
+    if (sv !== 4) issues.push("legacy-source");
+    if (dartIssue) issues.push("dart-semantics-incomplete");
+    if (dartBoundaryMissing) issues.push("dart-boundary-missing");
     if (unresolved.length) issues.push("unresolved-replacement");
     // 필수 role 이 **provenance 있는 unresolved 없이** 사라졌다면 metadata 전달 오류다
     // (의도된 unresolved 와 구분). unresolved 로 설명되는 유실도 missing 목록에는 그대로 남긴다.
-    var unexplained = missing.filter(function (m) { return sv === 3 && !hasUnresolved[m.piece]; });
+    var unexplained = missing.filter(function (m) { return sv === 4 && !hasUnresolved[m.piece]; });
     if (unexplained.length) issues.push("missing-required-role");
-    return { ready: issues.length === 0, sourceSchemaVersion: sv, issues: issues, unresolved: unresolved, missing: missing };
+    return { ready: issues.length === 0, sourceSchemaVersion: sv, issues: issues, unresolved: unresolved, missing: missing,
+      darts: darts, fingerprint: semanticFingerprint(darts) };
   }
 
   // ── 검사 ──

@@ -296,10 +296,10 @@ function makeHarness() {
 {
   const h = makeHarness();
   const b = h.bw.complete();
-  ok(b.snapshot.schemaVersion === 3, "14: 신규 캡처 = v3");
+  ok(b.snapshot.schemaVersion === 4, "14: 신규 캡처 = v4");
   const dp = h.dw.startFromBlock(b);
-  ok(dp.semanticStatus === "complete", "14: v3 → semanticStatus=complete");
-  ok(dp.sourceBlock.schemaVersion === 3, "14: sourceBlock.schemaVersion=3");
+  ok(dp.semanticStatus === "complete", "14: v4 → semanticStatus=complete");
+  ok(dp.sourceBlock.schemaVersion === 4, "14: sourceBlock.schemaVersion=4");
   ok(Object.isFrozen(dp.sourceBlock), "14: sourceBlock frozen 유지");
 }
 
@@ -343,11 +343,21 @@ function makeHarness() {
   const mk = (sv) => { const h = makeHarness(); const b = h.bw.complete();
     return [h, { id: b.id, version: b.version, canonicalHash: b.canonicalHash,
       snapshot: { schemaVersion: sv, source: b.snapshot.source, geometry: b.snapshot.geometry } }]; };
-  [1, 4, undefined].forEach(sv => {
+  [1, 5, undefined].forEach(sv => {
     const [h, blk] = mk(sv);
     throws(() => h.dw.startFromBlock(blk), "unsupported-schema-version", "16: schemaVersion=" + sv + " 거부");
     ok(h.dw.current() === null, "16: 거부 후 current 불변(" + sv + ")");
   });
+}
+
+// 16b. v3 는 legacy 로 **수용**한다(거부 아님) — 신규 다트 의미가 없을 뿐.
+{
+  const h = makeHarness(); const b = h.bw.complete();
+  const v3 = { id: b.id, version: b.version, canonicalHash: b.canonicalHash,
+    snapshot: { schemaVersion: 3, source: b.snapshot.source, geometry: b.snapshot.geometry } };
+  const dp = h.dw.startFromBlock(v3);
+  ok(!!dp && dp.semanticStatus === "legacy-incomplete", "16b: v3 → legacy-incomplete 수용");
+  ok(dp.sourceBlock.schemaVersion === 3, "16b: sourceBlock.schemaVersion=3 기록");
 }
 
 // 17. semanticStatus 는 **source block 상태 전용** — 편집 후 상태를 대표하지 않는다.
@@ -355,7 +365,7 @@ function makeHarness() {
 {
   const h = makeHarness();
   const dp = h.dw.startFromBlock(h.bw.complete());
-  ok(dp.semanticStatus === "complete", "17: v3 source → complete");
+  ok(dp.semanticStatus === "complete", "17: v4 source → complete");
   // 디자인 편집(의미 미지정 대체 구간 포함)을 해도 source 상태는 그대로다
   dp.working.geometry.front.outline.push({ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 },
     edgeStatus: "unresolved", edgeSourceLineId: "line-9" });

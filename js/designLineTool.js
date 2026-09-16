@@ -259,7 +259,7 @@
   //   · edgeSourceLineId = 그 구간을 만든 patternLine 의 stable ID(provenance).
   //                        **중첩 객체가 아니라 평문 문자열** — clone/freeze 경로에서 공유
   //                        참조가 생길 여지를 아예 없앤다.
-  const SEMANTIC_KEYS = ["edge", "edgeStatus", "edgeSourceLineId"];
+  const SEMANTIC_KEYS = ["edge", "edgeStatus", "edgeSourceLineId", "dart"];
   function _carryEdge(src, dst) {
     if (src) SEMANTIC_KEYS.forEach(k => { if (k in src) dst[k] = src[k]; });
     return dst;

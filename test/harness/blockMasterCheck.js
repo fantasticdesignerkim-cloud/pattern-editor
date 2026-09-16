@@ -176,7 +176,7 @@ function makeHarness(cfg) {
 {
   const h = makeHarness();
   const s = h.capture();
-  ok(s.schemaVersion === 3, "1: schemaVersion=3");
+  ok(s.schemaVersion === 4, "1: schemaVersion=4");
   ok(deepEqual(Object.keys(s).sort(), ["geometry", "schemaVersion", "source"]), "1: 최상위 키");
   const dist = {};
   ["front", "back", "shared", "sleeve"].forEach(pc => ["outline", "construction"].forEach(rl => { dist[pc + "/" + rl] = s.geometry[pc][rl].length; }));
@@ -455,6 +455,66 @@ function makeHarness(cfg) {
 }
 
 // ══════════════════════════════════════════════
+// ══════════════════════════════════════════════
+// 테스트 32(SV4): 구조화 다트 의미가 **선언된 대로만** snapshot 에 실린다.
+{
+  const dartEl = (piece, role, c, meta) => {
+    const a = { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2,
+      "data-dart-id": meta.id, "data-dart-apex-at": meta.apexAt };
+    if (meta.boundary) a["data-dart-boundary"] = meta.boundary;
+    if (meta.onFold) a["data-dart-on-fold"] = "true";
+    return el("line", a);
+  };
+  // apex=(200,200) 공유, leg=(180,260)·(220,260)
+  const withDarts = (mode) => {
+    const base = defaultScene(mode);
+    if (mode === "sleeve") return base;
+    return base.concat([
+      dartEl("front", "construction", { x1: 180, y1: 260, x2: 200, y2: 200 }, { id: "front-bust", boundary: "armhole", apexAt: "to" }),
+      dartEl("front", "construction", { x1: 220, y1: 260, x2: 200, y2: 200 }, { id: "front-bust", boundary: "armhole", apexAt: "to" }),
+      dartEl("back", "construction", { x1: 80, y1: 260, x2: 100, y2: 200 }, { id: "back-waist-f", boundary: "waist", apexAt: "to", onFold: true })
+    ]);
+  };
+  const s4 = makeHarness({ sceneBuilder: withDarts }).capture();
+  const fd = s4.geometry.front.construction.filter(p => p.dart);
+  ok(fd.length === 2 && fd.every(p => p.dart.id === "front-bust" && p.dart.boundary === "armhole" && p.dart.apexAt === "to"),
+    "32: 앞판 가슴다트 2다리 의미 보존");
+  const bd = s4.geometry.back.construction.filter(p => p.dart);
+  ok(bd.length === 1 && bd[0].dart.onFold === true, "32: 접어재단 반쪽 다트(다리 1개) 허용");
+  // 선언 없는 primitive 엔 dart own-property 자체가 없다
+  ok(s4.geometry.front.outline.every(p => !Object.prototype.hasOwnProperty.call(p, "dart")), "32: 선언 없으면 dart 속성 없음");
+  // JSON 왕복 보존
+  const rt = JSON.parse(JSON.stringify(s4));
+  ok(JSON.stringify(rt.geometry.front.construction) === JSON.stringify(s4.geometry.front.construction), "32: JSON 왕복 보존");
+}
+
+// 테스트 33(SV4): 다트 선언 실패 계약
+{
+  const mk = (extraEls) => (mode) => mode === "sleeve" ? defaultScene(mode) : defaultScene(mode).concat(extraEls);
+  const dl = (attrs) => el("line", Object.assign({ "data-piece": "front", "data-geometry-role": "construction", x1: 1, y1: 1, x2: 2, y2: 2 }, attrs));
+  // apex-at 누락/오값
+  throws(() => makeHarness({ sceneBuilder: mk([dl({ "data-dart-id": "d1", "data-dart-boundary": "waist" })]) }).capture(),
+    "bad-dart-apex-at", "33: apex-at 누락 거부");
+  throws(() => makeHarness({ sceneBuilder: mk([dl({ "data-dart-id": "d1", "data-dart-apex-at": "middle" })]) }).capture(),
+    "bad-dart-apex-at", "33: apex-at 오값 거부");
+  // boundary 화이트리스트
+  throws(() => makeHarness({ sceneBuilder: mk([dl({ "data-dart-id": "d1", "data-dart-boundary": "bogus", "data-dart-apex-at": "to" })]) }).capture(),
+    "bad-dart-boundary", "33: boundary 오값 거부");
+  // 다리 1개(비 onFold) → legs-invalid
+  throws(() => makeHarness({ sceneBuilder: mk([dl({ "data-dart-id": "d1", "data-dart-boundary": "waist", "data-dart-apex-at": "to" })]) }).capture(),
+    "dart-legs-invalid", "33: 다리 1개(비 fold) 거부");
+  // apex 불일치
+  const a1 = dl({ "data-dart-id": "d2", "data-dart-boundary": "waist", "data-dart-apex-at": "to" });
+  const a2 = el("line", { "data-piece": "front", "data-geometry-role": "construction", x1: 9, y1: 9, x2: 8, y2: 8,
+    "data-dart-id": "d2", "data-dart-boundary": "waist", "data-dart-apex-at": "to" });
+  throws(() => makeHarness({ sceneBuilder: mk([a1, a2]) }).capture(), "dart-apex-mismatch", "33: apex 불일치 거부");
+  // 소매엔 다트 의미 금지
+  const sl = el("line", { "data-piece": "sleeve", "data-geometry-role": "outline", x1: 1, y1: 1, x2: 2, y2: 2,
+    "data-dart-id": "d3", "data-dart-apex-at": "to" });
+  throws(() => makeHarness({ sceneBuilder: (mode) => mode === "body" ? defaultScene(mode) : defaultScene(mode).concat([sl]) }).capture(),
+    "dart-placement", "33: sleeve 다트 의미 거부");
+}
+
 // 테스트 29(SV3): 봉제 경계 의미가 하나라도 빠지면 정상 v3 로 통과하지 않는다.
 //   → v3 는 "신규 semantic 없이도 통과하는 optional schema" 가 아니다.
 {
