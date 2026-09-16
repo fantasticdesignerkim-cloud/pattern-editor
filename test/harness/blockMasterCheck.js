@@ -42,6 +42,13 @@ function sharesRef(a, b) {
 }
 
 // ── 알려진 좌표 변환(테스트가 결과를 예측할 수 있도록 고정) ──
+// P0.3a(SV5): 의미 모서리 outline 은 생산자가 root 경계 identity 를 선언한다(명령마다 구간 하나).
+const bndAttrs = (a, piece, role, edge, cmds) => {
+  if (edge && role === "outline" && (piece === "front" || piece === "back")) {
+    a["data-boundary-root"] = piece + "/" + edge;
+    a["data-boundary-ranges"] = Array.from({ length: cmds }, (_, k) => (k / cmds) + "," + ((k + 1) / cmds)).join(";");
+  }
+};
 const MX = 40, MY = 20, SC = 4;
 const p2c_ref = (x, y) => [(x - MX) / SC, (y - MY) / SC];
 
@@ -54,11 +61,13 @@ function elFactory() {
   const lineEl = (piece, role, c, edge) => {
     const a = { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 };
     if (edge) a["data-edge"] = edge;
+    bndAttrs(a, piece, role, edge, 1);
     return el("line", a);
   };
   const pathEl = (piece, role, d, edge) => {
     const a = { "data-piece": piece, "data-geometry-role": role, d };
     if (edge) a["data-edge"] = edge;
+    bndAttrs(a, piece, role, edge, (String(d).match(/C/g) || []).length);
     return el("path", a);
   };
   return { el, lineEl, pathEl };
@@ -176,7 +185,7 @@ function makeHarness(cfg) {
 {
   const h = makeHarness();
   const s = h.capture();
-  ok(s.schemaVersion === 4, "1: schemaVersion=4");
+  ok(s.schemaVersion === 5, "1: schemaVersion=5");
   ok(deepEqual(Object.keys(s).sort(), ["geometry", "schemaVersion", "source"]), "1: 최상위 키");
   const dist = {};
   ["front", "back", "shared", "sleeve"].forEach(pc => ["outline", "construction"].forEach(rl => { dist[pc + "/" + rl] = s.geometry[pc][rl].length; }));
@@ -557,6 +566,50 @@ function makeHarness(cfg) {
     mode === "body" ? [] : [lineEl("sleeve", "outline", { x1: 5, y1: 5, x2: 9, y2: 9 }, "shoulder")]);
   throws(() => makeHarness({ sceneBuilder: onConstr }).capture(), "edge-placement", "31: front construction armhole 불허");
   throws(() => makeHarness({ sceneBuilder: onSleeve }).capture(), "edge-placement", "31: sleeve outline shoulder 불허");
+}
+
+// 테스트 32(SV5, P0.3a): 생산자 선언 경계 identity 캡처 — root/ranges 를 그대로, 명령 수만큼.
+{
+  const s = makeHarness().capture();
+  const armF = s.geometry.front.outline.filter(p => p.edge === "armhole");
+  ok(armF.every(p => p.boundary && p.boundary.root === "front/armhole" && p.boundary.ranges.length === 1),
+    "32: path 명령 수만큼 구간(C 1개 = 1)");
+  ok(["front", "back"].every(pc => s.geometry[pc].outline.every(p => !p.edge || (p.boundary && p.boundary.root === pc + "/" + p.edge))),
+    "32: 모든 의미 모서리 primitive 가 root identity 보유");
+  ok(s.geometry.sleeve.outline.every(p => !("boundary" in p)) &&
+     ["front", "back", "shared"].every(pc => s.geometry[pc].construction.every(p => !("boundary" in p))),
+    "32: identity 없는 곳엔 필드 자체를 만들지 않음");
+  const s2 = makeHarness().capture();
+  ok(JSON.stringify(s.geometry) === JSON.stringify(s2.geometry), "32: 같은 입력 → 결정론적 identity");
+  // 캡처본의 boundary 는 호출마다 새 객체(공유 참조 없음)
+  ok(s.geometry.front.outline[0].boundary !== s2.geometry.front.outline[0].boundary, "32: 캡처 간 참조 공유 없음");
+  // 두 명령 path 는 구간 2개
+  const twoCmd = (mode) => defaultScene(mode).map(e =>
+    (e.getAttribute("data-piece") === "back" && e.getAttribute("data-edge") === "armhole")
+      ? pathEl("back", "outline", "M60,100 C70,110 80,120 90,130 C100,140 110,150 120,160", "armhole") : e);
+  const s3 = makeHarness({ sceneBuilder: twoCmd }).capture();
+  const ba = s3.geometry.back.outline.find(p => p.edge === "armhole");
+  ok(ba.boundary.ranges.length === 2 && ba.boundary.ranges[1][0] === 0.5, "32: C 2개 path → 명령별 구간 2개");
+}
+
+// 테스트 33(SV5): identity 실패 계약 — 좌표로 채우지 않고 명시적으로 거부.
+{
+  const mutate = (pred, fn) => (mode) => defaultScene(mode).map(e => pred(e) ? fn(e) : e);
+  const isFC = (e) => e.getAttribute("data-piece") === "front" && e.getAttribute("data-edge") === "center";
+  const withAttr = (e, over) => ({ tagName: e.tagName, getAttribute(k) { return (k in over) ? over[k] : e.getAttribute(k); } });
+  throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-root": null, "data-boundary-ranges": null })) }).capture(),
+    "missing-boundary-identity", "33: 의미는 있는데 identity 없음 → 거부");
+  throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-ranges": "0,0.5;0.5,1" })) }).capture(),
+    "boundary-range-count", "33: 구간 수 ≠ 명령 수 → 거부");
+  throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-ranges": "0,0" })) }).capture(),
+    "bad-boundary-range", "33: 길이 0 구간 거부");
+  throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-root": "back/center" })) }).capture(),
+    "bad-boundary-root", "33: 다른 piece root 거부");
+  throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-root": "front/waist" })) }).capture(),
+    "boundary-edge-mismatch", "33: root 의미 ≠ edge 거부");
+  const onSleeve = (mode) => defaultScene(mode).concat(mode === "body" ? [] :
+    [el("line", { "data-piece": "sleeve", "data-geometry-role": "outline", x1: 5, y1: 5, x2: 9, y2: 9, "data-boundary-root": "front/center", "data-boundary-ranges": "0,1" })]);
+  throws(() => makeHarness({ sceneBuilder: onSleeve }).capture(), "boundary-placement", "33: sleeve 에 identity 불허");
 }
 
 // ── 결과 ──

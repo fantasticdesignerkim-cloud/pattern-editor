@@ -68,8 +68,45 @@ function addLineSegment(segments, from, to, meta = {}) {
 }
 
 function addSampledSegments(segments, pts, meta = {}) {
-  for (let i = 0; i < pts.length - 1; i++)
-    addLineSegment(segments, pts[i], pts[i + 1], meta);
+  const n = pts.length - 1;
+  const hasB = typeof meta.boundaryRoot === "string";
+  for (let i = 0; i < n; i++) {
+    if (!hasB) { addLineSegment(segments, pts[i], pts[i + 1], meta); continue; }
+    // P0.3a: 샘플 i 의 root 구간은 생산자가 선언한 곡선 전체 구간을 샘플 순번으로 나눈 값이다.
+    const a = meta.boundaryFromT, b = meta.boundaryToT;
+    addLineSegment(segments, pts[i], pts[i + 1],
+      { ...meta, boundaryFromT: a + (b - a) * (i / n), boundaryToT: a + (b - a) * ((i + 1) / n) });
+  }
+}
+
+// ── P0.3a: 봉제 경계 안정 identity(생산자 선언값) ──
+//   boundaryRoot  : 의미를 아는 생산 지점이 선언한 root 경계 ID("front/neckline" 등).
+//                   좌표·배열 index 로 만들지 않는다.
+//   boundaryFromT / boundaryToT : 이 세그먼트의 from/to 가 root 위에서 차지하는 파라미터
+//                   (root 고유 방향, 0→1). 세그먼트 안에서는 from→to 에 affine.
+//   잘라도(cut) root 는 그대로, 구간만 좁아진다 · 뒤집으면 from/to 값이 서로 바뀐다.
+function hasBoundaryId(seg) {
+  return !!seg && typeof seg.boundaryRoot === "string" &&
+    typeof seg.boundaryFromT === "number" && typeof seg.boundaryToT === "number";
+}
+// seg 위의 점 pt 에 해당하는 root 파라미터(세그먼트 affine). identity 가 아니라 파생 구간 경계값.
+function boundaryTAt(seg, pt) {
+  const dx = seg.to.x - seg.from.x, dy = seg.to.y - seg.from.y, L2 = dx * dx + dy * dy;
+  let f = L2 > 0 ? ((pt.x - seg.from.x) * dx + (pt.y - seg.from.y) * dy) / L2 : 0;
+  f = f < 0 ? 0 : f > 1 ? 1 : f;
+  return seg.boundaryFromT + (seg.boundaryToT - seg.boundaryFromT) * f;
+}
+// 방금 만든 세그먼트 out(src 의 복사/반전/절단본)에 lineage 구간을 설정한다.
+//   reversed = out 이 src 를 뒤집은 것 · cutFromPt = out.from 을 절단점으로 바꿨을 때 그 점.
+function withBoundarySpan(out, src, reversed, cutFromPt) {
+  if (!hasBoundaryId(src)) return out;
+  out.boundaryRoot = src.boundaryRoot;
+  let fromT = reversed ? src.boundaryToT : src.boundaryFromT;
+  const toT = reversed ? src.boundaryFromT : src.boundaryToT;
+  if (cutFromPt) fromT = boundaryTAt(src, cutFromPt);
+  out.boundaryFromT = fromT;
+  out.boundaryToT = toT;
+  return out;
 }
 
 // ── BP 중심 회전 ──────────────────────────────
@@ -392,7 +429,7 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle, cutBoundary 
   };
   const cloneCleanSeg = (seg) => ({ ...seg, from: { ...seg.from }, to: { ...seg.to } });
   const rotateSeg     = (seg) => ({ ...seg, from: rotPt(seg.from), to: rotPt(seg.to) });
-  const reverseSegL   = (seg) => ({ ...seg, from: { ...seg.to }, to: { ...seg.from } });
+  const reverseSegL   = (seg) => withBoundarySpan({ ...seg, from: { ...seg.to }, to: { ...seg.from } }, seg, true);
 
   // 시퀀스 전체(기존 다트선 포함)를 순서 그대로 처리 — fixed는 그대로, rotate는 통째로 회전
   const segsAFull = safeFixedAll.map(cloneCleanSeg);
@@ -722,8 +759,10 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
       ptsA.push({ ...seg.to });
       continue;
     }
-    const fromPt = segsA.length === 0 ? { ...cutPoint } : { ...seg.from };
-    segsA.push({ ...seg, from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+    const isCutA = segsA.length === 0;
+    const fromPt = isCutA ? { ...cutPoint } : { ...seg.from };
+    segsA.push(withBoundarySpan({ ...seg, from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled },
+      seg, false, isCutA ? cutPoint : null));
     ptsA.push({ ...seg.to });
   }
 
@@ -734,8 +773,10 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
     const revSeg = { from: { ...seg.to }, to: { ...seg.from }, type: seg.type };
     // 첫 스텝: from을 cutPoint로 교체. non-boundary cutSegIndex면 to=seg.from(반쪽),
     //          boundary거나 이후 스텝이면 revSeg 그대로.
-    const fromPt = segsB.length === 0 ? { ...cutPoint } : { ...revSeg.from };
-    segsB.push({ ...seg, from: fromPt, to: { ...revSeg.to }, type: seg.type, disabled: !!seg.disabled });
+    const isCutB = segsB.length === 0;
+    const fromPt = isCutB ? { ...cutPoint } : { ...revSeg.from };
+    segsB.push(withBoundarySpan({ ...seg, from: fromPt, to: { ...revSeg.to }, type: seg.type, disabled: !!seg.disabled },
+      seg, true, isCutB ? cutPoint : null));
     ptsB.push({ ...revSeg.to });
   }
 
@@ -755,7 +796,7 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   for (let step = backwardSteps; step < backwardSteps + restSteps; step++) {
     const idx = (backStart - step + nn) % nn;
     const seg = segments[idx];
-    segsBFull.push({ ...seg, from: { ...seg.to }, to: { ...seg.from }, type: seg.type, disabled: !!seg.disabled });
+    segsBFull.push(withBoundarySpan({ ...seg, from: { ...seg.to }, to: { ...seg.from }, type: seg.type, disabled: !!seg.disabled }, seg, true));
   }
 
   dbg('[splitBaked] A:', segsA.length, 'B:', segsB.length, 'rest:', restSteps,
@@ -807,7 +848,8 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       if (seg.disabled && !isG(next) && !isGG(next)) continue;
       // cutSegIndex segment는 from을 cutPoint로 교체 (cutPoint 이전 구간 제거)
       const fromPt = (step === 0) ? { ...cutPoint } : { ...seg.from };
-      segs.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+      segs.push(withBoundarySpan({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled },
+        seg, false, step === 0 ? cutPoint : null));
       pts.push(next);
       if (isG(next))  { hit = "G";  break; }
       if (isGG(next)) { hit = "GG"; break; }
@@ -827,12 +869,12 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       if (isG(prev))  { hit = "G";  break; }
       if (isGG(prev)) { hit = "GG"; break; }
     }
-    const segs = rawSegs.map(seg => ({
+    const segs = rawSegs.map((seg, k) => withBoundarySpan({
       from: { ...seg.to },
       to:   { ...seg.from },
       type: seg.type,
       disabled: !!seg.disabled,
-    }));
+    }, seg, true, k === 0 ? cutPoint : null));
     if (segs.length > 0) segs[0].from = { ...cutPoint };
     const pts = [{ ...cutPoint }];
     for (const seg of segs) pts.push({ ...seg.to });
@@ -914,9 +956,11 @@ function buildFrontOutline(p, f, B) {
   // SIDE_TOP → G 하부 구간은 drawArmhole의 뒤/앞 진동 구조에서 담당한다.
   const frontArm = sampleCubic(GG, FH.hFa, FH.hFb, FSP, 16);
 
-  addLineSegment(segments, nBR,        p.FRONT_WL,  { type: "front-center"   });
-  addLineSegment(segments, p.FRONT_WL, p.SIDE_BTM,  { type: "front-waist"    });
-  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP,  { type: "side-seam"      });
+  // ★ P0.3a: root 경계 identity 선언(root 방향: center=목→허리 · waist=중심→옆 · side-seam=진동밑→허리
+  //   · armhole-lower=진동밑→G · armhole-upper=GG→어깨 · shoulder=목→어깨끝 · neckline=중심→SNP).
+  addLineSegment(segments, nBR,        p.FRONT_WL,  { type: "front-center", boundaryRoot: "front/center", boundaryFromT: 0, boundaryToT: 1 });
+  addLineSegment(segments, p.FRONT_WL, p.SIDE_BTM,  { type: "front-waist",  boundaryRoot: "front/waist",  boundaryFromT: 0, boundaryToT: 1 });
+  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP,  { type: "side-seam",    boundaryRoot: "front/side-seam", boundaryFromT: 1, boundaryToT: 0 });
   // 앞암홀 하부: SIDE_TOP → G 곡선 (state.armH 핸들 사용, 직선 금지)
   {
     const H = state.armH;
@@ -925,7 +969,7 @@ function buildFrontOutline(p, f, B) {
       const lower1 = sampleCubic(p.SIDE_TOP, H.h2b, H.h3a, H.a3, 8);
       const lower2 = sampleCubic(H.a3,       H.h3b, H.h4,  p.G,   8);
       const lowerFrontArm = [...lower1, ...lower2.slice(1)];
-      addSampledSegments(segments, lowerFrontArm, { type: "front-armhole-lower" });
+      addSampledSegments(segments, lowerFrontArm, { type: "front-armhole-lower", boundaryRoot: "front/armhole-lower", boundaryFromT: 0, boundaryToT: 1 });
     } else {
       // fallback: SIDE_TOP → G 단순 cubic 근사 (직선 회피)
       const midX = (p.SIDE_TOP.x + p.G.x) / 2;
@@ -933,16 +977,16 @@ function buildFrontOutline(p, f, B) {
       const c1 = { x: p.SIDE_TOP.x, y: midY };
       const c2 = { x: midX,         y: midY };
       const fallbackArm = sampleCubic(p.SIDE_TOP, c1, c2, p.G, 16);
-      addSampledSegments(segments, fallbackArm, { type: "front-armhole-lower" });
+      addSampledSegments(segments, fallbackArm, { type: "front-armhole-lower", boundaryRoot: "front/armhole-lower", boundaryFromT: 0, boundaryToT: 1 });
     }
   }
   // ★ P0.2: 가슴다트 의미를 **생산 지점에서 선언**한다(좌표·배열 순서로 추론하지 않는다).
   //   apex = BP(두 다리가 만나는 꼭짓점) · 두 boundary leg endpoint = G·GG · 열린 경계 = 진동.
   addLineSegment(segments, p.G,        p.BP,        { type: "old-dart", disabled: true, dartId: "front-bust", dartBoundary: "armhole", dartApexAt: "to" });
   addLineSegment(segments, p.BP,       GG,          { type: "old-dart", disabled: true, dartId: "front-bust", dartBoundary: "armhole", dartApexAt: "from" });
-  addSampledSegments(segments, frontArm,             { type: "front-armhole-upper" });
-  addLineSegment(segments, FSP,        nTL,         { type: "front-shoulder" });
-  addSampledSegments(segments, [...neckAll].reverse(),{ type: "front-neckline" });
+  addSampledSegments(segments, frontArm,             { type: "front-armhole-upper", boundaryRoot: "front/armhole-upper", boundaryFromT: 0, boundaryToT: 1 });
+  addLineSegment(segments, FSP,        nTL,         { type: "front-shoulder", boundaryRoot: "front/shoulder", boundaryFromT: 1, boundaryToT: 0 });
+  addSampledSegments(segments, [...neckAll].reverse(),{ type: "front-neckline", boundaryRoot: "front/neckline", boundaryFromT: 1, boundaryToT: 0 });
 
   return segments;
 }
@@ -974,7 +1018,8 @@ function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
       const next = { ...seg.to };
       if (seg.disabled && !isDartRelated(seg)) continue;
       const fromPt = (step === 0) ? { ...cutPoint } : { ...seg.from };
-      segs.push({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled });
+      segs.push(withBoundarySpan({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled },
+        seg, false, step === 0 ? cutPoint : null));
       pts.push(next);
       if (isDartCenter(next)) { hit = "dartCenter"; break; }
       if (isDartEnd(next))    { hit = "dartEnd";    break; }
@@ -994,12 +1039,12 @@ function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
       if (isDartCenter(prev)) { hit = "dartCenter"; break; }
       if (isDartEnd(prev))    { hit = "dartEnd";    break; }
     }
-    const segs = rawSegs.map(seg => ({
+    const segs = rawSegs.map((seg, k) => withBoundarySpan({
       from: { ...seg.to },
       to:   { ...seg.from },
       type: seg.type,
       disabled: !!seg.disabled,
-    }));
+    }, seg, true, k === 0 ? cutPoint : null));
     if (segs.length > 0) segs[0].from = { ...cutPoint };
     const pts = [{ ...cutPoint }];
     for (const seg of segs) pts.push({ ...seg.to });
@@ -1095,23 +1140,25 @@ function buildBackOutline(p, f, B) {
   //   회전(dartEnd_ 포함):   dartEnd_ → [dart disabled] → dartCenter
 
   // ── 어깨선: dartCenter → bND ────────────────
-  addLineSegment(segments, dartCenter, bND,      { type: "back-shoulder" });
+  // ★ P0.3a: root 방향: shoulder-neck=목→다트 · neckline=중심→SNP · center=목→허리 · waist=중심→옆
+  //   · side-seam=진동밑→허리 · armhole=진동밑→어깨끝 · shoulder-armhole=다트→어깨끝.
+  addLineSegment(segments, dartCenter, bND,      { type: "back-shoulder", boundaryRoot: "back/shoulder-neck", boundaryFromT: 1, boundaryToT: 0 });
 
   // ── 뒤목선 곡선: bND → A ────────────────────
   {
     const NH = state.bNeckH;
     if (NH && NH.h0 && NH.h1) {
       const neckPts = sampleCubic(bND, NH.h1, NH.h0, p.A, 10);
-      addSampledSegments(segments, neckPts, { type: "back-neckline" });
+      addSampledSegments(segments, neckPts, { type: "back-neckline", boundaryRoot: "back/neckline", boundaryFromT: 1, boundaryToT: 0 });
     } else {
-      addLineSegment(segments, bND, p.A, { type: "back-neckline" });
+      addLineSegment(segments, bND, p.A, { type: "back-neckline", boundaryRoot: "back/neckline", boundaryFromT: 1, boundaryToT: 0 });
     }
   }
 
   // ── 뒤중심/허리/옆선 직선 ────────────────────
-  addLineSegment(segments, p.A,        p.BACK_WL,  { type: "back-center" });
-  addLineSegment(segments, p.BACK_WL,  p.SIDE_BTM, { type: "back-waist"  });
-  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP, { type: "side-seam"   });
+  addLineSegment(segments, p.A,        p.BACK_WL,  { type: "back-center", boundaryRoot: "back/center", boundaryFromT: 0, boundaryToT: 1 });
+  addLineSegment(segments, p.BACK_WL,  p.SIDE_BTM, { type: "back-waist",  boundaryRoot: "back/waist",  boundaryFromT: 0, boundaryToT: 1 });
+  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP, { type: "side-seam",   boundaryRoot: "back/side-seam", boundaryFromT: 1, boundaryToT: 0 });
 
   // ── 뒤진동 곡선: SIDE_TOP → bSP ─────────────
   {
@@ -1120,14 +1167,14 @@ function buildBackOutline(p, f, B) {
       const back1 = sampleCubic(p.SIDE_TOP, H.h2a, H.h1b, H.a1, 8);
       const back2 = sampleCubic(H.a1,       H.h1a, H.h0,  bSP,  8);
       const backArmPts = [...back1, ...back2.slice(1)];
-      addSampledSegments(segments, backArmPts, { type: "back-armhole" });
+      addSampledSegments(segments, backArmPts, { type: "back-armhole", boundaryRoot: "back/armhole", boundaryFromT: 0, boundaryToT: 1 });
     } else {
-      addLineSegment(segments, p.SIDE_TOP, bSP, { type: "back-armhole" });
+      addLineSegment(segments, p.SIDE_TOP, bSP, { type: "back-armhole", boundaryRoot: "back/armhole", boundaryFromT: 0, boundaryToT: 1 });
     }
   }
 
   // ── 어깨선: bSP → dartEnd_ ──────────────────
-  addLineSegment(segments, bSP,      dartEnd_,  { type: "back-shoulder" });
+  addLineSegment(segments, bSP,      dartEnd_,  { type: "back-shoulder", boundaryRoot: "back/shoulder-armhole", boundaryFromT: 1, boundaryToT: 0 });
 
   // ── 어깨 다트 (disabled): dartEnd_ → E → dartCenter ──
   // ★ P0.2: 뒤어깨다트 의미 선언. apex = E · leg endpoint = dartEnd_·dartCenter · 열린 경계 = 어깨.

@@ -259,7 +259,10 @@
   //   · edgeSourceLineId = 그 구간을 만든 patternLine 의 stable ID(provenance).
   //                        **중첩 객체가 아니라 평문 문자열** — clone/freeze 경로에서 공유
   //                        참조가 생길 여지를 아예 없앤다.
-  const SEMANTIC_KEYS = ["edge", "edgeStatus", "edgeSourceLineId", "dart"];
+  //   · boundary         = (P0.3a) 생산자가 선언한 경계 identity { root, ranges:[[from,to]] }.
+  //                        세그먼트(line/cubic) 하나는 구간 하나. 자르면 root 는 유지·구간만 좁히고
+  //                        뒤집으면 구간 방향을 바꾼다. 매핑할 수 없으면 **버린다**(추측 금지).
+  const SEMANTIC_KEYS = ["edge", "edgeStatus", "edgeSourceLineId", "dart", "boundary"];
   //   ★ 중첩 객체(dart)는 **값 복제**한다 — 참조로 옮기면 잘라낸/뒤집은/합성한 작업 형상과
   //   원본 working.geometry 가 같은 객체를 공유해, 한쪽 변형이 다른 쪽을 오염시킨다.
   //   문자열 값(edge·edgeStatus·edgeSourceLineId)은 불변이라 그대로 옮긴다.
@@ -275,6 +278,34 @@
   //   의미가 명시된 구간(예: 목선 전환 도구가 만든 edge:"neckline")은 그대로 승계하고,
   //   **의미가 없는 일반 replacement 구간에만** 명시적 unresolved + provenance 를 부여한다.
   //   → "edge 부재"만으로 unresolved 를 표현하지 않는다(다트 다리·구성선과 구분 가능).
+  // P0.3a 경계 구간 lineage. 한 구간 안에서 root 파라미터는 세그먼트 자체 파라미터에 affine 이다.
+  function _singleRange(seg) {
+    const b = seg && seg.boundary;
+    return (b && typeof b.root === "string" && Array.isArray(b.ranges) && b.ranges.length === 1) ? b.ranges[0] : null;
+  }
+  function _sliceBoundary(dst, t0, t1) {
+    if (!("boundary" in dst)) return dst;
+    const r = _singleRange(dst);
+    if (!r) { delete dst.boundary; return dst; }
+    dst.boundary = { root: dst.boundary.root, ranges: [[r[0] + (r[1] - r[0]) * t0, r[0] + (r[1] - r[0]) * t1]] };
+    return dst;
+  }
+  function _reverseBoundary(dst) {
+    if (!("boundary" in dst)) return dst;
+    const r = _singleRange(dst);
+    if (!r) { delete dst.boundary; return dst; }
+    dst.boundary = { root: dst.boundary.root, ranges: [[r[1], r[0]]] };
+    return dst;
+  }
+  // path primitive 의 k 번째 C 명령(전체 n 개)에 해당하는 구간만 남긴다. 선언 구간 수가 명령 수와
+  // 다르면 어느 구간인지 알 수 없으므로 identity 를 싣지 않는다.
+  function _commandBoundary(dst, k, n) {
+    if (!("boundary" in dst)) return dst;
+    const b = dst.boundary;
+    if (!(b && typeof b.root === "string" && Array.isArray(b.ranges) && b.ranges.length === n)) { delete dst.boundary; return dst; }
+    dst.boundary = { root: b.root, ranges: [[b.ranges[k][0], b.ranges[k][1]]] };
+    return dst;
+  }
   function boundarySegsOf(line) {
     const id = line && line.id;
     return ((line && line.segments) || []).map(s => {
@@ -284,13 +315,13 @@
     });
   }
   function subSegment(seg, t0, t1) {
-    if (seg.kind === "line") return _carryEdge(seg, { kind: "line", from: _lerpP(seg.from, seg.to, t0), to: _lerpP(seg.from, seg.to, t1) });
+    if (seg.kind === "line") return _sliceBoundary(_carryEdge(seg, { kind: "line", from: _lerpP(seg.from, seg.to, t0), to: _lerpP(seg.from, seg.to, t1) }), t0, t1);
     const R = _cubicBetween(seg.from, seg.c1, seg.c2, seg.to, t0, t1);
-    return _carryEdge(seg, { kind: "cubic", from: R[0], c1: R[1], c2: R[2], to: R[3] });
+    return _sliceBoundary(_carryEdge(seg, { kind: "cubic", from: R[0], c1: R[1], c2: R[2], to: R[3] }), t0, t1);
   }
   function reverseSeg(seg) {
-    if (seg.kind === "line") return _carryEdge(seg, { kind: "line", from: _pt(seg.to), to: _pt(seg.from) });
-    return _carryEdge(seg, { kind: "cubic", from: _pt(seg.to), c1: _pt(seg.c2), c2: _pt(seg.c1), to: _pt(seg.from) });
+    if (seg.kind === "line") return _reverseBoundary(_carryEdge(seg, { kind: "line", from: _pt(seg.to), to: _pt(seg.from) }));
+    return _reverseBoundary(_carryEdge(seg, { kind: "cubic", from: _pt(seg.to), c1: _pt(seg.c2), c2: _pt(seg.c1), to: _pt(seg.from) }));
   }
   function cloneSeg(seg) {
     return _carryEdge(seg, seg.kind === "cubic"
@@ -565,9 +596,9 @@
     const segs = [];
     (outline || []).forEach(pr => {
       // path 가 여러 C 로 쪼개져도 **각 span 이 같은 edge role 을 유지**한다(span 수는 identity 아님).
-      if (pr.kind === "line") segs.push(_carryEdge(pr, { kind: "line", from: pr.from, to: pr.to }));
-      else if (pr.kind === "cubic") segs.push(_carryEdge(pr, { kind: "cubic", from: pr.from, c1: pr.c1, c2: pr.c2, to: pr.to }));
-      else if (pr.kind === "path") { let cur = null; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { segs.push(_carryEdge(pr, { kind: "cubic", from: cur, c1: c.points[0], c2: c.points[1], to: c.points[2] })); cur = c.points[2]; } }); }
+      if (pr.kind === "line") segs.push(_commandBoundary(_carryEdge(pr, { kind: "line", from: pr.from, to: pr.to }), 0, 1));
+      else if (pr.kind === "cubic") segs.push(_commandBoundary(_carryEdge(pr, { kind: "cubic", from: pr.from, c1: pr.c1, c2: pr.c2, to: pr.to }), 0, 1));
+      else if (pr.kind === "path") { const nC = pr.commands.filter(c => c.type === "C").length; let cur = null, k = 0; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { segs.push(_commandBoundary(_carryEdge(pr, { kind: "cubic", from: cur, c1: c.points[0], c2: c.points[1], to: c.points[2] }), k++, nC)); cur = c.points[2]; } }); }
     });
     return segs;
   }
@@ -1014,8 +1045,10 @@
   function geomToPatternSegments(prims) {
     const out = [];
     (prims || []).forEach(pr => {
-      if (pr.kind === "line") out.push({ kind: "line", from: _pt(pr.from), to: _pt(pr.to) });
-      else if (pr.kind === "path") { let cur = null; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { out.push({ kind: "cubic", from: _pt(cur), c1: _pt(c.points[0]), c2: _pt(c.points[1]), to: _pt(c.points[2]) }); cur = c.points[2]; } }); }
+      // P0.3a: 생산자(designBodice)가 선언한 경계 identity 만 명령 단위로 옮긴다(다른 의미는 옮기지 않음).
+      const bnd = (dst, k, n) => { if (pr.boundary) { dst.boundary = _copySemanticValue(pr.boundary); _commandBoundary(dst, k, n); } return dst; };
+      if (pr.kind === "line") out.push(bnd({ kind: "line", from: _pt(pr.from), to: _pt(pr.to) }, 0, 1));
+      else if (pr.kind === "path") { const nC = pr.commands.filter(c => c.type === "C").length; let cur = null, k = 0; pr.commands.forEach(c => { if (c.type === "M") cur = c.points[0]; else if (c.type === "C") { out.push(bnd({ kind: "cubic", from: _pt(cur), c1: _pt(c.points[0]), c2: _pt(c.points[1]), to: _pt(c.points[2]) }, k++, nC)); cur = c.points[2]; } }); }
     });
     return out;
   }

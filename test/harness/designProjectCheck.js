@@ -39,6 +39,13 @@ function allFrozen(o) {
 }
 
 // ── blockMaster/blockWorkflow 검증에서 쓰던 최소 mock ──
+// P0.3a(SV5): 의미 모서리 outline 은 생산자가 root 경계 identity 를 선언한다(명령마다 구간 하나).
+const bndAttrs = (a, piece, role, edge, cmds) => {
+  if (edge && role === "outline" && (piece === "front" || piece === "back")) {
+    a["data-boundary-root"] = piece + "/" + edge;
+    a["data-boundary-ranges"] = Array.from({ length: cmds }, (_, k) => (k / cmds) + "," + ((k + 1) / cmds)).join(";");
+  }
+};
 const MX = 40, MY = 20, SC = 4;
 const p2c_ref = (x, y) => [(x - MX) / SC, (y - MY) / SC];
 const SIDE = { x1: 240, y1: 100, x2: 240, y2: 300 };
@@ -46,11 +53,13 @@ const el = (tag, attrs) => ({ tagName: tag, getAttribute(k) { return (k in attrs
 const lineEl = (piece, role, c, edge) => {
   const a = { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 };
   if (edge) a["data-edge"] = edge;
+  bndAttrs(a, piece, role, edge, 1);
   return el("line", a);
 };
 const pathEl = (piece, role, d, edge) => {
   const a = { "data-piece": piece, "data-geometry-role": role, d };
   if (edge) a["data-edge"] = edge;
+  bndAttrs(a, piece, role, edge, (String(d).match(/C/g) || []).length);
   return el("path", a);
 };
 // SV2 의미 모서리(junction 유일).
@@ -296,10 +305,10 @@ function makeHarness() {
 {
   const h = makeHarness();
   const b = h.bw.complete();
-  ok(b.snapshot.schemaVersion === 4, "14: 신규 캡처 = v4");
+  ok(b.snapshot.schemaVersion === 5, "14: 신규 캡처 = v5");
   const dp = h.dw.startFromBlock(b);
-  ok(dp.semanticStatus === "complete", "14: v4 → semanticStatus=complete");
-  ok(dp.sourceBlock.schemaVersion === 4, "14: sourceBlock.schemaVersion=4");
+  ok(dp.semanticStatus === "complete", "14: v5 → semanticStatus=complete");
+  ok(dp.sourceBlock.schemaVersion === 5, "14: sourceBlock.schemaVersion=5");
   ok(Object.isFrozen(dp.sourceBlock), "14: sourceBlock frozen 유지");
 }
 
@@ -343,7 +352,7 @@ function makeHarness() {
   const mk = (sv) => { const h = makeHarness(); const b = h.bw.complete();
     return [h, { id: b.id, version: b.version, canonicalHash: b.canonicalHash,
       snapshot: { schemaVersion: sv, source: b.snapshot.source, geometry: b.snapshot.geometry } }]; };
-  [1, 5, undefined].forEach(sv => {
+  [1, 6, undefined].forEach(sv => {
     const [h, blk] = mk(sv);
     throws(() => h.dw.startFromBlock(blk), "unsupported-schema-version", "16: schemaVersion=" + sv + " 거부");
     ok(h.dw.current() === null, "16: 거부 후 current 불변(" + sv + ")");

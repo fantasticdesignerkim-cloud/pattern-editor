@@ -11,6 +11,17 @@ function _tagGeom(el, piece, role, edge){
   return el;
 }
 
+// ★ P0.3a: 봉제 경계 안정 identity 를 **생산 지점에서 선언**한다(좌표·DOM 순서 추론 없음).
+//   data-boundary-root   : root 경계 ID("front/neckline" 등, 의미를 아는 생산자가 정한다)
+//   data-boundary-ranges : 이 요소가 그리는 **명령마다** root 위 구간 "from,to"를 ';' 로 나열
+//                          (line = 1개, path = C 명령 수). 값의 순서는 명령의 그리기 방향을 따른다.
+function _tagBoundary(el, root, ranges){
+  if (!el || !el.setAttribute || !root || !Array.isArray(ranges) || !ranges.length) return el;
+  el.setAttribute("data-boundary-root", root);
+  el.setAttribute("data-boundary-ranges", ranges.map(r => r[0] + "," + r[1]).join(";"));
+  return el;
+}
+
 // 허리다트는 draft.js drawDart 가 다트다리(dart-waist) 2개를 만든다. draft.js 를
 // 건드리지 않고, 이 호출이 방금 g 에 추가한 dart-waist 요소에만 표식을 부여한다
 // (좌표/전역 순서 추측이 아니라 "이 호출이 생성한 것"을 특정 — 소유권은 호출부가 안다).
@@ -668,11 +679,17 @@ function drawAppliedSegments(g, segs, cls, color, side) {
     if (color) el.setAttribute("style", `stroke:${color};`);
     // curveType 은 flush 시점에 아직 이 곡선의 타입이다(호출부가 전부 flush 후 재할당).
     _tagGeom(el, side, "outline", SEG_EDGE[curveType]);
+    // P0.3a: 명령 하나 = 샘플 세그먼트 하나. run 전체가 같은 root 를 선언했을 때만 싣는다.
+    if (curveBnd.length === pts.length - 1 && curveBnd.every(b => b && b.root === curveBnd[0].root))
+      _tagBoundary(el, curveBnd[0].root, curveBnd.map(b => [b.from, b.to]));
     g.appendChild(el);
   };
 
   let curvePts = [];
   let curveType = null;
+  let curveBnd = [];
+  const bndOf = (seg) => (typeof seg.boundaryRoot === "string" && typeof seg.boundaryFromT === "number" &&
+    typeof seg.boundaryToT === "number") ? { root: seg.boundaryRoot, from: seg.boundaryFromT, to: seg.boundaryToT } : null;
 
   for (const seg of segs) {
     if (!seg || !seg.from || !seg.to) continue;
@@ -689,15 +706,19 @@ function drawAppliedSegments(g, segs, cls, color, side) {
         flushSmoothPath(curvePts);
         curvePts = [{ ...seg.from }];
         curveType = seg.type;
+        curveBnd = [];
       }
       curvePts.push({ ...seg.to });
+      curveBnd.push(bndOf(seg));
     } else {
       flushSmoothPath(curvePts);
       curvePts = [];
       curveType = null;
+      curveBnd = [];
+      const lb = bndOf(seg);
       // baked 세그먼트가 **생산 지점에서 실어 온** 다트 의미를 그대로 전달한다(재추론 없음).
-      g.appendChild(_tagDartMeta(_tagGeom(LnC(seg.from, seg.to, cls, color), side, "outline", SEG_EDGE[seg.type]),
-        { id: seg.dartId, boundary: seg.dartBoundary, apexAt: seg.dartApexAt }));
+      g.appendChild(_tagBoundary(_tagDartMeta(_tagGeom(LnC(seg.from, seg.to, cls, color), side, "outline", SEG_EDGE[seg.type]),
+        { id: seg.dartId, boundary: seg.dartBoundary, apexAt: seg.dartApexAt }), lb && lb.root, lb && [[lb.from, lb.to]]));
     }
   }
   flushSmoothPath(curvePts);
@@ -801,6 +822,7 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
         });
         if(DEBUG_COLORS) _fnp.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
         _tagGeom(_fnp, "front", "outline", "neckline");   // SV3 봉제 경계 의미
+        _tagBoundary(_fnp, "front/neckline", [[0, 0.5], [0.5, 1]]);   // P0.3a: FND→안내점→SNP
         gPat.appendChild(_fnp);
       }
 
@@ -825,7 +847,7 @@ function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
     }
 
     // ─ 앞어깨선 ──────────────────────────────────
-    gPat.appendChild(_tagGeom(LnC(nTL, FSP, "pattern", _DC_F), "front", "outline", "shoulder"));
+    gPat.appendChild(_tagBoundary(_tagGeom(LnC(nTL, FSP, "pattern", _DC_F), "front", "outline", "shoulder"), "front/shoulder", [[0, 1]]));
     if(showDim) gPat.appendChild(dimLine(nTL, FSP, 12));
     gPat.appendChild(dot(FSP, "pt-main", 3));
     gPat.appendChild(lbl(FSP, "FSP", "txt-dark", 6, 10));
@@ -867,6 +889,7 @@ function drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
         });
         if(DEBUG_COLORS) _p.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
         _tagGeom(_p, "front", "outline", "armhole");      // SV3(진동 상부 — 가슴다트로 나뉜 span 중 하나)
+        _tagBoundary(_p, "front/armhole-upper", [[0, 1]]);      // P0.3a: GG→FSP
         gPat.appendChild(_p);
       }
 
@@ -930,6 +953,7 @@ function drawBackNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
         });
         if(DEBUG_COLORS) _bnp.setAttribute("style", `stroke:${DBG_BACK};`); // DEBUG
         _tagGeom(_bnp, "back", "outline", "neckline");    // SV3 봉제 경계 의미
+        _tagBoundary(_bnp, "back/neckline", [[0, 1]]);          // P0.3a: A→bND
         gPat.appendChild(_bnp);
       }
 
@@ -972,8 +996,9 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
 
 
     // SV3: 뒤어깨선은 뒤어깨다트로 두 span 으로 나뉜다 — 두 primitive 가 같은 shoulder role.
-    gPat.appendChild(_tagGeom(LnC(bND, dartCenter, "pattern", _DC_B), "back", "outline", "shoulder"));
-    gPat.appendChild(_tagGeom(LnC(dartEnd_, bSP, "pattern", _DC_B), "back", "outline", "shoulder"));
+    // P0.3a: 다트로 나뉜 두 어깨 구간은 각자 root 를 선언한다(목→다트 / 다트→어깨끝).
+    gPat.appendChild(_tagBoundary(_tagGeom(LnC(bND, dartCenter, "pattern", _DC_B), "back", "outline", "shoulder"), "back/shoulder-neck", [[0, 1]]));
+    gPat.appendChild(_tagBoundary(_tagGeom(LnC(dartEnd_, bSP, "pattern", _DC_B), "back", "outline", "shoulder"), "back/shoulder-armhole", [[0, 1]]));
     gPat.appendChild(dot(bSP, "pt-main", 3));
     gPat.appendChild(lbl(bSP, "BSP", "txt-dark", 4, 10));
     gPat.appendChild(Ln(p.E, eOnSh, "dep"));
@@ -1041,6 +1066,7 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
         const _bp = E("path",{ d:_bpd, class:"pattern" });
         if(DEBUG_COLORS) _bp.setAttribute("style", `stroke:${DBG_BACK};`); // DEBUG
         _tagGeom(_bp, "back", "outline", "armhole");      // SV3
+        _tagBoundary(_bp, "back/armhole", [[1, 0.5], [0.5, 0]]); // P0.3a: BSP→C안내→진동밑(root 는 진동밑→어깨끝)
         gPat.appendChild(_bp);
       }
 
@@ -1051,6 +1077,7 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
         const _fp = E("path",{ d:_fpd, class:"pattern" });
         if(DEBUG_COLORS) _fp.setAttribute("style", `stroke:${DBG_FRONT};`); // DEBUG
         _tagGeom(_fp, "front", "outline", "armhole");     // SV3(진동 하부 span)
+        _tagBoundary(_fp, "front/armhole-lower", [[0, 0.5], [0.5, 1]]); // P0.3a: 진동밑→F안내→G
         gPat.appendChild(_fp);
       }
 
@@ -1121,23 +1148,23 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
 
     // 앞판 옆선: 앞판 적용 시 drawDartMoveApplied 담당
     if(!isFrontApplied){
-      gPat.appendChild(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "side-seam"));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "side-seam"), "front/side-seam", [[0, 1]]));
     }
     // 뒤판 옆선: 뒤판 적용 시 drawDartMoveApplied 담당
     if(!isBackApplied){
-      gPat.appendChild(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_B), "back", "outline", "side-seam"));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_B), "back", "outline", "side-seam"), "back/side-seam", [[0, 1]]));
     }
 
     const FND = { x: f.sw(), y: f.yB() + f.fnd() };
     // 앞판 허리선 + 앞중심선
     if(!isFrontApplied){
-      gPat.appendChild(_tagGeom(LnC(FND,        p.FRONT_WL, "pattern", _DC_F), "front", "outline", "center"));
-      gPat.appendChild(_tagGeom(LnC(p.FRONT_WL, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "waist"));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(FND,        p.FRONT_WL, "pattern", _DC_F), "front", "outline", "center"), "front/center", [[0, 1]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.FRONT_WL, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "waist"), "front/waist", [[0, 1]]));
     }
     // 뒤판 허리선 + 뒤중심선
     if(!isBackApplied){
-      gPat.appendChild(_tagGeom(LnC(p.SIDE_BTM, p.BACK_WL,  "pattern", _DC_B), "back", "outline", "waist"));
-      gPat.appendChild(_tagGeom(LnC(p.BACK_WL,  p.A,         "pattern", _DC_B), "back", "outline", "center"));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_BTM, p.BACK_WL,  "pattern", _DC_B), "back", "outline", "waist"), "back/waist", [[1, 0]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.BACK_WL,  p.A,         "pattern", _DC_B), "back", "outline", "center"), "back/center", [[1, 0]]));
     }
 
     // ── FRONT_ARM → BP (절개선) ─ 앞판 적용 시 skip ──

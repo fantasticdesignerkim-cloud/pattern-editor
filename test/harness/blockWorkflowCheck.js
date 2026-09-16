@@ -29,6 +29,13 @@ function throws(fn, reasonWanted, name) {
 }
 
 // ── blockMaster 검증에서 쓰던 것과 동일한 최소 mock ──
+// P0.3a(SV5): 의미 모서리 outline 은 생산자가 root 경계 identity 를 선언한다(명령마다 구간 하나).
+const bndAttrs = (a, piece, role, edge, cmds) => {
+  if (edge && role === "outline" && (piece === "front" || piece === "back")) {
+    a["data-boundary-root"] = piece + "/" + edge;
+    a["data-boundary-ranges"] = Array.from({ length: cmds }, (_, k) => (k / cmds) + "," + ((k + 1) / cmds)).join(";");
+  }
+};
 const MX = 40, MY = 20, SC = 4;
 const p2c_ref = (x, y) => [(x - MX) / SC, (y - MY) / SC];
 const SIDE = { x1: 240, y1: 100, x2: 240, y2: 300 };
@@ -36,11 +43,13 @@ const el = (tag, attrs) => ({ tagName: tag, getAttribute(k) { return (k in attrs
 const lineEl = (piece, role, c, edge) => {
   const a = { "data-piece": piece, "data-geometry-role": role, x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 };
   if (edge) a["data-edge"] = edge;
+  bndAttrs(a, piece, role, edge, 1);
   return el("line", a);
 };
 const pathEl = (piece, role, d, edge) => {
   const a = { "data-piece": piece, "data-geometry-role": role, d };
   if (edge) a["data-edge"] = edge;
+  bndAttrs(a, piece, role, edge, (String(d).match(/C/g) || []).length);
   return el("path", a);
 };
 
@@ -148,7 +157,7 @@ function makeHarness(cfg) {
   ok(b.version === 1, "1: v1");
   ok(typeof b.completedAt === "string" && b.completedAt.length > 0, "1: completedAt metadata");
   ok(typeof b.canonicalHash === "string" && /^[0-9a-f]{8}$/.test(b.canonicalHash), "1: canonicalHash 8hex");
-  ok(b.snapshot && b.snapshot.schemaVersion === 4 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
+  ok(b.snapshot && b.snapshot.schemaVersion === 5 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
   ok(h.wf.versions().length === 1 && h.wf.hasCompleted(), "1: 이력 1건");
 }
 

@@ -209,6 +209,70 @@
     return hashStr(parts.sort().join(";"));
   }
 
+  // ── 봉제 경계 안정 identity(P0.3a) ──
+  // 생산자가 선언한 primitive.boundary = { root, ranges:[[from,to] per 그리기 명령] } 만 읽는다.
+  // root 는 좌표·배열 순서에서 만들지 않는다. **최종 effective outline** 에서 모으므로 manual 합성·
+  // 디자인 변환 뒤의 lineage 가 그대로 증거가 된다. 이번 단계는 참조 기반까지만 — affected chain·
+  // correspondence·닫힘 부호는 만들지 않는다.
+  var BOUNDARY_ROOT_EDGE = {
+    center: "center", waist: "waist", "side-seam": "side-seam",
+    neckline: "neckline", shoulder: "shoulder",
+    "shoulder-neck": "shoulder", "shoulder-armhole": "shoulder",
+    armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole",
+    hem: "hem", "center-extension": "center", "side-seam-extension": "side-seam"
+  };
+  function commandCount(prim) {
+    if (prim.kind === "line" || prim.kind === "cubic") return 1;
+    if (prim.kind === "path" && Array.isArray(prim.commands)) return prim.commands.filter(function (c) { return c.type === "C"; }).length;
+    return 0;
+  }
+  // 선언값이 이 primitive·piece 와 정렬되는지만 검사한다(형상 재추론 없음).
+  function boundaryDeclOk(prim, piece) {
+    var b = prim.boundary;
+    if (!b || typeof b.root !== "string" || !Array.isArray(b.ranges)) return false;
+    var slash = b.root.indexOf("/");
+    if (slash < 0 || b.root.slice(0, slash) !== piece) return false;
+    if (BOUNDARY_ROOT_EDGE[b.root.slice(slash + 1)] !== prim.edge) return false;
+    if (b.ranges.length !== commandCount(prim)) return false;
+    return b.ranges.every(function (r) { return Array.isArray(r) && r.length === 2 && isFinite(r[0]) && isFinite(r[1]) && r[0] !== r[1]; });
+  }
+  // 안정 span reference 를 순서·방향과 함께 담는 ordered chain(기반만). 입력은 {root, from, to} 목록.
+  // 유효하지 않은 참조가 하나라도 있으면 chain 을 만들지 않는다(부분 chain 을 ready 로 위장하지 않음).
+  function makeBoundaryChain(spans) {
+    if (!Array.isArray(spans) || !spans.length) return { ok: false, reason: "empty-chain" };
+    var out = [];
+    for (var i = 0; i < spans.length; i++) {
+      var sp = spans[i];
+      if (!sp || typeof sp.root !== "string" || !isFinite(sp.from) || !isFinite(sp.to) || sp.from === sp.to) return { ok: false, reason: "invalid-span", index: i };
+      out.push(Object.freeze({ root: sp.root, from: sp.from, to: sp.to, direction: sp.to > sp.from ? "forward" : "reverse" }));
+    }
+    return { ok: true, chain: Object.freeze({ spans: Object.freeze(out) }) };
+  }
+  // piece 의 effective outline 에서 span reference 목록(outline 순서 그대로) + 누락/부정합 증거.
+  function boundarySpans(proj, piece) {
+    var spans = [], missing = [], misaligned = [];
+    (effectiveOutline(proj, piece) || []).forEach(function (prim) {
+      if (!prim) return;
+      if (prim.boundary) {
+        if (!boundaryDeclOk(prim, piece)) { misaligned.push({ piece: piece, role: prim.edge || null, root: (typeof prim.boundary.root === "string") ? prim.boundary.root : null }); return; }
+        prim.boundary.ranges.forEach(function (r) { spans.push({ root: prim.boundary.root, role: prim.edge, from: r[0], to: r[1] }); });
+      } else if (prim.edge) {
+        missing.push({ piece: piece, role: prim.edge });   // 의미는 있는데 identity 선언이 없음
+      }
+    });
+    return { spans: spans, missing: missing, misaligned: misaligned };
+  }
+  // 경계 topology 의미 전용 fingerprint. 형상 hash 와 분리 — 좌표·배치·UI 상태 미포함.
+  function boundaryFingerprint(per) {
+    var parts = [];
+    Object.keys(per).sort().forEach(function (piece) {
+      per[piece].spans.forEach(function (sp) { parts.push(["span", piece, sp.role, sp.root, round4(sp.from), round4(sp.to)].join("|")); });
+      per[piece].missing.forEach(function (m) { parts.push(["missing", piece, m.role].join("|")); });
+      per[piece].misaligned.forEach(function (m) { parts.push(["misaligned", piece, m.role, m.root].join("|")); });
+    });
+    return hashStr(parts.sort().join(";"));
+  }
+
   // 상호 배타적 단일 status 를 쓰지 않는다 — legacy / unresolved / missing 은 **동시에** 성립할
   // 수 있으므로 issues 배열로 복수 원인을 전부 보존한다. summary(ready)는 issues 를 덮지 않는다.
   function evaluateSemantics(proj) {
@@ -246,17 +310,29 @@
         if (d.boundary && !have[d.boundary]) dartBoundaryMissing = true;
       });
     });
-    // v4 가 아닌 출처(구형 v2/v3·미상)는 신규 의미를 보장하지 못한다.
-    if (sv !== 4) issues.push("legacy-source");
+    // 경계 identity(P0.3a)
+    var bnd = { front: boundarySpans(proj, "front"), back: boundarySpans(proj, "back") };
+    var bMissing = bnd.front.missing.concat(bnd.back.missing), bMisaligned = bnd.front.misaligned.concat(bnd.back.misaligned);
+    // v5 가 아닌 출처(구형 v2/v3/v4·미상)는 신규 의미를 보장하지 못한다.
+    if (sv !== 5) issues.push("legacy-source");
+    // legacy 는 identity 가 없는 것이 정상이라 legacy-source 로 이미 not-ready 다(누락을 지어내지 않음).
+    if (sv === 5 && bMissing.length) issues.push("boundary-identity-missing");
+    if (bMisaligned.length) issues.push("boundary-identity-misaligned");
     if (dartIssue) issues.push("dart-semantics-incomplete");
     if (dartBoundaryMissing) issues.push("dart-boundary-missing");
     if (unresolved.length) issues.push("unresolved-replacement");
     // 필수 role 이 **provenance 있는 unresolved 없이** 사라졌다면 metadata 전달 오류다
     // (의도된 unresolved 와 구분). unresolved 로 설명되는 유실도 missing 목록에는 그대로 남긴다.
-    var unexplained = missing.filter(function (m) { return sv === 4 && !hasUnresolved[m.piece]; });
+    var unexplained = missing.filter(function (m) { return sv >= 4 && !hasUnresolved[m.piece]; });
     if (unexplained.length) issues.push("missing-required-role");
     return { ready: issues.length === 0, sourceSchemaVersion: sv, issues: issues, unresolved: unresolved, missing: missing,
-      darts: darts, fingerprint: semanticFingerprint(darts) };
+      darts: darts, fingerprint: semanticFingerprint(darts),
+      boundaries: {
+        front: bnd.front.spans.map(function (sp) { return { root: sp.root, role: sp.role, from: round4(sp.from), to: round4(sp.to) }; }),
+        back: bnd.back.spans.map(function (sp) { return { root: sp.root, role: sp.role, from: round4(sp.from), to: round4(sp.to) }; }),
+        missing: bMissing, misaligned: bMisaligned
+      },
+      boundaryFingerprint: boundaryFingerprint(bnd) };
   }
 
   // ── 검사 ──
@@ -366,5 +442,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ evaluateSemantics: evaluateSemantics, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

@@ -21,6 +21,11 @@
 //       span 수를 고정하지 않고, 배열 위치·primitive 종류를 identity 로 쓰지 않는다.
 //   - v3 정상 캡처는 **필수 semantic coverage 를 강제**한다(신규 semantic 없이 통과하는
 //     optional schema 가 아니다). 구형 v2 완료본의 수용·legacy 표시는 designProject 의 몫.
+//   - SV5(schemaVersion 5, P0.3a) = 위 + 봉제 경계 안정 identity. 의미를 아는 생산자가 선언한
+//     data-boundary-root / data-boundary-ranges 를 primitive.boundary = { root, ranges } 로 싣는다.
+//     ranges 는 **그리기 명령마다 하나**(line 1 · path 의 C 수)이며 root 위 [from,to] 구간이다.
+//     좌표·배열 index 로 root 를 만들거나 없는 identity 를 채우지 않는다. v5 정상 캡처는 front/back
+//     outline 의 모든 의미 모서리 primitive 가 root 와 일치하는 boundary 를 가져야 한다.
 //   - 좌표는 원본 정밀도를 보존하고, 정규화는 hash/중복 판정(canonical)에서만 한다.
 //   - workMode 만 제한된 transaction 으로 all 로 바꿔 수집하고 finally 에서 원복한다.
 //     전역 state 에 snapshot source 를 임시 주입하지 않는다.
@@ -46,7 +51,14 @@
   //   좌표·배열 순서로 apex/leg/intake/target boundary 를 추론하지 않는다.
   var ALLOWED_DART_BOUNDARY = { neckline: 1, shoulder: 1, armhole: 1, waist: 1, "side-seam": 1, center: 1, hem: 1 };
   var ALLOWED_APEX_AT = { from: 1, to: 1 };
-  var SCHEMA_VERSION = 4;
+  // SV5: root 경계 ID → 그 root 가 속하는 의미 모서리. piece 접두어는 primitive 의 piece 와 같아야 한다.
+  var BOUNDARY_ROOT_EDGE = {
+    center: "center", waist: "waist", "side-seam": "side-seam",
+    neckline: "neckline", shoulder: "shoulder",
+    "shoulder-neck": "shoulder", "shoulder-armhole": "shoulder",
+    armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole"
+  };
+  var SCHEMA_VERSION = 5;
 
   function fail(reason, detail) {
     var e = new Error("captureBlockSnapshot 실패: " + reason);
@@ -108,6 +120,20 @@
       prim = { kind: "path", commands: parsePathCommands(el.getAttribute("d") || "") };
     } else {
       fail("unsupported-primitive-tag", tag);
+    }
+    // SV5: 경계 identity 선언이 있을 때만 담는다. 명령 수와 구간 수가 다르면 명시적 실패.
+    var bRoot = el.getAttribute("data-boundary-root");
+    var bRanges = el.getAttribute("data-boundary-ranges");
+    if (bRoot !== null || bRanges !== null) {
+      if (!bRoot || !bRanges) fail("bad-boundary", String(bRoot) + "/" + String(bRanges));
+      var ranges = bRanges.split(";").map(function (pair) {
+        var ab = pair.split(",").map(Number);
+        if (ab.length !== 2 || !isFinite(ab[0]) || !isFinite(ab[1]) || ab[0] === ab[1]) fail("bad-boundary-range", pair);
+        return [ab[0], ab[1]];
+      });
+      var cmdCount = (prim.kind === "line") ? 1 : prim.commands.filter(function (c) { return c.type === "C"; }).length;
+      if (ranges.length !== cmdCount) fail("boundary-range-count", bRoot + " ranges=" + ranges.length + " commands=" + cmdCount);
+      prim.boundary = { root: bRoot, ranges: ranges };
     }
     // SV2: data-edge 가 있을 때만 조건부로 담는다(없으면 own-property 자체가 없다).
     var edge = el.getAttribute("data-edge");
@@ -231,6 +257,10 @@
         var aAttr = el.getAttribute("data-dart-apex-at");
         if (aAttr === null || !ALLOWED_APEX_AT[aAttr]) fail("bad-dart-apex-at", String(aAttr));
       }
+      // SV5: boundary identity 는 front/back outline 에만 둔다.
+      if (el.getAttribute("data-boundary-root") !== null && !((piece === "front" || piece === "back") && role === "outline")) {
+        fail("boundary-placement", piece + "/" + role);
+      }
       var prim = primitiveOf(el);
       // 중복 판정 키는 edge 를 제외한다(같은 형상·다른 edge 는 중복으로 잡는다).
       var id = piece + "|" + role + "|" + canonical(prim);
@@ -254,6 +284,20 @@
       for (var si = 0; si < REQUIRED_SEAM_EDGES.length; si++) {
         if (!have[REQUIRED_SEAM_EDGES[si]]) fail("missing-seam-edge", pc + "/" + REQUIRED_SEAM_EDGES[si]);
       }
+    }
+    // SV5: 의미 모서리 primitive 마다 root identity 가 있고, root 의 piece·edge 가 primitive 와 일치해야 한다.
+    for (var pb = 0; pb < REQUIRED_EDGE_PIECES.length; pb++) {
+      var pcb = REQUIRED_EDGE_PIECES[pb];
+      geometry[pcb].outline.forEach(function (prm) {
+        if (!prm.boundary) {
+          if (prm.edge) fail("missing-boundary-identity", pcb + "/" + prm.edge);
+          return;
+        }
+        var slash = prm.boundary.root.indexOf("/");
+        var rp = prm.boundary.root.slice(0, slash), rn = prm.boundary.root.slice(slash + 1);
+        if (slash < 0 || rp !== pcb || !BOUNDARY_ROOT_EDGE[rn]) fail("bad-boundary-root", prm.boundary.root);
+        if (BOUNDARY_ROOT_EDGE[rn] !== prm.edge) fail("boundary-edge-mismatch", prm.boundary.root + " edge=" + String(prm.edge));
+      });
     }
     // SV4: 다트 그룹 일관성 — 같은 id 의 다리들이 **선언한 apex 끝점이 실제로 일치**하는지 확인한다
     //   (일치 여부 검증이지, 좌표로 apex 를 찾아내는 추론이 아니다). onFold 면 다리 1개, 아니면 2개.

@@ -191,6 +191,14 @@
   // 프리미티브의 on-curve 끝점(line from/to · path M/각 C end)이 어느 move.pt 와 **거리 tol 이내**면
   // 그 move.d 만큼 이동(per-target delta). exact key 매칭은 source 기하의 ~0.0004cm 드리프트
   // (옆선·진동 접점)를 놓친다. cubic 은 인접 제어점(들어오는 c2·나가는 c1)도 함께 이동해 접선 보존.
+  // ── P0.3a 경계 identity(생산자 선언) ──
+  // boundary = { root, ranges:[[from,to] per 그리기 명령] }. 점 이동은 lineage 를 바꾸지 않으므로
+  // 값 복제로 그대로 옮긴다. 이 파일이 새로 만드는 경계(hem·연장·parametric 목선)는 이 파일이
+  // 의미를 알기 때문에 root 를 선언하되, **입력이 identity 를 싣고 있을 때만** 선언한다
+  // (legacy 입력에 identity 를 섞어 넣지 않는다).
+  function carryBoundary(src, dst) { if (src && "boundary" in src) dst.boundary = deepClone(src.boundary); return dst; }
+  function hasBoundaryIds(outline) { for (var i = 0; i < outline.length; i++) if (outline[i].boundary) return true; return false; }
+  function declareBoundary(prim, root, from, to) { prim.boundary = { root: root, ranges: [[from, to]] }; return prim; }
   var JOIN_TOL = 0.02;   // 드리프트(0.0004) 는 잇고, 별개 설계점(≥0.08cm) 은 안 합침
   function movePrimPoints(prim, moves) {
     var matchD = function (q) { for (var t = 0; t < moves.length; t++) if (Math.hypot(q.x - moves[t].pt.x, q.y - moves[t].pt.y) < JOIN_TOL) return moves[t].d; return null; };
@@ -200,7 +208,7 @@
         to: dt ? add(prim.to, dt) : { x: prim.to.x, y: prim.to.y } };
       if ("edge" in prim) ln.edge = prim.edge;   // edge 없는 세그먼트에 own-property 추가 금지(SV2)
       if ("dart" in prim) ln.dart = deepClone(prim.dart);   // SV4 다트 의미 보존(참조 공유 없음)
-      return ln;
+      return carryBoundary(prim, ln);
     }
     // path: 명령 복제 후 on-curve 이동 + 인접 제어점 보정
     var cmds = prim.commands.map(function (c) { return { type: c.type, points: c.points.map(function (q) { return { x: q.x, y: q.y }; }) }; });
@@ -218,7 +226,7 @@
     var out = { kind: "path", commands: cmds };
     if ("edge" in prim) out.edge = prim.edge;
     if ("dart" in prim) out.dart = deepClone(prim.dart);
-    return out;
+    return carryBoundary(prim, out);
   }
 
   // 옆선 곡선화: 진동밑→허리→밑단 두 직선(허리 꺾임)을 두 cubic 으로 매끄럽게 연결.
@@ -246,6 +254,14 @@
     var cub1 = pathCubic(U, add(U, mul(tU, len1 * k)), sub(Sp, mul(T, len1 * k)), Sp);   // 진동밑→허리
     var cub2 = pathCubic(Sp, add(Sp, mul(T, len2 * k)), sub(H, mul(tH, len2 * k)), H);   // 허리→밑단
     var s1Upper = isSame(e1, U);             // s1 비공유 끝이 U 면 s1=진동밑→허리
+    // P0.3a: 곡선은 원래 직선 구간의 lineage 를 잇는다. 새 cubic 방향(U→Sp / Sp→H)에 맞춰 구간을 둔다.
+    var orient = function (line, cub, startPt) {
+      if (!line.boundary || line.boundary.ranges.length !== 1) return;
+      var r = line.boundary.ranges[0], same = isSame(line.from, startPt);
+      cub.boundary = { root: line.boundary.root, ranges: [same ? [r[0], r[1]] : [r[1], r[0]]] };
+    };
+    var upperLine = s1Upper ? s1 : s2, lowerLine = s1Upper ? s2 : s1;
+    orient(upperLine, cub1, U); orient(lowerLine, cub2, Sp);
     var out = outline.slice();
     out[idxs[0]] = s1Upper ? cub1 : cub2;
     out[idxs[1]] = s1Upper ? cub2 : cub1;
@@ -337,6 +353,14 @@
     var centerExt = { kind: "line", from: { x: C.x, y: C.y }, to: { x: centerHem.x, y: centerHem.y }, edge: "center" };
     var hem = { kind: "line", from: { x: centerHem.x, y: centerHem.y }, to: { x: sideHem.x, y: sideHem.y }, edge: "hem" };
     var sideExt = { kind: "line", from: { x: S.x, y: S.y }, to: { x: sideHem.x, y: sideHem.y }, edge: "side-seam" };
+    // P0.3a: 이 변환이 새로 만든 경계 — root 접두어(piece)는 입력 center 의 선언값에서 읽는다(좌표 아님).
+    var centerDecl = null; outline.forEach(function (pr) { if (pr.edge === "center" && pr.boundary && !centerDecl) centerDecl = pr.boundary.root; });
+    if (centerDecl && hasBoundaryIds(outline)) {
+      var pfx = centerDecl.slice(0, centerDecl.indexOf("/"));
+      declareBoundary(centerExt, pfx + "/center-extension", 0, 1);   // 허리 → 밑단
+      declareBoundary(hem, pfx + "/hem", 0, 1);                      // 중심 → 옆
+      declareBoundary(sideExt, pfx + "/side-seam-extension", 0, 1);  // 허리 → 밑단
+    }
     return {
       outline: keepOutline.concat([centerExt, hem, sideExt]),
       construction: construction.concat(waistPrims)
@@ -422,6 +446,9 @@
     // SV3: 새로 만든 네크라인 span 은 이 함수가 "목선을 만든다"는 작업 의미를 알고 있으므로
     // neckline role 을 **명시적으로** 부여한다(좌표 추론 아님). 다세그먼트(스퀘어)도 전부 같은 role.
     shape.segs.forEach(function (s) { s.edge = "neckline"; });
+    // P0.3a: parametric 목선은 이 함수가 만든 새 root 경계다. 세그먼트는 중심→SNP 순서로 생성되므로
+    //   생산자가 root 구간을 명령 순서대로 균등 분할해 선언한다(입력에 identity 가 있을 때만).
+    if (hasBoundaryIds(piece.outline)) shape.segs.forEach(function (s, k) { declareBoundary(s, side + "/neckline", k / shape.segs.length, (k + 1) / shape.segs.length); });
     var moves = [{ pt: FNP, d: sub(shape.cfPt, FNP) }, { pt: SNP, d: sub(SNPn, SNP) }];
     var outline = [];
     piece.outline.forEach(function (pr) { if (pr === info.neckSeg) shape.segs.forEach(function (s) { outline.push(s); }); else outline.push(movePrimPoints(pr, moves)); });

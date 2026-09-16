@@ -46,6 +46,8 @@ const suites = [
   { file: "designPlacketCheck.js",      golden: false },
   // 몸판 모양 완료 체크포인트: 검사·완료 게이트·불변 스냅샷·스테일 판정(스텁 project).
   { file: "bodiceCheckpointCheck.js",   golden: false },
+  // P0.3a 봉제 경계 안정 identity/lineage: 엔진 절단·반전·bake, 디자인 변환·manual 합성, fingerprint.
+  { file: "boundaryIdentityCheck.js",   golden: false },
   // 소매산 봉제선 순수 측정(읽기 전용): cap 곡선 apex 분할·앞/뒤 호길이·실패 계약.
   { file: "sleeveMeasureCheck.js",      golden: false },
   // 소매 모양 S1 파생: cap 고정·하부 실루엣·초기값 재현·착용 경고·실패/불변.
