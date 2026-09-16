@@ -58,6 +58,7 @@
     "shoulder-neck": "shoulder", "shoulder-armhole": "shoulder",
     armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole"
   };
+  var BOUNDARY_RANGE_EPS = 1e-6;   // root 구간 [0,1] 계약의 수치 허용치
   var SCHEMA_VERSION = 5;
 
   function fail(reason, detail) {
@@ -129,6 +130,8 @@
       var ranges = bRanges.split(";").map(function (pair) {
         var ab = pair.split(",").map(Number);
         if (ab.length !== 2 || !isFinite(ab[0]) || !isFinite(ab[1]) || ab[0] === ab[1]) fail("bad-boundary-range", pair);
+        // root 파라미터 계약 [0,1] — 부동소수 오차(BOUNDARY_RANGE_EPS)만 허용한다.
+        if (ab.some(function (v) { return v < -BOUNDARY_RANGE_EPS || v > 1 + BOUNDARY_RANGE_EPS; })) fail("boundary-range-out-of-bounds", pair);
         return [ab[0], ab[1]];
       });
       var cmdCount = (prim.kind === "line") ? 1 : prim.commands.filter(function (c) { return c.type === "C"; }).length;

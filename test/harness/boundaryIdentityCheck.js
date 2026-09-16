@@ -283,8 +283,25 @@ const DB = loadInto(["designBodice.js"]).window.designBodice;
   const ru = sem(un);
   ok(ru.boundaries.missing.length === 0 && ru.issues.indexOf("unresolved-replacement") >= 0, "8: unresolved 는 기존 원인만");
 
+  // ordered: 같은 span 집합의 순서만 바뀌어도 fingerprint 변화(형상 hash 는 형상 전용이라 별개)
+  const ro = mk(5, true); const fo = ro.working.geometry.front.outline; [fo[0], fo[1]] = [fo[1], fo[0]];
+  const rro = sem(ro);
+  ok(JSON.stringify(rro.boundaries.front.map(b => b.root).sort()) === JSON.stringify(r5.boundaries.front.map(b => b.root).sort()) &&
+     rro.boundaryFingerprint !== r5.boundaryFingerprint, "8: 순서만 바뀐 동일 span 집합 → fingerprint 변화");
+  const rb2 = mk(5, true); rb2.working.geometry.back.outline.reverse();
+  ok(sem(rb2).boundaryFingerprint !== r5.boundaryFingerprint && sem(rb2).boundaryFingerprint !== rro.boundaryFingerprint, "8: 뒤판 내부 순서 변경도 구분(piece 별 순서 보존)");
+  // [0,1] 계약: 허용치 밖 선언은 ready 위장 없이 misaligned
+  const oob = mk(5, true); oob.working.geometry.back.outline[1].boundary.ranges = [[0, 1.01]];
+  const rob = sem(oob);
+  ok(!rob.ready && rob.issues.indexOf("boundary-identity-misaligned") >= 0 && rob.boundaries.misaligned.some(m => m.piece === "back" && m.role === "side-seam"), "8: 범위 밖(1.01) → misaligned");
+  const neg = mk(5, true); neg.working.geometry.front.outline[0].boundary.ranges = [[-0.001, 1]];
+  ok(sem(neg).issues.indexOf("boundary-identity-misaligned") >= 0, "8: 범위 밖(-0.001) → misaligned");
+  const epsOk = mk(5, true); epsOk.working.geometry.front.outline[0].boundary.ranges = [[0, 1 + 5e-7]];
+  ok(sem(epsOk).ready === true, "8: 허용치(1e-6) 이내 → 정렬 유지");
+
   // legacy v4: identity 를 지어내지 않고 legacy 로만 표시
   const l4 = sem(mk(4, false));
+  ok(l4.boundaries.misaligned.length === 0 && l4.issues.indexOf("boundary-identity-misaligned") < 0, "8: legacy 에 범위 위반 identity 를 만들지 않음");
   ok(!l4.ready && l4.issues.indexOf("legacy-source") >= 0 && l4.issues.indexOf("boundary-identity-missing") < 0, "8: v4 → legacy-source(누락을 오류로 조작하지 않음)");
   ok(l4.boundaries.front.length === 0 && l4.boundaries.missing.length === 10, "8: v4 증거 = span 0 · 누락 목록 그대로");
 

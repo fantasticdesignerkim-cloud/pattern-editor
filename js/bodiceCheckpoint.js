@@ -221,6 +221,9 @@
     armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole",
     hem: "hem", "center-extension": "center", "side-seam-extension": "side-seam"
   };
+  // root 파라미터 계약은 [0,1]. 부동소수 오차만 흡수하는 명시적 허용치 — 그 밖은 정렬 실패로 본다.
+  var BOUNDARY_RANGE_EPS = 1e-6;
+  function inRootRange(v) { return isFinite(v) && v >= -BOUNDARY_RANGE_EPS && v <= 1 + BOUNDARY_RANGE_EPS; }
   function commandCount(prim) {
     if (prim.kind === "line" || prim.kind === "cubic") return 1;
     if (prim.kind === "path" && Array.isArray(prim.commands)) return prim.commands.filter(function (c) { return c.type === "C"; }).length;
@@ -234,7 +237,7 @@
     if (slash < 0 || b.root.slice(0, slash) !== piece) return false;
     if (BOUNDARY_ROOT_EDGE[b.root.slice(slash + 1)] !== prim.edge) return false;
     if (b.ranges.length !== commandCount(prim)) return false;
-    return b.ranges.every(function (r) { return Array.isArray(r) && r.length === 2 && isFinite(r[0]) && isFinite(r[1]) && r[0] !== r[1]; });
+    return b.ranges.every(function (r) { return Array.isArray(r) && r.length === 2 && inRootRange(r[0]) && inRootRange(r[1]) && r[0] !== r[1]; });
   }
   // 안정 span reference 를 순서·방향과 함께 담는 ordered chain(기반만). 입력은 {root, from, to} 목록.
   // 유효하지 않은 참조가 하나라도 있으면 chain 을 만들지 않는다(부분 chain 을 ready 로 위장하지 않음).
@@ -263,14 +266,20 @@
     return { spans: spans, missing: missing, misaligned: misaligned };
   }
   // 경계 topology 의미 전용 fingerprint. 형상 hash 와 분리 — 좌표·배치·UI 상태 미포함.
+  // ★ ordered semantics: piece 순서는 명시적으로 front→back 고정, 각 piece 안에서는 effective
+  //   outline 의 span 순서를 **그대로 보존**한다(정렬하지 않는다). 같은 span 집합이라도 순서가
+  //   바뀌면 fingerprint 가 바뀐다.
+  var BOUNDARY_PIECE_ORDER = ["front", "back"];
   function boundaryFingerprint(per) {
     var parts = [];
-    Object.keys(per).sort().forEach(function (piece) {
-      per[piece].spans.forEach(function (sp) { parts.push(["span", piece, sp.role, sp.root, round4(sp.from), round4(sp.to)].join("|")); });
-      per[piece].missing.forEach(function (m) { parts.push(["missing", piece, m.role].join("|")); });
-      per[piece].misaligned.forEach(function (m) { parts.push(["misaligned", piece, m.role, m.root].join("|")); });
+    BOUNDARY_PIECE_ORDER.forEach(function (piece) {
+      var e = per[piece] || { spans: [], missing: [], misaligned: [] };
+      parts.push("piece|" + piece);
+      e.spans.forEach(function (sp) { parts.push(["span", sp.role, sp.root, round4(sp.from), round4(sp.to)].join("|")); });
+      e.missing.forEach(function (m) { parts.push(["missing", m.role].join("|")); });
+      e.misaligned.forEach(function (m) { parts.push(["misaligned", m.role, m.root].join("|")); });
     });
-    return hashStr(parts.sort().join(";"));
+    return hashStr(parts.join(";"));
   }
 
   // 상호 배타적 단일 status 를 쓰지 않는다 — legacy / unresolved / missing 은 **동시에** 성립할

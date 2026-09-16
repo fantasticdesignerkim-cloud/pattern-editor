@@ -603,6 +603,12 @@ function makeHarness(cfg) {
     "boundary-range-count", "33: 구간 수 ≠ 명령 수 → 거부");
   throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-ranges": "0,0" })) }).capture(),
     "bad-boundary-range", "33: 길이 0 구간 거부");
+  throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-ranges": "0,1.01" })) }).capture(),
+    "boundary-range-out-of-bounds", "33: [0,1] 밖 구간 거부(1.01)");
+  throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-ranges": "-0.001,1" })) }).capture(),
+    "boundary-range-out-of-bounds", "33: [0,1] 밖 구간 거부(-0.001)");
+  ok(makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-ranges": "0,1.0000005" })) }).capture().geometry.front.outline
+    .some(p => p.edge === "center" && p.boundary.ranges[0][1] === 1.0000005), "33: 허용치(1e-6) 이내 부동소수 오차는 수용·값 보존");
   throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-root": "back/center" })) }).capture(),
     "bad-boundary-root", "33: 다른 piece root 거부");
   throws(() => makeHarness({ sceneBuilder: mutate(isFC, e => withAttr(e, { "data-boundary-root": "front/waist" })) }).capture(),
