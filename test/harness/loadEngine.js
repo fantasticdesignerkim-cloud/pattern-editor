@@ -104,6 +104,7 @@ function createEngine(opts = {}) {
       calcFrontBaseDartAngle, calcBackBaseDartAngle, buildBackShoulderDartInfo,
       applyDartMove, resetDartMove,
       polygonArea,
+      buildGen0WaistDarts, gen0WaistDartAttach, gen0WaistDartPayload, carryWaistDartPayload, waistLegOwner,
     };
   `;
   new vm.Script(exportScript, { filename: "export.js" }).runInContext(context);

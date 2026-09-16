@@ -441,15 +441,14 @@ function render(){
   const showDim     = document.getElementById("chkDim")?.checked     === true;
 
   // ── 다트 미리 계산 ───────────────────────────
-  const WL_y = f.yWL();
-  const darts_ = {
-    a: makeDart(dr.a, {x:p.BP.x,        y:p.BP.y+2      }, WL_y),
-    b: makeDart(dr.b, {x:p.F.x+1.5,     y:p.G.y         }, WL_y),
-    c: makeDart(dr.c, {x:p.SIDE_TOP.x,  y:p.SIDE_TOP.y  }, WL_y),
-    d: makeDart(dr.d, {x:p.C.x-1,       y:p.G.y         }, WL_y),
-    e: makeDart(dr.e, {x:p.E.x-0.5,     y:f.yBL()-2     }, WL_y),
-    f: makeDart(dr.f, {x:0, y:f.yBL()-(f.yBL()-f.yD())*2/3}, WL_y),
-  };
+  // gen-0 허리다트는 엔진 단일 원천(buildGen0WaistDarts). 다트이동이 적용된 side 는 엔진이 carry 한
+  //   payload(a,b / d,e,f)를 대신 쓴다 — base 를 중복 그리지 않는다. 미적용 side·공용 c 는 base 그대로.
+  const darts_ = buildGen0WaistDarts(f, p, dr);
+  const waistCarry_ = {};
+  [dartMoveState?.appliedFront?.waistDarts, dartMoveState?.appliedBack?.waistDarts].forEach(pl => {
+    if (pl) Object.keys(pl).forEach(k => { darts_[k] = pl[k].dart; waistCarry_[k] = pl[k].attach; });
+  });
+  darts_._carry = waistCarry_;
 
   const showBody = state.workMode !== "sleeve";
   const showSleeve = state.workMode !== "body";
@@ -1391,18 +1390,16 @@ function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatter
   //   (앞 = 앞중심 FRONT_WL(0) → 옆 SIDE_BTM(1), 뒤 = 뒤중심 BACK_WL(0) → 옆 SIDE_BTM(1))이고, 다리 끝은
   //   makeDart 가 같은 허리 y 위에 apex.x ± 분량/2 로 정의한 점이다 → 선 위 선형 파라미터로 선언한다.
   //   옆선 다트 c 는 옆선 양쪽에 걸쳐 left 는 뒤 허리, right 는 앞 허리 root 에 붙는다.
-  const _wT = (pc, x) => pc === "front"
-    ? (p.FRONT_WL.x - x) / (p.FRONT_WL.x - p.SIDE_BTM.x)
-    : (x - p.BACK_WL.x) / (p.SIDE_BTM.x - p.BACK_WL.x);
-  const _wA = (lp, rp, d) => ({ left: { root: lp + "/waist", t: _wT(lp, d.left.x) }, right: { root: rp + "/waist", t: _wT(rp, d.right.x) } });
-  _tagDart(gDart, darts_.a, "front", "front-waist-a", _wA("front", "front", darts_.a));   // BP 아래 (앞판)
-  _tagDart(gDart, darts_.b, "front", "front-waist-b", _wA("front", "front", darts_.b));   // F점 앞 (앞판)
-  _tagDart(gDart, darts_.c, "shared", "shared-waist-c", _wA("back", "front", darts_.c));  // 옆선 (앞뒤 공용)
-  _tagDart(gDart, darts_.d, "back", "back-waist-d", _wA("back", "back", darts_.d));    // 뒤품~옆선 (뒤판)
-  _tagDart(gDart, darts_.e, "back", "back-waist-e", _wA("back", "back", darts_.e));    // E점 (뒤판)
+  //   attachment 는 엔진 단일 원천(gen0WaistDartAttach); carried payload 는 엔진이 보존한 선언값을 그대로 쓴다.
+  const _wA = (k) => (darts_._carry && darts_._carry[k]) || gen0WaistDartAttach(p, k, darts_[k]);
+  _tagDart(gDart, darts_.a, "front", "front-waist-a", _wA("a"));   // BP 아래 (앞판)
+  _tagDart(gDart, darts_.b, "front", "front-waist-b", _wA("b"));   // F점 앞 (앞판)
+  _tagDart(gDart, darts_.c, "shared", "shared-waist-c", _wA("c"));  // 옆선 (앞뒤 공용)
+  _tagDart(gDart, darts_.d, "back", "back-waist-d", _wA("d"));    // 뒤품~옆선 (뒤판)
+  _tagDart(gDart, darts_.e, "back", "back-waist-e", _wA("e"));    // E점 (뒤판)
   // f 다트: 뒤중심선이라 오른쪽만
   gDart.appendChild(_tagDartMeta(_tagGeom(Ln(darts_.f.right, darts_.f.apex, "dart-waist"), "back", "construction"),
-    { id: "back-waist-f", boundary: "waist", apexAt: "to", onFold: true, attachRoot: "back/waist", attachT: _wT("back", darts_.f.right.x) }));
+    { id: "back-waist-f", boundary: "waist", apexAt: "to", onFold: true, attachRoot: _wA("f").right.root, attachT: _wA("f").right.t }));
   gDart.appendChild(dot(darts_.f.apex, "pt-main", 4));
   if(showDart)svg.appendChild(gDart);
 }

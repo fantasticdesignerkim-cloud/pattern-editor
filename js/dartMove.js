@@ -2407,6 +2407,12 @@ function applyDartMove() {
 
   // valid — commit. 커밋 형상은 evaluation.shape(재사용) 그 자체다(재bake 0).
   const bakedSegments = _ev.shape;
+  // P0.3b: gen-0 허리다트 payload carry — 이 side 의 최신 carried payload(없으면 gen-0 원천)를 이번 split 의
+  //   조각 소유권과 커밋 각도로 변환한다. 과거 cutPoint/angle 로 복원하지 않고 payload 자체가 누적된다.
+  const _prevApplied = side === "front" ? dartMoveState.appliedFront : dartMoveState.appliedBack;
+  let _waistSrc = _prevApplied && _prevApplied.waistDarts;
+  if (!_waistSrc) { const _dd = createDraft(n("inpB"), n("inpW"), n("inpBL")); _waistSrc = gen0WaistDartPayload(side, _dd.formula, _dd.pts, _dd.darts); }
+  const waistDarts = carryWaistDartPayload(_waistSrc, _cleanFixed, _cleanRotate, pivot, _ev.angleRad);
   debugCheckSegmentContinuity(bakedSegments, `${side} bakedSegments`);
   validateBakedSegments(bakedSegments, side, pivot);   // DEBUG 진단(프로덕션 no-op)
 
@@ -2419,14 +2425,14 @@ function applyDartMove() {
 
   if (side === "front") {
     dartMoveState.appliedFront = {
-      side: "front", bakedSegments,
+      side: "front", bakedSegments, waistDarts,
       cutPoint: { ...dartMoveState.cutPoint },
       pivot:    { ...pivot },
       angle:    dartMoveState.userAngle,
     };
   } else {
     dartMoveState.appliedBack = {
-      side: "back", bakedSegments,
+      side: "back", bakedSegments, waistDarts,
       cutPoint: { ...dartMoveState.cutPoint },
       pivot:    { ...pivot },
       angle:    dartMoveState.userAngle,
@@ -2467,6 +2473,77 @@ function applyDartMove() {
   const appliedW = dartOpenWidth(appliedCutPoint, pivot, angle);
   setHint(`${sideLabel} 적용 완료 (${appliedW.toFixed(1)}cm) · 앞판 / 뒤판을 선택하세요`);
   render();
+}
+
+// ── gen-0 허리다트(a~f) 단일 원천 ─────────────────────────
+// render(표시)와 엔진 payload(다트이동 carry)가 **같은 함수**로 허리다트 좌표·attachment 를 얻는다
+// (좌표 공식 복제 금지). 앞 허리 root 파라미터 = FRONT_WL(0)→SIDE_BTM(1), 뒤 = BACK_WL(0)→SIDE_BTM(1).
+const GEN0_WAIST_DART_SPEC = {
+  a: { id: "front-waist-a",  piece: "front",  left: "front", right: "front" },
+  b: { id: "front-waist-b",  piece: "front",  left: "front", right: "front" },
+  c: { id: "shared-waist-c", piece: "shared", left: "back",  right: "front" },   // 옆선에 걸친 공용 다트
+  d: { id: "back-waist-d",   piece: "back",   left: "back",  right: "back" },
+  e: { id: "back-waist-e",   piece: "back",   left: "back",  right: "back" },
+  f: { id: "back-waist-f",   piece: "back",   left: null,    right: "back", onFold: true },   // 뒤중심 접어재단: 오른쪽 다리만
+};
+function buildGen0WaistDarts(f, p, dr) {
+  const WL_y = f.yWL();
+  return {
+    a: makeDart(dr.a, {x:p.BP.x,        y:p.BP.y+2      }, WL_y),
+    b: makeDart(dr.b, {x:p.F.x+1.5,     y:p.G.y         }, WL_y),
+    c: makeDart(dr.c, {x:p.SIDE_TOP.x,  y:p.SIDE_TOP.y  }, WL_y),
+    d: makeDart(dr.d, {x:p.C.x-1,       y:p.G.y         }, WL_y),
+    e: makeDart(dr.e, {x:p.E.x-0.5,     y:f.yBL()-2     }, WL_y),
+    f: makeDart(dr.f, {x:0, y:f.yBL()-(f.yBL()-f.yD())*2/3}, WL_y),
+  };
+}
+// 다리 끝은 makeDart 가 허리 y 위에 정의한 점 → 허리 root 위 선형 파라미터로 선언한다.
+function gen0WaistRootT(p, piece, x) {
+  return piece === "front"
+    ? (p.FRONT_WL.x - x) / (p.FRONT_WL.x - p.SIDE_BTM.x)
+    : (x - p.BACK_WL.x) / (p.SIDE_BTM.x - p.BACK_WL.x);
+}
+function gen0WaistDartAttach(p, key, dart) {
+  const sp = GEN0_WAIST_DART_SPEC[key];
+  const one = (pc, pt) => pc ? { root: pc + "/waist", t: gen0WaistRootT(p, pc, pt.x) } : null;
+  return { left: one(sp.left, dart.left), right: one(sp.right, dart.right) };
+}
+
+// ── P0.3b 증분 2: gen-0 허리다트 강체 carry payload ─────────────
+// 다트이동 생산 경로가 소유·누적한다(appliedFront/appliedBack.waistDarts). 공용 옆 다트 c 는 포함하지 않는다.
+const CARRY_WAIST_KEYS = { front: ["a", "b"], back: ["d", "e", "f"] };
+function gen0WaistDartPayload(side, f, p, dr) {
+  const darts = buildGen0WaistDarts(f, p, dr), out = {};
+  CARRY_WAIST_KEYS[side].forEach(k => {
+    out[k] = { id: GEN0_WAIST_DART_SPEC[k].id, onFold: !!GEN0_WAIST_DART_SPEC[k].onFold,
+      dart: JSON.parse(JSON.stringify(darts[k])), attach: gen0WaistDartAttach(p, k, darts[k]), unresolved: false };
+  });
+  return out;
+}
+// 다리 attachment {root,t} 가 이번 split 의 어느 조각 경계 구간(선언 root·range)에 속하는지 — 좌표 미사용.
+function waistLegOwner(attach, fixedSegs, rotateSegs) {
+  if (!attach || typeof attach.root !== "string" || !isFinite(attach.t)) return "unresolved";
+  const EPS = 1e-6;
+  const has = (segs) => segs.some(s => hasBoundaryId(s) && s.boundaryRoot === attach.root &&
+    attach.t >= Math.min(s.boundaryFromT, s.boundaryToT) - EPS && attach.t <= Math.max(s.boundaryFromT, s.boundaryToT) + EPS);
+  const inR = has(rotateSegs), inF = has(fixedSegs);
+  return (inR && !inF) ? "rotate" : (inF && !inR) ? "fixed" : "unresolved";   // 양쪽·어느 쪽도 아님 = 미해결
+}
+// 한 이동의 carry: 모든 다리가 회전 조각에 고유하게 속하면 그 이동의 pivot/angle 로 apex·center·다리를 함께
+// 회전(attach·identity 보존). 모두 고정이면 그대로. 섞이거나(절개가 intake 안·정확한 다리 t) 모호하면
+// 좌표를 건드리지 않고 unresolved 로 고정한다 — 이후 이동에서도 다시 carry 하지 않는다(누적 회전 누락 방지).
+function carryWaistDartPayload(payload, fixedSegs, rotateSegs, pivot, angle) {
+  const out = JSON.parse(JSON.stringify(payload || {}));   // 값 복사(순수 데이터)
+  Object.keys(out).forEach(k => {
+    const e = out[k];
+    if (!e || e.unresolved) return;
+    const legs = e.onFold ? ["right"] : ["left", "right"];
+    const owners = legs.map(l => waistLegOwner(e.attach && e.attach[l], fixedSegs, rotateSegs));
+    if (owners.every(o => o === "fixed")) return;
+    if (!owners.every(o => o === "rotate")) { e.unresolved = true; return; }
+    ["apex", "center", "left", "right"].forEach(key => { if (e.dart[key]) e.dart[key] = rotatePt(e.dart[key], pivot, angle); });
+  });
+  return out;
 }
 
 // ── 드래프트 pts 헬퍼 (중복 방지) ─────────────
