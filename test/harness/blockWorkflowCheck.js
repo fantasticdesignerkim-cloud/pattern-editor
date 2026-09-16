@@ -157,7 +157,7 @@ function makeHarness(cfg) {
   ok(b.version === 1, "1: v1");
   ok(typeof b.completedAt === "string" && b.completedAt.length > 0, "1: completedAt metadata");
   ok(typeof b.canonicalHash === "string" && /^[0-9a-f]{8}$/.test(b.canonicalHash), "1: canonicalHash 8hex");
-  ok(b.snapshot && b.snapshot.schemaVersion === 6 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
+  ok(b.snapshot && b.snapshot.schemaVersion === 7 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
   ok(h.wf.versions().length === 1 && h.wf.hasCompleted(), "1: 이력 1건");
 }
 

@@ -188,6 +188,14 @@ function createDraft(B,W,BL){
     f: total*0.07,  // 뒤중심
   };
 
+  // ── 옆선 허리 조임(c) → 앞·뒤 최종 옆선 허리점 (단일 원천) ─────────
+  // c 는 봉제해서 닫는 다트가 아니라 앞·뒤 옆선에 분배된 허리 조임이다. makeDart 규칙(apex=SIDE_TOP,
+  // 허리선 위 apex.x ± c/2)의 right 는 앞판 옆선 허리점, left 는 뒤판 옆선 허리점이다.
+  // SIDE_TOP→SIDE_BTM 중앙선은 외곽선이 아니라 기준선으로 남는다.
+  const sideSuppression = makeDart(darts.c, {x:pts.SIDE_TOP.x, y:pts.SIDE_TOP.y}, formula.yWL());
+  pts.FRONT_SIDE_WL = sideSuppression.right;
+  pts.BACK_SIDE_WL  = sideSuppression.left;
+
   return {formula, pts, darts};
 }
 

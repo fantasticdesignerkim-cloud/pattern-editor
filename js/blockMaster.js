@@ -29,6 +29,9 @@
 //   - SV6(schemaVersion 6, P0.3b) = 위 + 다트 다리 경계 attachment. 다리마다 생산자가 선언한
 //     data-dart-attach-root / -t 를 dart.attach = { root, t } 로 싣고, root 의미가 다트 boundary 와
 //     같으며 t 가 [0,1] 이고 **같은 캡처의 그 root 경계 구간이 t 를 덮는지** 검증한다(좌표 복원 없음).
+//   - SV7(schemaVersion 7) = 위 + 옆선 허리 조임 승격. 앞판 옆선·허리는 SIDE_TOP→FRONT_SIDE_WL,
+//     뒤판은 SIDE_TOP→BACK_SIDE_WL 로 끝나고(draft 단일 원천), 옆선 조임 c 는 구조화 다트가 아니다.
+//     v6 이하 완료본은 중앙 옆선 + c 다트 형상이라 designProject 가 legacy 로만 받는다.
 //   - 좌표는 원본 정밀도를 보존하고, 정규화는 hash/중복 판정(canonical)에서만 한다.
 //   - workMode 만 제한된 transaction 으로 all 로 바꿔 수집하고 finally 에서 원복한다.
 //     전역 state 에 snapshot source 를 임시 주입하지 않는다.
@@ -62,7 +65,7 @@
     armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole"
   };
   var BOUNDARY_RANGE_EPS = 1e-6;   // root 구간 [0,1] 계약의 수치 허용치
-  var SCHEMA_VERSION = 6;
+  var SCHEMA_VERSION = 7;
 
   function fail(reason, detail) {
     var e = new Error("captureBlockSnapshot 실패: " + reason);

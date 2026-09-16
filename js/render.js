@@ -1153,26 +1153,27 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
 
 
     // ── 옆선 (앞판 + 뒤판) ───────────────────────
-    const _dartC = darts_.c;
+    // 옆선 허리 조임 c 는 다트가 아니다 — 앞판 옆선은 SIDE_TOP→FRONT_SIDE_WL, 뒤판은 SIDE_TOP→BACK_SIDE_WL
+    // (draft 단일 원천). SIDE_TOP→SIDE_BTM 중앙선은 기준선(drawBaseLines)으로만 남는다.
 
     // 앞판 옆선: 앞판 적용 시 drawDartMoveApplied 담당
     if(!isFrontApplied){
-      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "side-seam"), "front/side-seam", [[0, 1]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.FRONT_SIDE_WL, "pattern", _DC_F), "front", "outline", "side-seam"), "front/side-seam", [[0, 1]]));
     }
     // 뒤판 옆선: 뒤판 적용 시 drawDartMoveApplied 담당
     if(!isBackApplied){
-      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_B), "back", "outline", "side-seam"), "back/side-seam", [[0, 1]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.BACK_SIDE_WL, "pattern", _DC_B), "back", "outline", "side-seam"), "back/side-seam", [[0, 1]]));
     }
 
     const FND = { x: f.sw(), y: f.yB() + f.fnd() };
     // 앞판 허리선 + 앞중심선
     if(!isFrontApplied){
       gPat.appendChild(_tagBoundary(_tagGeom(LnC(FND,        p.FRONT_WL, "pattern", _DC_F), "front", "outline", "center"), "front/center", [[0, 1]]));
-      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.FRONT_WL, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "waist"), "front/waist", [[0, 1]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.FRONT_WL, p.FRONT_SIDE_WL, "pattern", _DC_F), "front", "outline", "waist"), "front/waist", [[0, 1]]));
     }
     // 뒤판 허리선 + 뒤중심선
     if(!isBackApplied){
-      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_BTM, p.BACK_WL,  "pattern", _DC_B), "back", "outline", "waist"), "back/waist", [[1, 0]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.BACK_SIDE_WL, p.BACK_WL, "pattern", _DC_B), "back", "outline", "waist"), "back/waist", [[1, 0]]));
       gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.BACK_WL,  p.A,         "pattern", _DC_B), "back", "outline", "center"), "back/center", [[1, 0]]));
     }
 
@@ -1394,7 +1395,6 @@ function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatter
   const _wA = (k) => (darts_._carry && darts_._carry[k]) || gen0WaistDartAttach(p, k, darts_[k]);
   _tagDart(gDart, darts_.a, "front", "front-waist-a", _wA("a"));   // BP 아래 (앞판)
   _tagDart(gDart, darts_.b, "front", "front-waist-b", _wA("b"));   // F점 앞 (앞판)
-  _tagDart(gDart, darts_.c, "shared", "shared-waist-c", _wA("c"));  // 옆선 (앞뒤 공용)
   _tagDart(gDart, darts_.d, "back", "back-waist-d", _wA("d"));    // 뒤품~옆선 (뒤판)
   _tagDart(gDart, darts_.e, "back", "back-waist-e", _wA("e"));    // E점 (뒤판)
   // f 다트: 뒤중심선이라 오른쪽만
@@ -1429,7 +1429,9 @@ function drawDimLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPat
     gd.appendChild(dimLine(p.C,          p.F,                    32)); // ⑭ C~F
     gd.appendChild(dimLine(p.SIDE_TOP,   p.SIDE_BTM,             16)); // ⑭ 옆선 세로
     // 다트 너비
-    [darts_.a,darts_.b,darts_.c,darts_.d,darts_.e,darts_.f].forEach((d,i)=>{
+    // 옆선 조임 c 는 다트가 아니므로 다트 너비 치수에서 뺀다(나머지 치수선 위치는 그대로).
+    [darts_.a,darts_.b,null,darts_.d,darts_.e,darts_.f].forEach((d,i)=>{
+      if(!d) return;
       gd.appendChild(dimLine(d.left, d.right, -16-i*6));
     });
     svg.appendChild(gd);
@@ -1468,7 +1470,8 @@ function drawPoints(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatte
 
   // 다트 apex 포인트
   if(showDart){
-    [darts_.a,darts_.b,darts_.c,darts_.d,darts_.e,darts_.f].forEach((d,i)=>{
+    [darts_.a,darts_.b,null,darts_.d,darts_.e,darts_.f].forEach((d,i)=>{
+      if(!d) return;   // 옆선 조임 c 는 다트 apex 표시 없음
       const names=["a","b","c","d","e","f"];
       gp.appendChild(dot(d.apex,"pt-main",3.5));
       gp.appendChild(lbl(d.apex,names[i],"txt-dark",5,-5));

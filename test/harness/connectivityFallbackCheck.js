@@ -58,7 +58,7 @@ function toPrims(segs, mergeCurves) {
   flush();
   return out;
 }
-const project = (front, back, constr) => ({ sourceBlock: { version: 1, schemaVersion: 6 }, working: {
+const project = (front, back, constr) => ({ sourceBlock: { version: 1, schemaVersion: 7 }, working: {
   geometry: { front: { outline: front, construction: constr || [] }, back: { outline: back || front, construction: constr || [] }, shared: { outline: [], construction: [] }, sleeve: { outline: [], construction: [] } },
   parameters: {}, designOutline: null, frontPlacket: null, patternLines: [] } });
 const connected = (outline, constr) => { REAL.set(project(outline, outline, constr)); return BC.check().connectivity.front; };

@@ -185,7 +185,7 @@ function makeHarness(cfg) {
 {
   const h = makeHarness();
   const s = h.capture();
-  ok(s.schemaVersion === 6, "1: schemaVersion=6");
+  ok(s.schemaVersion === 7, "1: schemaVersion=7");
   ok(deepEqual(Object.keys(s).sort(), ["geometry", "schemaVersion", "source"]), "1: 최상위 키");
   const dist = {};
   ["front", "back", "shared", "sleeve"].forEach(pc => ["outline", "construction"].forEach(rl => { dist[pc + "/" + rl] = s.geometry[pc][rl].length; }));

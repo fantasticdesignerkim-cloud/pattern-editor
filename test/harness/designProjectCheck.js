@@ -305,10 +305,10 @@ function makeHarness() {
 {
   const h = makeHarness();
   const b = h.bw.complete();
-  ok(b.snapshot.schemaVersion === 6, "14: 신규 캡처 = v6");
+  ok(b.snapshot.schemaVersion === 7, "14: 신규 캡처 = v7");
   const dp = h.dw.startFromBlock(b);
-  ok(dp.semanticStatus === "complete", "14: v6 → semanticStatus=complete");
-  ok(dp.sourceBlock.schemaVersion === 6, "14: sourceBlock.schemaVersion=6");
+  ok(dp.semanticStatus === "complete", "14: v7 → semanticStatus=complete");
+  ok(dp.sourceBlock.schemaVersion === 7, "14: sourceBlock.schemaVersion=7");
   ok(Object.isFrozen(dp.sourceBlock), "14: sourceBlock frozen 유지");
 }
 
@@ -352,7 +352,7 @@ function makeHarness() {
   const mk = (sv) => { const h = makeHarness(); const b = h.bw.complete();
     return [h, { id: b.id, version: b.version, canonicalHash: b.canonicalHash,
       snapshot: { schemaVersion: sv, source: b.snapshot.source, geometry: b.snapshot.geometry } }]; };
-  [1, 7, undefined].forEach(sv => {
+  [1, 8, undefined].forEach(sv => {
     const [h, blk] = mk(sv);
     throws(() => h.dw.startFromBlock(blk), "unsupported-schema-version", "16: schemaVersion=" + sv + " 거부");
     ok(h.dw.current() === null, "16: 거부 후 current 불변(" + sv + ")");
@@ -369,8 +369,8 @@ function makeHarness() {
   ok(dp.sourceBlock.schemaVersion === 3, "16b: sourceBlock.schemaVersion=3 기록");
 }
 
-// 16c. v4·v5 도 legacy 로 수용 — 다트 attachment 를 만들어 넣지 않는다(P0.3b).
-[4, 5].forEach(sv => {
+// 16c. v4·v5·v6 도 legacy 로 수용 — 다트 attachment 를 만들어 넣지 않고 v6 을 현재 형상으로 승격하지 않는다.
+[4, 5, 6].forEach(sv => {
   const h = makeHarness(); const b = h.bw.complete();
   const strip = JSON.parse(JSON.stringify(b.snapshot.geometry), (k, v) => (k === "attach" ? undefined : v));
   const blk = { id: b.id, version: b.version, canonicalHash: b.canonicalHash, snapshot: { schemaVersion: sv, source: b.snapshot.source, geometry: strip } };

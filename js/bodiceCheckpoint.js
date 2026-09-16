@@ -457,7 +457,8 @@
     var bnd = { front: boundarySpans(proj, "front"), back: boundarySpans(proj, "back") };
     var bMissing = bnd.front.missing.concat(bnd.back.missing), bMisaligned = bnd.front.misaligned.concat(bnd.back.misaligned);
     // v5 가 아닌 출처(구형 v2/v3/v4·미상)는 신규 의미를 보장하지 못한다.
-    if (sv !== 6) issues.push("legacy-source");
+    // v7 이 아닌 출처(v2~v6·미상)는 현재 seam-ready 형상(옆선 조임 승격 포함)을 보장하지 못한다.
+    if (sv !== 7) issues.push("legacy-source");
     // legacy 는 identity 가 없는 것이 정상이라 legacy-source 로 이미 not-ready 다(누락을 지어내지 않음).
     if (sv >= 5 && bMissing.length) issues.push("boundary-identity-missing");
     // P0.3b 다트 attachment: v6 에서 선언이 없으면 incomplete, 선언이 최종 경계와 정렬되지 않으면 misaligned.

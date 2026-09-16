@@ -1009,8 +1009,9 @@ function buildFrontOutline(p, f, B) {
   // ★ P0.3a: root 경계 identity 선언(root 방향: center=목→허리 · waist=중심→옆 · side-seam=진동밑→허리
   //   · armhole-lower=진동밑→G · armhole-upper=GG→어깨 · shoulder=목→어깨끝 · neckline=중심→SNP).
   addLineSegment(segments, nBR,        p.FRONT_WL,  { type: "front-center", boundaryRoot: "front/center", boundaryFromT: 0, boundaryToT: 1 });
-  addLineSegment(segments, p.FRONT_WL, p.SIDE_BTM,  { type: "front-waist",  boundaryRoot: "front/waist",  boundaryFromT: 0, boundaryToT: 1 });
-  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP,  { type: "side-seam",    boundaryRoot: "front/side-seam", boundaryFromT: 1, boundaryToT: 0 });
+  //   옆선 허리 끝 = draft 단일 원천 FRONT_SIDE_WL(옆선 조임 c 의 앞판 몫). 중앙 SIDE_BTM 은 기준선.
+  addLineSegment(segments, p.FRONT_WL, p.FRONT_SIDE_WL, { type: "front-waist",  boundaryRoot: "front/waist",  boundaryFromT: 0, boundaryToT: 1 });
+  addLineSegment(segments, p.FRONT_SIDE_WL, p.SIDE_TOP, { type: "side-seam",    boundaryRoot: "front/side-seam", boundaryFromT: 1, boundaryToT: 0 });
   // 앞암홀 하부: SIDE_TOP → G 곡선 (state.armH 핸들 사용, 직선 금지)
   {
     const H = state.armH;
@@ -1168,7 +1169,7 @@ function buildBackShoulderDartInfo(f, p, B) {
 }
 
 // ── 뒤판 외곽선 세그먼트 배열 ─────────────────
-// 순서: A → BACK_WL → SIDE_BTM → SIDE_TOP
+// 순서: A → BACK_WL → BACK_SIDE_WL → SIDE_TOP
 //       → [진동곡선: SIDE_TOP→bSP]
 //       → dartEnd_ → E(꼭지점) → dartCenter
 //       → bND → [목곡선: bND→A]
@@ -1193,7 +1194,7 @@ function buildBackOutline(p, f, B) {
 
   const { dartCenter, dartEnd_ } = buildBackShoulderDartInfo(f, p, B);
 
-  // ── 고정 조각: dartCenter → bND → [목선] → A → BACK_WL → SIDE_BTM → SIDE_TOP → [진동] → bSP → dartEnd_ ──
+  // ── 고정 조각: dartCenter → bND → [목선] → A → BACK_WL → BACK_SIDE_WL → SIDE_TOP → [진동] → bSP → dartEnd_ ──
   // 순서 설명:
   //   고정(dartCenter 포함): dartCenter → bND → 목선 → A → 뒤중심 → 허리 → 옆선 → 진동 → bSP → dartEnd_
   //   회전(dartEnd_ 포함):   dartEnd_ → [dart disabled] → dartCenter
@@ -1216,8 +1217,9 @@ function buildBackOutline(p, f, B) {
 
   // ── 뒤중심/허리/옆선 직선 ────────────────────
   addLineSegment(segments, p.A,        p.BACK_WL,  { type: "back-center", boundaryRoot: "back/center", boundaryFromT: 0, boundaryToT: 1 });
-  addLineSegment(segments, p.BACK_WL,  p.SIDE_BTM, { type: "back-waist",  boundaryRoot: "back/waist",  boundaryFromT: 0, boundaryToT: 1 });
-  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP, { type: "side-seam",   boundaryRoot: "back/side-seam", boundaryFromT: 1, boundaryToT: 0 });
+  //   옆선 허리 끝 = draft 단일 원천 BACK_SIDE_WL(옆선 조임 c 의 뒤판 몫). 중앙 SIDE_BTM 은 기준선.
+  addLineSegment(segments, p.BACK_WL,  p.BACK_SIDE_WL, { type: "back-waist",  boundaryRoot: "back/waist",  boundaryFromT: 0, boundaryToT: 1 });
+  addLineSegment(segments, p.BACK_SIDE_WL, p.SIDE_TOP, { type: "side-seam",   boundaryRoot: "back/side-seam", boundaryFromT: 1, boundaryToT: 0 });
 
   // ── 뒤진동 곡선: SIDE_TOP → bSP ─────────────
   {
@@ -2477,11 +2479,11 @@ function applyDartMove() {
 
 // ── gen-0 허리다트(a~f) 단일 원천 ─────────────────────────
 // render(표시)와 엔진 payload(다트이동 carry)가 **같은 함수**로 허리다트 좌표·attachment 를 얻는다
-// (좌표 공식 복제 금지). 앞 허리 root 파라미터 = FRONT_WL(0)→SIDE_BTM(1), 뒤 = BACK_WL(0)→SIDE_BTM(1).
+// (좌표 공식 복제 금지). 앞 허리 root 파라미터 = FRONT_WL(0)→FRONT_SIDE_WL(1), 뒤 = BACK_WL(0)→BACK_SIDE_WL(1).
+// 옆선 조임 c 는 다트가 아니므로(draft 가 앞·뒤 옆선 허리점으로 분배) 여기 없다.
 const GEN0_WAIST_DART_SPEC = {
   a: { id: "front-waist-a",  piece: "front",  left: "front", right: "front" },
   b: { id: "front-waist-b",  piece: "front",  left: "front", right: "front" },
-  c: { id: "shared-waist-c", piece: "shared", left: "back",  right: "front" },   // 옆선에 걸친 공용 다트
   d: { id: "back-waist-d",   piece: "back",   left: "back",  right: "back" },
   e: { id: "back-waist-e",   piece: "back",   left: "back",  right: "back" },
   f: { id: "back-waist-f",   piece: "back",   left: null,    right: "back", onFold: true },   // 뒤중심 접어재단: 오른쪽 다리만
@@ -2491,7 +2493,6 @@ function buildGen0WaistDarts(f, p, dr) {
   return {
     a: makeDart(dr.a, {x:p.BP.x,        y:p.BP.y+2      }, WL_y),
     b: makeDart(dr.b, {x:p.F.x+1.5,     y:p.G.y         }, WL_y),
-    c: makeDart(dr.c, {x:p.SIDE_TOP.x,  y:p.SIDE_TOP.y  }, WL_y),
     d: makeDart(dr.d, {x:p.C.x-1,       y:p.G.y         }, WL_y),
     e: makeDart(dr.e, {x:p.E.x-0.5,     y:f.yBL()-2     }, WL_y),
     f: makeDart(dr.f, {x:0, y:f.yBL()-(f.yBL()-f.yD())*2/3}, WL_y),
@@ -2500,8 +2501,8 @@ function buildGen0WaistDarts(f, p, dr) {
 // 다리 끝은 makeDart 가 허리 y 위에 정의한 점 → 허리 root 위 선형 파라미터로 선언한다.
 function gen0WaistRootT(p, piece, x) {
   return piece === "front"
-    ? (p.FRONT_WL.x - x) / (p.FRONT_WL.x - p.SIDE_BTM.x)
-    : (x - p.BACK_WL.x) / (p.SIDE_BTM.x - p.BACK_WL.x);
+    ? (p.FRONT_WL.x - x) / (p.FRONT_WL.x - p.FRONT_SIDE_WL.x)
+    : (x - p.BACK_WL.x) / (p.BACK_SIDE_WL.x - p.BACK_WL.x);
 }
 function gen0WaistDartAttach(p, key, dart) {
   const sp = GEN0_WAIST_DART_SPEC[key];

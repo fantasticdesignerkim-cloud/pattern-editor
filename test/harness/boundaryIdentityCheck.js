@@ -243,18 +243,18 @@ const DB = loadInto(["designBodice.js"]).window.designBodice;
     parameters: { neckline: { mode: "parametric", type: "round", parameters: {} } }, designOutline: null, frontPlacket: null, patternLines: [] } });
   const sem = (p) => { PROJECT = p; return BC.check().semantics; };
 
-  const r5 = sem(mk(6, true));
-  ok(r5.ready === true && r5.boundaries.missing.length === 0 && r5.boundaries.misaligned.length === 0, "8: v6 + 전부 선언 → ready");
+  const r5 = sem(mk(7, true));
+  ok(r5.ready === true && r5.boundaries.missing.length === 0 && r5.boundaries.misaligned.length === 0, "8: v7 + 전부 선언 → ready");
   ok(r5.boundaries.front.length === 5 && r5.boundaries.front[0].root === "front/center", "8: effective outline 순서의 span reference 증거");
-  ok(typeof r5.boundaryFingerprint === "string" && r5.boundaryFingerprint === sem(mk(6, true)).boundaryFingerprint, "8: fingerprint 결정론");
+  ok(typeof r5.boundaryFingerprint === "string" && r5.boundaryFingerprint === sem(mk(7, true)).boundaryFingerprint, "8: fingerprint 결정론");
 
   // 의미만 변경 → boundaryFingerprint 변화, 형상 hash·측정·dart fingerprint 불변
-  const base = mk(6, true); PROJECT = base; const c1 = BC.complete();
-  const dirP = mk(6, true); dirP.working.geometry.front.outline[3].boundary.ranges = [[1, 0]];
+  const base = mk(7, true); PROJECT = base; const c1 = BC.complete();
+  const dirP = mk(7, true); dirP.working.geometry.front.outline[3].boundary.ranges = [[1, 0]];
   PROJECT = dirP; const c2 = BC.complete();
-  const rootP = mk(6, true); rootP.working.geometry.back.outline[4].boundary.root = "back/armhole-upper";
+  const rootP = mk(7, true); rootP.working.geometry.back.outline[4].boundary.root = "back/armhole-upper";
   PROJECT = rootP; const c3 = BC.complete();
-  const rangeP = mk(6, true); rangeP.working.geometry.front.outline[1].boundary.ranges = [[0, 0.5]];
+  const rangeP = mk(7, true); rangeP.working.geometry.front.outline[1].boundary.ranges = [[0, 0.5]];
   PROJECT = rangeP; const c4 = BC.complete();
   ok(c1.ok && c2.ok && c3.ok && c4.ok, "8: 완료 자체는 막지 않음(증거만)");
   ok(c1.result.hash === c2.result.hash && c1.result.hash === c3.result.hash && c1.result.hash === c4.result.hash, "8: bodiceResult.hash 불변(형상 전용)");
@@ -264,39 +264,39 @@ const DB = loadInto(["designBodice.js"]).window.designBodice;
   ok(JSON.stringify(c1.result.armholeLengths) === JSON.stringify(c2.result.armholeLengths) &&
      JSON.stringify(c1.result.necklineLengths) === JSON.stringify(c2.result.necklineLengths), "8: reported 측정 불변");
   // 배치·UI 상태 제외
-  const lay = mk(6, true); lay.working.layout = { front: { dx: 9, dy: 9 } }; lay.working.selectedId = "line-1";
+  const lay = mk(7, true); lay.working.layout = { front: { dx: 9, dy: 9 } }; lay.working.selectedId = "line-1";
   ok(sem(lay).boundaryFingerprint === r5.boundaryFingerprint, "8: 배치·선택 상태는 fingerprint 미포함");
   ok(Object.isFrozen(c1.result.semantics.boundaries.front[0]), "8: 스냅샷 증거 deepFrozen");
 
   // 정렬되지 않은 선언 → ready 위장 금지
-  const mis = mk(6, true); mis.working.geometry.front.outline[4].boundary.root = "front/shoulder";   // armhole prim 에 shoulder root
+  const mis = mk(7, true); mis.working.geometry.front.outline[4].boundary.root = "front/shoulder";   // armhole prim 에 shoulder root
   const rm = sem(mis);
   ok(!rm.ready && rm.issues.indexOf("boundary-identity-misaligned") >= 0 && rm.boundaries.misaligned[0].role === "armhole", "8: root 의미 불일치 → misaligned");
-  const cnt = mk(6, true); cnt.working.geometry.front.outline[2].boundary.ranges = [[0, 0.5], [0.5, 1]];
+  const cnt = mk(7, true); cnt.working.geometry.front.outline[2].boundary.ranges = [[0, 0.5], [0.5, 1]];
   ok(sem(cnt).issues.indexOf("boundary-identity-misaligned") >= 0, "8: 구간 수 ≠ 명령 수 → misaligned");
-  const miss = mk(6, true); delete miss.working.geometry.back.outline[0].boundary;
+  const miss = mk(7, true); delete miss.working.geometry.back.outline[0].boundary;
   const rmi = sem(miss);
-  ok(!rmi.ready && rmi.issues.indexOf("boundary-identity-missing") >= 0 && rmi.boundaries.missing.some(m => m.piece === "back" && m.role === "center"), "8: v6 필수 role identity 누락 → missing");
+  ok(!rmi.ready && rmi.issues.indexOf("boundary-identity-missing") >= 0 && rmi.boundaries.missing.some(m => m.piece === "back" && m.role === "center"), "8: v7 필수 role identity 누락 → missing");
   // unresolved replacement 는 identity 누락으로 세지 않는다(의미 없는 구간)
-  const un = mk(6, true);
+  const un = mk(7, true);
   un.working.designOutline = { front: { outline: un.working.geometry.front.outline.concat([{ kind: "line", from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, edgeStatus: "unresolved", edgeSourceLineId: "line-4" }]) } };
   const ru = sem(un);
   ok(ru.boundaries.missing.length === 0 && ru.issues.indexOf("unresolved-replacement") >= 0, "8: unresolved 는 기존 원인만");
 
   // ordered: 같은 span 집합의 순서만 바뀌어도 fingerprint 변화(형상 hash 는 형상 전용이라 별개)
-  const ro = mk(6, true); const fo = ro.working.geometry.front.outline; [fo[0], fo[1]] = [fo[1], fo[0]];
+  const ro = mk(7, true); const fo = ro.working.geometry.front.outline; [fo[0], fo[1]] = [fo[1], fo[0]];
   const rro = sem(ro);
   ok(JSON.stringify(rro.boundaries.front.map(b => b.root).sort()) === JSON.stringify(r5.boundaries.front.map(b => b.root).sort()) &&
      rro.boundaryFingerprint !== r5.boundaryFingerprint, "8: 순서만 바뀐 동일 span 집합 → fingerprint 변화");
-  const rb2 = mk(6, true); rb2.working.geometry.back.outline.reverse();
+  const rb2 = mk(7, true); rb2.working.geometry.back.outline.reverse();
   ok(sem(rb2).boundaryFingerprint !== r5.boundaryFingerprint && sem(rb2).boundaryFingerprint !== rro.boundaryFingerprint, "8: 뒤판 내부 순서 변경도 구분(piece 별 순서 보존)");
   // [0,1] 계약: 허용치 밖 선언은 ready 위장 없이 misaligned
-  const oob = mk(6, true); oob.working.geometry.back.outline[1].boundary.ranges = [[0, 1.01]];
+  const oob = mk(7, true); oob.working.geometry.back.outline[1].boundary.ranges = [[0, 1.01]];
   const rob = sem(oob);
   ok(!rob.ready && rob.issues.indexOf("boundary-identity-misaligned") >= 0 && rob.boundaries.misaligned.some(m => m.piece === "back" && m.role === "side-seam"), "8: 범위 밖(1.01) → misaligned");
-  const neg = mk(6, true); neg.working.geometry.front.outline[0].boundary.ranges = [[-0.001, 1]];
+  const neg = mk(7, true); neg.working.geometry.front.outline[0].boundary.ranges = [[-0.001, 1]];
   ok(sem(neg).issues.indexOf("boundary-identity-misaligned") >= 0, "8: 범위 밖(-0.001) → misaligned");
-  const epsOk = mk(6, true); epsOk.working.geometry.front.outline[0].boundary.ranges = [[0, 1 + 5e-7]];
+  const epsOk = mk(7, true); epsOk.working.geometry.front.outline[0].boundary.ranges = [[0, 1 + 5e-7]];
   ok(sem(epsOk).ready === true, "8: 허용치(1e-6) 이내 → 정렬 유지");
 
   // legacy v4: identity 를 지어내지 않고 legacy 로만 표시
