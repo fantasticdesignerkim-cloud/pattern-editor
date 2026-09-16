@@ -96,6 +96,19 @@ function boundaryTAt(seg, pt) {
   f = f < 0 ? 0 : f > 1 ? 1 : f;
   return seg.boundaryFromT + (seg.boundaryToT - seg.boundaryFromT) * f;
 }
+// ★ P0.2 보완: 세그먼트를 뒤집으면 선언된 apex 끝(from/to)도 함께 뒤집혀야 한다.
+//   (뒤집기만 하고 dartApexAt 을 그대로 두면 apex 가 pivot 반대쪽 끝을 가리키게 된다.)
+function withReversedDartApex(out, src) {
+  if (src && (src.dartApexAt === "from" || src.dartApexAt === "to")) out.dartApexAt = src.dartApexAt === "from" ? "to" : "from";
+  return out;
+}
+// ★ P0.2 보완: 1차(gen-0) 분할 walk 가 멈춘 지점 다음(진행 방향)의 **생산자 선언 다트 다리**의 의미.
+//   walk 는 다트 다리 바깥 끝에서 멈추므로, 닫힌 외곽선 체인에서 그 다음 세그먼트가 source 다트의
+//   다리다. 선언된 apex 방향이 "바깥 끝에서 들어온다"와 맞을 때만 채택한다(좌표 추론 아님).
+function sourceDartOfSuccessor(leg, joinAt) {
+  if (!leg || !leg.dartId || leg.dartApexAt !== (joinAt === "from" ? "to" : "from")) return null;
+  return { id: leg.dartId, boundary: leg.dartBoundary || null };
+}
 // 방금 만든 세그먼트 out(src 의 복사/반전/절단본)에 lineage 구간을 설정한다.
 //   reversed = out 이 src 를 뒤집은 것 · cutFromPt = out.from 을 절단점으로 바꿨을 때 그 점.
 function withBoundarySpan(out, src, reversed, cutFromPt) {
@@ -429,7 +442,7 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle, cutBoundary 
   };
   const cloneCleanSeg = (seg) => ({ ...seg, from: { ...seg.from }, to: { ...seg.to } });
   const rotateSeg     = (seg) => ({ ...seg, from: rotPt(seg.from), to: rotPt(seg.to) });
-  const reverseSegL   = (seg) => withBoundarySpan({ ...seg, from: { ...seg.to }, to: { ...seg.from } }, seg, true);
+  const reverseSegL   = (seg) => withReversedDartApex(withBoundarySpan({ ...seg, from: { ...seg.to }, to: { ...seg.from } }, seg, true), seg);
 
   // 시퀀스 전체(기존 다트선 포함)를 순서 그대로 처리 — fixed는 그대로, rotate는 통째로 회전
   const segsAFull = safeFixedAll.map(cloneCleanSeg);
@@ -463,7 +476,7 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle, cutBoundary 
 
   if (outlineEndIdxA < 0 || outlineEndIdxB < 0) {
     console.warn("[bakeFromSplitPieces] no outline segment found", { outlineEndIdxA, outlineEndIdxB });
-    return [...segsAFull, ...segsBFull];
+    return [...segsAFull, ...segsBFull].map(s => { if (!("sourceDart" in s)) return s; const { sourceDart, ...rest } = s; return rest; });
   }
 
   const endA = segsAFull[outlineEndIdxA].to;
@@ -489,10 +502,22 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle, cutBoundary 
                    from: { ...cutB }, to: { ...pivot }, disabled: true };
 
   // 기존 다트 잔여선: trailing이 없을 때만 새로 생성 (있으면 원래 다트선을 그대로 사용)
-  const legOldA = { type: "dart-leg-old", role: "dart-leg-old", dartId, pair: "oldA",
-                    from: { ...endA }, to: { ...pivot }, disabled: true };
-  const legOldB = { type: "dart-leg-old", role: "dart-leg-old", dartId, pair: "oldB",
-                    from: { ...pivot }, to: { ...endB }, disabled: true };
+  // ★ P0.2 보완: 잔여선은 **새 다트가 아니라 source 다트의 아직 열린 다리**다(부분 회전이면 열린 채
+  //   남고, 완전히 닫히면 normalize 가 녹인다). 분할 생산자가 조각 끝에 실어 준 source 다트 선언
+  //   (sourceDart)이 있으면 그 id·boundary 를 쓰고, apex 는 이 함수가 만든 방향대로 pivot 끝을 선언한다.
+  //   선언이 없으면 예전 동작 그대로(추측하지 않는다).
+  const srcA = segsAFull[outlineEndIdxA].sourceDart || null;
+  const srcB = segsBFull[outlineEndIdxB].sourceDart || null;
+  const legOldA = srcA
+    ? { type: "dart-leg-old", role: "dart-leg-old", dartId: srcA.id, pair: "oldA", dartBoundary: srcA.boundary, dartApexAt: "to",
+        from: { ...endA }, to: { ...pivot }, disabled: true }
+    : { type: "dart-leg-old", role: "dart-leg-old", dartId, pair: "oldA",
+        from: { ...endA }, to: { ...pivot }, disabled: true };
+  const legOldB = srcB
+    ? { type: "dart-leg-old", role: "dart-leg-old", dartId: srcB.id, pair: "oldB", dartBoundary: srcB.boundary, dartApexAt: "from",
+        from: { ...pivot }, to: { ...endB }, disabled: true }
+    : { type: "dart-leg-old", role: "dart-leg-old", dartId, pair: "oldB",
+        from: { ...pivot }, to: { ...endB }, disabled: true };
 
   // 폐곡선: pivot → cutA → segsA_outline → endA → (trailing 또는 legOldA) →
   //         (trailing 또는 legOldB) → endB → reversed(segsB_outline) → cutB → pivot
@@ -512,7 +537,8 @@ function bakeFromSplitPieces({ fixedSegs, rotateSegs, pivot, angle, cutBoundary 
 
   finalSegments.push(...segsB_outline.slice().reverse().map(reverseSegL), legIn);
 
-  return finalSegments;
+  // sourceDart 는 분할→bake 사이 전달용 표식이라 결과 형상에 남기지 않는다.
+  return finalSegments.map(s => { if (!("sourceDart" in s)) return s; const { sourceDart, ...rest } = s; return rest; });
 }
 
 // ── normalizeBakedSegments: bake 결과를 "현재 형상 하나"로 정리 (젤리/물 모델 1단계) ──
@@ -775,8 +801,8 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
     //          boundary거나 이후 스텝이면 revSeg 그대로.
     const isCutB = segsB.length === 0;
     const fromPt = isCutB ? { ...cutPoint } : { ...revSeg.from };
-    segsB.push(withBoundarySpan({ ...seg, from: fromPt, to: { ...revSeg.to }, type: seg.type, disabled: !!seg.disabled },
-      seg, true, isCutB ? cutPoint : null));
+    segsB.push(withReversedDartApex(withBoundarySpan({ ...seg, from: fromPt, to: { ...revSeg.to }, type: seg.type, disabled: !!seg.disabled },
+      seg, true, isCutB ? cutPoint : null), seg));
     ptsB.push({ ...revSeg.to });
   }
 
@@ -796,7 +822,7 @@ function splitBakedOutline(segments, cutPoint, cutSegIndex, pivot) {
   for (let step = backwardSteps; step < backwardSteps + restSteps; step++) {
     const idx = (backStart - step + nn) % nn;
     const seg = segments[idx];
-    segsBFull.push(withBoundarySpan({ ...seg, from: { ...seg.to }, to: { ...seg.from }, type: seg.type, disabled: !!seg.disabled }, seg, true));
+    segsBFull.push(withReversedDartApex(withBoundarySpan({ ...seg, from: { ...seg.to }, to: { ...seg.from }, type: seg.type, disabled: !!seg.disabled }, seg, true), seg));
   }
 
   dbg('[splitBaked] A:', segsA.length, 'B:', segsB.length, 'rest:', restSteps,
@@ -851,23 +877,30 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       segs.push(withBoundarySpan({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled },
         seg, false, step === 0 ? cutPoint : null));
       pts.push(next);
-      if (isG(next))  { hit = "G";  break; }
-      if (isGG(next)) { hit = "GG"; break; }
+      if (isG(next) || isGG(next)) {
+        hit = isG(next) ? "G" : "GG";
+        const src = sourceDartOfSuccessor(segments[(idx + 1) % nn], "from");
+        if (src) segs[segs.length - 1].sourceDart = src;
+        break;
+      }
     }
     return { pts, segs, hit };
   }
 
   function walkBackward() {
     const rawSegs = [];
-    let hit = null;
+    let hit = null, stopSrc = null;
     for (let step = 0; step < nn; step++) {
       const idx = (cutSegIndex - step + nn) % nn;
       const seg = segments[idx];
       const prev = seg.from;
       if (seg.disabled && !isG(prev) && !isGG(prev)) continue;
       rawSegs.push(seg);
-      if (isG(prev))  { hit = "G";  break; }
-      if (isGG(prev)) { hit = "GG"; break; }
+      if (isG(prev) || isGG(prev)) {
+        hit = isG(prev) ? "G" : "GG";
+        stopSrc = sourceDartOfSuccessor(segments[(idx - 1 + nn) % nn], "to");
+        break;
+      }
     }
     const segs = rawSegs.map((seg, k) => withBoundarySpan({
       from: { ...seg.to },
@@ -876,6 +909,7 @@ function splitFrontOutline(segments, cutPoint, cutSegIndex, p, B) {
       disabled: !!seg.disabled,
     }, seg, true, k === 0 ? cutPoint : null));
     if (segs.length > 0) segs[0].from = { ...cutPoint };
+    if (stopSrc && segs.length > 0) segs[segs.length - 1].sourceDart = stopSrc;
     const pts = [{ ...cutPoint }];
     for (const seg of segs) pts.push({ ...seg.to });
     return { pts, segs, hit };
@@ -1021,23 +1055,30 @@ function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
       segs.push(withBoundarySpan({ from: fromPt, to: { ...seg.to }, type: seg.type, disabled: !!seg.disabled },
         seg, false, step === 0 ? cutPoint : null));
       pts.push(next);
-      if (isDartCenter(next)) { hit = "dartCenter"; break; }
-      if (isDartEnd(next))    { hit = "dartEnd";    break; }
+      if (isDartCenter(next) || isDartEnd(next)) {
+        hit = isDartCenter(next) ? "dartCenter" : "dartEnd";
+        const src = sourceDartOfSuccessor(segments[(idx + 1) % nn], "from");
+        if (src) segs[segs.length - 1].sourceDart = src;
+        break;
+      }
     }
     return { pts, segs, hit };
   }
 
   function walkBackward() {
     const rawSegs = [];
-    let hit = null;
+    let hit = null, stopSrc = null;
     for (let step = 0; step < nn; step++) {
       const idx = (cutSegIndex - step + nn) % nn;
       const seg = segments[idx];
       const prev = seg.from;
       if (seg.disabled && !isDartRelated(seg)) continue;
       rawSegs.push(seg);
-      if (isDartCenter(prev)) { hit = "dartCenter"; break; }
-      if (isDartEnd(prev))    { hit = "dartEnd";    break; }
+      if (isDartCenter(prev) || isDartEnd(prev)) {
+        hit = isDartCenter(prev) ? "dartCenter" : "dartEnd";
+        stopSrc = sourceDartOfSuccessor(segments[(idx - 1 + nn) % nn], "to");
+        break;
+      }
     }
     const segs = rawSegs.map((seg, k) => withBoundarySpan({
       from: { ...seg.to },
@@ -1046,6 +1087,7 @@ function splitBackOutline(segments, cutPoint, cutSegIndex, p, f, B) {
       disabled: !!seg.disabled,
     }, seg, true, k === 0 ? cutPoint : null));
     if (segs.length > 0) segs[0].from = { ...cutPoint };
+    if (stopSrc && segs.length > 0) segs[segs.length - 1].sourceDart = stopSrc;
     const pts = [{ ...cutPoint }];
     for (const seg of segs) pts.push({ ...seg.to });
     return { pts, segs, hit };
