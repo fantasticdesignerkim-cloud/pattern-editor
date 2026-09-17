@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026082510">
+<link rel="stylesheet" href="css/style.css?v=2026092001">
 </head>
 <body>
 
@@ -307,6 +307,13 @@
             <button class="btn" id="btnCollarBodyRevert" hidden>수치형으로 돌아가기</button>
           </div>
           <div class="row note" id="designCollarBodyNote" aria-live="polite"></div>
+          <!-- 제도 보조수치(표시 전용): collarAnnotation 표시 모델. 형상·hash·완료 게이트와 무관. -->
+          <div class="row" style="margin-top:8px"><label><input type="checkbox" id="chkCollarDraftDims" checked> 제도 치수 표시</label></div>
+          <div class="row note" id="collarDraftModeNote" aria-live="polite"></div>
+          <div class="collar-draft-summary">
+            <div class="cds-title">제도 입력값</div><dl class="cds-list" id="collarDraftInputs"></dl>
+            <div class="cds-title">계산·정합 결과</div><dl class="cds-list" id="collarDraftResults"></dl>
+          </div>
           <!-- 카라 모양 완료(collarCheckpoint): 게이트 통과 시 working.collarResult 세션 스냅샷.
                형상 source=bodiceResult(sourceBodiceHash 고정), 소매는 작업 순서 게이트만. 시접·너치·심지·재단 미포함. -->
           <div class="row" style="margin-top:8px"><label>카라 완료</label></div>
@@ -380,7 +387,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026091910"></script>
+<script src="js/render.js?v=2026092001"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -416,13 +423,15 @@
 <script src="js/designCollar.js?v=2026091920"></script>
 <!-- 카라 모양 완료 체크포인트: window.collarCheckpoint. 게이트 + working.collarResult 세션 스냅샷(형상 source=bodice, 소매=순서 게이트). -->
 <script src="js/collarCheckpoint.js?v=2026091920"></script>
+<!-- 카라 제도 보조수치 표시 모델(순수·표시 전용): window.collarAnnotation. 형상·hash 무관. -->
+<script src="js/collarAnnotation.js?v=2026092001"></script>
 <!-- Design 형상 통합: window.designResult. 세 완료본 + structuralLines(유효 cut) 묶음. 재단 아님. -->
 <script src="js/designResult.js?v=2026082701"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026091920"></script>
+<script src="js/ui.js?v=2026092001"></script>
 
 </body>
 </html>

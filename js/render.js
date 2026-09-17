@@ -244,6 +244,25 @@ function _appendCollarBody(root, collarDraft, off, scale){
   root.appendChild(g);
 }
 
+// 카라 제도 보조수치 오버레이(표시 전용): collarAnnotation 표시 모델(카라 로컬 cm)을 카라 offset 동승으로 그린다.
+//   보조선=가는 점선, 치수선=양끝 tick + 라벨. 선 굵기는 px 고정(줌 무관). 형상·hash 무관.
+function _appendCollarAnnotation(root, model, off, scale){
+  if(!model) return;
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-collar":"annotation", class:"collar-anno" });
+  const TICK=4, TXT=11;
+  (model.dims||[]).forEach(d=>{
+    const [x1,y1]=c2p(d.from.x,d.from.y), [x2,y2]=c2p(d.to.x,d.to.y);
+    const len=Math.hypot(x2-x1,y2-y1); if(!(len>0)) return;
+    const nx=-(y2-y1)/len, ny=(x2-x1)/len;
+    g.appendChild(E("line",{ x1,y1,x2,y2, class:d.kind==="dim"?"collar-anno-dim":"collar-anno-ref", "data-anno":d.id }));
+    if(d.kind!=="dim") return;
+    [[x1,y1],[x2,y2]].forEach(([x,y])=>g.appendChild(E("line",{ x1:x-nx*TICK, y1:y-ny*TICK, x2:x+nx*TICK, y2:y+ny*TICK, class:"collar-anno-tick" })));
+    if(typeof d.text==="number") g.appendChild(E("text",{ x:(x1+x2)/2+nx*TXT, y:(y1+y2)/2+ny*TXT+3, class:"collar-anno-text", "text-anchor":"middle", "data-anno-text":d.id }, String(Math.round(d.text*100)/100)));
+  });
+  (model.labels||[]).forEach(l=>{ const [x,y]=c2p(l.at.x,l.at.y); g.appendChild(E("text",{ x:x+4, y:y+12, class:"collar-anno-label", "data-anno-label":l.id }, l.text)); });
+  root.appendChild(g);
+}
+
 // 카라 hit rect(collar-body manual 편집 시에만): designLineTool.pieceAt 이 "collar" 를 해석하도록.
 // 레이아웃 드래그는 designLayout 이 collar 를 PIECES 에서 제외해 무시한다(=편집 전용 hit).
 function _appendCollarHitRect(root, collarDraft, off, scale){
@@ -370,6 +389,8 @@ function render(){
       const cRoot = E("g"); cRoot.setAttribute("data-design-root", "collar");
       _appendCollarStand(cRoot, dp.working.collarDraft, cOff, scale);
       _appendCollarBody(cRoot, dp.working.collarDraft, cOff, scale);
+      // 제도 보조수치(카라 탭·토글 ON·유효 모델일 때만, 매 렌더 새 그룹 — 중복 누적 없음).
+      if (typeof window.collarAnnotationForRender === "function") _appendCollarAnnotation(cRoot, window.collarAnnotationForRender(), cOff, scale);
       // 관리형 collar-body 선(무효 시 빨강 점선) + 편집 overlay(카라 offset transform 동승).
       const cLineGrp = E("g"); cLineGrp.setAttribute("transform", tf(cOff));
       _appendPatternLines(cLineGrp, dp.working.patternLines, "collar");

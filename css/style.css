@@ -123,6 +123,20 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-collar-stand{stroke:#0E7490;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round;fill:color-mix(in srgb,#0E7490 8%,transparent)}
 /* 카라 본체(C2): 스탠드 윗선에 부착되는 조각(실선 블루 + 옅은 fill). 스탠드와 다른 색으로 구분. */
 .design-collar-body{stroke:#2563EB;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round;fill:color-mix(in srgb,#2563EB 7%,transparent)}
+/* 카라 제도 보조수치(표시 전용): 가는 중립 점선 보조선 · 치수선 · 흰 halo 라벨. 포인터 비개입. */
+.collar-anno{pointer-events:none}
+.collar-anno-ref{fill:none;stroke:#8A94A6;stroke-width:0.8;stroke-dasharray:3 3}
+.collar-anno-dim{fill:none;stroke:#475569;stroke-width:0.8;stroke-dasharray:4 2}
+.collar-anno-tick{fill:none;stroke:#475569;stroke-width:0.8}
+.collar-anno-text{font-size:10px;fill:#1E293B;font-weight:600;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px;stroke-linejoin:round}
+.collar-anno-label{font-size:9px;fill:#475569;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px}
+.collar-draft-summary{display:flex;flex-direction:column;gap:2px;font-size:11px}
+.cds-title{font-weight:600;color:var(--navy);margin-top:4px}
+.cds-list{display:grid;grid-template-columns:1fr auto;gap:1px 8px;margin:0}
+.cds-list dt{color:#475569}
+.cds-list dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.cds-list dd[data-status="match"]{color:#0F8A4A;font-weight:600}
+.cds-list dd[data-status="mismatch"]{color:#cc3333;font-weight:600}
 /* 무효 카라 본체 관리선(C3 직접 편집): 빨강 점선. 카라 레이어는 .design-working 밖이라 전용 클래스. */
 .design-collar-invalid{fill:none;stroke:#cc3333;stroke-width:2;stroke-dasharray:5 3;stroke-linejoin:round;stroke-linecap:round}
 /* 무효 소매산 편집: 빨강 점선(마지막 유효 navy geometry 는 유지, 선택 무관 표시).

@@ -975,7 +975,7 @@
     const btn = document.querySelector('.subtab[data-subtab-btn="collar"]'); if (!btn) return;
     const ok = collarGateOk(project);
     btn.disabled = !ok; btn.title = ok ? "" : "소매 완료 후 활성";
-    if (!ok && currentDesignSubtab() === "collar") setDesignSubtab("body");
+    if (!ok && currentDesignSubtab() === "collar") { setDesignSubtab("body"); if (typeof render === "function") render(); }
   }
   function collarBodiceHash(project) { const b = project && window.bodiceCheckpoint && window.bodiceCheckpoint.latest(project); return b ? b.hash : null; }
   function committedCollar(project) {
@@ -1009,6 +1009,7 @@
       baseMethod: "bunka-shirt-collar-M-v2",   // 정본 제도법 출처(geometry 엔진이 곧 교재 M형). hash 미포함 메타.
       parameters: { stand: { standHeightCm: standHeightCm, frontRiseCm: frontRiseCm } },
       standGeometry: r.standGeometry,
+      standAnchors: r.anchors,   // 표시 전용 named anchor(collarAnnotation) — checkpoint 스냅샷·hash 미포함
       collarGeometry: null,   // (미사용 예약)
       body: null,             // C2 본체(스탠드 재적용 시 무효 → 명시적 재생성)
       // 5분리 길이(직선 스캐폴드 아님 — 곡률 반영). C2 는 upperTotal 을 직접 쓰지 않고 앞끝 여백을 별도 결정.
@@ -1068,8 +1069,8 @@
     project.working.collarDraft = {
       sourceBodiceHash: bodice.hash, type: "shirt-two-piece", baseMethod: "bunka-shirt-collar-M-v2",
       parameters: { stand: { standHeightCm: rp.standHeightCm, frontRiseCm: rp.frontRiseCm } },
-      standGeometry: standRe.standGeometry, collarGeometry: null,
-      body: { parameters: rb, geometry: bodyRe.bodyGeometry, attachLenCm: bodyRe.attachLenCm, measure: bodyRe.measure },
+      standGeometry: standRe.standGeometry, standAnchors: standRe.anchors, collarGeometry: null,   // standAnchors·body.anchors = 표시 전용(hash 미포함)
+      body: { parameters: rb, geometry: bodyRe.bodyGeometry, attachLenCm: bodyRe.attachLenCm, measure: bodyRe.measure, anchors: bodyRe.anchors },
       measure: {
         lowerNeckSeamLenCm: standRe.lowerNeckSeamLenCm, lowerExtensionLenCm: standRe.lowerExtensionLenCm,
         upperNeckSegmentLenCm: standRe.upperNeckSegmentLenCm, upperExtensionLenCm: standRe.upperExtensionLenCm,
@@ -1119,7 +1120,7 @@
     if (!stand.ok) return stand;
     const r = window.designCollar.computeBody(stand, bodyParams);
     if (!r.ok) return r;
-    cd.body = { parameters: bodyParams, geometry: r.bodyGeometry, attachLenCm: r.attachLenCm, measure: r.measure };
+    cd.body = { parameters: bodyParams, geometry: r.bodyGeometry, attachLenCm: r.attachLenCm, measure: r.measure, anchors: r.anchors };   // anchors = 표시 전용(hash 미포함)
     return { ok: true, result: r };
   }
   function setCollarBodyNote(t) { const n = document.getElementById("designCollarBodyNote"); if (n) n.textContent = t; }
@@ -1173,6 +1174,43 @@
     else setCollarBodyNote("CB 폭·앞폭·앞끝 물림·앞끝 돌출·외곽 휨 적용으로 본체 생성(여밈 연장 미포함) · 세션 전용");
     syncCollarBodyModeUI(project);
     updateCollarCheckpointUI(project);
+    updateCollarDraftSummary(project);
+  }
+
+  // ── 카라 제도 보조수치(표시 전용) ── collarAnnotation.buildModel 이 named anchors·parameters·measures 로 만든
+  //   표시 모델을 캔버스 오버레이(render.js)와 읽기 전용 패널이 소비한다. 형상·hash·게이트와 무관.
+  //   토글 상태는 체크박스 DOM 하나(세션 UI) — 저장·hash 에 넣지 않는다.
+  function collarAnnotationModel(project) {
+    if (!project || !window.collarAnnotation || collarStale(project)) return null;
+    const bodice = window.bodiceCheckpoint ? window.bodiceCheckpoint.latest(project) : null;
+    return window.collarAnnotation.buildModel(project.working.collarDraft, bodice);
+  }
+  // render.js 가 읽는다: design stage · 카라 서브탭 · 토글 ON · 모델 있음 일 때만 모델, 그 외 null.
+  function collarAnnotationForRender() {
+    if (!isDesignStageActive() || currentDesignSubtab() !== "collar") return null;
+    const chk = document.getElementById("chkCollarDraftDims"); if (!chk || !chk.checked) return null;
+    return collarAnnotationModel(designProjectNow());
+  }
+  function fmtCm(v) { return v == null ? "—" : (Math.round(v * 100) / 100).toFixed(2); }
+  function fillDraftList(listId, rows) {
+    const dl = document.getElementById(listId); if (!dl) return;
+    const nodes = [];
+    rows.forEach(r => {
+      const dt = document.createElement("dt"); dt.textContent = r.label;
+      const dd = document.createElement("dd"); dd.setAttribute("data-key", r.key);
+      dd.textContent = r.value == null ? "—" : (r.text != null ? r.text : fmtCm(r.value)) + " cm";
+      if (r.status === "match") { dd.textContent += " · 정합"; dd.setAttribute("data-status", "match"); }
+      else if (r.status === "mismatch") dd.setAttribute("data-status", "mismatch");
+      nodes.push(dt, dd);
+    });
+    dl.replaceChildren.apply(dl, nodes);
+  }
+  function updateCollarDraftSummary(project) {
+    const model = collarAnnotationModel(project);
+    const note = document.getElementById("collarDraftModeNote");
+    fillDraftList("collarDraftInputs", model ? model.inputs : []);
+    fillDraftList("collarDraftResults", model ? model.results : []);
+    if (note) note.textContent = !model ? "카라 스탠드 적용 후 표시" : (model.note || "");
   }
 
   // ── C3 칼라 본체 직접 편집(관리형 선, 소매산 manual 미러) ──
@@ -1515,7 +1553,10 @@
     // 몸판/소매 서브탭: 클릭 = 전환(disabled 소매 탭은 무시). 게이트는 updateBodiceCheckpointUI 가 관리.
     const subtabs = document.getElementById("designSubtabs");
     if (subtabs) subtabs.querySelectorAll(".subtab").forEach(b =>
-      b.addEventListener("click", () => { if (!b.disabled) setDesignSubtab(b.getAttribute("data-subtab-btn")); }));
+      b.addEventListener("click", () => { if (!b.disabled) { setDesignSubtab(b.getAttribute("data-subtab-btn")); if (typeof render === "function") render(); } }));
+    // 카라 제도 치수 표시 토글(세션 UI): 오버레이만 다시 그린다.
+    const chkDims = document.getElementById("chkCollarDraftDims");
+    if (chkDims) chkDims.addEventListener("change", () => { if (typeof render === "function") render(); });
     // 소매 모양(S1): 입력 중엔 버튼 활성만 갱신·Enter 로 적용, 적용/원형복원 버튼.
     ["inpSleeveLength", "inpSleeveCuff"].forEach(id => {
       const el = document.getElementById(id); if (!el) return;
@@ -1631,7 +1672,8 @@
   window.setActiveTool          = setActiveTool;
   window.updateContextInspector = updateContextInspector;
   window.updateContextActions   = updateContextActions;
-  window.isDesignStageActive    = isDesignStageActive;   // render.js 등이 읽는 읽기 전용 신호
+  window.isDesignStageActive    = isDesignStageActive;
+  window.collarAnnotationForRender = collarAnnotationForRender;   // render.js 카라 제도 보조수치 오버레이(표시 전용)   // render.js 등이 읽는 읽기 전용 신호
   window.refreshDesignBodyPanel = updateDesignBodyPanel;  // designLineTool 이 boundary 편집 후 목둘레·상태 갱신
   window.refreshFrontPlacket = () => refreshFrontPlacket();  // boundary 편집으로 유효 외곽 변경 시 여밈 재파생
   window.recomposeSleeveCap = recomposeSleeveCap;            // designLineTool 이 관리형 소매산 편집 후 소매 재합성
