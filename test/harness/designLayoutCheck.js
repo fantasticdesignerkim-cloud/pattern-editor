@@ -83,27 +83,38 @@ function geom() {
   ok(near(full2.minX, -5) && near(out2.minX, 0), "6: construction 은 full 에만 반영");
 }
 
-// 7. autoLayout: 앞판→뒤판→소매 가로, 실제 봉제선 간격 10, 세로중심 앞판 기준
+// 7. autoLayout: 뒤판→앞판→소매 가로(원형 화면과 같은 좌우 순서), 실제 봉제선 간격 10, 세로중심 뒤판 기준
 {
   const a = DL.autoLayout(geom());
-  ok(a && near(a.front.dx, 0) && near(a.front.dy, 0), "7: 앞판 앵커(0,0)");
-  // back.dx = (frontMaxX 20 + 10) - backMinX 0 = 30, dy = frontCY 15 - backCY 15 = 0
-  ok(near(a.back.dx, 30) && near(a.back.dy, 0), "7: 뒤판 = 앞판 오른쪽+10, 세로중심");
-  // sleeve.dx = (backDisp maxX 50 + 10) - sleeveMinX 0 = 60, dy = 15 - 60 = -45
-  ok(near(a.sleeve.dx, 60) && near(a.sleeve.dy, -45), "7: 소매 = 뒤판 오른쪽+10, 세로중심");
-  // 실제 봉제선 간격 검증(outline 기준): 뒤판 좌단 - 앞판 우단 = 10
-  ok(near((0 + a.back.dx) - 20, 10), "7: 앞↔뒤 봉제선 간격 10");
-  ok(near((0 + a.sleeve.dx) - (20 + a.back.dx), 10), "7: 뒤↔소매 봉제선 간격 10");
-  // 세로 중심 3피스 일치(표시 후)
-  const fcy = 15, bcy = 15 + a.back.dy, scy = 60 + a.sleeve.dy;
-  ok(near(fcy, bcy) && near(fcy, scy), "7: 세 피스 세로중심 일치");
+  ok(a && near(a.back.dx, 0) && near(a.back.dy, 0), "7: 뒤판 앵커(0,0)");
+  // front.dx = (backMaxX 20 + 10) - frontMinX 0 = 30, dy = backCY 15 - frontCY 15 = 0
+  ok(near(a.front.dx, 30) && near(a.front.dy, 0), "7: 앞판 = 뒤판 오른쪽+10, 세로중심");
+  // sleeve.dx = (frontDisp maxX 50 + 10) - sleeveMinX 0 = 60, dy = 15 - 60 = -45
+  ok(near(a.sleeve.dx, 60) && near(a.sleeve.dy, -45), "7: 소매 = 앞판 오른쪽+10, 세로중심");
+  ok(near((0 + a.front.dx) - 20, 10), "7: 뒤↔앞 봉제선 간격 10");
+  ok(near((0 + a.sleeve.dx) - (20 + a.front.dx), 10), "7: 앞↔소매 봉제선 간격 10");
+  const bcy = 15, fcy = 15 + a.front.dy, scy = 60 + a.sleeve.dy;
+  ok(near(fcy, bcy) && near(bcy, scy), "7: 세 피스 세로중심 일치");
+  ok(a.back.dx + 0 < a.front.dx + 0 && a.front.dx + 20 < a.sleeve.dx + 0, "7: x 순서 back < front < sleeve");
 }
-// 8. autoLayout: 소매 없으면 소매 offset 0, 뒤판만 배치
+// 7b. 서로 다른 형상 폭·위치: 순서·간격 10·겹침 없음 유지
+[[0, 26, 18, 44, 5, 22], [-8, 14, 30, 70, 100, 131], [3, 40, 3, 25, -20, -2]].forEach(([b0, b1, f0, f1, s0, s1], i) => {
+  const rect = (x0, x1, y0, y1) => [line(x0, y0, x1, y0), line(x0, y1, x1, y1), line(x0, y0, x0, y1), line(x1, y0, x1, y1)];
+  const g = { front: { outline: rect(f0, f1, 2, 40), construction: [] }, back: { outline: rect(b0, b1, 0, 36), construction: [] },
+    shared: { outline: [], construction: [] }, sleeve: { outline: rect(s0, s1, 45, 95), construction: [] } };
+  const a = DL.autoLayout(g);
+  const B = [b0 + a.back.dx, b1 + a.back.dx], F = [f0 + a.front.dx, f1 + a.front.dx], S = [s0 + a.sleeve.dx, s1 + a.sleeve.dx];
+  ok(near(a.back.dx, 0) && near(F[0] - B[1], 10) && near(S[0] - F[1], 10), "7b-" + i + ": 뒤↔앞·앞↔소매 간격 10");
+  ok(B[1] < F[0] && F[1] < S[0], "7b-" + i + ": 겹침 없음·x 순서 back < front < sleeve");
+});
+// 8. autoLayout: 소매 없으면 소매 offset 0 / 뒤판 없으면 앞판이 앵커 / 앞판 없으면 null
 {
   const g = geom(); g.sleeve = { outline: [], construction: [] };
   const a = DL.autoLayout(g);
-  ok(near(a.back.dx, 30) && near(a.sleeve.dx, 0) && near(a.sleeve.dy, 0), "8: 소매 없음 → 0");
-  // 앞판 없으면 null(안전)
+  ok(near(a.front.dx, 30) && near(a.sleeve.dx, 0) && near(a.sleeve.dy, 0), "8: 소매 없음 → 0");
+  const g1 = geom(); g1.back = { outline: [], construction: [] };
+  const a1 = DL.autoLayout(g1);
+  ok(near(a1.front.dx, 0) && near(a1.back.dx, 0) && near(a1.sleeve.dx, 30), "8: 뒤판 없음 → 앞판 앵커·소매 앞판 오른쪽");
   const g2 = geom(); g2.front = { outline: [], construction: [] };
   ok(DL.autoLayout(g2) === null, "8: 앞판 없음 → null");
 }
@@ -147,6 +158,40 @@ function geom() {
   ok(Lnew.collar && Lnew.collar.dx === 0 && Lnew.placement.collar === "auto", "11: ensureLayout 신규 collar 기본");
   const Lold = DL.ensureLayout({ working: { layout: { body: { dx: 7, dy: 8 }, sleeve: { dx: 9, dy: 10 }, sleevePlacement: "manual" } } });
   ok(Lold.collar && Lold.collar.dx === 0 && Lold.placement.collar === "auto", "11: ensureLayout 구형 마이그레이션 시 collar 추가");
+}
+
+// 12. DOM 액션(디자인 진입·배치 초기화·몸판 중앙·길이 적용): 순서 back<front<sleeve, manual 보존, 몸판 중앙은 offset 불변
+{
+  let W = 1440, H = 900;
+  const sb = {
+    window: { addEventListener() {} }, document: { documentElement: { clientWidth: W }, addEventListener() {} },
+    console: { log() {}, warn() {}, error() {} }, Math, JSON, Object, Array, Number, isFinite, Infinity, NaN
+  };
+  sb.globalThis = sb;
+  vm.createContext(sb);
+  vm.runInContext(`var view = { SC: 11, MX: 80, MY: 100, x: 0, y: 0, z: 1 }; var SC = 11, MX = 80, MY = 100, viewX = 0, viewY = 0, viewZ = 1;
+    function syncViewVars(){ SC=view.SC; MX=view.MX; MY=view.MY; viewX=view.x; viewY=view.y; viewZ=view.z; }
+    var renders = 0; function render(){ renders++; }
+    var svg = { getBoundingClientRect: () => ({ width: __W(), height: __H() }), addEventListener(){}, clientWidth: 0, clientHeight: 0 };`, sb);
+  sb.__W = () => W; sb.__H = () => H;
+  const project = { working: { geometry: geom(), layout: null } };
+  sb.window.designWorkflow = { current: () => project };
+  sb.window.isDesignStageActive = () => true;
+  vm.runInContext(SRC, sb, { filename: "designLayout.js" });
+  const D = sb.window.designLayout;
+  const order = () => { const L = project.working.layout; return [L.back.dx + 20, L.front.dx, L.front.dx + 20, L.sleeve.dx]; };   // [backMax, frontMin, frontMax, sleeveMin]
+  const inOrder = () => { const o = order(); return o[0] < o[1] && o[2] < o[3] && near(o[1] - o[0], 10) && near(o[3] - o[2], 10); };
+  [[1440, 900], [390, 700]].forEach(([w, h]) => {
+    W = w; H = h; project.working.layout = null;
+    D.enterDesign(); ok(inOrder(), "12: 디자인 진입 " + w + "px → back<front<sleeve·간격 10");
+    project.working.layout.front = { dx: 99, dy: 1 }; project.working.layout.placement.front = "manual";
+    D.afterBodyLength(); ok(project.working.layout.front.dx === 99 && project.working.layout.placement.front === "manual", "12: 길이 적용 재배치가 manual 앞판을 덮지 않음 " + w);
+    D.resetLayout(); ok(inOrder() && project.working.layout.placement.front === "auto", "12: 배치 초기화 " + w + "px → back<front<sleeve");
+    const before = JSON.stringify(project.working.layout);
+    D.centerBody(); ok(JSON.stringify(project.working.layout) === before && inOrder(), "12: 몸판 중앙 = 카메라만, 순서 보존 " + w);
+    const L = project.working.layout, cx = ((0 + L.back.dx) + (20 + L.front.dx)) / 2;
+    ok(Math.abs((sb.MX + cx * sb.SC * sb.viewZ + sb.viewX) - w / 2) < 1e-6, "12: 몸판 중앙 = 뒤+앞 union 중심 " + w);
+  });
 }
 
 console.log("══════════════════════════════════════════════");

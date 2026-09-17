@@ -6,8 +6,8 @@
 // reference 와 working 에 같은 offset 을 적용해 회색/남색이 항상 함께 이동한다.
 //
 // 배치 규칙:
-//  · 초기 배치 = 앞판 → 뒤판 → 소매 순 **가로**, 피스 사이 **실제 봉제선(outline) 간격 10cm**,
-//    세 피스 **세로 중심**을 앞판 세로 중심에 맞춘다(옆으로 나란히).
+//  · 초기 배치 = 뒤판 → 앞판 → 소매 순 **가로**(원형 화면과 같은 좌우 순서), 피스 사이 **실제 봉제선
+//    (outline) 간격 10cm**, 세 피스 **세로 중심**을 첫 피스(뒤판) 세로 중심에 맞춘다(옆으로 나란히).
 //  · 앞판/뒤판/소매를 각각 드래그하면 그 피스만 "manual" → 이후 자동 배치에서 안 움직인다.
 //  · shared(허리다트 c 다리)는 **앞판 offset 을 따른다**(앞·뒤가 벌어져도 붙일 곳은 하나).
 //  · fit = 세 피스 union 중심을 viewport 중심에 두는 카메라(형상·layout 불변).
@@ -90,17 +90,22 @@
   }
 
   // ── 순수: 앞판 → 뒤판 → 소매 가로 배치 offset. 실제 봉제선 간격 GAP, 세로중심은 앞판 기준. ──
+  // 표시 순서(왼쪽→오른쪽) = 뒤판 → 앞판 → 소매(원형 화면과 같은 좌우 순서). 첫 피스가 앵커(자연 위치),
+  //   다음 피스는 직전 표시 피스 오른쪽 GAP, 세로 중심은 앵커 기준. 없는 피스는 offset 0 으로 건너뛴다.
+  const DISPLAY_ORDER = ["back", "front", "sleeve"];
   function autoLayout(geometry) {
     const f = outlineBBoxOf(geometry, "front");
-    const b = outlineBBoxOf(geometry, "back");
-    const s = outlineBBoxOf(geometry, "sleeve");
     if (!f) return null;
-    const fcy = (f.minY + f.maxY) / 2;
-    const front = { dx: 0, dy: 0 };                                  // 앵커(자연 위치)
-    const back = b ? { dx: (f.maxX + GAP) - b.minX, dy: fcy - (b.minY + b.maxY) / 2 } : { dx: 0, dy: 0 };
-    const backMaxXDisp = b ? (b.maxX + back.dx) : f.maxX;
-    const sleeve = s ? { dx: (backMaxXDisp + GAP) - s.minX, dy: fcy - (s.minY + s.maxY) / 2 } : { dx: 0, dy: 0 };
-    return { front, back, sleeve };
+    const out = { front: { dx: 0, dy: 0 }, back: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 } };
+    let prevMaxX = null, cy = null;
+    DISPLAY_ORDER.forEach(k => {
+      const bb = outlineBBoxOf(geometry, k); if (!bb) return;
+      const bcy = (bb.minY + bb.maxY) / 2;
+      if (prevMaxX === null) { cy = bcy; prevMaxX = bb.maxX; return; }   // 앵커(자연 위치)
+      out[k] = { dx: (prevMaxX + GAP) - bb.minX, dy: cy - bcy };
+      prevMaxX = bb.maxX + out[k].dx;
+    });
+    return out;
   }
 
   // ── layout 기본값·정규화(구형 {body,sleeve,sleevePlacement} 마이그레이션 포함) ──
@@ -224,7 +229,7 @@
     centerCameraOnBody();
     if (typeof render === "function") render();
   }
-  function placeSleeveRight() {      // "소매 오른쪽": 소매를 auto 로 되돌려 뒤판 오른쪽 재배치 + fit
+  function placeSleeveRight() {      // "소매 오른쪽": 소매를 auto 로 되돌려 앞판 오른쪽 재배치 + fit
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
     _userArranged = false;
