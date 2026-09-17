@@ -3554,17 +3554,13 @@ attachLenCm }`(세션 전용). 순수 `designCollar.computeBody(standResult, par
 - **셔츠 카드 클릭은 M 여유값(1/1/0/1)을 입력에 채우기만** 하고, 실제 몸판 변경은 기존 `적용` 버튼에서만 일어난다
   (카드 클릭 시점 geometry 불변 — 실측 확인).
 
-### 3cm 작업 간격은 geometry/hash 에 없다 · 위 칼라 CB 길이 조정의 계산적 동등
-- 교재는 밴드와 위 칼라 사이 **3cm 작업용 제도 간격**을 두지만, 이는 종이 제도 편의일 뿐 **최종 geometry·hash·
-  완성 치수에 포함하지 않는다.** 현재 구현은 위 칼라 부착선을 **밴드 윗선 primitive 에서 `subpathByLength`로 직접
-  추출**(`attachLen = upperNeckSegmentLenCm − frontInsetCm`, 여밈 연장 미포함)해 만든다.
-- 교재의 "위 칼라 이음선과 밴드 윗선 길이 차이를 **위 칼라 CB선 이동**으로 수정" 원칙은, 현재처럼 밴드 윗선에서
-  직접 파생하면 **처음부터 길이차 0**(CB 이동량 0)이므로 **CB 이동의 계산적 동등 구현**이다. collarCheckpoint 게이트
-  (`attachLen === upperNeckSegment − frontInset`, 오차 ≤0.01)와 designCollarCheck test 12 가 이를 잠근다.
+### ~~3cm 작업 간격은 geometry/hash 에 없다 · CB 길이 조정의 계산적 동등~~ → 폐기(M-v2, 아래)
+> 이 섹션의 옛 설명(위 칼라 부착선 = 밴드 윗선 subpath 복사, gap 3 생략, "처음부터 길이차 0 = CB 이동 동등")은
+> **교재 제도법과 달랐다.** 아래 "✅ 교재 M형 위 칼라 제도 교정(M-v2)" 섹션이 현재 계약이다.
 
 ### M 초기화 ≠ manual "수치형으로 돌아가기" (서로 다른 동작)
 - **`교재 M 기본형으로 초기화`**(`onCollarBaseM`): 스탠드·본체를 **교재 M 기준값으로 정확히** 복원한다
-  (referenceParams/referenceBodyParams, frontWidth=√33.75 로 입력 반올림 왕복을 피해 **pointDiagonal 정확히 6**).
+  (referenceParams/referenceBodyParams — M-v2: gap 3·CB 폭 4·setback 0.5·수평 돌출 1.5·실제 사선 6, √33.75 는 파생).
 - **`수치형으로 돌아가기`**(`btnCollarBodyRevert`, 라벨 정정): 관리형 직접 편집(manual) 진입 **전 보존된 사용자
   파라미터로 복귀**한다(M 기준값이 아니다). 둘은 명시적으로 다른 버튼·동작.
 - **manual 보호**: 관리형 직접 편집 중에는 `교재 M 기본형` 버튼이 **disabled**(수치형으로 먼저 돌아가야 함).
@@ -3594,6 +3590,35 @@ attachLenCm }`(세션 전용). 순수 `designCollar.computeBody(standResult, par
   밴드=×+⊘ / 사용자 수치형→M 초기화 정확·M 2회 byte-identical / manual→M버튼 disabled·관리선/사용자선 보존·
   수치형 복귀 후 재활성 / computeBody 실패→collarDraft 완전 보존 / 카라·Design 완료 후 M 초기화→두 완료본 변경 /
   baseMethod hash 미포함.
+
+## ✅ 교재 M형 위 칼라 제도 교정(M-v2, 2026-09) — 위 섹션의 "subpath 복사·gap 생략" 설명 대체
+
+**사용자 확정 제도 순서(reference recipe, `designCollar.computeBody`)** — named semantic point:
+1. 밴드: 몸판 뒤목→옆목→앞목 목둘레로 아래선, CF 끝 1cm 올림, 폭 3(기존 `computeStand` 그대로).
+2. `bandTopCf` = CF 1cm 올림점에서 **밴드 아래선에 90° 윗방향**으로 세운 선과 밴드 위선의 교점(`CFu`). 플래킷
+   연장 끝이 아니다.
+3. `setbackPoint`(위칼라 이음선 앞끝) = `bandTopCf` 에서 **밴드 위선을 따라 CB 방향 호길이 0.5**. 이세·중첩·수직
+   간격 아님. `bandAttachLenCm` = 밴드 위선 CB→setbackPoint(= upperNeckSegment − 0.5, 연장 미포함).
+4. `upperCbSeam` = 밴드 위선 CB 에서 CB 선(수직) 위로 **gap 3**. gap 높이 고정.
+5. 위칼라 이음선 = `upperCbSeam`→`setbackPoint` **독립 cubic**(밴드 복사 아님). 곡률은 `UPPER_SEAM_RULE`
+   (CB 수평 출발 · 현 방향 도착 · 핸들 = 현 길이 × 1/3, 이 파일 외곽 휨과 같은 관례) — 새 도메인 치수 없음.
+6. CB 보정: 이음선 길이 = `bandAttachLenCm` 가 되도록 `upperCbSeam` 을 **수평으로만** 이동(이분 탐색).
+   `cbCorrectionCm` = 보정 CB x − 밴드 CB x(+ = 앞쪽). 참조 치수에서 +0.0966cm.
+7. `cbOuter` = `upperCbSeam` 에서 CB 선 위로 4.
+8. `tip`: `setbackPoint` 에 CB 선과 평행한 수직 기준선 → 수평 앞쪽 1.5, 실제 사선 |tip−setbackPoint| = 6.
+   수직 성분 √33.75 는 **파생 measure(`frontWidthCm`)** 일 뿐 입력/default 가 아니다.
+9. 외곽선 `tip`→`cbOuter`. `outerBowCm` 은 외곽선 추가 휨만(0 = 직선, 이음선과 무관).
+
+- **파라미터**: `{ gapCm, cbWidthCm, frontInsetCm(=setback), frontProjectionCm, pointDiagonalCm, outerBowCm }`.
+  `frontWidthCm` 입력 폐기. UI 의 기존 입력 `inpCollarBodyFrontWidth` 는 라벨 "칼라 끝 사선 길이"로 사선에 매핑
+  (gap 입력 없음 → 커밋값 또는 M 기준 3 유지). baseMethod `bunka-shirt-collar-M-v2`(hash 미포함 메타).
+- **관리형 직접 편집 topology**: `[cbOuter, bowMid, tip, attachFront]`(3세그·4 anchor, 옛 frontOuter 제거).
+  locked = 독립 위칼라 이음선. endpoint 잠금·교차 검사·원자성·manual 보호·revert 계약 그대로.
+- **collarCheckpoint 게이트**: `gap-missing`(gapCm 기록 필수) · `seam-length-mismatch`(위칼라 이음선 길이 vs
+  upperNeckSegment − frontInset, ≤0.01) · `extension-included` 유지. 옛 `attach-mismatch` 폐기.
+- **검증**: designCollarCheck 123 · collarCheckpointCheck 29, runAll 전체 통과, shape/perf 골든 diff 0.
+  실브라우저: M 적용·수치 적용(사선 7 → 실측 7)·완료·manual 중 M 차단·revert·computeBody 실패 stub 원자성.
+- **의도된 변화**: 칼라 본체 geometry → collarResult·designResult hash. bodice/sleeve·dartMove 골든 무변경.
 
 **남은 것/경계**: 기존 카라 시스템 전부 보존. 앞끝 기울기(부착 접선 기준 atan2(frontWidth, projection)=75.5°)는
 M 값(사선 6·돌출 1.5)의 결과값이지 별도 파라미터가 아니다. 시접·너치·심지·윗칼라/밑칼라 차이·재단은 여전히 미포함.

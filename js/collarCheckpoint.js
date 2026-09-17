@@ -9,8 +9,8 @@
 //
 // 완료 게이트(모두 통과): bodiceResult 존재·비스테일 / collarDraft.sourceBodiceHash===bodice.hash /
 //   현재 sleeveResult 존재·비스테일(순서 게이트) / 스탠드·본체 geometry 존재·폐곡선·자기교차 없음 /
-//   body manual 이면 관리선 존재·invalid===false / 부착선=스탠드 윗선 subpath(attachLen=upperNeckSeg−frontInset,
-//   여밈 연장 미포함) / 실측·파라미터 유한. 실패 시 기존 collarResult·현재 geometry 불변.
+//   body manual 이면 관리선 존재·invalid===false / gap(CB 제도 간격) 기록 / 위칼라 이음선 길이 = 밴드 기준 봉제 길이
+//   (밴드 위선 CB→setback 점 = upperNeckSeg − frontInset, 여밈 연장 미포함) / 실측·파라미터 유한. 실패 시 기존 collarResult·현재 geometry 불변.
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
@@ -64,18 +64,22 @@
       if (!line) fails.push("manual-line-missing");
       if (cd.body.invalid) fails.push("body-invalid");
     }
-    // 부착선 = 스탠드 윗선 subpath: attachLen = upperNeckSeg − frontInset, 여밈 연장 미포함, 유한
+    // 위칼라 이음선(독립 곡선) 길이 = 밴드 기준 봉제 길이 bandAttachLen(밴드 위선 CB→setback 점, 여밈 연장 미포함),
+    //   gap(CB 제도 간격)은 양수로 기록돼 있어야 한다. 길이 차이는 위칼라 CB 수평 보정으로 이미 0 이어야 한다.
     var lengths = null, standRe = null;
     if (cd && bodice && cd.parameters && cd.parameters.stand) {
       standRe = DC.computeStand(bodice, cd.parameters.stand);
       if (!standRe.ok) fails.push("stand-recompute");
       else {
         lengths = { lowerNeckSeam: standRe.lowerNeckSeamLenCm, lowerExtension: standRe.lowerExtensionLenCm, upperNeckSegment: standRe.upperNeckSegmentLenCm, upperExtension: standRe.upperExtensionLenCm, upperTotal: standRe.upperTotalLenCm };
-        var frontInset = (cd.body && cd.body.parameters) ? cd.body.parameters.frontInsetCm : NaN;
-        var attachLen = (cd.body) ? cd.body.attachLenCm : NaN;
-        if (!num(standRe.upperNeckSegmentLenCm) || !num(frontInset) || !num(attachLen)) fails.push("unmeasured");
-        else if (Math.abs(attachLen - (standRe.upperNeckSegmentLenCm - frontInset)) > 0.01) fails.push("attach-mismatch");
-        else if (attachLen > standRe.upperTotalLenCm - 1e-6 && standRe.upperExtensionLenCm > 0) fails.push("extension-included");   // 연장이 부착에 포함되면 안 됨
+        var bp = (cd.body && cd.body.parameters) || {};
+        var frontInset = bp.frontInsetCm, gapCm = bp.gapCm;
+        var seamLen = (cd.body) ? cd.body.attachLenCm : NaN;
+        var bandAttachLen = standRe.upperNeckSegmentLenCm - frontInset;
+        if (!num(standRe.upperNeckSegmentLenCm) || !num(frontInset) || !num(seamLen)) fails.push("unmeasured");
+        else if (!num(gapCm) || gapCm <= 0) fails.push("gap-missing");
+        else if (Math.abs(seamLen - bandAttachLen) > 0.01) fails.push("seam-length-mismatch");
+        else if (bandAttachLen > standRe.upperTotalLenCm - 1e-6 && standRe.upperExtensionLenCm > 0) fails.push("extension-included");   // 연장이 밴드 기준 길이에 포함되면 안 됨
       }
     }
     return { ok: fails.length === 0, fails: fails, _bodice: bodice, _lengths: lengths, _stand: standRe };

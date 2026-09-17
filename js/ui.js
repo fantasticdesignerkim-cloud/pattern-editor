@@ -1006,7 +1006,7 @@
     project.working.collarDraft = {
       sourceBodiceHash: bodice.hash,
       type: "shirt-two-piece",
-      baseMethod: "bunka-shirt-collar-M-v1",   // 정본 제도법 출처(geometry 엔진이 곧 교재 M형). hash 미포함 메타.
+      baseMethod: "bunka-shirt-collar-M-v2",   // 정본 제도법 출처(geometry 엔진이 곧 교재 M형). hash 미포함 메타.
       parameters: { stand: { standHeightCm: standHeightCm, frontRiseCm: frontRiseCm } },
       standGeometry: r.standGeometry,
       collarGeometry: null,   // (미사용 예약)
@@ -1047,7 +1047,7 @@
     updateCollarPanel(project);
   }
   // 교재 M 기본형으로 초기화: 스탠드·본체를 M 기준값으로 **정확히**(referenceParams/referenceBodyParams,
-  //   frontWidth=√33.75) 적용한다 — 입력 반올림 왕복을 피해 pointDiagonal 이 정확히 6 이 되게. "수치형으로
+  //   gap 3·setback 0.5·수평 돌출 1.5·실제 사선 6) 적용한다(√33.75 는 파생). "수치형으로
   //   돌아가기"(직접 편집 전 사용자 파라미터 복귀)와 다르다: 이건 교재 M 기준값 복원이다.
   //   ★ manual(관리형 직접 편집) 중에는 금지 — 관리선을 묵시 삭제/덮어쓰기 하지 않는다(먼저 수치형으로 돌아가기).
   //   ★ 원자성: 스탠드·본체를 임시로 모두 계산·검증한 뒤, 둘 다 성공할 때만 collarDraft 를 **한 번에** 교체한다.
@@ -1058,7 +1058,7 @@
     if (collarBodyManual(project)) { setCollarBodyNote("직접 수정 중에는 교재 M 기본형으로 초기화할 수 없습니다 · 먼저 수치형으로 돌아가기"); return; }
     const bodice = window.bodiceCheckpoint.latest(project);
     const rp = window.designCollar.referenceParams();        // { standHeightCm:3, frontRiseCm:1 }
-    const rb = window.designCollar.referenceBodyParams();    // 교재 M 본체(√33.75 정확)
+    const rb = window.designCollar.referenceBodyParams();    // 교재 M 위칼라(gap 3·CB 폭 4·setback 0.5·돌출 1.5·사선 6)
     // 임시 계산·검증(collarDraft 미변경) — 둘 다 성공해야 커밋.
     const standRe = window.designCollar.computeStand(bodice, rp);
     if (!standRe.ok) { setCollarNote("적용 불가: " + collarFailStr(standRe.reason)); return; }
@@ -1066,7 +1066,7 @@
     if (!bodyRe.ok) { setCollarBodyNote("적용 불가: " + collarBodyFailStr(bodyRe.reason)); return; }
     // ── 원자 교체(둘 다 ok) ──
     project.working.collarDraft = {
-      sourceBodiceHash: bodice.hash, type: "shirt-two-piece", baseMethod: "bunka-shirt-collar-M-v1",
+      sourceBodiceHash: bodice.hash, type: "shirt-two-piece", baseMethod: "bunka-shirt-collar-M-v2",
       parameters: { stand: { standHeightCm: rp.standHeightCm, frontRiseCm: rp.frontRiseCm } },
       standGeometry: standRe.standGeometry, collarGeometry: null,
       body: { parameters: rb, geometry: bodyRe.bodyGeometry, attachLenCm: bodyRe.attachLenCm, measure: bodyRe.measure },
@@ -1124,15 +1124,18 @@
   }
   function setCollarBodyNote(t) { const n = document.getElementById("designCollarBodyNote"); if (n) n.textContent = t; }
   function collarBodyFailStr(reason) {
-    const m = { "invalid-stand": "스탠드를 먼저 적용", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-front-width": "앞쪽 칼라 폭 값 확인(1–15)", "invalid-front-inset": "앞끝 물림 값 확인(0–3)", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "invalid-outer-bow": "외곽 휨 값 확인(−2–2)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
+    const m = { "invalid-stand": "스탠드를 먼저 적용", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-point-diagonal": "칼라 끝 사선 길이는 앞끝 돌출보다 커야 합니다", "invalid-gap": "CB 제도 간격 확인", "cb-correction-failed": "위칼라 이음선 길이를 밴드와 맞출 수 없습니다", "invalid-front-inset": "앞끝 물림 값 확인(0–3)", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "invalid-outer-bow": "외곽 휨 값 확인(−2–2)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
     return m[reason] || "칼라 본체를 적용할 수 없습니다";
   }
   function onApplyCollarBody() {
     const project = designProjectNow(); if (!project) return;
     if (!collarStandReady(project)) { setCollarBodyNote("카라 스탠드를 먼저 적용하세요"); return; }
     const w = readNum("inpCollarBodyWidth", 1, 15), fw = readNum("inpCollarBodyFrontWidth", 1, 15), inset = readNum("inpCollarBodyInset", 0, 3), proj = readNum("inpCollarBodyProjection", 0, 15), bow = readNum("inpCollarBodyBow", -2, 2);
-    if (!w.valid || !fw.valid || !inset.valid || !proj.valid || !bow.valid) { setCollarBodyNote("칼라 본체 값 범위를 확인하세요(CB 폭·앞폭 1–15·물림 0–3·앞끝 돌출 0–15·외곽 휨 −2–2)"); return; }
-    const r = deriveCollarBody(project, { cbWidthCm: w.v, frontWidthCm: fw.v, frontInsetCm: inset.v, frontProjectionCm: proj.v, outerBowCm: bow.v });
+    if (!w.valid || !fw.valid || !inset.valid || !proj.valid || !bow.valid) { setCollarBodyNote("칼라 본체 값 범위를 확인하세요(CB 폭·끝 사선 1–15·setback 0–3·앞끝 돌출 0–15·외곽 휨 −2–2)"); return; }
+    // CB 제도 간격(gap)은 입력이 없으므로 기존 커밋값(없으면 교재 M 기준)을 유지한다.
+    const prevBody = committedCollarBody(project), refB = window.designCollar.referenceBodyParams();
+    const gapCm = (prevBody.has && prevBody.params && prevBody.params.gapCm != null) ? prevBody.params.gapCm : refB.gapCm;
+    const r = deriveCollarBody(project, { gapCm: gapCm, cbWidthCm: w.v, frontInsetCm: inset.v, frontProjectionCm: proj.v, pointDiagonalCm: fw.v, outerBowCm: bow.v });
     if (!r.ok) { setCollarBodyNote("적용 불가: " + collarBodyFailStr(r.reason)); return; }   // 이전 유지
     if (window.designLayout) window.designLayout.afterCollar();
     if (typeof render === "function") render();
@@ -1149,9 +1152,9 @@
     if (!project) return;
     const ready = collarStandReady(project), cb = committedCollarBody(project);
     const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
-    const ref = (window.designCollar && window.designCollar.referenceBodyParams()) || { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 };
+    const ref = (window.designCollar && window.designCollar.referenceBodyParams()) || { gapCm: 3, cbWidthCm: 4, frontInsetCm: 0.5, frontProjectionCm: 1.5, pointDiagonalCm: 6 };
     const p = cb.has ? cb.params : ref;
-    setIf("inpCollarBodyWidth", p.cbWidthCm); setIf("inpCollarBodyFrontWidth", p.frontWidthCm != null ? p.frontWidthCm : p.cbWidthCm);
+    setIf("inpCollarBodyWidth", p.cbWidthCm); setIf("inpCollarBodyFrontWidth", p.pointDiagonalCm != null ? p.pointDiagonalCm : ref.pointDiagonalCm);
     setIf("inpCollarBodyInset", p.frontInsetCm); setIf("inpCollarBodyProjection", p.frontProjectionCm);
     setIf("inpCollarBodyBow", p.outerBowCm != null ? p.outerBowCm : 0);
     const applyBtn = document.getElementById("btnApplyCollarBody"), resetBtn = document.getElementById("btnResetCollarBody");
@@ -1165,7 +1168,7 @@
     // 읽기 전용 실제 결과: CB 폭·앞쪽 폭·앞끝 접선 돌출·포인트 사선 길이(=앞폭·투영 합성)·앞끝 기울기.
     //   ★ 기울기는 부착선 로컬 접선 기준 평면 기하값(캔버스 축·착용 spread 아님). frontRise 와 무관.
     else if (cb.has && cb.measure && cb.measure.cbWidthCm != null) { const m = cb.measure;
-      setCollarBodyNote("부착 " + fmtL(cb.attachLenCm) + "cm · CB 폭 " + fmtL(m.cbWidthCm) + "·앞폭 " + fmtL(m.frontWidthCm) + " · 앞끝 돌출 " + fmtL(m.frontProjectionCm) + "cm · 포인트 사선 " + fmtL(m.pointDiagonalLenCm) + "cm · 앞끝 기울기(부착 접선) " + m.localTiltDeg.toFixed(1) + "° · 외곽 휨 " + fmtL(m.outerBowCm) + "cm(외곽선 " + fmtL(m.outerEdgeLenCm) + "cm) · 세션 전용");
+      setCollarBodyNote("위칼라 이음선 " + fmtL(cb.attachLenCm) + "cm(밴드 " + fmtL(m.bandAttachLenCm) + "cm · CB 보정 " + fmtL(m.cbCorrectionCm) + "cm) · gap " + fmtL(m.gapCm) + " · CB 폭 " + fmtL(m.cbWidthCm) + " · 앞끝 돌출 " + fmtL(m.frontProjectionCm) + "cm · 끝 사선 " + fmtL(m.pointDiagonalLenCm) + "cm · 외곽 휨 " + fmtL(m.outerBowCm) + "cm(외곽선 " + fmtL(m.outerEdgeLenCm) + "cm) · 세션 전용");
     }
     else setCollarBodyNote("CB 폭·앞폭·앞끝 물림·앞끝 돌출·외곽 휨 적용으로 본체 생성(여밈 연장 미포함) · 세션 전용");
     syncCollarBodyModeUI(project);
@@ -1238,7 +1241,7 @@
     const m = { "no-bodice": "몸판 완료 필요", "bodice-stale": "몸판 변경됨 · 다시 완료 필요", "no-collar": "카라 적용 필요",
       "source-mismatch": "카라 출처가 몸판 완료본과 다름", "no-sleeve": "소매 완료 필요(작업 순서)", "sleeve-stale": "소매 변경됨 · 작업 순서 확인",
       "no-stand": "스탠드 적용 필요", "no-body": "본체 적용 필요", "body-invalid": "본체 편집 무효 · 복구 필요", "manual-line-missing": "관리형 본체 선 없음",
-      "attach-mismatch": "부착 길이 불일치", "extension-included": "여밈 연장이 부착에 포함됨", "unmeasured": "측정 불가", "no-project": "프로젝트 없음", "no-module": "" };
+      "seam-length-mismatch": "위칼라 이음선·밴드 길이 불일치", "gap-missing": "CB 제도 간격 없음", "extension-included": "여밈 연장이 부착에 포함됨", "unmeasured": "측정 불가", "no-project": "프로젝트 없음", "no-module": "" };
     if (m[reason] != null) return m[reason];
     if (reason && reason.indexOf("stand-") === 0) return "스탠드 형상 오류(" + reason.slice(6) + ")";
     if (reason && reason.indexOf("body-") === 0) return "본체 형상 오류(" + reason.slice(5) + ")";
@@ -1253,7 +1256,7 @@
     if (checkNote) {
       if (cd && cd.measure && cd.body && cd.body.measure) {
         const sm = cd.measure, bm = cd.body.measure, bp = cd.body.parameters || {};
-        checkNote.textContent = "스탠드: 목 봉제 " + fmtL(sm.lowerNeckSeamLenCm) + "·연장 " + fmtL(sm.lowerExtensionLenCm) + "·윗선 " + fmtL(sm.upperNeckSegmentLenCm) + "cm · 본체: 부착 " + fmtL(cd.body.attachLenCm) + "·CB폭 " + fmtL(bm.cbWidthCm != null ? bm.cbWidthCm : bp.cbWidthCm) + "·앞폭 " + fmtL(bm.frontWidthCm != null ? bm.frontWidthCm : bp.frontWidthCm) + "·포인트 사선 " + fmtL(bm.pointDiagonalLenCm) + "·외곽 " + fmtL(bm.outerEdgeLenCm) + "cm";
+        checkNote.textContent = "스탠드: 목 봉제 " + fmtL(sm.lowerNeckSeamLenCm) + "·연장 " + fmtL(sm.lowerExtensionLenCm) + "·윗선 " + fmtL(sm.upperNeckSegmentLenCm) + "cm · 본체: 부착 " + fmtL(cd.body.attachLenCm) + "·CB폭 " + fmtL(bm.cbWidthCm != null ? bm.cbWidthCm : bp.cbWidthCm) + "·gap " + fmtL(bm.gapCm != null ? bm.gapCm : bp.gapCm) + "·끝 사선 " + fmtL(bm.pointDiagonalLenCm) + "·외곽 " + fmtL(bm.outerEdgeLenCm) + "cm";
       } else checkNote.textContent = c.fails.length ? "완료 전 검사: " + collarCPFailStr(c.fails[0]) : "";
     }
     if (btn) btn.disabled = !c.ok;

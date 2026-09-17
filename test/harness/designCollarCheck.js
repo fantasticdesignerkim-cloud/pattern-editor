@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════
-// designCollarCheck.js — js/designCollar.js C1c 순수 파생 회귀.
+// designCollarCheck.js — js/designCollar.js 순수 파생 회귀(밴드 C1c + 교재 M 위 칼라 제도).
 //   직선+원호 복합 스탠드(어깨 경계): 뒤목 직선 + 앞목 원호(frontRise 상승) + 여밈 접선 연장 + 윗선 오프셋.
 //   frontRise=0 → C1 직선 스캐폴드 정확 재현. 봉제/연장 5분리 길이. 원자적 실패·불변.
 //   node test/harness/designCollarCheck.js
@@ -153,232 +153,150 @@ ok(C.referenceParams().standHeightCm === 3 && C.referenceParams().frontRiseCm ==
   ok(near(r0.lowerNeckSeamLenCm, partActual(r0.standGeometry, "neck-seam"), 1e-9) && near(r0.lowerNeckSeamLenCm, half), "7: 직선 primitive 실측=half");
 }
 
-// 8. C2 칼라 본체 — 부착선 = 스탠드 윗선 목 primitive − frontInset(연장 미포함), 실측 attachLenCm.
+// 8~12. 위 칼라 — 교재 M형 제도(reference recipe).
+//   밴드 CF 기준점(CFu) → 밴드 위선을 따라 CB 방향 호길이 0.5 = setbackPoint → CB gap 3 → 독립 이음선(수평 출발·현 도착)
+//   → CB 수평 보정으로 이음선 길이 = 밴드 기준 길이 → CB 폭 4(수직) → 수직 기준선에서 수평 1.5·실제 사선 6 → 외곽선.
+const M = () => C.referenceBodyParams();
+function arcLenAlong(path, pt) {   // path(연속 seg) 시작부터 pt 까지 호길이(pt 는 path 위, 독립 조밀 샘플)
+  let acc = 0, best = { d: Infinity, s: 0 };
+  path.forEach(s => { const p = s.kind === "line" ? [s.from, s.to] : cubicPts(s, 4000);
+    for (let i = 1; i < p.length; i++) { const a = p[i - 1], b = p[i], dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+      let t = L2 ? ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / L2 : 0; t = Math.max(0, Math.min(1, t));
+      const d = Math.hypot(pt.x - (a.x + t * dx), pt.y - (a.y + t * dy)); if (d < best.d) best = { d, s: acc + Math.sqrt(L2) * t }; acc += Math.sqrt(L2); } });
+  return { dist: best.d, arc: best.s, total: acc };
+}
+// 8. 기본형 계약: API·기본값·gap·setback·독립 이음선·CB 폭·돌출·사선·길이 정합
 {
+  const rb = M();
   ok(typeof C.computeBody === "function", "8: computeBody API");
-  { const rb = C.referenceBodyParams();
-    ok(rb.cbWidthCm === 4 && near(rb.frontWidthCm, Math.sqrt(33.75), 1e-9) && rb.frontInsetCm === 0.5 && rb.frontProjectionCm === 1.5 && rb.outerBowCm === 0, "8: 교재 M referenceBodyParams cb4/frontWidth√33.75/inset0.5/proj1.5/bow0"); }
-  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
-  const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
-  const standStr = JSON.stringify(stand);
-  const bp = { cbWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 };
-  const bpStr = JSON.stringify(bp);
-  const r = C.computeBody(stand, bp);
-  ok(r.ok, "8: 본체 파생 성공");
-  // attach 실제 primitive(독립 측정) == attachLenCm
-  const attachActual = partActual(r.bodyGeometry, "attach");
-  ok(near(r.attachLenCm, attachActual, 1e-5), "8: attachLenCm == 실제 attach primitive");
-  // attachLen = upperNeckSegment − inset (upperExtension 절대 미포함)
-  ok(Math.abs(r.attachLenCm - (stand.upperNeckSegmentLenCm - 0.3)) <= 1e-3, "8: attachLen = upperNeckSegment − 0.3 (실측 " + Math.abs(r.attachLenCm - (stand.upperNeckSegmentLenCm - 0.3)).toExponential(1) + ")");
-  ok(stand.upperExtensionLenCm > 0 && Math.abs(r.attachLenCm - (stand.upperTotalLenCm - 0.3)) > 1, "8: upperExtension 미포함(upperTotal 기준과 명확히 다름)");
-  // CF 물림 = upperNeckSegment − attachLen ≈ 0.3 (호길이 기준)
-  ok(Math.abs((stand.upperNeckSegmentLenCm - r.attachLenCm) - 0.3) <= 1e-3, "8: CF 물림 0.3cm(호길이 기준)");
-  // CB 완성 칼라 폭 = 6
-  ok(near(Math.hypot(r.anchors.cbOuter.x - r.anchors.cbAttach.x, r.anchors.cbOuter.y - r.anchors.cbAttach.y), 6), "8: CB 칼라 폭 6cm");
-  // 앞끝 돌출 = 접선 방향 투영량(사선 길이 아님): dot(tip−frontOuter, frontTangent)=4, dot(·, frontNormal)=0
-  const dv = { x: r.anchors.tip.x - r.anchors.frontOuter.x, y: r.anchors.tip.y - r.anchors.frontOuter.y };
-  const ft = r.anchors.frontTangent, fn = r.anchors.frontNormal;
-  ok(near(dv.x * ft.x + dv.y * ft.y, 4) && near(dv.x * fn.x + dv.y * fn.y, 0), "8: 앞끝 돌출 4cm = 접선 투영량(법선성분 0)");
-  ok(near(Math.hypot(ft.x, ft.y), 1) && near(Math.hypot(fn.x, fn.y), 1) && near(ft.x * fn.x + ft.y * fn.y, 0), "8: frontTangent·frontNormal 단위·직교");
-  ok(near(Math.hypot(r.anchors.frontOuter.x - r.anchors.target.x, r.anchors.frontOuter.y - r.anchors.target.y), 6), "8: 앞쪽 칼라 폭 6cm");
-  // 폐곡선 연속(각 to==다음 from)
-  let closed = true, o = r.bodyGeometry.outline;
-  for (let i = 0; i < o.length; i++) { const nx = o[(i + 1) % o.length]; if (!near(o[i].to.x, nx.from.x, 1e-6) || !near(o[i].to.y, nx.from.y, 1e-6)) closed = false; }
-  ok(closed, "8: 본체 폐곡선 연속");
-  ok(r.bodyGeometry.outline.some(s => s.part === "attach") && r.bodyGeometry.outline.filter(s => s.part === "cb-fold" || s.part === "outer" || s.part === "point-front" || s.part === "point-top").length === 4, "8: 부착·외곽·칼라끝·접힘 parts");
-  // 입력·스탠드 불변
-  ok(JSON.stringify(stand) === standStr && JSON.stringify(bp) === bpStr, "8: 스탠드·params 입력 불변");
-  // cubic 중간 분할(inset 이 arc 중간에 걸리는 큰 값)
-  const r2 = C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 3, frontProjectionCm: 4 });
-  ok(r2.ok && Math.abs((stand.upperNeckSegmentLenCm - r2.attachLenCm) - 3) <= 1e-3 && r2.bodyGeometry.outline.some(s => s.part === "attach" && s.kind === "cubic"), "8: 큰 inset arc 중간 de Casteljau 분할");
-  // 직선 스탠드에서도 동작(attach = neck − inset)
-  const stand0 = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: 0 });
-  const r0 = C.computeBody(stand0, bp);
-  ok(r0.ok && Math.abs(r0.attachLenCm - (stand0.upperNeckSegmentLenCm - 0.3)) <= 1e-3, "8: 직선 스탠드 본체 attach=neck−0.3");
+  ok(rb.gapCm === 3 && rb.cbWidthCm === 4 && rb.frontInsetCm === 0.5 && rb.frontProjectionCm === 1.5 && rb.pointDiagonalCm === 6 && rb.outerBowCm === 0 && !("frontWidthCm" in rb),
+    "8: M 도메인 치수 gap3·cb4·setback0.5·돌출1.5·사선6·휨0 (√33.75 는 입력 아님)");
+  const back = 7.6926, front = 11.129, ov = 1.75;
+  const stand = C.computeStand(bodice(back, front, ov), C.referenceParams());
+  const r = C.computeBody(stand, rb), A = r.anchors, m = r.measure;
+  ok(r.ok, "8: M 위 칼라 계산 성공");
+  // ① 밴드 CF 기준점 = CF 1cm 올림점에서 아래선에 90° 윗방향 3cm (연장 끝 아님)
+  ok(near(A.bandTopCf.x, stand.anchors.cfTop.x, 1e-9) && near(A.bandTopCf.y, stand.anchors.cfTop.y, 1e-9), "8: bandTopCf = 밴드 CF 기준점(CFu)");
+  const cfLow = stand.anchors.cfSeam, cfDir = { x: A.bandTopCf.x - cfLow.x, y: A.bandTopCf.y - cfLow.y };
+  const lowTan = (() => { const arc = stand.standGeometry.outline.filter(s => s.part === "neck-seam-arc"); const l = arc[arc.length - 1]; return { x: l.to.x - l.c2.x, y: l.to.y - l.c2.y }; })();
+  ok(near(Math.hypot(cfDir.x, cfDir.y), 3, 1e-9) && near((cfDir.x * lowTan.x + cfDir.y * lowTan.y) / Math.hypot(lowTan.x, lowTan.y), 0, 1e-6) && cfDir.y < 0, "8: CF 기준점 = 아래선 90° 위 3cm");
+  ok(stand.upperExtensionLenCm > 0 && Math.hypot(A.bandTopCf.x - stand.anchors.cfExtSeam.x, A.bandTopCf.y - stand.anchors.cfExtSeam.y) > 1, "8: 기준점은 플래킷 연장 끝이 아님");
+  // ② setback: 밴드 위선 위, CF 기준점에서 CB 방향 호길이 0.5
+  const al = arcLenAlong(stand.upperNeckPath, A.setbackPoint);
+  ok(al.dist < 1e-6 && near(al.total - al.arc, 0.5, 1e-4) && al.arc < al.total, "8: setbackPoint = 밴드 위선 CF 기준점에서 CB 방향 호길이 0.5");
+  ok(near(m.bandAttachLenCm, stand.upperNeckSegmentLenCm - 0.5, 1e-6) && near(m.bandTopNeckLenCm, stand.upperNeckSegmentLenCm, 1e-9), "8: 밴드 기준 봉제 길이 = 밴드 위선 CB→setback(연장 미포함)");
+  // ③ gap: 밴드 위선 CB 에서 수직 3
+  ok(near(A.upperCbSeam.y, A.bandTopCb.y - 3, 1e-12) && m.gapCm === 3, "8: CB gap = 밴드 위선 CB 에서 위로 3cm");
+  // ④ 독립 이음선: 밴드 위선 subpath 가 아니다(곡선 점이 밴드 위선에서 떨어져 있음), CB 수평 출발
+  const seam = r.bodyGeometry.outline.filter(s => s.part === "attach");
+  ok(seam.length === 1 && seam[0].kind === "cubic" && near(seam[0].c1.y, seam[0].from.y, 1e-12) && seam[0].c1.x > seam[0].from.x, "8: 이음선 = 단일 cubic·CB 에서 수평(앞쪽) 출발");
+  const band = partPts({ outline: stand.upperNeckPath.map(x => Object.assign({}, x, { part: "u" })) }, "u");
+  const seamMidDist = ptToPolyDist(cubicPts(seam[0], 2)[1], band);
+  ok(seamMidDist > 1 && near(seam[0].to.x, A.setbackPoint.x, 1e-12) && near(seam[0].to.y, A.setbackPoint.y, 1e-12), "8: 이음선은 밴드 위선 복사가 아니며 setback 점에서 끝남 (중간 거리 " + seamMidDist.toFixed(2) + ")");
+  ok(cubicPts(seam[0], 50).every((q, i, arr) => i === 0 || q.y >= arr[i - 1].y - 1e-9), "8: 이음선은 CB 에서 앞 attach 점으로 단조롭게 내려옴");
+  // ⑤ 길이 정합 + CB 수평 보정
+  ok(near(denseSegLen(seam[0]), m.bandAttachLenCm, 1e-4) && near(r.attachLenCm, m.bandAttachLenCm, 1e-6) && Math.abs(m.seamLengthDiffCm) < 1e-6, "8: 위칼라 이음선 길이(실측) = 밴드 기준 봉제 길이");
+  ok(near(m.cbCorrectionCm, A.upperCbSeam.x - A.bandTopCb.x, 1e-12) && m.cbCorrectionCm !== 0, "8: CB 보정 = gap 점 수평 이동량 (" + m.cbCorrectionCm.toFixed(4) + ")");
+  // ⑥ CB 폭 4: 새 이음선 CB 점에서 CB 선(수직) 위로
+  ok(near(A.cbOuter.x, A.upperCbSeam.x, 1e-12) && near(A.upperCbSeam.y - A.cbOuter.y, 4, 1e-12), "8: CB 폭 4 = 이음선 CB 점에서 수직");
+  // ⑦ 칼라 끝: 수직 기준선에서 수평 1.5 앞, 실제 사선 6
+  ok(near(A.tip.x - A.setbackPoint.x, 1.5, 1e-12) && near(Math.hypot(A.tip.x - A.setbackPoint.x, A.tip.y - A.setbackPoint.y), 6, 1e-12) && A.tip.y < A.setbackPoint.y, "8: tip = 수직 기준선에서 수평 1.5 · 실제 사선 6");
+  ok(near(m.frontWidthCm, Math.sqrt(33.75), 1e-12) && near(m.pointDiagonalLenCm, 6, 1e-12), "8: √33.75 는 파생 수직 성분(measure)");
+  // ⑧ 외곽선 = cbOuter→tip 직선(bow 0), 폐곡선
+  const outer = r.bodyGeometry.outline.filter(s => s.part === "outer");
+  ok(outer.length === 1 && outer[0].kind === "line" && near(outer[0].from.x, A.tip.x, 1e-12) && near(outer[0].to.x, A.cbOuter.x, 1e-12), "8: bow 0 외곽선 = tip→cbOuter 직선(이음선과 무관)");
+  ok(C.validateClosedOutline(r.bodyGeometry.outline).ok && r.bodyGeometry.outline.map(s => s.part).join(",") === "attach,point-front,outer,cb-fold", "8: 폐곡선 parts 이음선·앞끝 사선·외곽·CB 접힘");
   // 실패 계약
-  ok(C.computeBody(stand, { cbWidthCm: 0, frontInsetCm: 0.3, frontProjectionCm: 4 }).reason === "invalid-cb-width", "8: cbWidth 0");
-  ok(C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: -1, frontProjectionCm: 4 }).reason === "invalid-front-inset", "8: inset 음수");
-  ok(C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 999, frontProjectionCm: 4 }).reason === "invalid-front-inset", "8: inset ≥ upperLen");
-  ok(C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: NaN }).reason === "invalid-front-projection", "8: point NaN");
-  ok(C.computeBody({ ok: false }, bp).reason === "invalid-stand", "8: 무효 스탠드");
+  const bad = (o) => C.computeBody(stand, Object.assign(M(), o)).reason;
+  ok(bad({ gapCm: 0 }) === "invalid-gap" && bad({ gapCm: -1 }) === "invalid-gap", "8: gap ≤0 거부");
+  ok(bad({ cbWidthCm: 0 }) === "invalid-cb-width", "8: cbWidth 0 거부");
+  ok(bad({ frontInsetCm: -1 }) === "invalid-front-inset" && bad({ frontInsetCm: 999 }) === "invalid-front-inset", "8: setback 음수·과대 거부");
+  ok(bad({ frontProjectionCm: NaN }) === "invalid-front-projection", "8: 돌출 NaN 거부");
+  ok(bad({ pointDiagonalCm: 1.5 }) === "invalid-point-diagonal" && bad({ pointDiagonalCm: undefined }) === "invalid-point-diagonal", "8: 사선 ≤ 돌출·누락 거부");
+  ok(C.computeBody({ ok: false }, M()).reason === "invalid-stand", "8: 무효 스탠드 거부");
+  // 입력 불변 · 결정론
+  const sStr = JSON.stringify(stand), pStr = JSON.stringify(rb);
+  const r2 = C.computeBody(stand, rb);
+  ok(JSON.stringify(stand) === sStr && JSON.stringify(rb) === pStr && JSON.stringify(r2) === JSON.stringify(r), "8: 입력 불변·결정론");
 }
 
-// 9. 앞쪽 폭 변화(frontWidthCm) — CB 폭과 독립. 기본 6/6 = 현재 형상 동일. 읽기전용 measure.
+// 9. 대표 목둘레 여러 개: 유한값·길이 정합·gap·사선·결정론, 보정 방향은 기하에 따라 다를 수 있음
 {
-  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
-  const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
-  // 기본 6/6/0.3/4 == frontWidth 생략(=cbW) 과 동일 geometry
-  const rA = C.computeBody(stand, { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 });
-  const rB = C.computeBody(stand, { cbWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 });
-  ok(rA.ok && JSON.stringify(rA.bodyGeometry) === JSON.stringify(rB.bodyGeometry), "9: frontWidth 6 == 생략(=cbW) 동일 형상");
-  ok(near(rA.measure.cbWidthCm, 6) && near(rA.measure.frontWidthCm, 6) && near(rA.measure.frontProjectionCm, 4), "9: measure 파라미터 반영");
-  // 포인트 사선 길이 = sqrt(frontWidth² + projection²) = sqrt(36+16)=√52
-  ok(near(rA.measure.pointDiagonalLenCm, Math.sqrt(52), 1e-6), "9: 포인트 사선 = √(frontW²+proj²) ≈ 7.211");
-  ok(near(Math.hypot(rA.anchors.tip.x - rA.anchors.target.x, rA.anchors.tip.y - rA.anchors.target.y), rA.measure.pointDiagonalLenCm, 1e-9), "9: pointDiagonal = dist(tip, attachFront)");
-  // ★ 앞끝 기울기 = 부착선 로컬 접선 기준(캔버스 축·spread 아님): 대각(target→tip)의 접선/법선 성분.
-  const dg = { x: rA.anchors.tip.x - rA.anchors.target.x, y: rA.anchors.tip.y - rA.anchors.target.y };
-  const localTan = dg.x * rA.anchors.frontTangent.x + dg.y * rA.anchors.frontTangent.y;
-  const localNor = dg.x * rA.anchors.frontNormal.x + dg.y * rA.anchors.frontNormal.y;
-  ok(near(localTan, 4) && near(localNor, 6), "9: localTangentComponent=projection 4·localNormalComponent=frontWidth 6");
-  ok(near(rA.measure.localTiltDeg, Math.atan2(6, 4) * 180 / Math.PI) && near(rA.measure.localTiltDeg, 56.31, 1e-2), "9: localTiltDeg = atan2(frontWidth, projection) = 56.31°");
-  // frontRise 가 달라도 같은 본체 비율이면 localTiltDeg 동일(캔버스 기준이 아님을 증명)
-  const stand25 = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: 2.5 });
-  const r25 = C.computeBody(stand25, { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 });
-  ok(near(r25.measure.localTiltDeg, rA.measure.localTiltDeg), "9: localTiltDeg frontRise 무관(1.5 vs 2.5 동일)");
-  // 앞폭을 줄이면 front outer 가 부착점에 가까워진다(법선거리 = frontWidth)
-  const rN = C.computeBody(stand, { cbWidthCm: 6, frontWidthCm: 3, frontInsetCm: 0.3, frontProjectionCm: 4 });
-  ok(rN.ok && near(Math.hypot(rN.anchors.frontOuter.x - rN.anchors.target.x, rN.anchors.frontOuter.y - rN.anchors.target.y), 3), "9: frontWidth 3 → 앞 법선거리 3");
-  ok(near(Math.hypot(rN.anchors.cbOuter.x - rN.anchors.cbAttach.x, rN.anchors.cbOuter.y - rN.anchors.cbAttach.y), 6), "9: CB 폭은 여전히 6(독립)");
-  ok(near(rN.measure.pointDiagonalLenCm, Math.sqrt(3 * 3 + 16), 1e-6), "9: 앞폭 3 → 포인트 사선 √25=5");
-  // 앞끝 투영은 여전히 접선 방향(법선성분 0)
-  const dv = { x: rN.anchors.tip.x - rN.anchors.frontOuter.x, y: rN.anchors.tip.y - rN.anchors.frontOuter.y };
-  ok(near(dv.x * rN.anchors.frontTangent.x + dv.y * rN.anchors.frontTangent.y, 4) && near(dv.x * rN.anchors.frontNormal.x + dv.y * rN.anchors.frontNormal.y, 0), "9: 앞폭 변경에도 투영=접선 4·법선 0");
-  // 실패: frontWidth 0/음수
-  ok(C.computeBody(stand, { cbWidthCm: 6, frontWidthCm: 0, frontInsetCm: 0.3, frontProjectionCm: 4 }).reason === "invalid-front-width", "9: frontWidth 0");
-  ok(C.computeBody(stand, { cbWidthCm: 6, frontWidthCm: -2, frontInsetCm: 0.3, frontProjectionCm: 4 }).reason === "invalid-front-width", "9: frontWidth 음수");
-  // 폐곡선·자기교차 없음(앞폭 변경 케이스)
-  let closed = true, o = rN.bodyGeometry.outline;
-  for (let i = 0; i < o.length; i++) { const nx = o[(i + 1) % o.length]; if (!near(o[i].to.x, nx.from.x, 1e-6) || !near(o[i].to.y, nx.from.y, 1e-6)) closed = false; }
-  ok(closed, "9: 앞폭 변경 폐곡선 연속");
+  [[7.6926, 11.129, 1.75], [8.5, 12.4, 1.5], [6.8, 10.1, 0], [9.2, 13.6, 2]].forEach(([back, front, ov]) => {
+    const tag = "back" + back + " front" + front;
+    const stand = C.computeStand(bodice(back, front, ov), C.referenceParams());
+    const r = C.computeBody(stand, M());
+    const vals = r.ok ? [r.attachLenCm, r.measure.cbCorrectionCm, r.anchors.tip.x, r.anchors.tip.y, r.anchors.upperCbSeam.x] : [NaN];
+    ok(r.ok && vals.every(Number.isFinite), "9: " + tag + " 유한값");
+    ok(r.ok && Math.abs(r.attachLenCm - (stand.upperNeckSegmentLenCm - 0.5)) < 1e-6 && near(denseSegLen(r.bodyGeometry.outline[0]), r.attachLenCm, 1e-4), "9: " + tag + " 이음선 = 밴드 기준 길이");
+    ok(r.ok && near(r.anchors.bandTopCb.y - r.anchors.upperCbSeam.y, 3, 1e-12) && near(r.measure.pointDiagonalLenCm, 6, 1e-12) && near(r.measure.frontProjectionCm, 1.5, 1e-12), "9: " + tag + " gap3·사선6·돌출1.5");
+    ok(r.ok && JSON.stringify(C.computeBody(C.computeStand(bodice(back, front, ov), C.referenceParams()), M())) === JSON.stringify(r), "9: " + tag + " 결정론");
+    ok(r.ok && C.validateClosedOutline(r.bodyGeometry.outline).ok, "9: " + tag + " 폐곡선·자기교차 없음");
+  });
+  // gap 변경은 이음선만 바꾸고 밴드 기준 길이는 불변, CB 보정량은 다시 풀린다
+  const stand = C.computeStand(bodice(7.6926, 11.129, 1.75), C.referenceParams());
+  const g3 = C.computeBody(stand, M()), g4 = C.computeBody(stand, Object.assign(M(), { gapCm: 4 }));
+  ok(g4.ok && near(g4.measure.bandAttachLenCm, g3.measure.bandAttachLenCm, 1e-12) && near(g4.attachLenCm, g3.attachLenCm, 1e-6) && g4.measure.cbCorrectionCm !== g3.measure.cbCorrectionCm, "9: gap 4 → 같은 밴드 기준 길이·다른 CB 보정");
 }
 
-// 10. 외곽 휨량(outerBowCm) — cm 단위 signed bow. 0=직선 byte-identical, 고정점 불변, 접선 연속, 실측 길이.
+// 10. 외곽 휨(outerBowCm): 외곽선만 휜다 — 이음선·setback·gap·CB 폭·tip 불변
 {
-  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
-  const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
-  const base = { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 };
-  ok(C.referenceBodyParams().outerBowCm === 0, "10: referenceBodyParams outerBowCm 0");
-  // bow 0 → outerBow 생략과 byte-identical, 그리고 outer 는 단일 line
-  const r0 = C.computeBody(stand, Object.assign({ outerBowCm: 0 }, base));
-  const rOmit = C.computeBody(stand, base);
-  ok(r0.ok && JSON.stringify(r0.bodyGeometry) === JSON.stringify(rOmit.bodyGeometry), "10: bow 0 == 생략 byte-identical");
-  ok(r0.bodyGeometry.outline.filter(s => s.part === "outer").length === 1 && r0.bodyGeometry.outline.find(s => s.part === "outer").kind === "line", "10: bow 0 → 단일 line outer");
-  ok(near(r0.measure.outerBowCm, 0) && near(r0.measure.outerEdgeLenCm, Math.hypot(r0.anchors.frontOuter.x - r0.anchors.cbOuter.x, r0.anchors.frontOuter.y - r0.anchors.cbOuter.y)), "10: bow 0 outerEdgeLen = 직선 길이");
-
-  const seKind = (s) => s.kind === "cubic";
-  const segStartTan = (s) => { const v = seKind(s) ? { x: s.c1.x - s.from.x, y: s.c1.y - s.from.y } : { x: s.to.x - s.from.x, y: s.to.y - s.from.y }; const d = Math.hypot(v.x, v.y) || 1; return { x: v.x / d, y: v.y / d }; };
-  const segEndTan = (s) => { const v = seKind(s) ? { x: s.to.x - s.c2.x, y: s.to.y - s.c2.y } : { x: s.to.x - s.from.x, y: s.to.y - s.from.y }; const d = Math.hypot(v.x, v.y) || 1; return { x: v.x / d, y: v.y / d }; };
-  const cross = (a, b) => a.x * b.y - a.y * b.x;
-
-  function checkBow(bow) {
-    const r = C.computeBody(stand, Object.assign({ outerBowCm: bow }, base));
-    ok(r.ok, "10: bow " + bow + " 성공");
-    // 고정점 불변(bow 0 결과와 동일 anchors)
-    ok(JSON.stringify(r.anchors) === JSON.stringify(r0.anchors), "10: bow " + bow + " 고정점(cbOuter·frontOuter·tip·접선) 불변");
-    // 부착선 불변
-    ok(JSON.stringify(r.bodyGeometry.outline.filter(s => s.part === "attach")) === JSON.stringify(r0.bodyGeometry.outline.filter(s => s.part === "attach")), "10: bow " + bow + " 부착선 불변");
-    // 측정 불변: CB 폭·앞폭·투영·포인트 사선
-    ok(near(r.measure.cbWidthCm, 6) && near(r.measure.frontWidthCm, 6) && near(r.measure.frontProjectionCm, 4) && near(r.measure.pointDiagonalLenCm, r0.measure.pointDiagonalLenCm), "10: bow " + bow + " 폭·투영·포인트사선 불변");
-    // 외곽 = 두 cubic
+  const stand = C.computeStand(bodice(7.6926, 11.129, 1.75), C.referenceParams());
+  const r0 = C.computeBody(stand, M());
+  [1, -1].forEach(bow => {
+    const r = C.computeBody(stand, Object.assign(M(), { outerBowCm: bow }));
+    ok(r.ok && JSON.stringify(r.anchors) === JSON.stringify(r0.anchors), "10: bow " + bow + " 고정점 불변");
+    ok(JSON.stringify(r.bodyGeometry.outline.filter(s => s.part === "attach")) === JSON.stringify(r0.bodyGeometry.outline.filter(s => s.part === "attach")), "10: bow " + bow + " 이음선 불변");
     const outer = r.bodyGeometry.outline.filter(s => s.part === "outer");
-    ok(outer.length === 2 && outer.every(seKind), "10: bow " + bow + " 외곽 두 cubic");
-    // 중점 signed offset = outerBowCm
-    const cbO = r.anchors.cbOuter, fO = r.anchors.frontOuter;
-    const chord = (() => { const v = { x: fO.x - cbO.x, y: fO.y - cbO.y }, d = Math.hypot(v.x, v.y); return { x: v.x / d, y: v.y / d }; })();
-    let perp = { x: -chord.y, y: chord.x };
-    const nCBv = segEndTan(r.bodyGeometry.outline.find(s => s.part === "cb-fold"));  // not used for sign; recompute nCB below
-    // nCB = attach CB 법선(위) — attach 첫 세그 접선의 normalUp
-    const aTan = segStartTan(r.bodyGeometry.outline.find(s => s.part === "attach"));
-    let nCB = { x: -aTan.y, y: aTan.x }; if (nCB.y > 0) nCB = { x: aTan.y, y: -aTan.x };
-    if (perp.x * nCB.x + perp.y * nCB.y < 0) perp = { x: chord.y, y: -chord.x };
-    const M = { x: (cbO.x + fO.x) / 2, y: (cbO.y + fO.y) / 2 };
-    const bowMid = outer[0].to;   // 두 cubic 접점
-    const signedOff = (bowMid.x - M.x) * perp.x + (bowMid.y - M.y) * perp.y;
-    ok(near(signedOff, bow, 1e-6), "10: bow " + bow + " 중점 signed offset = outerBowCm");
-    // 접선 연속: 중간 접점(outer[0] 끝 == outer[1] 시작), front(=tTgt), CB(=부착 CB 접선)
-    ok(Math.abs(cross(segEndTan(outer[0]), segStartTan(outer[1]))) < 1e-6, "10: bow " + bow + " 중간 접선 연속");
-    ok(Math.abs(cross(segStartTan(outer[0]), r.anchors.frontTangent)) < 1e-6, "10: bow " + bow + " front 도착 접선 = 앞끝 돌출 방향");
-    ok(Math.abs(cross(segEndTan(outer[1]), aTan)) < 1e-6, "10: bow " + bow + " CB 시작 접선 = 부착 CB 접선");
-    // 실측 outer length == 반환값
-    ok(near(r.measure.outerEdgeLenCm, partActual(r.bodyGeometry, "outer"), 1e-5), "10: bow " + bow + " outerEdgeLen == 실제 primitive");
-    // 폐곡선 연속 + 교차 0(ok 로 보장)
-    let closed = true, o = r.bodyGeometry.outline;
-    for (let i = 0; i < o.length; i++) { const nx = o[(i + 1) % o.length]; if (!near(o[i].to.x, nx.from.x, 1e-6) || !near(o[i].to.y, nx.from.y, 1e-6)) closed = false; }
-    ok(closed, "10: bow " + bow + " 폐곡선 연속");
-    return r;
-  }
-  const rPos = checkBow(1.5), rNeg = checkBow(-1.5);
-  // 볼록(+)은 안쪽(−)보다 외곽이 부착선에서 멀다 → outer 길이 둘 다 직선보다 김
-  ok(rPos.measure.outerEdgeLenCm > r0.measure.outerEdgeLenCm && rNeg.measure.outerEdgeLenCm > r0.measure.outerEdgeLenCm, "10: ± 휨 outer 길이 > 직선");
-  // 원자적 실패
-  ok(C.computeBody(stand, Object.assign({ outerBowCm: NaN }, base)).reason === "invalid-outer-bow", "10: bow NaN → invalid-outer-bow");
-  ok(C.computeBody(stand, Object.assign({ outerBowCm: Infinity }, base)).reason === "invalid-outer-bow", "10: bow Infinity");
-  ok(C.computeBody(stand, Object.assign({ outerBowCm: -20 }, base)).reason === "self-intersection", "10: 과도한 안쪽 휨 → self-intersection");
+    ok(outer.length === 2 && outer.every(s => s.kind === "cubic") && near(r.measure.outerBowCm, bow), "10: bow " + bow + " 외곽선 두 cubic");
+    ok(near(r.measure.outerEdgeLenCm, outer.reduce((t, s) => t + denseSegLen(s), 0), 1e-4) && r.measure.outerEdgeLenCm > r0.measure.outerEdgeLenCm, "10: bow " + bow + " 외곽 실측 길이");
+    ok(C.validateClosedOutline(r.bodyGeometry.outline).ok, "10: bow " + bow + " 폐곡선");
+  });
+  ok(C.computeBody(stand, Object.assign(M(), { outerBowCm: NaN })).reason === "invalid-outer-bow", "10: bow NaN 거부");
+  ok(C.computeBody(stand, Object.assign(M(), { outerBowCm: -30 })).reason === "self-intersection", "10: 과도한 안쪽 휨 → self-intersection");
 }
 
-// 11. C3 관리형 직접 편집 순수: 고정 anchor topology·source-of-truth 재조립·endpoint 잠금·교차·불변.
+// 11. 관리형 직접 편집: 고정 topology [cbOuter,bowMid,tip,attachFront]·locked 이음선·endpoint 잠금·교차·불변
 {
-  const back = 10, front = 8, rise = 1.5, H = 3, ov = 1.75;
-  const stand = C.computeStand(bodice(back, front, ov), { standHeightCm: H, frontRiseCm: rise });
-  const base = { cbWidthCm: 6, frontWidthCm: 6, frontInsetCm: 0.3, frontProjectionCm: 4 };
-  // 변환: bow 0(직선) — 관리 체인 항상 [cbOuter,bowMid,frontOuter,tip,attachFront]
-  const body0 = C.computeBody(stand, Object.assign({ outerBowCm: 0 }, base));
+  const stand = C.computeStand(bodice(7.6926, 11.129, 1.75), C.referenceParams());
+  const body0 = C.computeBody(stand, M());
   const lc = C.collarBodyLineFromGeometry(body0.bodyGeometry);
-  ok(lc && lc.segments.length === 4 && lc.anchors.length === 5, "11: 관리 체인 4세그·5 anchor");
+  ok(lc && lc.segments.length === 3 && lc.anchors.length === 4, "11: 관리 체인 3세그·4 anchor");
   ok(near(lc.anchors[0].x, body0.anchors.cbOuter.x) && near(lc.anchors[0].y, body0.anchors.cbOuter.y), "11: anchor0 = cbOuter");
-  ok(near(lc.anchors[4].x, body0.anchors.target.x) && near(lc.anchors[4].y, body0.anchors.target.y), "11: anchor4 = attachFront");
-  ok(near(lc.anchors[2].x, body0.anchors.frontOuter.x) && near(lc.anchors[3].x, body0.anchors.tip.x), "11: anchor2 frontOuter·anchor3 tip");
-  ok(near(lc.anchors[1].x, (body0.anchors.cbOuter.x + body0.anchors.frontOuter.x) / 2), "11: bow0 bowMid = 직선 중점(명시 생성)");
-  ok(lc.locked && lc.locked.attachSegs.length && near(lc.locked.cbOuter.x, body0.anchors.cbOuter.x), "11: locked attachSegs·cbOuter");
-  // bow≠0 도 같은 anchor index 구조(외곽 두 세그가 cubic)
-  const body15 = C.computeBody(stand, Object.assign({ outerBowCm: 1.5 }, base));
-  const lc15 = C.collarBodyLineFromGeometry(body15.bodyGeometry);
-  ok(lc15.segments.length === 4 && lc15.segments[0].kind === "cubic" && lc15.segments[1].kind === "cubic", "11: bow≠0 도 4세그(외곽 cubic)·index 동일");
-  // round-trip: 관리 체인 → computeFromBodyLine → 유효 폐곡선, attachLen·포인트 사선 보존
+  ok(near(lc.anchors[2].x, body0.anchors.tip.x) && near(lc.anchors[2].y, body0.anchors.tip.y), "11: anchor2 = tip");
+  ok(near(lc.anchors[3].x, body0.anchors.setbackPoint.x) && near(lc.anchors[3].y, body0.anchors.setbackPoint.y), "11: anchor3 = attachFront(setback 점)");
+  ok(near(lc.anchors[1].x, (body0.anchors.cbOuter.x + body0.anchors.tip.x) / 2), "11: bow0 bowMid = 직선 중점(명시 생성)");
+  ok(JSON.stringify(lc.locked.attachSegs.map(s => [s.kind, s.from, s.c1, s.c2, s.to])) === JSON.stringify(body0.bodyGeometry.outline.filter(s => s.part === "attach").map(s => [s.kind, s.from, s.c1, s.c2, s.to])), "11: locked = 독립 위칼라 이음선 그대로");
+  const lc15 = C.collarBodyLineFromGeometry(C.computeBody(stand, Object.assign(M(), { outerBowCm: 1 })).bodyGeometry);
+  ok(lc15.segments.length === 3 && lc15.segments[0].kind === "cubic" && lc15.segments[1].kind === "cubic", "11: bow≠0 도 같은 index 구조");
   const rt = C.computeFromBodyLine(lc.segments, lc.locked);
-  ok(rt.ok && near(rt.attachLenCm, body0.attachLenCm, 1e-5) && near(rt.measure.pointDiagonalLenCm, body0.measure.pointDiagonalLenCm, 1e-6), "11: round-trip attachLen·포인트 사선 보존");
-  // endpoint 잠금
+  ok(rt.ok && near(rt.attachLenCm, body0.attachLenCm, 1e-9) && near(rt.measure.pointDiagonalLenCm, 6, 1e-9), "11: round-trip 이음선 길이·사선 보존");
   const cl = s => ({ kind: "line", from: { x: s.from.x, y: s.from.y }, to: { x: s.to.x, y: s.to.y } });
   const moveA = (segs, idx, np) => { const s = segs.map(cl); if (idx > 0) s[idx - 1].to = { x: np.x, y: np.y }; if (idx < s.length) s[idx].from = { x: np.x, y: np.y }; return s; };
   ok(C.computeFromBodyLine(moveA(lc.segments, 0, { x: 99, y: 99 }), lc.locked).reason === "endpoint-cbouter", "11: cbOuter 이동 → endpoint-cbouter");
-  ok(C.computeFromBodyLine(moveA(lc.segments, 4, { x: 99, y: 99 }), lc.locked).reason === "endpoint-attachfront", "11: attachFront 이동 → endpoint-attachfront");
-  // 편집 유효(SP 근처 소폭 이동) → ok
-  const okEdit = C.computeFromBodyLine(moveA(lc.segments, 1, { x: lc.anchors[1].x, y: lc.anchors[1].y - 1 }), lc.locked);
-  ok(okEdit.ok, "11: 유효 편집(bowMid 위로) → ok");
-  // 교차: tip 을 부착선 아래로 끌어 침범 → self-intersection
-  const bad = C.computeFromBodyLine(moveA(lc.segments, 3, { x: lc.locked.attachCB.x, y: lc.locked.attachCB.y + 3 }), lc.locked);
-  ok(bad.reason === "self-intersection" || bad.reason === "degenerate-area", "11: tip 침범 → self-intersection/degenerate (" + bad.reason + ")");
-  // 실패 계약
-  ok(C.computeFromBodyLine([], lc.locked).reason === "no-line", "11: 빈 체인 → no-line");
-  ok(C.computeFromBodyLine(lc.segments, { attachSegs: [] }).reason === "no-attach", "11: locked 없음 → no-attach");
-  // 입력 불변
-  const segStr = JSON.stringify(lc.segments), lockStr = JSON.stringify(lc.locked);
-  C.computeFromBodyLine(lc.segments, lc.locked);
-  ok(JSON.stringify(lc.segments) === segStr && JSON.stringify(lc.locked) === lockStr, "11: computeFromBodyLine 입력 불변");
-  // collarBodyLineFromGeometry 입력 불변
-  const gStr = JSON.stringify(body0.bodyGeometry);
-  C.collarBodyLineFromGeometry(body0.bodyGeometry);
-  ok(JSON.stringify(body0.bodyGeometry) === gStr, "11: collarBodyLineFromGeometry 입력 불변");
+  ok(C.computeFromBodyLine(moveA(lc.segments, 3, { x: 99, y: 99 }), lc.locked).reason === "endpoint-attachfront", "11: attachFront 이동 → endpoint-attachfront");
+  ok(C.computeFromBodyLine(moveA(lc.segments, 1, { x: lc.anchors[1].x, y: lc.anchors[1].y - 1 }), lc.locked).ok, "11: 유효 편집(bowMid 위로) → ok");
+  const bad = C.computeFromBodyLine(moveA(lc.segments, 2, { x: lc.locked.attachCB.x + 2, y: lc.locked.attachCB.y + 3 }), lc.locked);
+  ok(bad.reason === "self-intersection" || bad.reason === "degenerate-area", "11: tip 을 이음선 아래로 → 거부 (" + bad.reason + ")");
+  ok(C.computeFromBodyLine([], lc.locked).reason === "no-line" && C.computeFromBodyLine(lc.segments, { attachSegs: [] }).reason === "no-attach", "11: 실패 계약");
+  const segStr = JSON.stringify(lc.segments), lockStr = JSON.stringify(lc.locked), gStr = JSON.stringify(body0.bodyGeometry);
+  C.computeFromBodyLine(lc.segments, lc.locked); C.collarBodyLineFromGeometry(body0.bodyGeometry);
+  ok(JSON.stringify(lc.segments) === segStr && JSON.stringify(lc.locked) === lockStr && JSON.stringify(body0.bodyGeometry) === gStr, "11: 입력 불변");
 }
 
-// 12. 교재 M 기본형(bunka-shirt-collar-M-v1) 종합 — referenceParams/referenceBodyParams 로 정확히 파생.
-//     밴드: CB 수평 접선·어깨 경계=뒤목·CF 올림 1·달림선=×+⊘. 위 칼라: 사선 정확히 6·부착=윗선−0.5·연장 미포함.
-//     '위 칼라를 밴드 윗선 primitive 에서 직접 파생' = 처음부터 길이 일치(CB 이동량 0) → CB 이동의 계산적 동등.
+// 12. 교재 M 밴드(스탠드) 종합 — 밴드 폭 3·CF 1 올림·달림선 ×+⊘·어깨 경계
 {
   const back = 10, front = 8, ov = 1.75;
-  const rp = C.referenceParams(), rb = C.referenceBodyParams();
-  const stand = C.computeStand(bodice(back, front, ov), rp);
-  ok(stand.ok && stand.frontRiseCm === 1, "12: M 스탠드 frontRise 1");
-  // CB 수평 접선(뒤목 직선 = 수평), 어깨 경계 = 뒤목둘레 지점, CF 올림 1
+  const stand = C.computeStand(bodice(back, front, ov), C.referenceParams());
+  ok(stand.ok && stand.frontRiseCm === 1 && stand.standHeightCm === 3, "12: M 밴드 폭 3·CF 올림 1");
   const straight = partSeg(stand.standGeometry, "neck-seam-straight");
   ok(straight && near(straight.from.y, straight.to.y), "12: CB 시작 접선 수평(뒤목 직선)");
-  ok(near(stand.anchors.shoulderSeam.x, back) && near(stand.anchors.shoulderSeam.y, 0), "12: 어깨 경계 = 뒤목둘레 지점");
-  ok(near(stand.anchors.cfSeam.y, -1), "12: CF 올림 = 1cm");
-  // 달림선(목둘레 봉제) = 뒤목 + 앞목 = × + ⊘ (여밈 연장 미포함)
+  ok(near(stand.anchors.shoulderSeam.x, back) && near(stand.anchors.shoulderSeam.y, 0) && near(stand.anchors.cfSeam.y, -1), "12: 어깨 경계 = 뒤목둘레 지점·CF 올림 1cm");
   ok(near(stand.lowerNeckSeamLenCm, back + front) && near(stand.backNeckLenCm, back) && near(stand.frontNeckLenCm, front), "12: 밴드 달림선 = ×+⊘ (연장 별도)");
-  // 위 칼라(M): 사선 정확히 6, frontWidth √33.75, cb4/inset0.5/proj1.5/bow0
-  const body = C.computeBody(stand, rb);
-  ok(body.ok && near(body.measure.pointDiagonalLenCm, 6, 1e-9), "12: 위 칼라 앞끝 사선 정확히 6cm");
-  ok(near(body.measure.cbWidthCm, 4) && near(body.measure.frontWidthCm, Math.sqrt(33.75), 1e-9) && near(body.measure.frontProjectionCm, 1.5) && near(body.measure.outerBowCm, 0), "12: M 본체 cb4/frontWidth√33.75/proj1.5/bow0");
-  // 부착선 = 밴드 윗선 목 primitive − 0.5(여밈 연장 미포함). 3cm 작업 간격이 geometry 에 없음(직접 파생).
-  ok(Math.abs(body.attachLenCm - (stand.upperNeckSegmentLenCm - 0.5)) <= 1e-3, "12: 부착 = 윗선 목 − 0.5(CB 이동 동등: 길이차 0)");
-  ok(stand.upperExtensionLenCm > 0 && Math.abs(body.attachLenCm - (stand.upperTotalLenCm - 0.5)) > 1, "12: 여밈 연장 부착 미포함");
-  // 폐곡선·자기교차 없음
-  ok(C.validateClosedOutline(stand.standGeometry.outline).ok && C.validateClosedOutline(body.bodyGeometry.outline).ok, "12: 스탠드·본체 폐곡선·자기교차 없음");
-  // M 기본형 복원 결정성(같은 기준값 → 동일 geometry)
-  const stand2 = C.computeStand(bodice(back, front, ov), C.referenceParams());
-  const body2 = C.computeBody(stand2, C.referenceBodyParams());
-  ok(JSON.stringify(stand.standGeometry) === JSON.stringify(stand2.standGeometry) && JSON.stringify(body.bodyGeometry) === JSON.stringify(body2.bodyGeometry), "12: M 기본형 복원 결정성(동일 geometry)");
+  const body = C.computeBody(stand, C.referenceBodyParams());
+  ok(body.ok && C.validateClosedOutline(stand.standGeometry.outline).ok && C.validateClosedOutline(body.bodyGeometry.outline).ok, "12: 밴드·위 칼라 폐곡선");
+  const stand2 = C.computeStand(bodice(back, front, ov), C.referenceParams()), body2 = C.computeBody(stand2, C.referenceBodyParams());
+  ok(JSON.stringify(stand.standGeometry) === JSON.stringify(stand2.standGeometry) && JSON.stringify(body.bodyGeometry) === JSON.stringify(body2.bodyGeometry), "12: M 기본형 복원 결정성");
 }
 
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
