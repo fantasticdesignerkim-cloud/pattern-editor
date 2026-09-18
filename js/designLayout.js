@@ -282,7 +282,7 @@
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
     _userArranged = false;
-    L.placement = { front: "auto", back: "auto", sleeve: "auto", collar: "auto" };
+    L.placement = { front: "auto", back: "auto", sleeve: "auto" };
     refreshAutoLayout();
     Object.assign(view, { SC: 11, MX: 80, MY: 100 });
     syncViewVars(); fitUnion();

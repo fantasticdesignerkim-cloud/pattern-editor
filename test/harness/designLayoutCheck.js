@@ -267,7 +267,7 @@ function semGeom(opts) {
   L().front = { dx: 77, dy: 5 }; L().placement.front = "manual";
   D.afterBodyLength(); D.afterCollar();
   ok(L().front.dx === 77 && L().front.dy === 5 && L().placement.front === "manual", "14: manual 앞판은 재계산에서 재정렬 안 함");
-  D.resetLayout(); ok(bl() && nonOverlap() && L().placement.front === "auto" && L().placement.collar === "auto", "14: 배치 초기화 → 가슴선 복귀·collar 포함 auto");
+  D.resetLayout(); ok(bl() && nonOverlap() && L().placement.front === "auto", "14: 배치 초기화 → 가슴선 복귀·뒤<앞<소매·간격 10");
 }
 
 console.log("══════════════════════════════════════════════");
