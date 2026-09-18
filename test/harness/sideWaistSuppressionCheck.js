@@ -100,7 +100,7 @@ let PROJECT = null;
 const sb = { window: { designLineTool: { buildPieceRing: () => ({ ok: true }) }, designWorkflow: { current: () => PROJECT } },
   console: { log() {}, warn() {}, error() {} }, structuredClone, Math, JSON, Object, Array, Number, isFinite, Error, Infinity, NaN, Date };
 sb.globalThis = sb; vm.createContext(sb);
-["designBodice.js", "bodiceCheckpoint.js"].forEach(f => vm.runInContext(JS(f), sb, { filename: f }));
+["designBodice.js", "bodiceCheckpoint.js", "sideWaistAnnotation.js"].forEach(f => vm.runInContext(JS(f), sb, { filename: f }));
 const DB = sb.window.designBodice, BC = sb.window.bodiceCheckpoint;
 function loadLT() { const s2 = { window: {}, document: {}, console: { log() {}, warn() {} }, structuredClone, Math, JSON, Object, Array, Number, isFinite, Error, Infinity, NaN }; s2.globalThis = s2; vm.createContext(s2); vm.runInContext(JS("designLineTool.js"), s2); return s2.window.designLineTool; }
 // 엔진 unmoved 외곽을 design geometry(line primitive + edge + boundary)로 옮긴다. 곡선도 샘플 line 으로 둔다.
@@ -258,6 +258,39 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
     const leg = [{ kind: "line", from: { x: 0, y: 0 }, to: { x: 0, y: 5 }, edge: "side-seam" }, { kind: "line", from: { x: 0, y: 5 }, to: { x: 0, y: 8 }, edge: "side-seam", boundary: { root: "front/side-seam-extension", ranges: [[0, 1]] } }];
     const mL = BC.measureSideSeam(leg);
     ok(mL.status === "measured" && near(mL.length, 8), "6f: legacy 명시 edge(boundary 없음) + 연장 → 측정 8");
+  }
+  // 7. 디자인 원형 옆허리 억제 보조 표시 모델: reference 기본 옆선에서 결정론적 계산, working 조작 무관,
+  //    working 측정 불가 조각은 표시 안 함(좌표 복원 없음), 연장만 있는 reference 는 기본 옆선 아님
+  {
+    const SWA = sb.window.sideWaistAnnotation, deps = { measureSideSeam: BC.measureSideSeam };
+    const dproj = (work, dO) => ({ referenceGeometry: G, working: { geometry: work, designOutline: dO || null } });
+    const m0 = SWA.buildModel(dproj(G), deps);
+    ok(m0.front.available && m0.back.available && near(m0.front.halfCm, 0.6875, 1e-12) && near(m0.back.halfCm, 0.6875, 1e-12) && near(m0.totalCm, d.darts.c, 1e-12),
+      "7: 원형 c/2 앞 0.6875·뒤 0.6875, 합 = c 1.375");
+    ok(nearPt(m0.front.underarm, p.SIDE_TOP) && nearPt(m0.front.waist, p.FRONT_SIDE_WL) && nearPt(m0.back.waist, p.BACK_SIDE_WL) &&
+       nearPt(m0.front.guideBottom, { x: p.SIDE_TOP.x, y: p.FRONT_SIDE_WL.y }), "7: 진동밑 = SIDE_TOP, 허리점 = 앞/뒤 옆선 허리점, 보조선 = SIDE_TOP 수직");
+    const refStr = JSON.stringify(G);
+    [{ bustEaseCm: 4 }, { waistSideOffsetCm: -2 }, { hemExtensionBelowWaistCm: 10, waistSideOffsetCm: -2, sideSeamCurve: 1 }].forEach((body, i) => {
+      const w = DB.computeGeometry(geom0, { body }), ws = JSON.stringify(w);
+      const m = SWA.buildModel(dproj(w), deps);
+      ok(JSON.stringify(m) === JSON.stringify(m0) && JSON.stringify(w) === ws && JSON.stringify(G) === refStr, "7-" + i + ": working 조작 후에도 원형 값 그대로·입력 불변");
+    });
+    // generic 대체가 기본 옆선을 삼키고 연장만 남음 → 앞 표시 안 함(게이트와 같은 판정), 뒤는 표시
+    const GHw = curveArm(DB.computeGeometry(geom0, { body: { hemExtensionBelowWaistCm: 10 } }));
+    const gen = bulge(1.5, null), oG = compose(GHw, "front", [gen]);
+    const mG = SWA.buildModel(dproj(GHw, { front: { outline: oG } }), deps);
+    ok(!mG.front.available && mG.front.reason === "working-side-unmeasured" && mG.back.available && mG.totalCm === null, "7: 연장만 남은 working → 앞 표시 불가·합계 없음·뒤 표시");
+    PROJECT = projDO(GHw, { front: { outline: oG, lineIds: [gen.id] } }, [gen]);
+    ok(BC.check(PROJECT).sideSeam.status === "unmeasured", "7: 같은 상태에서 게이트도 unmeasured(모순 없음)");
+    // 명시 side-seam 대체 + 연장 → 게이트 측정 가능 → 표시(값은 원형 reference 그대로)
+    const exp = bulge(1.5, "side-seam"), oE = compose(GHw, "front", [exp]);
+    const mE = SWA.buildModel(dproj(GHw, { front: { outline: oE } }), deps);
+    ok(mE.front.available && near(mE.front.halfCm, 0.6875, 1e-12) && JSON.stringify(mE.front) === JSON.stringify(m0.front), "7: 명시 대체 → 표시 유지, 값은 원형 reference");
+    // reference 에 연장만 있고 기본 옆선이 없으면 기본 옆선 아님
+    const refExtOnly = JSON.parse(refStr);
+    refExtOnly.front.outline.forEach(x => { if (x.edge === "side-seam") x.boundary = { root: "front/side-seam-extension", ranges: [[0, 1]] }; });
+    ok(SWA.buildModel({ referenceGeometry: refExtOnly, working: { geometry: G } }, deps).front.reason === "no-reference-primary", "7: reference 연장 root 만 → no-reference-primary");
+    ok(SWA.buildModel(null, deps) === null, "7: project 없음 → null");
   }
 }
 

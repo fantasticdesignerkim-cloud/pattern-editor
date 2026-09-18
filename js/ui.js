@@ -431,6 +431,24 @@
     el.textContent = "앞옆선 " + fmtL(ss.front) + "cm · 뒤옆선 " + fmtL(ss.back) + "cm · 차이 " + fmtL(ss.diff) + "cm";
     el.setAttribute("data-ok", ss.diff <= 1 ? "1" : "0");
   }
+  // 원형 옆허리 억제(c) 보조 표시(표시 전용): 원형 reference 기본 옆선에서 계산한 원형 c/2·c. working 조작량이 아니다.
+  function sideWaistModel(project) {
+    if (!project || !window.sideWaistAnnotation || !window.bodiceCheckpoint) return null;
+    return window.sideWaistAnnotation.buildModel(project, { measureSideSeam: window.bodiceCheckpoint.measureSideSeam });
+  }
+  // render.js 가 읽는다: design stage · 몸판 서브탭일 때만 모델, 그 외 null.
+  function sideWaistAnnotationForRender() {
+    if (!isDesignStageActive() || currentDesignSubtab() !== "body") return null;
+    return sideWaistModel(designProjectNow());
+  }
+  function sideWaistNote(project) {
+    const el = document.getElementById("designSideWaistNote"); if (!el) return;
+    const m = sideWaistModel(project);
+    if (!m) { el.textContent = ""; return; }
+    const cm = (v) => (Math.round(Math.round(v * 1e4) / 1e4 * 100) / 100).toFixed(2) + "cm";   // 좌표 차 float 잡음(1.3749999…) 흡수 후 표시 반올림
+    const half = (pm) => pm.available ? cm(pm.halfCm) : "표시 불가";
+    el.textContent = "원형 옆허리 억제 c " + (m.totalCm == null ? "표시 불가" : cm(m.totalCm)) + " · 원형 앞 c/2 " + half(m.front) + " · 원형 뒤 c/2 " + half(m.back);
+  }
   function setBodyNote(txt) { const n = document.getElementById("designBodyNote"); if (n) n.textContent = txt; }
   // 적용 중 상태 문구(여유량·길이·허리/밑단 옆선). 전부 0이면 기본 안내. 옆선은 부호 표시(안/밖).
   function offStr(v, inLabel, outLabel) { return (v < 0 ? inLabel + " " + fmtL(-v) : outLabel + " " + fmtL(v)) + "cm"; }
@@ -1365,7 +1383,7 @@
     setIf("inpNeckCurveAmount", cn.CA); setIf("inpNeckVDepth", cn.VD);
     setIf("inpNeckSquareWidth", cn.SW); setIf("inpNeckCornerRadius", cn.CR);
     setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv, cn.type));
-    sideLenNote(project); neckLenNote(project);
+    sideLenNote(project); sideWaistNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
     // 앞중심 여밈 입력·상태 복원(포커스 중 안 덮음)
@@ -1418,7 +1436,7 @@
     setBack(st.nCA, st.nCA.v); setBack(st.nVD, st.nVD.v); setBack(st.nSW, st.nSW.v); setBack(st.nCR, st.nCR.v);
     const necked = st.neckType !== "original";
     setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0 && !necked) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv, st.neckType));
-    sideLenNote(project); neckLenNote(project);
+    sideLenNote(project); sideWaistNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
     updateBodiceCheckpointUI(project);   // 몸판 변경 → 검사 요약·완료 상태(변경됨) 갱신
@@ -1673,6 +1691,7 @@
   window.updateContextInspector = updateContextInspector;
   window.updateContextActions   = updateContextActions;
   window.isDesignStageActive    = isDesignStageActive;
+  window.sideWaistAnnotationForRender = sideWaistAnnotationForRender;   // render.js 원형 옆허리 억제 보조 오버레이(표시 전용)
   window.collarAnnotationForRender = collarAnnotationForRender;   // render.js 카라 제도 보조수치 오버레이(표시 전용)   // render.js 등이 읽는 읽기 전용 신호
   window.refreshDesignBodyPanel = updateDesignBodyPanel;  // designLineTool 이 boundary 편집 후 목둘레·상태 갱신
   window.refreshFrontPlacket = () => refreshFrontPlacket();  // boundary 편집으로 유효 외곽 변경 시 여밈 재파생
