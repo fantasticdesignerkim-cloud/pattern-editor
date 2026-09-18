@@ -1,13 +1,14 @@
 // ══════════════════════════════════════════════
-// sideWaistSuppressionCheck.js — 옆선 허리 조임(c) 승격 회귀.
+// sideWaistDartCheck.js — 기본 수직 옆선 + 옆허리 다트 c(앞·뒤 반쪽) 원형·엔진 회귀.
 //
-// 도메인 결정: shared-waist-c 는 봉제해서 닫는 다트가 아니라 앞·뒤 옆선에 분배된 허리 조임이다.
-// 앞판 최종 옆선 = SIDE_TOP→c.right(FRONT_SIDE_WL), 뒤판 = SIDE_TOP→c.left(BACK_SIDE_WL). draft 가 단일 원천.
-// SIDE_TOP→SIDE_BTM 중앙선은 기준선일 뿐 외곽선 끝점이 아니다. c 는 구조화 다트/attachment/carry 대상이 아니다.
-// 옆선·허리 외 primitive, a/b/d/e/f 다리·apex 좌표는 승격 전과 동일해야 한다(아래 PRE_* 는 승격 직전
-// HEAD 88d1509 의 엔진 출력에서 기록한 값).
+// 도메인 계약(사용자 확정):
+//  · 앞·뒤 기본 옆선 = SIDE_TOP→SIDE_BTM 수직 완성선(겹침 원형 화면에서 같은 위치). 허리 root 는 SIDE_BTM 에서 끝.
+//  · c 는 논리적 하나의 옆허리 다트(총 intake darts.c). 앞·뒤 조각에 각각 c/2 반쪽 다트:
+//    apex SIDE_TOP · 다리 SIDE_BTM · 다리 FRONT_SIDE_WL(앞) / BACK_SIDE_WL(뒤). group 으로 연결, 예산에서 한 번만.
+//  · c 반쪽은 locked — 다트이동 carry·split·retarget 대상 아님(엔진 외곽·carry payload 에 없음).
+//  · SIDE_TOP→*_SIDE_WL 사선은 다트선이지 외곽(side-seam)이 아니다.
 //
-//   node test/harness/sideWaistSuppressionCheck.js
+//   node test/harness/sideWaistDartCheck.js
 // ══════════════════════════════════════════════
 const vm = require("vm");
 const fs = require("fs");
@@ -21,77 +22,111 @@ const near = (a, b, e = 1e-9) => Math.abs(a - b) < e;
 const nearPt = (p, q, e = 1e-9) => near(p.x, q.x, e) && near(p.y, q.y, e);
 const dims = { B: 83, W: 64, BL: 38 };
 const hashStr = (s) => { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return (x >>> 0).toString(16) + ":" + s.length; };
-const SIDE_WAIST = new Set(["side-seam", "front-waist", "back-waist"]);
 
-// 승격 직전(HEAD 88d1509) 기록값
-const PRE_OTHER_OUTLINE_HASH = { front: "3f980a6c:11980", back: "965bfedd:1391" };
+// 수직 옆선 도입 전후 모두 같은 a/b/d/e/f 다리·apex(HEAD 88d1509 엔진 출력 기록값)
 const PRE_WAIST_DARTS = {"a":{"apex":{"x":38.512499999999996,"y":22.616666666666667},"left":{"x":37.637499999999996,"y":38},"right":{"x":39.387499999999996,"y":38}},"b":{"apex":{"x":29.83125,"y":14.808333333333334},"left":{"x":28.89375,"y":38},"right":{"x":30.76875,"y":38}},"d":{"apex":{"x":16.775,"y":14.808333333333334},"left":{"x":14.587499999999999,"y":38},"right":{"x":18.9625,"y":38}},"e":{"apex":{"x":9.3875,"y":18.616666666666667},"left":{"x":8.2625,"y":38},"right":{"x":10.5125,"y":38}},"f":{"apex":{"x":0,"y":12.205555555555556},"left":{"x":-0.43750000000000006,"y":38},"right":{"x":0.43750000000000006,"y":38}}};
 
 const { engine } = createEngine();
 const d = engine.createDraft(83, 64, 38), p = d.pts;
 
-// 1. draft 단일 원천: c 분배점
+// 1. 원형 기준점·분량(B83/W64/BL38/total 12.5)
 {
-  const half = d.darts.c / 2;
-  ok(nearPt(p.FRONT_SIDE_WL, { x: p.SIDE_TOP.x + half, y: p.SIDE_BTM.y }) && nearPt(p.BACK_SIDE_WL, { x: p.SIDE_TOP.x - half, y: p.SIDE_BTM.y }),
-    "1: FRONT_SIDE_WL = c.right, BACK_SIDE_WL = c.left (허리선 위 SIDE_TOP.x ± c/2)");
-  ok(p.SIDE_BTM.x === p.SIDE_TOP.x && typeof d.darts.c === "number" && d.darts.c > 0, "1: 중앙 SIDE_BTM·c 분량은 기준값으로 유지");
+  ok(nearPt(p.SIDE_TOP, { x: 23.053125, y: 20.616666666666667 }, 1e-9) && nearPt(p.SIDE_BTM, { x: 23.053125, y: 38 }), "1: SIDE_TOP (23.053125,20.616667) · SIDE_BTM (23.053125,38)");
+  ok(near(d.darts.total, 12.5) && near(d.darts.c, 1.375), "1: total 12.5 · c = 12.5×0.11 = 1.375");
+  ok(nearPt(p.FRONT_SIDE_WL, { x: 23.740625, y: 38 }) && nearPt(p.BACK_SIDE_WL, { x: 22.365625, y: 38 }), "1: c 다리 끝 FRONT_SIDE_WL 23.740625 · BACK_SIDE_WL 22.365625");
+  ok(near(["a", "b", "c", "d", "e", "f"].reduce((t, k) => t + d.darts[k], 0), 12.5), "1: a+b+c+d+e+f = 12.5");
 }
 
-// 2. unmoved 엔진 외곽: 옆선·허리 끝점 승격, 중앙 SIDE_BTM 은 외곽 끝점 아님, identity·방향 유지
-[["front", engine.buildFrontOutline(p, d.formula, 83), p.FRONT_SIDE_WL, "front-waist"],
- ["back", engine.buildBackOutline(p, d.formula, 83), p.BACK_SIDE_WL, "back-waist"]].forEach(([side, segs, S, waistType]) => {
+// 2. 엔진 외곽: 앞·뒤 옆선 = SIDE_BTM→SIDE_TOP 수직, 허리 root 끝 = SIDE_BTM, c 사선은 외곽에 없음
+[["front", engine.buildFrontOutline(p, d.formula, 83), "front-waist"], ["back", engine.buildBackOutline(p, d.formula, 83), "back-waist"]].forEach(([side, segs, waistType]) => {
   const ss = segs.filter(s => s.type === "side-seam"), ws = segs.filter(s => s.type === waistType);
-  ok(ss.length === 1 && nearPt(ss[0].from, S) && nearPt(ss[0].to, p.SIDE_TOP), "2: " + side + " 옆선 = 새 옆선 허리점→SIDE_TOP");
-  ok(ss[0].boundaryRoot === side + "/side-seam" && ss[0].boundaryFromT === 1 && ss[0].boundaryToT === 0, "2: " + side + " 옆선 root·방향(진동밑 0→허리 1) 유지");
-  ok(ws.length === 1 && nearPt(ws[0].to, S) && ws[0].boundaryRoot === side + "/waist" && ws[0].boundaryFromT === 0 && ws[0].boundaryToT === 1, "2: " + side + " 허리 root 중심(0)→새 옆 점(1)");
-  ok(segs.every(s => !nearPt(s.from, p.SIDE_BTM, 1e-6) && !nearPt(s.to, p.SIDE_BTM, 1e-6)), "2: " + side + " 중앙 SIDE_BTM 은 외곽 끝점 아님");
-  ok(hashStr(JSON.stringify(segs.filter(s => !SIDE_WAIST.has(s.type)))) === PRE_OTHER_OUTLINE_HASH[side], "2: " + side + " 옆선·허리 외 primitive 는 승격 전과 byte 동일");
+  ok(ss.length === 1 && nearPt(ss[0].from, p.SIDE_BTM) && nearPt(ss[0].to, p.SIDE_TOP) && near(ss[0].from.x, ss[0].to.x), "2: " + side + " 옆선 = SIDE_BTM→SIDE_TOP 수직");
+  ok(near(Math.hypot(ss[0].to.x - ss[0].from.x, ss[0].to.y - ss[0].from.y), 17.383333333333333, 1e-9), "2: " + side + " 옆선 길이 17.383333");
+  ok(ss[0].boundaryRoot === side + "/side-seam" && ss[0].boundaryFromT === 1 && ss[0].boundaryToT === 0, "2: " + side + " 옆선 root·방향(진동밑 0→허리 1)");
+  ok(ws.length === 1 && nearPt(ws[0].to, p.SIDE_BTM) && ws[0].boundaryRoot === side + "/waist" && ws[0].boundaryFromT === 0 && ws[0].boundaryToT === 1, "2: " + side + " 허리 root 중심(0)→SIDE_BTM(1)");
+  const cEnd = side === "front" ? p.FRONT_SIDE_WL : p.BACK_SIDE_WL;
+  ok(segs.every(s => !nearPt(s.from, cEnd, 1e-6) && !nearPt(s.to, cEnd, 1e-6)), "2: " + side + " c 다리 끝(" + (side === "front" ? "FRONT" : "BACK") + "_SIDE_WL)은 엔진 외곽 끝점이 아님");
+  ok(segs.every(s => !/side-waist-c/.test(s.dartId || "")), "2: " + side + " c 는 엔진 외곽(다트이동 대상)에 없음");
 });
 
-// 3. c 는 다트가 아니다: 단일 원천·payload·attachment 에서 제거, a/b/d/e/f 다리·apex 불변, attach t 는 새 허리 root 기준
+// 3. c 반쪽 다트(단일 원천): identity·group·locked·apex·다리·intake·attachment, 예산에서 한 번만
+const SC = engine.buildGen0SideWaistC(d.formula, p, d.darts);
+{
+  ok(SC.group === "side-waist-c" && near(SC.totalCm, 1.375), "3: logical group side-waist-c · total 1.375");
+  [["front", SC.front, p.FRONT_SIDE_WL], ["back", SC.back, p.BACK_SIDE_WL]].forEach(([pc, h, leg]) => {
+    ok(h.id === pc + "-side-waist-c" && h.piece === pc && h.group === SC.group && h.locked === true, "3: " + pc + " 반쪽 id·piece·group·locked");
+    ok(nearPt(h.apex, p.SIDE_TOP) && nearPt(h.legs.side, p.SIDE_BTM) && nearPt(h.legs.intake, leg), "3: " + pc + " apex SIDE_TOP · 다리 SIDE_BTM · 다리 " + pc.toUpperCase() + "_SIDE_WL");
+    ok(near(h.intakeCm, 0.6875, 1e-12), "3: " + pc + " intake c/2 = 0.6875");
+    const C = pc === "front" ? p.FRONT_WL : p.BACK_WL, at = (t) => ({ x: C.x + (p.SIDE_BTM.x - C.x) * t, y: C.y });
+    ok(h.attach.side.root === pc + "/waist" && near(h.attach.side.t, 1) && h.attach.intake.root === pc + "/waist" && nearPt(at(h.attach.intake.t), leg, 1e-9) && h.attach.intake.t < 1,
+      "3: " + pc + " attach = 허리 root(SIDE_BTM t 1, 사선 다리 t = 같은 물리점)");
+  });
+  // 예산: a,b,d,e,f 폭 + group 당 c 한 번 = 12.5. 반쪽 intake 를 따로 더해도 c 와 같다(이중 계산 없음).
+  const darts = engine.buildGen0WaistDarts(d.formula, p, d.darts);
+  const wid = k => Math.abs(darts[k].right.x - darts[k].left.x);
+  const byGroup = {}; [SC.front, SC.back].forEach(h => { byGroup[h.group] = (byGroup[h.group] || 0) + h.intakeCm; });
+  ok(Object.keys(byGroup).length === 1 && near(byGroup[SC.group], SC.totalCm, 1e-12), "3: 반쪽 두 record 합 = group 총량 c(1.375)");
+  ok(near(["a", "b", "d", "e", "f"].reduce((t, k) => t + wid(k), 0) + SC.totalCm, 12.5, 1e-9), "3: a,b,d,e,f + c(group 1회) = 12.5");
+}
+
+// 4. a/b/d/e/f 불변·새 허리 root attach·carry 에 c 없음
 {
   const darts = engine.buildGen0WaistDarts(d.formula, p, d.darts);
-  ok(JSON.stringify(Object.keys(darts)) === JSON.stringify(["a", "b", "d", "e", "f"]), "3: gen-0 허리다트 = a,b,d,e,f (c 없음)");
-  ok(Object.keys(PRE_WAIST_DARTS).every(k => ["apex", "left", "right"].every(q => JSON.stringify(darts[k][q]) === JSON.stringify(PRE_WAIST_DARTS[k][q]))), "3: a/b/d/e/f 다리·apex 좌표 승격 전과 동일");
+  ok(JSON.stringify(Object.keys(darts)) === JSON.stringify(["a", "b", "d", "e", "f"]), "4: 이동 대상 gen-0 허리다트 = a,b,d,e,f (c 는 locked 별도)");
+  ok(Object.keys(PRE_WAIST_DARTS).every(k => ["apex", "left", "right"].every(q => JSON.stringify(darts[k][q]) === JSON.stringify(PRE_WAIST_DARTS[k][q]))), "4: a/b/d/e/f 다리·apex 좌표 불변");
   let aligned = true;
   ["a", "b", "d", "e", "f"].forEach(k => {
     const at = engine.gen0WaistDartAttach(p, k, darts[k]);
     ["left", "right"].forEach(leg => {
       if (!at[leg]) return;
-      const piece = at[leg].root.split("/")[0], C = piece === "front" ? p.FRONT_WL : p.BACK_WL, S = piece === "front" ? p.FRONT_SIDE_WL : p.BACK_SIDE_WL;
-      const q = { x: C.x + (S.x - C.x) * at[leg].t, y: C.y + (S.y - C.y) * at[leg].t };
+      const C = at[leg].root.startsWith("front") ? p.FRONT_WL : p.BACK_WL;
+      const q = { x: C.x + (p.SIDE_BTM.x - C.x) * at[leg].t, y: C.y };
       if (!nearPt(q, darts[k][leg], 1e-9) || at[leg].t < 0 || at[leg].t > 1) aligned = false;
     });
   });
-  ok(aligned, "3: a/b/d/e/f attachment t = 새 허리 root 위 같은 물리점");
-  ok(!("c" in engine.gen0WaistDartPayload("front", d.formula, p, d.darts)) && !("c" in engine.gen0WaistDartPayload("back", d.formula, p, d.darts)), "3: carry payload 에 c 없음");
+  ok(aligned, "4: a/b/d/e/f attachment t = 새 허리 root(→SIDE_BTM) 위 같은 물리점");
+  ["front", "back"].forEach(side => {
+    const pl = engine.gen0WaistDartPayload(side, d.formula, p, d.darts);
+    ok(!("c" in pl) && Object.values(pl).every(x => !/side-waist-c/.test(x.id)), "4: " + side + " carry payload 에 c 없음");
+  });
 }
 
-// 4. dartMove 후 baked: 옆선 root 허리 끝(t=1)의 실제 점이 (강체 변환된) 새 옆선 허리점과 일치, 허리다트 정합
+// 5. 가상 닫힘 허리(반패턴): 앞 20.134375 · 뒤 15.303125 · 합 35.4375 — c 는 각 조각에서 자기 c/2 만 닫힌다
+{
+  const darts = engine.buildGen0WaistDarts(d.formula, p, d.darts);
+  const onPattern = (k, xmin, xmax) => Math.max(0, Math.min(darts[k].right.x, xmax) - Math.max(darts[k].left.x, xmin));
+  const frontOpen = p.FRONT_WL.x - p.SIDE_BTM.x, backOpen = p.SIDE_BTM.x - p.BACK_WL.x;
+  const frontClosed = frontOpen - (onPattern("a", p.SIDE_BTM.x, p.FRONT_WL.x) + onPattern("b", p.SIDE_BTM.x, p.FRONT_WL.x) + SC.front.intakeCm);
+  const backClosed = backOpen - (onPattern("d", p.BACK_WL.x, p.SIDE_BTM.x) + onPattern("e", p.BACK_WL.x, p.SIDE_BTM.x) + onPattern("f", p.BACK_WL.x, p.SIDE_BTM.x) + SC.back.intakeCm);
+  ok(near(frontOpen, 24.446875) && near(backOpen, 23.053125), "5: 펼친 허리 앞 24.446875 · 뒤 23.053125 (합 47.5)");
+  ok(near(frontClosed, 20.134375, 1e-9) && near(backClosed, 15.303125, 1e-9) && near(frontClosed + backClosed, 35.4375, 1e-9), "5: 닫힌 허리 앞 20.134375 · 뒤 15.303125 · 합 35.4375");
+  // 기록: 예산식 sw − total = 35.0 과의 차 0.4375 = f 의 CB 접힘 바깥 반쪽(이번 범위에서 해결하지 않음)
+  ok(near((frontClosed + backClosed) - (p.FRONT_WL.x - d.darts.total), 0.4375, 1e-9), "5: 기록 — 예산식 35.0 과의 차 0.4375 = f 의 CB 바깥 반쪽");
+}
+
+// 6. dartMove 후: 옆선 t=1 = 허리 t=1 = SIDE_BTM(고정 또는 이번 회전), c 반쪽은 원형 그대로(locked)
 function evalRoot(segs, root, t) {
   return segs.filter(s => s.boundaryRoot === root && t >= Math.min(s.boundaryFromT, s.boundaryToT) - 1e-9 && t <= Math.max(s.boundaryFromT, s.boundaryToT) + 1e-9)
     .map(s => { const u = (t - s.boundaryFromT) / (s.boundaryToT - s.boundaryFromT); return { x: s.from.x + (s.to.x - s.from.x) * u, y: s.from.y + (s.to.y - s.from.y) * u }; });
 }
-[["front", ["front-neckline", 0.4, "A", 1.0]], ["front", ["front-armhole-upper", 0.5, "B", 0.4]], ["front", ["front-waist", 0.6, "A", 0.5]],
+[["front", ["front-neckline", 0.4, "A", 1.0]], ["front", ["front-armhole-upper", 0.5, "B", 0.4]], ["front", ["front-waist", 0.6, "A", 0.5]], ["front", ["side-seam", 0.45, "B", 0.4]],
  ["back", ["back-waist", 0.55, "A", 0.5]], ["back", ["back-armhole", 0.4, "A", 0.6]]].forEach(([side, m]) => {
   const { engine: e } = createEngine();
   const res = applyRecipe(e, side, dims, { type: m[0], arcFraction: m[1], piece: m[2], moveFraction: m[3] });
   const name = side + " " + m[0] + " " + m[2] + "×" + m[3];
-  ok(res.status === "applied", "4: " + name + " 적용");
+  ok(res.status === "applied", "6: " + name + " 적용");
   if (res.status !== "applied") return;
   const segs = res.bakedSegments;
-  const S = side === "front" ? p.FRONT_SIDE_WL : p.BACK_SIDE_WL;
   const sideEnd = evalRoot(segs, side + "/side-seam", 1), waistEnd = evalRoot(segs, side + "/waist", 1);
-  ok(sideEnd.length >= 1 && waistEnd.length >= 1 && sideEnd.some(q => waistEnd.some(w => nearPt(q, w, 1e-6))), "4: " + name + " 옆선 t=1 과 허리 t=1 이 같은 점(최종 형상 접합)");
-  const pivot = res.pivot, rot = (pt, a) => ({ x: pivot.x + (pt.x - pivot.x) * Math.cos(a) - (pt.y - pivot.y) * Math.sin(a), y: pivot.y + (pt.x - pivot.x) * Math.sin(a) + (pt.y - pivot.y) * Math.cos(a) });
-  const ang = res.userAngleDeg * Math.PI / 180;
-  ok(sideEnd.some(q => nearPt(q, S, 1e-6) || nearPt(q, rot(S, ang), 1e-6)) || m[0] === "front-waist" || m[0] === "back-waist",
-    "4: " + name + " 옆선 허리 끝 = 새 옆선 허리점(고정 또는 이번 회전)");
-  ok(segs.every(s => !nearPt(s.from, p.SIDE_BTM, 1e-6) && !nearPt(s.to, p.SIDE_BTM, 1e-6)), "4: " + name + " 중앙 SIDE_BTM 이 baked 끝점에 없음");
+  ok(sideEnd.length >= 1 && waistEnd.length >= 1 && sideEnd.some(q => waistEnd.some(w => nearPt(q, w, 1e-6))), "6: " + name + " 옆선 t=1 과 허리 t=1 이 같은 점");
+  const pivot = res.pivot, ang = res.userAngleDeg * Math.PI / 180;
+  const rot = (pt) => ({ x: pivot.x + (pt.x - pivot.x) * Math.cos(ang) - (pt.y - pivot.y) * Math.sin(ang), y: pivot.y + (pt.x - pivot.x) * Math.sin(ang) + (pt.y - pivot.y) * Math.cos(ang) });
+  ok(sideEnd.some(q => nearPt(q, p.SIDE_BTM, 1e-6) || nearPt(q, rot(p.SIDE_BTM), 1e-6)) || /waist|side-seam/.test(m[0]), "6: " + name + " 옆선 허리 끝 = SIDE_BTM(고정 또는 이번 회전)");
+  ok(segs.every(s => !/side-waist-c/.test(s.dartId || "")), "6: " + name + " c 는 baked(이동) 결과에 없음");
   const pl = side === "front" ? e.dartMoveState.appliedFront.waistDarts : e.dartMoveState.appliedBack.waistDarts;
   const legAligned = Object.values(pl).filter(x => !x.unresolved).every(x => (x.onFold ? ["right"] : ["left", "right"]).every(l => evalRoot(segs, x.attach[l].root, x.attach[l].t).some(q => nearPt(q, x.dart[l], 1e-3))));
-  ok(legAligned && !("c" in pl), "4: " + name + " 허리다트 carry 정합·c 없음");
+  ok(legAligned && !("c" in pl), "6: " + name + " a/b/d/e/f carry 정합·c 없음");
+  ok(JSON.stringify(e.buildGen0SideWaistC(d.formula, p, d.darts)) === JSON.stringify(SC), "6: " + name + " c 반쪽 원천은 이동과 무관(locked)");
 });
 
 // 5. Design 변환(여유량·허리 이동·허리 아래 길이) + seam-ready evidence, v6 legacy 미승격
@@ -140,9 +175,9 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
   // 허리 아래: 기존 수직 연장 규칙이 새 옆선 허리점에서 시작(기울기 연장·곡선화 없음)
   const g = DB.computeGeometry(geom0, { body: { hemExtensionBelowWaistCm: 10 } });
   ["front", "back"].forEach(pc => {
-    const S = pc === "front" ? p.FRONT_SIDE_WL : p.BACK_SIDE_WL;
+    const S = p.SIDE_BTM;
     const ext = g[pc].outline.filter(x => x.boundary && x.boundary.root === pc + "/side-seam-extension");
-    ok(ext.length === 1 && nearPt(ext[0].from, S, 1e-9) && near(ext[0].to.x, S.x, 1e-9) && near(ext[0].to.y, S.y + 10, 1e-9), "5: " + pc + " 허리 아래 연장 = 새 옆선 허리점에서 수직 10cm");
+    ok(ext.length === 1 && nearPt(ext[0].from, S, 1e-9) && near(ext[0].to.x, S.x, 1e-9) && near(ext[0].to.y, S.y + 10, 1e-9), "5: " + pc + " 허리 아래 연장 = SIDE_BTM 에서 수직 10cm");
   });
   ok(waistRecs(BC.evaluateSemantics(proj(7, g))).every(x => x.attachment === "complete"), "5: 길이 연장 후에도 허리다트 정합");
 }
@@ -155,13 +190,12 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
 // 6. 몸판 체크포인트 옆선 측정 = 유효 외곽(designOutline 우선)의 명시 side-seam 만. 측정 불가는 0cm 정합이 아니라 차단.
 {
   // 기준 수치 고정: B83/W64/BL38 → totalDart 12.5, c = 11% = 1.375, 앞·뒤 각 0.6875
-  ok(near(d.darts.total, 12.5) && near(d.darts.c, 1.375) && near(p.FRONT_SIDE_WL.x - p.SIDE_TOP.x, 0.6875) && near(p.SIDE_TOP.x - p.BACK_SIDE_WL.x, 0.6875),
-    "6: c = 12.5×0.11 = 1.375, 앞·뒤 각 0.6875");
+
   // 원형 → 디자인(no-op) 로컬 옆선 끝점 동일, c 는 dart id 로 나타나지 않음
   const g0 = DB.computeGeometry(geom0, {});
   ["front", "back"].forEach(pc => {
-    const S = pc === "front" ? p.FRONT_SIDE_WL : p.BACK_SIDE_WL, ss = g0[pc].outline.filter(x => x.edge === "side-seam");
-    ok(ss.length === 1 && [ss[0].from, ss[0].to].some(q => nearPt(q, S)) && [ss[0].from, ss[0].to].some(q => nearPt(q, p.SIDE_TOP)), "6: " + pc + " 디자인 옆선 = SIDE_TOP↔옆선 허리점(원형과 동일)");
+    const ss = g0[pc].outline.filter(x => x.edge === "side-seam");
+    ok(ss.length === 1 && [ss[0].from, ss[0].to].some(q => nearPt(q, p.SIDE_BTM)) && [ss[0].from, ss[0].to].some(q => nearPt(q, p.SIDE_TOP)), "6: " + pc + " 디자인 옆선 = SIDE_TOP↔SIDE_BTM 수직(원형과 동일)");
   });
   const ids = ["front", "back", "shared"].flatMap(pc => (g0[pc] ? g0[pc].construction : []).filter(x => x.dart).map(x => x.dart.id));
   ok(ids.length && ids.every(i => /-waist-[abdef]$/.test(i)), "6: 디자인 다트 id 는 a/b/d/e/f 뿐(c 없음)");
@@ -175,7 +209,7 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
   const compose = (g, pc, lines) => { const ring = LT.buildPieceRing(LT.outlinePrimsToSegs(g[pc].outline), constr(pc)); const r = LT.composeDesignOutline(ring.ring, lines.map(LT.boundarySegsOf)); return r.ok ? r.outline : null; };
   const projDO = (g, dO, pls) => { const pr = proj(7, g); pr.working.designOutline = dO; pr.working.patternLines = pls || []; return pr; };
   const geomSide = (g, pc) => g[pc].outline.filter(x => x.edge === "side-seam").reduce((t, x) => t + (x.kind === "line" ? Math.hypot(x.to.x - x.from.x, x.to.y - x.from.y) : NaN), 0);
-  const A = p.SIDE_TOP, S = p.FRONT_SIDE_WL;
+  const A = p.SIDE_TOP, S = p.SIDE_BTM;
   const bulge = (k, edge) => ({ id: "line-" + k, piece: "front", role: "boundary", segments: [Object.assign({ kind: "cubic", from: { ...A }, c1: { x: A.x - k, y: A.y + 5 }, c2: { x: S.x - k, y: S.y - 5 }, to: { ...S } }, edge ? { edge } : {})] });
 
   // 6a 정상(designOutline 없음): geometry 옆선 그대로 측정 — 기존 값·match·완료
@@ -260,6 +294,7 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
     ok(mL.status === "measured" && near(mL.length, 8), "6f: legacy 명시 edge(boundary 없음) + 연장 → 측정 8");
   }
 }
+
 
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }

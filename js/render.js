@@ -37,6 +37,8 @@ function _tagDartMeta(el, meta){
   if (meta.boundary) el.setAttribute("data-dart-boundary", meta.boundary);
   if (meta.apexAt) el.setAttribute("data-dart-apex-at", meta.apexAt);
   if (meta.onFold) el.setAttribute("data-dart-on-fold", "true");
+  if (meta.group) el.setAttribute("data-dart-group", meta.group);      // 논리 다트 group(예: 옆허리 c 의 앞·뒤 반쪽)
+  if (meta.locked) el.setAttribute("data-dart-locked", "true");        // 다트이동 대상 아님(원형 고정)
   // P0.3b: 경계 쪽 끝이 붙는 root 경계 attachment(생산자 선언값만).
   if (typeof meta.attachRoot === "string" && typeof meta.attachT === "number" && isFinite(meta.attachT)) {
     el.setAttribute("data-dart-attach-root", meta.attachRoot);
@@ -1174,27 +1176,27 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
 
 
     // ── 옆선 (앞판 + 뒤판) ───────────────────────
-    // 옆선 허리 조임 c 는 다트가 아니다 — 앞판 옆선은 SIDE_TOP→FRONT_SIDE_WL, 뒤판은 SIDE_TOP→BACK_SIDE_WL
-    // (draft 단일 원천). SIDE_TOP→SIDE_BTM 중앙선은 기준선(drawBaseLines)으로만 남는다.
+    // 앞·뒤 기본 옆선 = SIDE_TOP→SIDE_BTM 수직 완성선(겹침 원형 화면에서 같은 위치에 포개진다).
+    // SIDE_TOP→FRONT_SIDE_WL / →BACK_SIDE_WL 사선은 옆허리 다트 c 의 반쪽 다리(drawDarts, construction)다.
 
     // 앞판 옆선: 앞판 적용 시 drawDartMoveApplied 담당
     if(!isFrontApplied){
-      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.FRONT_SIDE_WL, "pattern", _DC_F), "front", "outline", "side-seam"), "front/side-seam", [[0, 1]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "side-seam"), "front/side-seam", [[0, 1]]));
     }
     // 뒤판 옆선: 뒤판 적용 시 drawDartMoveApplied 담당
     if(!isBackApplied){
-      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.BACK_SIDE_WL, "pattern", _DC_B), "back", "outline", "side-seam"), "back/side-seam", [[0, 1]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_TOP, p.SIDE_BTM, "pattern", _DC_B), "back", "outline", "side-seam"), "back/side-seam", [[0, 1]]));
     }
 
     const FND = { x: f.sw(), y: f.yB() + f.fnd() };
     // 앞판 허리선 + 앞중심선
     if(!isFrontApplied){
       gPat.appendChild(_tagBoundary(_tagGeom(LnC(FND,        p.FRONT_WL, "pattern", _DC_F), "front", "outline", "center"), "front/center", [[0, 1]]));
-      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.FRONT_WL, p.FRONT_SIDE_WL, "pattern", _DC_F), "front", "outline", "waist"), "front/waist", [[0, 1]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.FRONT_WL, p.SIDE_BTM, "pattern", _DC_F), "front", "outline", "waist"), "front/waist", [[0, 1]]));
     }
     // 뒤판 허리선 + 뒤중심선
     if(!isBackApplied){
-      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.BACK_SIDE_WL, p.BACK_WL, "pattern", _DC_B), "back", "outline", "waist"), "back/waist", [[1, 0]]));
+      gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.SIDE_BTM, p.BACK_WL, "pattern", _DC_B), "back", "outline", "waist"), "back/waist", [[1, 0]]));
       gPat.appendChild(_tagBoundary(_tagGeom(LnC(p.BACK_WL,  p.A,         "pattern", _DC_B), "back", "outline", "center"), "back/center", [[1, 0]]));
     }
 
@@ -1409,10 +1411,9 @@ function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatter
   const gDart=E("g");
   gDart.setAttribute("id","layer-dart");
   // P0.3b: 허리다트 다리 끝은 허리 root 위에 있다. 허리 root 의 파라미터는 생산자가 그린 허리선 그대로
-  //   (앞 = 앞중심 FRONT_WL(0) → 앞 옆선 허리점 FRONT_SIDE_WL(1), 뒤 = 뒤중심 BACK_WL(0) → 뒤 옆선 허리점
-  //   BACK_SIDE_WL(1))이고, 다리 끝은 makeDart 가 같은 허리 y 위에 apex.x ± 분량/2 로 정의한 점이다 → 선 위
-  //   선형 파라미터로 선언한다. c 는 앞·뒤 옆선에 분배된 허리 조임(side-waist suppression)이며 구조화 다트가
-  //   아니다 — 여기서 그리거나 태깅하지 않는다.
+  //   (앞 = 앞중심 FRONT_WL(0) → SIDE_BTM(1), 뒤 = 뒤중심 BACK_WL(0) → SIDE_BTM(1))이고, 다리 끝은 makeDart 가
+  //   같은 허리 y 위에 apex.x ± 분량/2 로 정의한 점이다 → 선 위 선형 파라미터로 선언한다.
+  //   옆허리 다트 c 는 앞·뒤 조각에 각각 c/2 반쪽 다트(엔진 단일 원천 buildGen0SideWaistC, locked)로 그린다.
   //   attachment 는 엔진 단일 원천(gen0WaistDartAttach); carried payload 는 엔진이 보존한 선언값을 그대로 쓴다.
   const _wA = (k) => (darts_._carry && darts_._carry[k]) || gen0WaistDartAttach(p, k, darts_[k]);
   _tagDart(gDart, darts_.a, "front", "front-waist-a", _wA("a"));   // BP 아래 (앞판)
@@ -1423,6 +1424,14 @@ function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatter
   gDart.appendChild(_tagDartMeta(_tagGeom(Ln(darts_.f.right, darts_.f.apex, "dart-waist"), "back", "construction"),
     { id: "back-waist-f", boundary: "waist", apexAt: "to", onFold: true, attachRoot: _wA("f").right.root, attachT: _wA("f").right.t }));
   gDart.appendChild(dot(darts_.f.apex, "pt-main", 4));
+  // 옆허리 다트 c: 앞·뒤 반쪽(각 다리 2개 = 수직 옆선 쪽 SIDE_BTM · 사선 쪽 *_SIDE_WL, apex SIDE_TOP). 외곽 아님.
+  const _sc = buildGen0SideWaistC(f, p, dr);
+  [["front", _sc.front], ["back", _sc.back]].forEach(([pc, h]) => {
+    ["side", "intake"].forEach(leg => {
+      gDart.appendChild(_tagDartMeta(_tagGeom(Ln(h.legs[leg], h.apex, "dart-waist dart-side-c"), pc, "construction"),
+        { id: h.id, boundary: "waist", apexAt: "to", attachRoot: h.attach[leg].root, attachT: h.attach[leg].t, group: h.group, locked: true }));
+    });
+  });
   if(showDart)svg.appendChild(gDart);
 }
 
@@ -1451,9 +1460,9 @@ function drawDimLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPat
     gd.appendChild(dimLine(p.C,          p.F,                    32)); // ⑭ C~F
     gd.appendChild(dimLine(p.SIDE_TOP,   p.SIDE_BTM,             16)); // ⑭ 옆선 세로
     // 다트 너비
-    // 옆선 조임 c 는 다트가 아니므로 다트 너비 치수에서 뺀다(나머지 치수선 위치는 그대로).
-    [darts_.a,darts_.b,null,darts_.d,darts_.e,darts_.f].forEach((d,i)=>{
-      if(!d) return;
+    // 옆허리 다트 c 는 논리적 한 다트(총 intake = 두 반쪽 사선 다리 끝 사이)로 치수 표시.
+    const _scd = buildGen0SideWaistC(f, p, dr);
+    [darts_.a,darts_.b,{left:_scd.back.legs.intake,right:_scd.front.legs.intake},darts_.d,darts_.e,darts_.f].forEach((d,i)=>{
       gd.appendChild(dimLine(d.left, d.right, -16-i*6));
     });
     svg.appendChild(gd);
@@ -1492,8 +1501,7 @@ function drawPoints(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatte
 
   // 다트 apex 포인트
   if(showDart){
-    [darts_.a,darts_.b,null,darts_.d,darts_.e,darts_.f].forEach((d,i)=>{
-      if(!d) return;   // 옆선 조임 c 는 다트 apex 표시 없음
+    [darts_.a,darts_.b,{apex:p.SIDE_TOP},darts_.d,darts_.e,darts_.f].forEach((d,i)=>{   // c apex = SIDE_TOP
       const names=["a","b","c","d","e","f"];
       gp.appendChild(dot(d.apex,"pt-main",3.5));
       gp.appendChild(lbl(d.apex,names[i],"txt-dark",5,-5));

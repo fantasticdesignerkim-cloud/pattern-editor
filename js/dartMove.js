@@ -1009,9 +1009,10 @@ function buildFrontOutline(p, f, B) {
   // ★ P0.3a: root 경계 identity 선언(root 방향: center=목→허리 · waist=중심→옆 · side-seam=진동밑→허리
   //   · armhole-lower=진동밑→G · armhole-upper=GG→어깨 · shoulder=목→어깨끝 · neckline=중심→SNP).
   addLineSegment(segments, nBR,        p.FRONT_WL,  { type: "front-center", boundaryRoot: "front/center", boundaryFromT: 0, boundaryToT: 1 });
-  //   옆선 허리 끝 = draft 단일 원천 FRONT_SIDE_WL(옆선 조임 c 의 앞판 몫). 중앙 SIDE_BTM 은 기준선.
-  addLineSegment(segments, p.FRONT_WL, p.FRONT_SIDE_WL, { type: "front-waist",  boundaryRoot: "front/waist",  boundaryFromT: 0, boundaryToT: 1 });
-  addLineSegment(segments, p.FRONT_SIDE_WL, p.SIDE_TOP, { type: "side-seam",    boundaryRoot: "front/side-seam", boundaryFromT: 1, boundaryToT: 0 });
+  //   기본 옆선 = SIDE_TOP→SIDE_BTM 수직 완성선(앞·뒤 공통 위치). 허리 root 는 SIDE_BTM 에서 끝난다.
+  //   옆허리 다트 c 의 앞 반쪽(SIDE_TOP→FRONT_SIDE_WL 사선)은 외곽이 아니라 gen-0 construction(buildGen0SideWaistC).
+  addLineSegment(segments, p.FRONT_WL, p.SIDE_BTM, { type: "front-waist",  boundaryRoot: "front/waist",  boundaryFromT: 0, boundaryToT: 1 });
+  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP, { type: "side-seam",    boundaryRoot: "front/side-seam", boundaryFromT: 1, boundaryToT: 0 });
   // 앞암홀 하부: SIDE_TOP → G 곡선 (state.armH 핸들 사용, 직선 금지)
   {
     const H = state.armH;
@@ -1217,9 +1218,9 @@ function buildBackOutline(p, f, B) {
 
   // ── 뒤중심/허리/옆선 직선 ────────────────────
   addLineSegment(segments, p.A,        p.BACK_WL,  { type: "back-center", boundaryRoot: "back/center", boundaryFromT: 0, boundaryToT: 1 });
-  //   옆선 허리 끝 = draft 단일 원천 BACK_SIDE_WL(옆선 조임 c 의 뒤판 몫). 중앙 SIDE_BTM 은 기준선.
-  addLineSegment(segments, p.BACK_WL,  p.BACK_SIDE_WL, { type: "back-waist",  boundaryRoot: "back/waist",  boundaryFromT: 0, boundaryToT: 1 });
-  addLineSegment(segments, p.BACK_SIDE_WL, p.SIDE_TOP, { type: "side-seam",   boundaryRoot: "back/side-seam", boundaryFromT: 1, boundaryToT: 0 });
+  //   기본 옆선 = SIDE_TOP→SIDE_BTM 수직 완성선. 옆허리 다트 c 의 뒤 반쪽(SIDE_TOP→BACK_SIDE_WL)은 gen-0 construction.
+  addLineSegment(segments, p.BACK_WL,  p.SIDE_BTM, { type: "back-waist",  boundaryRoot: "back/waist",  boundaryFromT: 0, boundaryToT: 1 });
+  addLineSegment(segments, p.SIDE_BTM, p.SIDE_TOP, { type: "side-seam",   boundaryRoot: "back/side-seam", boundaryFromT: 1, boundaryToT: 0 });
 
   // ── 뒤진동 곡선: SIDE_TOP → bSP ─────────────
   {
@@ -2479,8 +2480,8 @@ function applyDartMove() {
 
 // ── gen-0 허리다트(a~f) 단일 원천 ─────────────────────────
 // render(표시)와 엔진 payload(다트이동 carry)가 **같은 함수**로 허리다트 좌표·attachment 를 얻는다
-// (좌표 공식 복제 금지). 앞 허리 root 파라미터 = FRONT_WL(0)→FRONT_SIDE_WL(1), 뒤 = BACK_WL(0)→BACK_SIDE_WL(1).
-// 옆선 조임 c 는 다트가 아니므로(draft 가 앞·뒤 옆선 허리점으로 분배) 여기 없다.
+// (좌표 공식 복제 금지). 앞 허리 root 파라미터 = FRONT_WL(0)→SIDE_BTM(1), 뒤 = BACK_WL(0)→SIDE_BTM(1).
+// 옆허리 다트 c 는 아래 buildGen0SideWaistC(앞·뒤 반쪽, locked)가 따로 담당한다 — 이동 대상 허리다트 목록에 없다.
 const GEN0_WAIST_DART_SPEC = {
   a: { id: "front-waist-a",  piece: "front",  left: "front", right: "front" },
   b: { id: "front-waist-b",  piece: "front",  left: "front", right: "front" },
@@ -2501,8 +2502,31 @@ function buildGen0WaistDarts(f, p, dr) {
 // 다리 끝은 makeDart 가 허리 y 위에 정의한 점 → 허리 root 위 선형 파라미터로 선언한다.
 function gen0WaistRootT(p, piece, x) {
   return piece === "front"
-    ? (p.FRONT_WL.x - x) / (p.FRONT_WL.x - p.FRONT_SIDE_WL.x)
-    : (x - p.BACK_WL.x) / (p.BACK_SIDE_WL.x - p.BACK_WL.x);
+    ? (p.FRONT_WL.x - x) / (p.FRONT_WL.x - p.SIDE_BTM.x)
+    : (x - p.BACK_WL.x) / (p.SIDE_BTM.x - p.BACK_WL.x);
+}
+
+// ── gen-0 옆허리 다트 c(단일 원천) ─────────────────────────
+// c 는 논리적으로 하나의 옆허리 다트(총 intake = darts.c)이며, 분리된 앞판·뒤판에 각각 c/2 반쪽 다트로 귀속한다.
+//   앞 반쪽: apex SIDE_TOP · 다리 SIDE_BTM(수직 완성 옆선 쪽) · 다리 FRONT_SIDE_WL(= makeDart(c).right). intake c/2.
+//   뒤 반쪽: apex SIDE_TOP · 다리 SIDE_BTM · 다리 BACK_SIDE_WL(= makeDart(c).left). intake c/2.
+//   두 반쪽은 group "side-waist-c" 로 연결되고 예산에서는 c 를 한 번만 센다(group.totalCm).
+//   locked: 다트이동 carry·split·retarget 대상이 아니다(CARRY_WAIST_KEYS·엔진 외곽에 없다) — 좌표는 원형 그대로.
+//   다리 attachment 는 각 조각 허리 root 위 선형 파라미터(SIDE_BTM = t 1).
+const SIDE_WAIST_C_GROUP = "side-waist-c";
+const SIDE_WAIST_C_SPEC = {
+  front: { id: "front-side-waist-c", sideLeg: "SIDE_BTM", intakeLeg: "FRONT_SIDE_WL" },
+  back:  { id: "back-side-waist-c",  sideLeg: "SIDE_BTM", intakeLeg: "BACK_SIDE_WL" },
+};
+function buildGen0SideWaistC(f, p, dr) {
+  const half = (pc) => {
+    const sp = SIDE_WAIST_C_SPEC[pc], side = p[sp.sideLeg], leg = p[sp.intakeLeg];
+    return { id: sp.id, piece: pc, group: SIDE_WAIST_C_GROUP, locked: true, apex: { x: p.SIDE_TOP.x, y: p.SIDE_TOP.y },
+      legs: { side: { x: side.x, y: side.y }, intake: { x: leg.x, y: leg.y } },
+      attach: { side: { root: pc + "/waist", t: gen0WaistRootT(p, pc, side.x) }, intake: { root: pc + "/waist", t: gen0WaistRootT(p, pc, leg.x) } },
+      intakeCm: Math.abs(leg.x - side.x) };
+  };
+  return { group: SIDE_WAIST_C_GROUP, totalCm: dr.c, front: half("front"), back: half("back") };
 }
 function gen0WaistDartAttach(p, key, dart) {
   const sp = GEN0_WAIST_DART_SPEC[key];
