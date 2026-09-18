@@ -72,6 +72,7 @@
   // SV8: 논리 다트 group(선언값). 옆허리 다트 c 는 앞·뒤 조각에 반쪽씩 — 정확히 front/back 하나씩.
   var ALLOWED_DART_GROUP = { "side-waist-c": 1 };
   var SIDE_WAIST_C_GROUP = "side-waist-c";
+  var SIDE_WAIST_TOTAL_EPS = 1e-6;   // 반쪽 intake 합 ↔ 선언 총량 계산 허용치(cm, 봉제 허용오차 아님)
 
   function fail(reason, detail) {
     var e = new Error("captureBlockSnapshot 실패: " + reason);
@@ -163,6 +164,8 @@
       var grp = el.getAttribute("data-dart-group");
       if (grp !== null) { if (!ALLOWED_DART_GROUP[grp]) fail("bad-dart-group", grp); dart.group = grp; }
       if (el.getAttribute("data-dart-locked") === "true") dart.locked = true;
+      var gTot = el.getAttribute("data-dart-group-total");
+      if (gTot !== null) { var gv = Number(gTot); if (!isFinite(gv) || gv <= 0) fail("bad-dart-group-total", gTot); dart.groupTotal = gv; }
       var atRoot = el.getAttribute("data-dart-attach-root"), atT = el.getAttribute("data-dart-attach-t");
       if (atRoot !== null || atT !== null) {
         var tv = Number(atT);
@@ -309,6 +312,14 @@
       if (junction.length !== 1 || tops.length !== 1 || !ends.every(function (e) { return e.apex === tops[0]; })) fail("bad-side-waist-dart", pc + " apex");
       if (ends.filter(function (e) { return e.leg === junction[0]; }).length !== 1) fail("bad-side-waist-dart", pc + " side leg");
     });
+    // 논리 다트 총량(생산자 선언 groupTotal): 네 다리 모두 같은 값을 선언하고, 앞·뒤 반쪽 intake(다리 끝 사이) 합과 일치.
+    var all = ids.front[Object.keys(ids.front)[0]].concat(ids.back[Object.keys(ids.back)[0]]);
+    var tot = all[0].dart.groupTotal;
+    if (typeof tot !== "number" || !all.every(function (l) { return l.dart.groupTotal === tot; })) fail("bad-side-waist-dart", "group total");
+    var intake = function (legs) { var a = legs[0], b = legs[1];
+      var la = a.dart.apexAt === "from" ? a.to : a.from, lb = b.dart.apexAt === "from" ? b.to : b.from; return Math.hypot(la.x - lb.x, la.y - lb.y); };
+    var sum = intake(ids.front[Object.keys(ids.front)[0]]) + intake(ids.back[Object.keys(ids.back)[0]]);
+    if (Math.abs(sum - tot) > SIDE_WAIST_TOTAL_EPS) fail("bad-side-waist-dart", "total " + sum + " vs " + tot);
   }
 
   // all 상태 DOM 에서 봉제 형상 표식 요소를 수집·검증한다. 실패 시 throw(부분 반환 없음).

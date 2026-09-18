@@ -282,6 +282,8 @@
       return {
         id: id, boundary: legs[0].dart.boundary || null, onFold: onFold,
         group: (typeof legs[0].dart.group === "string") ? legs[0].dart.group : null, locked: legs.every(function (l) { return l.dart.locked === true; }),
+        // 논리 다트 총량(생산자 선언). 다리마다 같은 값이어야 한다 — 다르면 null(비교 불가 = 실패로 이어짐).
+        groupTotalCm: (function () { var v = legs[0].dart.groupTotal; return (typeof v === "number" && legs.every(function (l) { return l.dart.groupTotal === v; })) ? v : null; })(),
         apex: { x: round4(apex.x), y: round4(apex.y) },
         legs: legPts.map(function (q) { return { x: round4(q.x), y: round4(q.y) }; }),
         intakeCm: intake, legCount: legs.length,
@@ -496,20 +498,33 @@
       boundaryFingerprint: boundaryFingerprint(bnd) };
   }
 
-  // 옆허리 다트 c(논리 다트 하나 = 앞·뒤 c/2 반쪽 record). 예산에서는 group 총량을 한 번만 센다
-  //   (= 반쪽 intake 합; 반쪽과 총량을 따로 더하지 않는다). 반쪽마다 다리 2개·locked·apex 일치·attachment 정합이어야 ok.
+  // 옆허리 다트 c(논리 다트 하나 = 앞·뒤 c/2 반쪽 record). 총량은 생산자 선언 groupTotal(네 다리 공통)이 원천이고,
+  //   두 반쪽 intake 합이 그 총량과 같아야 한다 — 예산에서는 group 총량을 **한 번만** 쓴다(반쪽을 따로 더하지 않음).
+  //   판정 순서는 고정(결정론적 reason). 좌표로 c 를 찾지 않고 선언된 group·id·다리만 본다.
   var SIDE_WAIST_C_GROUP = "side-waist-c";
+  var SIDE_WAIST_TOTAL_EPS = 1e-6;   // 계산 허용치(cm) — 봉제 허용오차 아님
   function sideWaistDartOf(darts) {
-    var half = function (pc) {
+    var halves = {}, reason = null;
+    var set = function (r) { if (!reason) reason = r; };
+    if ((darts.shared || []).some(function (d) { return d.group === SIDE_WAIST_C_GROUP; })) set("side-waist-dart-shared");
+    ["front", "back"].forEach(function (pc) {
       var rs = (darts[pc] || []).filter(function (d) { return d.group === SIDE_WAIST_C_GROUP; });
-      if (rs.length !== 1) return null;
+      if (rs.length === 0) { set("side-waist-dart-missing"); return; }
+      if (rs.length > 1) { set("side-waist-dart-duplicate"); return; }
       var d = rs[0];
-      return { id: d.id, intakeCm: d.intakeCm, ok: d.complete && d.locked && d.legCount === 2 && d.attachment === "complete" && typeof d.intakeCm === "number" };
-    };
-    var f = half("front"), b = half("back");
-    var sharedC = (darts.shared || []).some(function (d) { return d.group === SIDE_WAIST_C_GROUP; });
-    var ok = !!(f && b && f.ok && b.ok && !sharedC);
-    return { group: SIDE_WAIST_C_GROUP, front: f, back: b, totalCm: (f && b && ok) ? round4(f.intakeCm + b.intakeCm) : null, ok: ok };
+      halves[pc] = { id: d.id, intakeCm: d.intakeCm, groupTotalCm: d.groupTotalCm };
+      if (!d.locked) set("side-waist-dart-unlocked");
+      else if (d.legCount !== 2) set("side-waist-dart-legs");
+      else if (!d.complete || d.attachment !== "complete") set("side-waist-dart-attachment");
+      else if (typeof d.intakeCm !== "number" || !isFinite(d.intakeCm) || !(d.intakeCm > 0)) set("side-waist-dart-intake");
+    });
+    var f = halves.front, b = halves.back, total = null;
+    if (!reason && f && b) {
+      total = f.groupTotalCm;
+      var sum = f.intakeCm + b.intakeCm;
+      if (typeof total !== "number" || !isFinite(total) || total !== b.groupTotalCm || Math.abs(sum - total) > SIDE_WAIST_TOTAL_EPS) set("side-waist-dart-total");
+    }
+    return { group: SIDE_WAIST_C_GROUP, front: f || null, back: b || null, totalCm: reason ? null : total, ok: !reason, reason: reason };
   }
 
   // ── 검사 ──
@@ -541,6 +556,10 @@
     if (!ahB.ok) fails.push("back-armhole-unmeasured");
     if (!(nkHalf > 0)) fails.push("neckline-unmeasured");
     if (manualBad) fails.push("neckline-preview-invalid");
+    // v8(현재 의미) 원형 출처: 옆허리 다트 c 는 구조화 다트로 반드시 보존돼야 한다 — 손상 시 완료 차단.
+    var svSrc = proj.sourceBlock && proj.sourceBlock.schemaVersion;
+    var sideWaistDart = sideWaistDartOf({ front: dartRecords(proj, "front"), back: dartRecords(proj, "back"), shared: dartRecords(proj, "shared") });
+    if (svSrc === 8 && !sideWaistDart.ok) fails.push(sideWaistDart.reason);
 
     return {
       ok: fails.length === 0,
@@ -551,7 +570,7 @@
       neckline: { front: nkF, back: nkB, half: nkHalf, finished: 2 * nkHalf, ok: nkHalf > 0 },
       previews: { neckline: !manualBad, placket: !placketBad, ok: previewOk },
       semantics: evaluateSemantics(proj),         // 완료 차단 아님 — 증거만
-      sideWaistDart: sideWaistDartOf({ front: dartRecords(proj, "front"), back: dartRecords(proj, "back"), shared: dartRecords(proj, "shared") })   // 증거(완료 차단 아님)
+      sideWaistDart: sideWaistDart   // v8 에서는 ok=false 면 fails 에 reason(완료 차단)
     };
   }
 

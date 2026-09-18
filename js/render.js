@@ -39,6 +39,7 @@ function _tagDartMeta(el, meta){
   if (meta.onFold) el.setAttribute("data-dart-on-fold", "true");
   if (meta.group) el.setAttribute("data-dart-group", meta.group);      // 논리 다트 group(예: 옆허리 c 의 앞·뒤 반쪽)
   if (meta.locked) el.setAttribute("data-dart-locked", "true");        // 다트이동 대상 아님(원형 고정)
+  if (typeof meta.groupTotal === "number" && isFinite(meta.groupTotal)) el.setAttribute("data-dart-group-total", String(meta.groupTotal));   // 논리 다트 총 intake(생산자 선언)
   // P0.3b: 경계 쪽 끝이 붙는 root 경계 attachment(생산자 선언값만).
   if (typeof meta.attachRoot === "string" && typeof meta.attachT === "number" && isFinite(meta.attachT)) {
     el.setAttribute("data-dart-attach-root", meta.attachRoot);
@@ -1429,7 +1430,7 @@ function drawDarts(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatter
   [["front", _sc.front], ["back", _sc.back]].forEach(([pc, h]) => {
     ["side", "intake"].forEach(leg => {
       gDart.appendChild(_tagDartMeta(_tagGeom(Ln(h.legs[leg], h.apex, "dart-waist dart-side-c"), pc, "construction"),
-        { id: h.id, boundary: "waist", apexAt: "to", attachRoot: h.attach[leg].root, attachT: h.attach[leg].t, group: h.group, locked: true }));
+        { id: h.id, boundary: "waist", apexAt: "to", attachRoot: h.attach[leg].root, attachT: h.attach[leg].t, group: h.group, locked: true, groupTotal: _sc.totalCm }));
     });
   });
   if(showDart)svg.appendChild(gDart);

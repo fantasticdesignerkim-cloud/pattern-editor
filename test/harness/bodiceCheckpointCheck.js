@@ -6,6 +6,7 @@
 // ══════════════════════════════════════════════
 const vm = require("vm");
 const fs = require("fs");
+const { addSideWaistC } = require("./sideWaistFixture");
 const path = require("path");
 
 const SRC = fs.readFileSync(path.join(__dirname, "..", "..", "js", "bodiceCheckpoint.js"), "utf8");
@@ -235,6 +236,7 @@ function fakeProject(backSideTopY, opts) {
       proj.working.geometry.front = taggedPiece(47.5, 3, 20, 38);
       proj.working.geometry.back = taggedPiece(24, 0, 20, 38);
       if (opts.schemaVersion >= 5) { withIds(proj.working.geometry.front, "front"); withIds(proj.working.geometry.back, "back"); }
+      if (opts.schemaVersion === 8) addSideWaistC(proj.working.geometry);   // v8 계약: c 반쪽(옳은 fixture)
     }
     if (opts.designOutline) proj.working.designOutline = opts.designOutline;
     return proj;
@@ -374,11 +376,11 @@ function fakeProject(backSideTopY, opts) {
     proj.working.geometry.back = v4piece(24, 0, 20, 38);
     if (sv >= 5) { withIds(proj.working.geometry.front, "front"); withIds(proj.working.geometry.back, "back"); }
     proj.working.geometry.shared = { outline: [], construction: [] };
-    proj.working.geometry.front.construction = darts || [];
+    proj.working.geometry.front.construction = JSON.parse(JSON.stringify(darts || []));   // 호출자 입력 비변형(ref·attach·c 반쪽이 새지 않게)
     // P0.3b(v6): 이 절은 P0.2 다트 레코드 검사다. fixture 생산자가 각 다리의 경계 끝에서 시작하는 짧은
     //   기준 경계 구간(construction, root=front/<boundary>, t 0→1)을 함께 두고, 다리를 그 t=0 에 붙인다 —
     //   선언 {root,t} 가 실제 점과 일치하는 정합 fixture(attachment 세부 검사는 dartAttachmentCheck).
-    if (sv >= 6 && !(opts && opts.refs === false)) (darts || []).forEach(l => {
+    if (sv >= 6 && !(opts && opts.refs === false)) proj.working.geometry.front.construction.slice().forEach(l => {
       if (!l.dart || l.dart.attach || !l.dart.boundary) return;
       const e = l.dart.apexAt === "from" ? l.to : l.from;
       const ref = line([e.x, e.y], [e.x + 1, e.y], l.dart.boundary);
@@ -386,9 +388,13 @@ function fakeProject(backSideTopY, opts) {
       proj.working.geometry.front.construction.push(ref);
       l.dart.attach = { root: "front/" + l.dart.boundary, t: 0 };
     });
+    if (sv === 8) addSideWaistC(proj.working.geometry);   // v8 계약: c 반쪽(옳은 fixture)
     return proj;
   };
-  const semOf = (proj) => { PROJECT = proj; return BC.check().semantics; };
+  // 이 절은 일반 다트 레코드 검사다 — v8 fixture 의 c 반쪽 record 는 별도(sideWaistDart)로 검증하므로 목록에서 뺀다.
+  const semOf = (proj) => { PROJECT = proj; const r = BC.check().semantics;
+    const nc = (a) => a.filter(d => d.group !== "side-waist-c");
+    return Object.assign({}, r, { darts: Object.assign({}, r.darts, { front: nc(r.darts.front), back: nc(r.darts.back) }) }); };
   RING_OK = true;
 
   // (a) apex 공유 2다리 → 완전한 레코드(apex·legs·intake·boundary 모두 선언 기반)

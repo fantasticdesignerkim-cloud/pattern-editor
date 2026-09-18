@@ -9,6 +9,7 @@
 // ══════════════════════════════════════════════
 const vm = require("vm");
 const fs = require("fs");
+const { addSideWaistC } = require("./sideWaistFixture");
 const path = require("path");
 const { createEngine } = require("./loadEngine");
 const { applyRecipe, attemptDartMove } = require("./dartDriver");
@@ -238,14 +239,16 @@ const DB = loadInto(["designBodice.js"]).window.designBodice;
     if (withIds) o.forEach(pr => { pr.boundary = { root: pfx + "/" + pr.edge, ranges: [[0, 1]] }; });
     return { outline: o, construction: [] };
   };
+  const geo = (sv, ids) => { const g = { front: piece(47.5, 3, 20, 38, "front", ids), back: piece(24, 0, 20, 38, "back", ids), shared: { outline: [], construction: [] }, sleeve: { outline: [], construction: [] } };
+    return sv === 8 ? addSideWaistC(g) : g; };   // v8 계약: c 반쪽(옳은 fixture)
   const mk = (sv, ids) => ({ sourceBlock: { version: 1, schemaVersion: sv }, working: {
-    geometry: { front: piece(47.5, 3, 20, 38, "front", ids), back: piece(24, 0, 20, 38, "back", ids), shared: { outline: [], construction: [] }, sleeve: { outline: [], construction: [] } },
+    geometry: geo(sv, ids),
     parameters: { neckline: { mode: "parametric", type: "round", parameters: {} } }, designOutline: null, frontPlacket: null, patternLines: [] } });
   const sem = (p) => { PROJECT = p; return BC.check().semantics; };
 
   const r5 = sem(mk(8, true));
   ok(r5.ready === true && r5.boundaries.missing.length === 0 && r5.boundaries.misaligned.length === 0, "8: v8 + 전부 선언 → ready");
-  ok(r5.boundaries.front.length === 5 && r5.boundaries.front[0].root === "front/center", "8: effective outline 순서의 span reference 증거");
+  ok(r5.boundaries.front.length === 6 && r5.boundaries.front[0].root === "front/center", "8: effective outline 순서의 span reference 증거(v8 fixture 는 허리 포함 6)");
   ok(typeof r5.boundaryFingerprint === "string" && r5.boundaryFingerprint === sem(mk(8, true)).boundaryFingerprint, "8: fingerprint 결정론");
 
   // 의미만 변경 → boundaryFingerprint 변화, 형상 hash·측정·dart fingerprint 불변

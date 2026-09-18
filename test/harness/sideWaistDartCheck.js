@@ -300,7 +300,7 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
 //    checkpoint 는 수직 옆선 17.383333 을 재고 c 는 group 으로 한 번(1.375)만 센다.
 {
   const cLegs = (pc) => { const h = SC[pc]; return ["side", "intake"].map(leg => ({ kind: "line", from: { ...h.legs[leg] }, to: { ...h.apex },
-    dart: { id: h.id, boundary: "waist", apexAt: "to", attach: { root: h.attach[leg].root, t: h.attach[leg].t }, group: h.group, locked: true } })); };
+    dart: { id: h.id, boundary: "waist", apexAt: "to", attach: { root: h.attach[leg].root, t: h.attach[leg].t }, group: h.group, locked: true, groupTotal: SC.totalCm } })); };
   const geomC = JSON.parse(JSON.stringify(geom0));
   ["front", "back"].forEach(pc => { geomC[pc].construction = geomC[pc].construction.concat(cLegs(pc)); });
   const P8 = (g, sv) => proj(sv || 8, g);
@@ -341,6 +341,56 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
     const c = BC.check(PROJECT);
     ok(c.sideWaistDart.ok && near(c.sideWaistDart.totalCm, 1.375) && c.sideSeam.status !== "unmeasured", "7: " + name + " c record 정합(attachment complete)·총 1.375 · 옆선 측정 가능");
   });
+}
+
+// 8. v8 몸판 체크포인트 게이트: 옆허리 다트 c 는 필수 구조화 다트 — 손상 시 check·complete 차단(결정론적 reason),
+//    기존 bodiceResult 를 새로 만들지 않는다. legacy(v6)에는 게이트를 적용하지 않는다.
+{
+  const cLegs = (pc) => { const h = SC[pc]; return ["side", "intake"].map(leg => ({ kind: "line", from: { ...h.legs[leg] }, to: { ...h.apex },
+    dart: { id: h.id, boundary: "waist", apexAt: "to", attach: { root: h.attach[leg].root, t: h.attach[leg].t }, group: h.group, locked: true, groupTotal: SC.totalCm } })); };
+  // 진동을 곡선 primitive 로(체크포인트 진동 측정 성립) — 좌표·edge·boundary 는 geom0 그대로
+  const armCurve = (g) => { ["front", "back"].forEach(pc => { g[pc].outline = g[pc].outline.map(x => (x.edge === "armhole" && x.kind === "line")
+    ? { kind: "path", commands: [{ type: "M", points: [x.from] }, { type: "C", points: [x.from, x.to, x.to] }], edge: x.edge, boundary: x.boundary } : x); }); return g; };
+  const good = () => { const g = armCurve(JSON.parse(JSON.stringify(geom0))); ["front", "back"].forEach(pc => { g[pc].construction = g[pc].construction.concat(cLegs(pc)); }); return g; };
+  const cOf = (g, pc) => g[pc].construction.filter(x => x.dart && x.dart.group === "side-waist-c");
+  PROJECT = proj(8, good());
+  const c0 = BC.check(PROJECT);
+  ok(c0.ok && c0.sideWaistDart.ok && c0.sideWaistDart.reason === null, "8: 정상 c 반쪽 → 게이트 통과");
+  ok(near(c0.sideWaistDart.totalCm, d.darts.c, 1e-12) && near(c0.sideWaistDart.front.intakeCm + c0.sideWaistDart.back.intakeCm, c0.sideWaistDart.totalCm, 1e-9),
+    "8: 두 반쪽 intake 합 = 선언 group 총량 = c(" + d.darts.c + ")");
+  const darts = engine.buildGen0WaistDarts(d.formula, p, d.darts);
+  ok(near(["a", "b", "d", "e", "f"].reduce((t, k) => t + Math.abs(darts[k].right.x - darts[k].left.x), 0) + c0.sideWaistDart.totalCm, d.darts.total, 1e-9),
+    "8: 예산 = a,b,d,e,f + c(group 총량 한 번) = total 12.5");
+  const r0 = BC.complete(PROJECT);
+  ok(r0.ok && PROJECT.working.bodiceResult === r0.result, "8: 정상 → 완료 결과 생성");
+  const kept = PROJECT.working.bodiceResult;
+  const cases = [
+    ["누락(뒤 반쪽 제거)", "side-waist-dart-missing", g => { g.back.construction = g.back.construction.filter(x => !(x.dart && x.dart.group)); }],
+    ["중복(앞에 두 번째 c 반쪽)", "side-waist-dart-duplicate", g => { cOf(g, "front").forEach(x => { const y = JSON.parse(JSON.stringify(x)); y.dart.id = "front-side-waist-c-2"; g.front.construction.push(y); }); }],
+    ["shared 배치", "side-waist-dart-shared", g => { g.shared.construction = cOf(g, "front").map(x => JSON.parse(JSON.stringify(x))); }],
+    ["unlocked", "side-waist-dart-unlocked", g => { cOf(g, "front")[1].dart.locked = false; }],
+    ["다리 1개", "side-waist-dart-legs", g => { const x = cOf(g, "back")[1]; g.back.construction = g.back.construction.filter(y => y !== x); }],
+    ["attachment 불완전(t 변조)", "side-waist-dart-attachment", g => { cOf(g, "front")[1].dart.attach.t = 0.5; }],
+    ["intake 변조(다리 이동·t 일치)", "side-waist-dart-total", g => { const x = cOf(g, "front")[1]; x.from.x = p.SIDE_BTM.x + 1.0;
+      x.dart.attach.t = (p.FRONT_WL.x - x.from.x) / (p.FRONT_WL.x - p.SIDE_BTM.x); }],
+    ["총량 선언 불일치", "side-waist-dart-total", g => { cOf(g, "back").forEach(x => { x.dart.groupTotal = 2; }); }],
+    ["총량 선언 누락", "side-waist-dart-total", g => { cOf(g, "front").forEach(x => { delete x.dart.groupTotal; }); }],
+  ];
+  cases.forEach(([name, reason, mut]) => {
+    const g = good(); mut(g);
+    PROJECT = proj(8, g); PROJECT.working.bodiceResult = kept;
+    const c = BC.check(PROJECT);
+    ok(!c.ok && c.fails.indexOf(reason) >= 0 && c.sideWaistDart.reason === reason && !c.sideWaistDart.ok && c.sideWaistDart.totalCm === null, "8: " + name + " → check 차단 " + reason);
+    const r = BC.complete(PROJECT);
+    ok(!r.ok && r.reason === reason && PROJECT.working.bodiceResult === kept, "8: " + name + " → complete 거부(" + reason + ")·기존 결과 유지·새 결과 없음");
+  });
+  // 결정론: 같은 손상은 같은 reason
+  const g1 = good(); cases[3][2](g1); PROJECT = proj(8, g1); const a1 = BC.check(PROJECT).sideWaistDart.reason;
+  const g2 = good(); cases[3][2](g2); PROJECT = proj(8, g2); ok(BC.check(PROJECT).sideWaistDart.reason === a1, "8: reason 결정론");
+  // legacy v6(중앙 옆선 + 옛 c 표현) 은 이 게이트를 받지 않는다(legacy-source 로 이미 구분)
+  PROJECT = proj(6, armCurve(JSON.parse(JSON.stringify(geom0))));
+  const c6 = BC.check(PROJECT);
+  ok(!c6.sideWaistDart.ok && c6.fails.every(f => f.indexOf("side-waist-dart") !== 0), "8: v6 legacy 는 c 게이트 미적용");
 }
 
 console.log("══════════════════════════════════════════════");

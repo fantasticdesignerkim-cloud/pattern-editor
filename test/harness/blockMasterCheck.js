@@ -73,7 +73,7 @@ function elFactory() {
   // SV8 옆허리 다트 c 반쪽 다리(construction). apex = 옆선 위끝(240,100), 다리 끝은 허리 위.
   const cLegEl = (piece, legX, t, extra) => el("line", Object.assign({ "data-piece": piece, "data-geometry-role": "construction", x1: legX, y1: 300, x2: 240, y2: 100,
     "data-dart-id": piece + "-side-waist-c", "data-dart-boundary": "waist", "data-dart-apex-at": "to", "data-dart-attach-root": piece + "/waist", "data-dart-attach-t": t,
-    "data-dart-group": "side-waist-c", "data-dart-locked": "true" }, extra || {}));
+    "data-dart-group": "side-waist-c", "data-dart-locked": "true", "data-dart-group-total": 2.5 }, extra || {}));
   return { el, lineEl, pathEl, cLegEl };
 }
 const { el, lineEl, pathEl, cLegEl } = elFactory();
@@ -686,6 +686,12 @@ function makeHarness(cfg) {
   throws(() => makeHarness({ sceneBuilder: (m) => defaultScene(m).map(e => e.getAttribute("data-dart-id") === "front-side-waist-c" ? cLegEl("front", +e.getAttribute("x1"), +e.getAttribute("data-dart-attach-t"), { "data-dart-group": "bogus" }) : e) }).capture(), "bad-dart-group", "36: group 오값 거부");
   throws(() => makeHarness({ sceneBuilder: (m) => defaultScene(m).map(e => e.getAttribute("data-dart-id") === "back-side-waist-c" ? cLegEl("back", +e.getAttribute("x1"), +e.getAttribute("data-dart-attach-t"), { x2: 230 }) : e) }).capture(), "bad-side-waist-dart", "36: apex 가 옆선 위끝이 아님 → 거부");
   throws(() => makeHarness({ sceneBuilder: (m) => defaultScene(m).map(e => e.getAttribute("data-dart-id") === "back-side-waist-c" && e.getAttribute("x1") === "240" ? cLegEl("back", 238, 2 / 180) : e) }).capture(), "bad-side-waist-dart", "36: 옆선∩허리 다리 없음 → 거부");
+  // 논리 총량(생산자 선언 groupTotal): 반쪽 intake 합(1.25+1.25)과 일치해야 하고 네 다리가 같은 값이어야 한다.
+  ok(["front", "back"].every(pc => half(pc).every(p => p.dart.groupTotal === 2.5)), "36: groupTotal 선언 보존(2.5)");
+  const retot = (fn) => (m) => defaultScene(m).map(e => fn(e) ? cLegEl(e.getAttribute("data-piece"), +e.getAttribute("x1"), +e.getAttribute("data-dart-attach-t"), { "data-dart-group-total": fn(e) }) : e);
+  throws(() => makeHarness({ sceneBuilder: retot(e => e.getAttribute("data-dart-group") ? 3 : 0) }).capture(), "bad-side-waist-dart", "36: 반쪽 합 ≠ 선언 총량 → 거부");
+  throws(() => makeHarness({ sceneBuilder: retot(e => e.getAttribute("data-dart-id") === "back-side-waist-c" ? 2.4 : 0) }).capture(), "bad-side-waist-dart", "36: 다리마다 다른 총량 → 거부");
+  throws(() => makeHarness({ sceneBuilder: retot(e => e.getAttribute("data-dart-group") ? "abc" : 0) }).capture(), "bad-dart-group-total", "36: 총량 비수치 → 거부");
 }
 
 console.log("══════════════════════════════════════════════");

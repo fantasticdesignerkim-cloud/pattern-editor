@@ -610,7 +610,10 @@
   function bodiceFailStr(reason) {
     const m = {
       "front-outline-not-connected": "앞판 외곽이 연결되지 않음", "back-outline-not-connected": "뒤판 외곽이 연결되지 않음",
-      "side-seam-mismatch": "옆선 봉제 길이 불일치(>0.3cm)", "side-seam-unmeasured": "옆선 측정 불가(유효 외곽에 명시 옆선 없음)", "front-armhole-unmeasured": "앞 진동둘레 측정 불가",
+      "side-seam-mismatch": "옆선 봉제 길이 불일치(>0.3cm)", "side-seam-unmeasured": "옆선 측정 불가(유효 외곽에 명시 옆선 없음)",
+      "side-waist-dart-missing": "옆허리 다트 c 반쪽 누락", "side-waist-dart-duplicate": "옆허리 다트 c 반쪽 중복", "side-waist-dart-shared": "옆허리 다트 c 가 공용으로 놓임",
+      "side-waist-dart-unlocked": "옆허리 다트 c 고정 해제됨", "side-waist-dart-legs": "옆허리 다트 c 다리 수 오류", "side-waist-dart-attachment": "옆허리 다트 c 허리 부착 불일치",
+      "side-waist-dart-intake": "옆허리 다트 c 분량 측정 불가", "side-waist-dart-total": "옆허리 다트 c 총량 불일치", "front-armhole-unmeasured": "앞 진동둘레 측정 불가",
       "back-armhole-unmeasured": "뒤 진동둘레 측정 불가", "neckline-unmeasured": "목둘레 측정 불가",
       "neckline-preview-invalid": "네크라인 미리보기 무효", "no-project": "프로젝트 없음"
     };

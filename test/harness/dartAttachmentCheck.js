@@ -10,6 +10,7 @@
 // ══════════════════════════════════════════════
 const vm = require("vm");
 const fs = require("fs");
+const { addSideWaistC } = require("./sideWaistFixture");
 const path = require("path");
 const { createEngine } = require("./loadEngine");
 const { applyRecipe, attemptDartMove } = require("./dartDriver");
@@ -133,8 +134,10 @@ function geom(ids, withAttach) {
   back.construction = [];
   return { front, back, shared: { outline: [], construction: [] }, sleeve: { outline: [], construction: [] } };
 }
+// v8 계약: 완료 경로의 c 반쪽이 있어야 한다 — 입력을 바꾸지 않도록 복제본에 붙인다(옳은 fixture).
+const withC = (sv, g) => (sv === 8 && !JSON.stringify(g).includes("side-waist-c")) ? addSideWaistC(JSON.parse(JSON.stringify(g))) : g;
 const proj = (sv, g, over) => Object.assign({ sourceBlock: { version: 1, schemaVersion: sv }, working: {
-  geometry: g, parameters: { neckline: { mode: "parametric", type: "round", parameters: {} } }, designOutline: null, frontPlacket: null, patternLines: [] } }, over || {});
+  geometry: withC(sv, g), parameters: { neckline: { mode: "parametric", type: "round", parameters: {} } }, designOutline: null, frontPlacket: null, patternLines: [] } }, over || {});
 const sem = (p) => { PROJECT = p; return BC.evaluateSemantics(p); };
 const att = (r, id) => r.darts.front.find(d => d.id === id);
 
