@@ -69,6 +69,8 @@ const suites = [
   // 카라 모양 완료 체크포인트: 완료 게이트·불변 스냅샷·형상전용 스테일·몸판 무효화 vs 소매 순서 게이트·idempotent.
   { file: "collarCheckpointCheck.js",   golden: false },
   { file: "collarAnnotationCheck.js",   golden: false },
+  // 카라 프리셋 registry(collarPresets): M 레코드·불변·검증·composeDraft=기존 M draft·hash 동일.
+  { file: "collarPresetsCheck.js",      golden: false },
   // Design 형상 통합(designResult): 세 하위 result + structuralLines(cut) 묶음·hash·게이트·idempotent.
   { file: "designResultCheck.js",       golden: false },
   // Design 배치(piece layout): designLayout.js 의 순수 기하(bbox/auto 배치) 검증.
