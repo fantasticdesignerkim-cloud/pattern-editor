@@ -7,7 +7,8 @@
 //
 // 배치 규칙:
 //  · 초기 배치 = 뒤판 → 앞판 → 소매 순 **가로**(원형 화면과 같은 좌우 순서), 피스 사이 **실제 봉제선
-//    (outline) 간격 10cm**, 세 피스 **세로 중심**을 첫 피스(뒤판) 세로 중심에 맞춘다(옆으로 나란히).
+//    (outline) 간격 10cm**. 앞판은 **가슴선(U=side-seam 비허리 끝, SIDE_TOP) 높이를 뒤판과 일치**,
+//    소매는 뒤판 세로 중심에 맞춘다. 초기 진입·배치 초기화가 같은 규칙, 몸판 중앙은 카메라만.
 //  · 앞판/뒤판/소매를 각각 드래그하면 그 피스만 "manual" → 이후 자동 배치에서 안 움직인다.
 //  · shared(허리다트 c 다리)는 **앞판 offset 을 따른다**(앞·뒤가 벌어져도 붙일 곳은 하나).
 //  · fit = 세 피스 union 중심을 viewport 중심에 두는 카메라(형상·layout 불변).
@@ -89,20 +90,60 @@
     return u;
   }
 
-  // ── 순수: 앞판 → 뒤판 → 소매 가로 배치 offset. 실제 봉제선 간격 GAP, 세로중심은 앞판 기준. ──
-  // 표시 순서(왼쪽→오른쪽) = 뒤판 → 앞판 → 소매(원형 화면과 같은 좌우 순서). 첫 피스가 앵커(자연 위치),
-  //   다음 피스는 직전 표시 피스 오른쪽 GAP, 세로 중심은 앵커 기준. 없는 피스는 offset 0 으로 건너뛴다.
+  // ── 순수: 가슴선 anchor U(=SIDE_TOP, 진동밑점) — 의미 모서리 topology 로만 식별 ──
+  // 명시 edge "side-seam" outline primitive 들을 on-curve 끝점으로 잇는 체인의 두 끝 중,
+  // waist(outline·construction 어디든 — hem 연장 후 waist 는 construction) 또는 hem 끝점에 닿지 않는
+  // 끝이 U 다. 좌표 근접은 체인 연결(JOIN_TOL)에만 쓰고, bbox·배열 순서로 추측하지 않는다.
+  // 정확히 하나가 아니면 null(모호) — 호출부가 legacy 세로중심 정렬로 폴백한다.
+  const JOIN_TOL = 0.02;   // designBodice 와 같은 드리프트 허용(원본 ~0.0004cm)
+  function primEnds(p) {
+    if (p.kind === "line" || p.kind === "cubic") return [p.from, p.to];
+    if (p.kind === "path" && Array.isArray(p.commands) && p.commands.length) {
+      const first = p.commands[0].points[0], lc = p.commands[p.commands.length - 1];
+      return [first, lc.points[lc.points.length - 1]];
+    }
+    return [];
+  }
+  function sideSeamUnderarm(geometry, piece) {
+    const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return null;
+    const near = (a, c) => Math.hypot(a.x - c.x, a.y - c.y) < JOIN_TOL;
+    const nodes = [];   // { pt, deg }
+    b.outline.forEach(pr => {
+      if (pr.edge !== "side-seam") return;
+      primEnds(pr).forEach(q => { const n = nodes.find(m => near(m.pt, q)); if (n) n.deg++; else nodes.push({ pt: q, deg: 1 }); });
+    });
+    const ends = nodes.filter(n => n.deg === 1).map(n => n.pt);
+    if (ends.length !== 2) return null;
+    const stops = [];   // waist·hem 끝점(역할 무관)
+    ["outline", "construction"].forEach(rl => (b[rl] || []).forEach(pr => {
+      if (pr.edge === "waist" || pr.edge === "hem") primEnds(pr).forEach(q => stops.push(q));
+    }));
+    if (!nodes.some(n => stops.some(q => near(n.pt, q)))) return null;   // S(side∩waist/hem) 없음 → 모호
+    const us = ends.filter(e => !stops.some(q => near(e, q)));
+    return us.length === 1 ? { x: us[0].x, y: us[0].y } : null;
+  }
+
+  // ── 순수: 뒤판 → 앞판 → 소매 가로 배치 offset. 실제 봉제선 간격 GAP. ──
+  // 표시 순서(왼쪽→오른쪽) = 뒤판 → 앞판 → 소매(원형 화면과 같은 좌우 순서). 뒤판이 앵커(자연 위치),
+  //   다음 피스는 직전 표시 피스 오른쪽 GAP. 없는 피스는 offset 0 으로 건너뛴다.
+  // 세로: **앞판은 가슴선 정렬** — front U.y + front.dy == back U.y + back.dy (U = sideSeamUnderarm).
+  //   U 를 식별할 수 없을 때만(legacy/모호) 앵커 세로중심 정렬로 폴백. 소매는 앵커(뒤판) 세로중심 정렬.
   const DISPLAY_ORDER = ["back", "front", "sleeve"];
   function autoLayout(geometry) {
     const f = outlineBBoxOf(geometry, "front");
     if (!f) return null;
     const out = { front: { dx: 0, dy: 0 }, back: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 } };
-    let prevMaxX = null, cy = null;
+    let prevMaxX = null, cy = null, anchor = null;
     DISPLAY_ORDER.forEach(k => {
       const bb = outlineBBoxOf(geometry, k); if (!bb) return;
       const bcy = (bb.minY + bb.maxY) / 2;
-      if (prevMaxX === null) { cy = bcy; prevMaxX = bb.maxX; return; }   // 앵커(자연 위치)
-      out[k] = { dx: (prevMaxX + GAP) - bb.minX, dy: cy - bcy };
+      if (prevMaxX === null) { anchor = k; cy = bcy; prevMaxX = bb.maxX; return; }   // 앵커(자연 위치)
+      let dy = cy - bcy;
+      if (k === "front" && anchor === "back") {
+        const uB = sideSeamUnderarm(geometry, "back"), uF = sideSeamUnderarm(geometry, "front");
+        if (uB && uF) dy = (uB.y + out.back.dy) - uF.y;   // 가슴선(BL) 정렬
+      }
+      out[k] = { dx: (prevMaxX + GAP) - bb.minX, dy };
       prevMaxX = bb.maxX + out[k].dx;
     });
     return out;
@@ -241,7 +282,7 @@
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
     _userArranged = false;
-    L.placement = { front: "auto", back: "auto", sleeve: "auto" };
+    L.placement = { front: "auto", back: "auto", sleeve: "auto", collar: "auto" };
     refreshAutoLayout();
     Object.assign(view, { SC: 11, MX: 80, MY: 100 });
     syncViewVars(); fitUnion();
@@ -323,7 +364,7 @@
 
   window.designLayout = Object.freeze({
     // 순수(harness)
-    bboxOf, outlineBBoxOf, autoLayout, ensureLayout, bboxOfStand, collarAutoOffset,
+    bboxOf, outlineBBoxOf, autoLayout, sideSeamUnderarm, ensureLayout, bboxOfStand, collarAutoOffset,
     // DOM 연동
     enterDesign, centerBody, placeSleeveRight, resetLayout, refreshAutoLayout, afterBodyLength, afterCollar, resetViewForDesign,
     cancelLayoutDrag   // 모드 전환 시 진행 중 배치 드래그 취소(designLineTool.setMode 에서 호출)

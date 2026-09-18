@@ -194,6 +194,82 @@ function geom() {
   });
 }
 
+// 13. 가슴선(BL) 정렬: 앞판 dy 는 bbox 가 아니라 semantic U(side-seam 의 비허리 끝, SIDE_TOP) 로 정한다.
+//   뒤판 bbox y[0,40]·U.y=18 / 앞판 bbox y[-4,44]·U.y=20(목·어깨·허리 높이 모두 다름).
+//   bbox 세로중심 정렬 → dy 0, top 정렬 → 4, bottom 정렬 → -4, **가슴선 정렬 → -2**.
+const E = (pr, e) => { pr.edge = e; return pr; };
+function semGeom(opts) {
+  opts = opts || {};
+  const back = { outline: [
+    E(line(0, 2, 0, 40), "center"), E(line(0, 40, 20, 40), "waist"), E(line(20, 40, 20, 18), "side-seam"),
+    cubic([[20, 18], [18, 12], [16, 8], [15, 5]]), line(15, 5, 5, 0), line(5, 0, 0, 2)], construction: [] };
+  let front;
+  if (opts.frontHemCurve) {
+    // hem 연장 + 옆선 곡선화 후 형태: side-seam 2 path(U→Sp→H), waist 는 construction, hem outline.
+    front = { outline: [
+      E(line(0, 8, 0, 60), "center"), E(line(0, 60, 22, 60), "hem"),
+      E(cubic([[22, 60], [22, 55], [23, 49], [23, 44]]), "side-seam"), E(cubic([[23, 44], [23, 38], [22, 26], [22, 20]]), "side-seam"),
+      cubic([[22, 20], [20, 12], [17, 6], [16, 3]]), line(16, 3, 6, -4), line(6, -4, 0, 8)],
+      construction: [E(line(0, 44, 23, 44), "waist")] };
+  } else {
+    front = { outline: [
+      E(line(0, 8, 0, 44), "center"), E(line(0, 44, 22, 44), "waist"), E(line(22, 44, 22, 20), "side-seam"),
+      cubic([[22, 20], [20, 12], [17, 6], [16, 3]]), line(16, 3, 6, -4), line(6, -4, 0, 8)], construction: [] };
+  }
+  return { front, back, shared: { outline: [], construction: [] },
+    sleeve: { outline: [line(0, 40, 15, 40), line(0, 80, 15, 80), line(0, 40, 0, 80), line(15, 40, 15, 80)], construction: [] } };
+}
+{
+  const g = semGeom();
+  const uB = DL.sideSeamUnderarm(g, "back"), uF = DL.sideSeamUnderarm(g, "front");
+  ok(uB && near(uB.x, 20) && near(uB.y, 18) && uF && near(uF.x, 22) && near(uF.y, 20), "13: semantic U = side-seam 비허리 끝");
+  const a = DL.autoLayout(g);
+  ok(near(uF.y + a.front.dy, uB.y + a.back.dy), "13: 초기 배치 가슴선 일치(front U.y+dy == back U.y+dy)");
+  ok(near(a.front.dy, -2), "13: 앞판 dy = -2 (bbox 중심 0·top 4·bottom -4 아님)");
+  const bbF = DL.outlineBBoxOf(g, "front"), bbB = DL.outlineBBoxOf(g, "back");
+  ok(!near((bbF.minY + bbF.maxY) / 2 + a.front.dy, (bbB.minY + bbB.maxY) / 2) && !near(bbF.minY + a.front.dy, bbB.minY), "13: bbox 중심·top 정렬이 아님");
+  ok(near(a.front.dx, (20 + 10) - 0) && near(a.sleeve.dx, (22 + a.front.dx + 10) - 0), "13: 뒤→앞→소매 봉제선 간격 10(가로 불변)");
+  ok(near((40 + 80) / 2 + a.sleeve.dy, (0 + 40) / 2), "13: 소매 세로중심 = 뒤판(앵커) 세로중심");
+  // hem 연장 + 곡선 옆선(waist 가 construction) 에서도 U 식별
+  const g2 = semGeom({ frontHemCurve: true });
+  const uF2 = DL.sideSeamUnderarm(g2, "front");
+  ok(uF2 && near(uF2.x, 22) && near(uF2.y, 20), "13: hem·곡선 옆선 후에도 U 식별(waist=construction)");
+  ok(near(uF2.y + DL.autoLayout(g2).front.dy, 18), "13: hem·곡선 옆선 후 가슴선 정렬");
+  // 모호/결손 → null(legacy 세로중심 폴백)
+  const g3 = semGeom(); g3.front.outline = g3.front.outline.filter(pr => pr.edge !== "waist");
+  ok(DL.sideSeamUnderarm(g3, "front") === null, "13: waist 없으면 U null(추측 안 함)");
+  const a3 = DL.autoLayout(g3), b3 = DL.outlineBBoxOf(g3, "front");
+  ok(near((b3.minY + b3.maxY) / 2 + a3.front.dy, 20), "13: U 없으면 세로중심 폴백");
+  ok(DL.sideSeamUnderarm(geom(), "front") === null, "13: edge 없는 legacy fixture → null");
+}
+// 14. DOM 액션에서도 가슴선: 진입·배치 초기화·몸판 중앙 보존, manual drag 는 자동 재정렬 안 함
+{
+  const sb = {
+    window: { addEventListener() {} }, document: { documentElement: { clientWidth: 1440 }, addEventListener() {} },
+    console: { log() {}, warn() {}, error() {} }, Math, JSON, Object, Array, Number, isFinite, Infinity, NaN
+  };
+  sb.globalThis = sb; vm.createContext(sb);
+  vm.runInContext(`var view = { SC: 11, MX: 80, MY: 100, x: 0, y: 0, z: 1 }; var SC = 11, MX = 80, MY = 100, viewX = 0, viewY = 0, viewZ = 1;
+    function syncViewVars(){ SC=view.SC; MX=view.MX; MY=view.MY; viewX=view.x; viewY=view.y; viewZ=view.z; }
+    function render(){}
+    var svg = { getBoundingClientRect: () => ({ width: 1440, height: 900 }), addEventListener(){}, clientWidth: 0, clientHeight: 0 };`, sb);
+  const project = { working: { geometry: semGeom(), layout: null } };
+  sb.window.designWorkflow = { current: () => project };
+  sb.window.isDesignStageActive = () => true;
+  vm.runInContext(SRC, sb, { filename: "designLayout.js" });
+  const D = sb.window.designLayout, L = () => project.working.layout;
+  const bl = () => near(20 + L().front.dy, 18 + L().back.dy);
+  const nonOverlap = () => (20 + L().back.dx) < (0 + L().front.dx) && (22 + L().front.dx) < (0 + L().sleeve.dx)
+    && near(L().front.dx - (20 + L().back.dx), 10) && near(L().sleeve.dx - (22 + L().front.dx), 10);
+  D.enterDesign(); ok(bl() && nonOverlap(), "14: 디자인 진입 → 가슴선 일치·뒤<앞<소매·간격 10");
+  const before = JSON.stringify(L()); D.centerBody();
+  ok(JSON.stringify(L()) === before && bl(), "14: 몸판 중앙 = 카메라만, 가슴선 보존");
+  L().front = { dx: 77, dy: 5 }; L().placement.front = "manual";
+  D.afterBodyLength(); D.afterCollar();
+  ok(L().front.dx === 77 && L().front.dy === 5 && L().placement.front === "manual", "14: manual 앞판은 재계산에서 재정렬 안 함");
+  D.resetLayout(); ok(bl() && nonOverlap() && L().placement.front === "auto" && L().placement.collar === "auto", "14: 배치 초기화 → 가슴선 복귀·collar 포함 auto");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);
