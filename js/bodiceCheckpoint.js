@@ -70,9 +70,13 @@
   // 옆선 봉제 길이 = **유효 외곽**(effectiveOutline: designOutline 우선)에서 edge==="side-seam" 으로 **명시된**
   //   구간만 합산(side-seam-extension 포함 — 같은 edge). 좌표·형상 유사성으로 옆선을 추측하지 않는다.
   //   명시 side-seam 이 하나도 없으면(예: unresolved 대체선이 옆선을 삼킴) 0 이 아니라 unavailable.
+  //   ★ 허리 아래 연장(boundary root "…/side-seam-extension")만 남은 것은 기본 옆선의 증거가 아니다 — 기본 옆선
+  //   (root "…/side-seam" 이거나 boundary 없는 명시 edge = legacy·명시 의미 대체선)이 하나 이상 있어야 측정하고,
+  //   그때 연장을 포함한 모든 명시 side-seam 구간을 합산한다. root 이름만 보며 좌표로 복원하지 않는다.
+  function isSideSeamExtension(s) { var r = s.boundary && s.boundary.root; return typeof r === "string" && /\/side-seam-extension$/.test(r); }
   function measureSideSeam(outline) {
     var segs = Array.isArray(outline) ? outline.filter(function (s) { return s && s.edge === "side-seam"; }) : [];
-    if (!segs.length) return { status: "unavailable", length: null };
+    if (!segs.some(function (s) { return !isSideSeamExtension(s); })) return { status: "unavailable", length: null };
     return { status: "measured", length: segs.reduce(function (t, s) { return t + segLen(s); }, 0) };
   }
   // center edge 최상단 점(FNP/BNP). 진동 식별에서 네크라인 제외용.
