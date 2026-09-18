@@ -21,7 +21,9 @@
 //  - `working.geometry`·`working.parameters` 는 디자인의 **실제 편집 대상**(mutable) —
 //    캐시가 아니다. 향후 편집은 이 둘만 바꾼다.
 //  - completed 와 **참조 공유 0**(deep clone). localStorage/autoSave/testSeed 미연결.
-//  - schemaVersion 수용: **7 = 정상**(봉제 경계 의미 + 다트 의미 + 경계 identity + 다트 attachment + 옆선 조임 승격),
+//  - schemaVersion 수용: **8 = 정상**(봉제 경계 의미 + 다트 의미 + 경계 identity + 다트 attachment + 수직 기본 옆선 +
+//    옆허리 다트 c 의 앞·뒤 c/2 반쪽). **7 = 폐기**(옆선을 c 사선으로 둔 잘못된 의미) — 자동 변환·추론 없이
+//    `stale-schema-version` 으로 거부한다(원형을 다시 완료해야 함).
 //    **2~6 = legacy 수용**(형상 입력으로는 쓰되 `semanticStatus:"legacy-incomplete"` 로 표시 —
 //    신규 semantic 을 fabricated data 로 주입하지 않는다). 그 외 버전은
 //    `unsupported-schema-version` 으로 거부(기존과 동일).
@@ -72,12 +74,14 @@
     // 디자인은 의미 모서리(edge)를 실은 snapshot 만 소비한다. v3=정상 / v2=legacy 수용.
     // 구형 v1(모서리 없음) snapshot 은 명시적으로 거부한다(조용히 edge 없는 디자인 생성 금지).
     const sv = completed.snapshot.schemaVersion;
-    if (sv !== 2 && sv !== 3 && sv !== 4 && sv !== 5 && sv !== 6 && sv !== 7) fail("unsupported-schema-version", sv);
+    // v7 = 옆선을 c 사선으로 둔 폐기 의미 — 조용히 수용·변환하지 않는다(원형 재완료 필요).
+    if (sv === 7) fail("stale-schema-version", sv);
+    if (sv !== 2 && sv !== 3 && sv !== 4 && sv !== 5 && sv !== 6 && sv !== 8) fail("unsupported-schema-version", sv);
     // v2 = 신규 봉제 경계 의미가 없는 구형 완료본. 형상은 쓰되 legacy 로 표시하고
     // role 을 지어내지 않는다(좌표 휴리스틱 재태깅 금지).
-    // v7 = 봉제 경계 의미 + 구조화 다트 의미 + 경계 identity + 다트 attachment + 옆선 허리 조임 승격 정상 완료본.
-    // v2~v6 = legacy(v6 은 중앙 옆선 + 옆선 조임 c 를 다트로 실은 형상) — 자동 승격·의미 복원 금지 — 없는 의미(경계 identity 포함)를 만들어 넣지 않는다.
-    const semanticStatus = (sv === 7) ? "complete" : "legacy-incomplete";
+    // v8 = 봉제 경계 의미 + 구조화 다트 의미 + 경계 identity + 다트 attachment + 수직 기본 옆선·옆허리 다트 c 반쪽 정상 완료본.
+    // v2~v6 = legacy — 자동 승격·의미 복원 금지 — 없는 의미(경계 identity·c 반쪽 group 포함)를 만들어 넣지 않는다.
+    const semanticStatus = (sv === 8) ? "complete" : "legacy-incomplete";
     if (_project) {
       const sb = _project.sourceBlock;
       const same = sb.id === completed.id

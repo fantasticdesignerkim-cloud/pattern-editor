@@ -29,9 +29,12 @@
 //   - SV6(schemaVersion 6, P0.3b) = 위 + 다트 다리 경계 attachment. 다리마다 생산자가 선언한
 //     data-dart-attach-root / -t 를 dart.attach = { root, t } 로 싣고, root 의미가 다트 boundary 와
 //     같으며 t 가 [0,1] 이고 **같은 캡처의 그 root 경계 구간이 t 를 덮는지** 검증한다(좌표 복원 없음).
-//   - SV7(schemaVersion 7) = 위 + 옆선 허리 조임 승격. 앞판 옆선·허리는 SIDE_TOP→FRONT_SIDE_WL,
-//     뒤판은 SIDE_TOP→BACK_SIDE_WL 로 끝나고(draft 단일 원천), 옆선 조임 c 는 구조화 다트가 아니다.
-//     v6 이하 완료본은 중앙 옆선 + c 다트 형상이라 designProject 가 legacy 로만 받는다.
+//   - SV7(schemaVersion 7, 폐기) = 옆선을 SIDE_TOP→*_SIDE_WL 사선으로, c 를 비다트로 둔 잘못된 의미.
+//     designProject 는 v7 완료본을 받지 않는다(자동 변환·추론 없음 — 원형을 다시 완료해야 한다).
+//   - SV8(schemaVersion 8) = 앞·뒤 기본 옆선 SIDE_TOP→SIDE_BTM 수직 완성선 + 옆허리 다트 c 를 앞·뒤 조각의
+//     c/2 반쪽 다트(construction, group "side-waist-c", locked)로 싣는다. 반쪽마다 apex = 그 조각 옆선의
+//     진동밑 끝, 한 다리 = 옆선∩허리 접점, 다른 다리는 허리 위(attachment 로 검증). 좌표로 추론하지 않고
+//     생산자가 선언한 dart id·group·locked 와 옆선/허리 edge 위상만으로 검증한다.
 //   - 좌표는 원본 정밀도를 보존하고, 정규화는 hash/중복 판정(canonical)에서만 한다.
 //   - workMode 만 제한된 transaction 으로 all 로 바꿔 수집하고 finally 에서 원복한다.
 //     전역 state 에 snapshot source 를 임시 주입하지 않는다.
@@ -65,7 +68,10 @@
     armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole"
   };
   var BOUNDARY_RANGE_EPS = 1e-6;   // root 구간 [0,1] 계약의 수치 허용치
-  var SCHEMA_VERSION = 7;
+  var SCHEMA_VERSION = 8;
+  // SV8: 논리 다트 group(선언값). 옆허리 다트 c 는 앞·뒤 조각에 반쪽씩 — 정확히 front/back 하나씩.
+  var ALLOWED_DART_GROUP = { "side-waist-c": 1 };
+  var SIDE_WAIST_C_GROUP = "side-waist-c";
 
   function fail(reason, detail) {
     var e = new Error("captureBlockSnapshot 실패: " + reason);
@@ -154,6 +160,9 @@
       var bnd = el.getAttribute("data-dart-boundary"); if (bnd) dart.boundary = bnd;
       var ax = el.getAttribute("data-dart-apex-at"); if (ax) dart.apexAt = ax;
       if (el.getAttribute("data-dart-on-fold") === "true") dart.onFold = true;
+      var grp = el.getAttribute("data-dart-group");
+      if (grp !== null) { if (!ALLOWED_DART_GROUP[grp]) fail("bad-dart-group", grp); dart.group = grp; }
+      if (el.getAttribute("data-dart-locked") === "true") dart.locked = true;
       var atRoot = el.getAttribute("data-dart-attach-root"), atT = el.getAttribute("data-dart-attach-t");
       if (atRoot !== null || atT !== null) {
         var tv = Number(atT);
@@ -272,6 +281,36 @@
     });
   }
 
+  // SV8: 옆허리 다트 c — 앞·뒤 각 조각에 정확히 하나의 c/2 반쪽(construction, locked, 다리 2개).
+  //   apex = 그 조각 side-seam 의 비-허리 끝점(진동밑), 한 다리 = side-seam∩waist 접점. shared·outline 금지.
+  //   (선언 위상 대조 — 좌표 근접으로 찾아내지 않는다. 다른 다리의 허리 위치는 attachment 검증이 맡는다.)
+  function validateSideWaistDart(geometry) {
+    var ids = {};
+    ["front", "back", "shared", "sleeve"].forEach(function (pc) {
+      ["outline", "construction"].forEach(function (rl) {
+        geometry[pc][rl].forEach(function (prm) {
+          if (!prm.dart || prm.dart.group !== SIDE_WAIST_C_GROUP) return;
+          if (!(rl === "construction" && (pc === "front" || pc === "back"))) fail("bad-side-waist-dart", "placement " + pc + "/" + rl);
+          if (prm.dart.locked !== true) fail("bad-side-waist-dart", "unlocked " + prm.dart.id);
+          (ids[pc] = ids[pc] || {})[prm.dart.id] = ((ids[pc] || {})[prm.dart.id] || []).concat([prm]);
+        });
+      });
+    });
+    ["front", "back"].forEach(function (pc) {
+      var byId = ids[pc] || {}, keys = Object.keys(byId);
+      if (keys.length !== 1) fail("missing-side-waist-dart", pc + " halves=" + keys.length);
+      var legs = byId[keys[0]];
+      if (legs.length !== 2) fail("bad-side-waist-dart", pc + " legs=" + legs.length);
+      var junction = commonEndpoints(geometry[pc].outline, "side-seam", "waist");
+      var sideKeys = {};
+      geometry[pc].outline.forEach(function (prm) { if (prm.edge === "side-seam") edgeEndpointKeys(prm).forEach(function (k) { sideKeys[k] = 1; }); });
+      var tops = Object.keys(sideKeys).filter(function (k) { return junction.indexOf(k) < 0; });
+      var ends = legs.map(dartEnds);
+      if (junction.length !== 1 || tops.length !== 1 || !ends.every(function (e) { return e.apex === tops[0]; })) fail("bad-side-waist-dart", pc + " apex");
+      if (ends.filter(function (e) { return e.leg === junction[0]; }).length !== 1) fail("bad-side-waist-dart", pc + " side leg");
+    });
+  }
+
   // all 상태 DOM 에서 봉제 형상 표식 요소를 수집·검증한다. 실패 시 throw(부분 반환 없음).
   function collectGeometry() {
     var svg = document.getElementById("cv");
@@ -350,6 +389,8 @@
     for (var pj = 0; pj < REQUIRED_EDGE_PIECES.length; pj++) {
       validateJunctions(geometry[REQUIRED_EDGE_PIECES[pj]].outline, REQUIRED_EDGE_PIECES[pj]);
     }
+    // SV8: 옆허리 다트 c 반쪽(junction 유일성 확인 뒤).
+    validateSideWaistDart(geometry);
     return geometry;
   }
 

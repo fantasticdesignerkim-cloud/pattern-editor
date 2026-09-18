@@ -262,6 +262,8 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-working{pointer-events:none}
 .design-working line,.design-working path{stroke:var(--navy);fill:none}
 .design-working [data-geometry-role="construction"]{opacity:.55;stroke-dasharray:4 3}
+/* 옆허리 다트 c 의 c/2 반쪽(construction 다트선): 수직 외곽 완성선(남색 실선)과 구분되는 주황 점선. */
+.design-working [data-dart-group="side-waist-c"]{stroke:#E07800;opacity:.9;stroke-dasharray:4 3}
 /* 배치 드래그용 투명 hit rect(최상단 hit layer). reference/working 은 pointer-events:none
    이라 이 rect 만 포인터를 받는다. 형상은 안 움직이고 layout offset 만 갱신한다. */
 .design-layout-hit{pointer-events:all;cursor:move;fill:transparent}

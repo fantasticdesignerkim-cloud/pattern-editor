@@ -70,9 +70,15 @@ function elFactory() {
     bndAttrs(a, piece, role, edge, (String(d).match(/C/g) || []).length);
     return el("path", a);
   };
-  return { el, lineEl, pathEl };
+  // SV8 옆허리 다트 c 반쪽 다리(construction). apex = 옆선 위끝(240,100), 다리 끝은 허리 위.
+  const cLegEl = (piece, legX, t, extra) => el("line", Object.assign({ "data-piece": piece, "data-geometry-role": "construction", x1: legX, y1: 300, x2: 240, y2: 100,
+    "data-dart-id": piece + "-side-waist-c", "data-dart-boundary": "waist", "data-dart-apex-at": "to", "data-dart-attach-root": piece + "/waist", "data-dart-attach-t": t,
+    "data-dart-group": "side-waist-c", "data-dart-locked": "true" }, extra || {}));
+  return { el, lineEl, pathEl, cLegEl };
 }
-const { el, lineEl, pathEl } = elFactory();
+const { el, lineEl, pathEl, cLegEl } = elFactory();
+// 앞·뒤 c/2 반쪽: 다리 SIDE_BTM(240,300) · 다리 허리 위 235(앞 허리 root 240→140 의 t 0.05, 뒤 240→60 의 t 5/180).
+const cHalves = () => [cLegEl("front", 240, 0), cLegEl("front", 235, 0.05), cLegEl("back", 240, 0), cLegEl("back", 235, 5 / 180)];
 
 // SV2 의미 모서리 좌표(junction 이 유일하도록 설계).
 //  front: side(240,100→240,300) ∩ waist(240,300→140,300) = (240,300);
@@ -115,6 +121,7 @@ function defaultScene(mode) {
     out.push(lineEl("back", "construction", { x1: 330, y1: 60, x2: 350, y2: 80 }));
     out.push(lineEl("shared", "construction", { x1: 200, y1: 60, x2: 200, y2: 80 }));
     out.push(lineEl("shared", "construction", { x1: 210, y1: 60, x2: 210, y2: 80 }));
+    cHalves().forEach(x => out.push(x));
   }
   if (sleeve) {
     out.push(pathEl("sleeve", "outline", "M400,100 C420,120 440,140 460,160"));
@@ -185,12 +192,12 @@ function makeHarness(cfg) {
 {
   const h = makeHarness();
   const s = h.capture();
-  ok(s.schemaVersion === 7, "1: schemaVersion=7");
+  ok(s.schemaVersion === 8, "1: schemaVersion=8");
   ok(deepEqual(Object.keys(s).sort(), ["geometry", "schemaVersion", "source"]), "1: 최상위 키");
   const dist = {};
   ["front", "back", "shared", "sleeve"].forEach(pc => ["outline", "construction"].forEach(rl => { dist[pc + "/" + rl] = s.geometry[pc][rl].length; }));
-  ok(dist["front/outline"] === 7 && dist["front/construction"] === 2, "1: front 분포");
-  ok(dist["back/outline"] === 6 && dist["back/construction"] === 2, "1: back 분포");
+  ok(dist["front/outline"] === 7 && dist["front/construction"] === 4, "1: front 분포(construction 2 + c 반쪽 다리 2)");
+  ok(dist["back/outline"] === 6 && dist["back/construction"] === 4, "1: back 분포(construction 2 + c 반쪽 다리 2)");
   ok(dist["shared/outline"] === 0 && dist["shared/construction"] === 2, "1: shared 분포");
   ok(dist["sleeve/outline"] === 2 && dist["sleeve/construction"] === 0, "1: sleeve 분포");
   ok(deepEqual(s.source.measurements, { B: 83, W: 64, BL: 38, SL: 52, Hem: 30, capAdj: 3, capFormula: "culture", dartTotal: 12.5 }), "1: measurements");
@@ -362,6 +369,7 @@ function makeHarness(cfg) {
     if (found) return;
     if (o && typeof o === "object") for (const k of Object.keys(o)) {
       if (/^(id|version|completedAt|designProject)$/.test(k)) { found = k; return; }
+      if (k === "dart") continue;   // 다트 의미 id 는 선언 semantic(완료본 id 아님)
       walk(o[k]);
     }
   })(s);
@@ -486,10 +494,10 @@ function makeHarness(cfg) {
     ]);
   };
   const s4 = makeHarness({ sceneBuilder: withDarts }).capture();
-  const fd = s4.geometry.front.construction.filter(p => p.dart);
+  const fd = s4.geometry.front.construction.filter(p => p.dart && !p.dart.group);
   ok(fd.length === 2 && fd.every(p => p.dart.id === "front-bust" && p.dart.boundary === "armhole" && p.dart.apexAt === "to"),
     "32: 앞판 가슴다트 2다리 의미 보존");
-  const bd = s4.geometry.back.construction.filter(p => p.dart);
+  const bd = s4.geometry.back.construction.filter(p => p.dart && !p.dart.group);
   ok(bd.length === 1 && bd[0].dart.onFold === true, "32: 접어재단 반쪽 다트(다리 1개) 허용");
   // 선언 없는 primitive 엔 dart own-property 자체가 없다
   ok(s4.geometry.front.outline.every(p => !Object.prototype.hasOwnProperty.call(p, "dart")), "32: 선언 없으면 dart 속성 없음");
@@ -541,10 +549,10 @@ function makeHarness(cfg) {
   const two = (m1, m2) => [leg("front", { x1: 180, y1: 260, x2: 200, y2: 200 }, m1), leg("front", { x1: 220, y1: 260, x2: 200, y2: 200 }, m2)];
   const good = { id: "dx", boundary: "armhole", root: "front/armhole", t: 0.25 };
   const s = makeHarness({ sceneBuilder: scene(two(good, Object.assign({}, good, { t: 0.75 }))) }).capture();
-  const legs = s.geometry.front.construction.filter(p => p.dart);
+  const legs = s.geometry.front.construction.filter(p => p.dart && !p.dart.group);
   ok(legs.length === 2 && legs[0].dart.attach.root === "front/armhole" && legs[0].dart.attach.t === 0.25 && legs[1].dart.attach.t === 0.75,
     "34: attachment 선언값 그대로(root·t)");
-  ok(legs[0].dart.attach !== makeHarness({ sceneBuilder: scene(two(good, good)) }).capture().geometry.front.construction.find(p => p.dart).dart.attach,
+  ok(legs[0].dart.attach !== makeHarness({ sceneBuilder: scene(two(good, good)) }).capture().geometry.front.construction.find(p => p.dart && !p.dart.group).dart.attach,
     "34: 캡처 간 attachment 참조 공유 없음");
   // 같은 root+t 두 다리(이동 다트형) 허용 · shared 다트의 앞/뒤 서로 다른 root 허용
   ok(!!makeHarness({ sceneBuilder: scene(two(good, good)) }).capture(), "34: 두 다리 같은 root+t 허용");
@@ -659,6 +667,27 @@ function makeHarness(cfg) {
 }
 
 // ── 결과 ──
+// 테스트 36(SV8): 옆허리 다트 c — 앞·뒤 반쪽 identity·group·locked·apex·다리·attachment 보존, 잘못된 선언 거부.
+{
+  const s8 = makeHarness().capture();
+  const half = (pc) => s8.geometry[pc].construction.filter(p => p.dart && p.dart.group === "side-waist-c");
+  ["front", "back"].forEach(pc => {
+    const h = half(pc);
+    ok(h.length === 2 && h.every(p => p.dart.id === pc + "-side-waist-c" && p.dart.locked === true && p.dart.boundary === "waist" && p.dart.apexAt === "to" && p.dart.attach.root === pc + "/waist" && !("edge" in p)),
+      "36: " + pc + " c 반쪽 다리 2개 · id·group·locked·attach · edge 없음(외곽 아님)");
+  });
+  ok(s8.geometry.shared.construction.every(p => !p.dart) && s8.geometry.front.outline.every(p => !p.dart), "36: c 는 shared·outline 에 없음");
+  const rt = JSON.parse(JSON.stringify(s8));
+  ok(JSON.stringify(rt.geometry.front.construction) === JSON.stringify(s8.geometry.front.construction), "36: v8 JSON 왕복 보존");
+  const without = (pred) => (mode) => defaultScene(mode).filter(e => !pred(e));
+  throws(() => makeHarness({ sceneBuilder: without(e => e.getAttribute("data-dart-id") === "back-side-waist-c") }).capture(), "missing-side-waist-dart", "36: 뒤 반쪽 누락 거부");
+  throws(() => makeHarness({ sceneBuilder: (m) => defaultScene(m).filter(e => !(e.getAttribute("data-dart-id") === "front-side-waist-c" && e.getAttribute("x1") === "235")) }).capture(), "dart-legs-invalid", "36: 다리 1개 거부");
+  throws(() => makeHarness({ sceneBuilder: (m) => defaultScene(m).map(e => e.getAttribute("data-dart-id") === "front-side-waist-c" ? cLegEl("front", +e.getAttribute("x1"), +e.getAttribute("data-dart-attach-t"), { "data-dart-locked": "false" }) : e) }).capture(), "bad-side-waist-dart", "36: locked 아님 거부");
+  throws(() => makeHarness({ sceneBuilder: (m) => defaultScene(m).map(e => e.getAttribute("data-dart-id") === "front-side-waist-c" ? cLegEl("front", +e.getAttribute("x1"), +e.getAttribute("data-dart-attach-t"), { "data-dart-group": "bogus" }) : e) }).capture(), "bad-dart-group", "36: group 오값 거부");
+  throws(() => makeHarness({ sceneBuilder: (m) => defaultScene(m).map(e => e.getAttribute("data-dart-id") === "back-side-waist-c" ? cLegEl("back", +e.getAttribute("x1"), +e.getAttribute("data-dart-attach-t"), { x2: 230 }) : e) }).capture(), "bad-side-waist-dart", "36: apex 가 옆선 위끝이 아님 → 거부");
+  throws(() => makeHarness({ sceneBuilder: (m) => defaultScene(m).map(e => e.getAttribute("data-dart-id") === "back-side-waist-c" && e.getAttribute("x1") === "240" ? cLegEl("back", 238, 2 / 180) : e) }).capture(), "bad-side-waist-dart", "36: 옆선∩허리 다리 없음 → 거부");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

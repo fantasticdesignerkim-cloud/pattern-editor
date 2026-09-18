@@ -132,6 +132,9 @@
         el.setAttribute("data-geometry-role", rl);
         el.setAttribute("data-design-layer", layer);
         if (edge) el.setAttribute("data-edge", edge); // edge 없는 primitive 엔 미부여
+        // 논리 다트 group(선언값, 예: 옆허리 다트 c 반쪽) — 표시 구분용. construction 다트선이지 외곽이 아니다.
+        const dg = arr[i].dart && arr[i].dart.group;
+        if (rl === "construction" && typeof dg === "string") el.setAttribute("data-dart-group", dg);
         kids.push(el);
       }
     }

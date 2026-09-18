@@ -140,20 +140,20 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
 
 // 5. v6 원본: attachment complete · ready
 {
-  const r = sem(proj(7, geom(true, true)));
-  ok(r.ready === true && att(r, "front-waist-a").attachment === "complete" && att(r, "front-bust").attachment === "complete", "5: v7 선언·포함 → complete·ready");
+  const r = sem(proj(8, geom(true, true)));
+  ok(r.ready === true && att(r, "front-waist-a").attachment === "complete" && att(r, "front-bust").attachment === "complete", "5: v8 선언·포함 → complete·ready");
   ok(att(r, "front-waist-a").attachments.map(a => a.root + "@" + a.t).join(",") === "front/waist@0.375,front/waist@0.4583", "5: evidence 는 다리별 root·t");
 }
 
 // 5b. 무결성: coverage 는 되지만 선언 점이 다리 끝과 다르면 complete 가 아니다
 {
   const legMoved = geom(true, true); legMoved.front.construction[0].from = { x: 31.2, y: 38 };
-  ok(att(sem(proj(7, legMoved)), "front-waist-a").attachment === "misaligned", "5b: 다리만 이동 → misaligned");
+  ok(att(sem(proj(8, legMoved)), "front-waist-a").attachment === "misaligned", "5b: 다리만 이동 → misaligned");
   const wrongT = geom(true, true); wrongT.front.construction[0].dart.attach.t = 0.3;
-  const rw = sem(proj(7, wrongT));
+  const rw = sem(proj(8, wrongT));
   ok(att(rw, "front-waist-a").attachment === "misaligned" && !rw.ready && rw.issues.indexOf("dart-attachment-misaligned") >= 0, "5b: 잘못된 t(coverage 됨) → misaligned·not ready");
   const boundaryMoved = geom(true, true); boundaryMoved.front.outline[1].from = { x: 41, y: 38 };
-  ok(att(sem(proj(7, boundaryMoved)), "front-waist-a").attachment === "misaligned", "5b: 경계만 이동 → misaligned");
+  ok(att(sem(proj(8, boundaryMoved)), "front-waist-a").attachment === "misaligned", "5b: 경계만 이동 → misaligned");
   // 열린 다트형: 같은 root+t(0.5) 가 서로 떨어진 두 구간에 있고 각 다리가 자기 좌표 후보와 일치
   const open = geom(true, true);
   const wA = { kind: "line", from: { x: 40, y: 38 }, to: { x: 28, y: 38 }, edge: "waist", boundary: { root: "front/waist", ranges: [[0, 0.5]] } };
@@ -161,7 +161,7 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   open.front.outline.splice(1, 1, wA, wB);
   open.front.construction = [dleg([28, 38], [28.2, 25], "moved", "waist", "to", { root: "front/waist", t: 0.5 }),
     dleg([28.4, 36], [28.2, 25], "moved", "waist", "to", { root: "front/waist", t: 0.5 })];
-  const ro = sem(proj(7, open));
+  const ro = sem(proj(8, open));
   ok(att(ro, "moved").attachment === "complete" && ro.darts.front.find(d => d.id === "moved").attachments.every(a => a.status === "complete"),
     "5b: 같은 root+t 두 좌표(열린 다트) → 각 다리 자기 후보와 일치·complete");
 }
@@ -170,10 +170,10 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
 {
   const g = geom(true, true);
   const out = DB.computeGeometry(g, { body: { hemExtensionBelowWaistCm: 10 } });
-  const r = sem(proj(7, out));
+  const r = sem(proj(8, out));
   ok(att(r, "front-waist-a").attachment === "complete" && att(r, "front-bust").attachment === "complete", "6: 길이 연장 후 attachment 정합 유지(허리는 construction lineage)");
   const eased = DB.computeGeometry(geom(true, true), { body: { bustEaseCm: 4, hemExtensionBelowWaistCm: 10 } });
-  const re = sem(proj(7, eased));
+  const re = sem(proj(8, eased));
   ok(att(re, "front-waist-a").attachment === "complete", "6: 여유량 — 허리다트는 생산자가 t 를 재매개변수화해 정합 유지");
   ok(att(re, "front-bust").attachment === "misaligned" && !re.ready,
     "6: 여유량이 진동 중간 t 의 경계만 옮기고 다리는 제자리 → misaligned·not ready(범위 밖 다트)");
@@ -182,8 +182,8 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   const outNo = DB.computeGeometry(geom(true, false), { body: { hemExtensionBelowWaistCm: 10 } });
   const strip = (x) => JSON.stringify(x, (k, v) => (k === "attach" ? undefined : v));
   ok(strip(out) === strip(outNo), "6: attachment 가 형상·개수·순서를 바꾸지 않음");
-  PROJECT = proj(7, out); const c1 = BC.complete();
-  PROJECT = proj(7, outNo); const c2 = BC.complete();
+  PROJECT = proj(8, out); const c1 = BC.complete();
+  PROJECT = proj(8, outNo); const c2 = BC.complete();
   ok(c1.ok && c2.ok && c1.result.hash === c2.result.hash && JSON.stringify(c1.result.armholeLengths) === JSON.stringify(c2.result.armholeLengths) &&
      JSON.stringify(c1.result.necklineLengths) === JSON.stringify(c2.result.necklineLengths), "6: bodiceResult.hash·reported 측정 불변");
   ok(Object.isFrozen(c1.result.semantics.darts.front[0].attachments[0]), "6: 완료 evidence deepFrozen");
@@ -192,7 +192,7 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
 // 7. manual outline: 유지(포함) · 절단(구간 밖) · 대체(root 소실)
 {
   const base = geom(true, true);
-  const withOutline = (o) => proj(7, geom(true, true), { working: { geometry: geom(true, true), parameters: {}, designOutline: { front: { outline: o } }, frontPlacket: null, patternLines: [] } });
+  const withOutline = (o) => proj(8, geom(true, true), { working: { geometry: geom(true, true), parameters: {}, designOutline: { front: { outline: o } }, frontPlacket: null, patternLines: [] } });
   // 유지: 경계 세그먼트를 designLineTool 경로로 복제만(lineage 그대로)
   const kept = LT.outlinePrimsToSegs(base.front.outline);
   ok(att(sem(withOutline(kept)), "front-bust").attachment === "complete", "7: manual 유지 구간 → attachment 포함");
@@ -211,14 +211,14 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
 
 // 8. 잘못된 선언 차단 · 누락 · legacy 무조작
 {
-  const withAttach = (at) => { const g = geom(true, true); g.front.construction[2].dart.attach = at; return sem(proj(7, g)); };
+  const withAttach = (at) => { const g = geom(true, true); g.front.construction[2].dart.attach = at; return sem(proj(8, g)); };
   ok(att(withAttach({ root: "front/armhole", t: 1.2 }), "front-bust").attachment === "misaligned", "8: t 범위 밖 → misaligned");
   ok(att(withAttach({ root: "back/armhole", t: 0.5 }), "front-bust").attachment === "misaligned", "8: 다른 piece root → misaligned");
   ok(att(withAttach({ root: "front/center", t: 0.5 }), "front-bust").attachment === "misaligned", "8: root 의미 ≠ 다트 boundary → misaligned");
   ok(att(withAttach({ root: "front/armhole-upper", t: 0 }), "front-bust").attachment === "misaligned", "8: 경계에 없는 root → misaligned");
   const gm = geom(true, true); delete gm.front.construction[0].dart.attach;
-  const rm = sem(proj(7, gm));
-  ok(att(rm, "front-waist-a").attachment === "missing" && rm.issues.indexOf("dart-attachment-missing") >= 0 && !rm.ready, "8: v7 누락 → missing·not ready");
+  const rm = sem(proj(8, gm));
+  ok(att(rm, "front-waist-a").attachment === "missing" && rm.issues.indexOf("dart-attachment-missing") >= 0 && !rm.ready, "8: v8 누락 → missing·not ready");
   const rl = sem(proj(5, geom(true, false)));
   ok(rl.issues.indexOf("legacy-source") >= 0 && rl.issues.indexOf("dart-attachment-missing") < 0 && rl.issues.indexOf("dart-attachment-misaligned") < 0,
     "8: legacy v5 → legacy-source 만(누락을 오류로 조작하지 않음)");
@@ -227,7 +227,7 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   const gs = geom(true, true);
   // 뒤 허리(거울) x = 16+24t · 앞 허리 x = 40-24t
   gs.shared.construction = [dleg([38.8, 38], [27, 25], "shared-waist-c", "waist", "to", { root: "back/waist", t: 0.95 }), dleg([16.48, 38], [27, 25], "shared-waist-c", "waist", "to", { root: "front/waist", t: 0.98 })];
-  const rs = sem(proj(7, gs));
+  const rs = sem(proj(8, gs));
   ok(rs.darts.shared[0].attachment === "complete", "8: shared 다트 앞·뒤 서로 다른 root → complete");
 }
 
@@ -236,12 +236,12 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   const g1 = geom(true, true), g2 = geom(true, true), g3 = geom(true, true);
   g2.front.construction[0].dart.attach.t = 0.3;
   g3.front.construction[2].dart.attach.root = "front/armhole"; g3.front.construction[3].dart.attach = { root: "front/armhole", t: 0.6 };
-  const f1 = sem(proj(7, g1)).fingerprint, f2 = sem(proj(7, g2)).fingerprint, f3 = sem(proj(7, g3)).fingerprint;
+  const f1 = sem(proj(8, g1)).fingerprint, f2 = sem(proj(8, g2)).fingerprint, f3 = sem(proj(8, g3)).fingerprint;
   ok(f1 !== f2 && f1 !== f3 && f2 !== f3, "9: t 변경·다른 다리 t 변경 각각 fingerprint 변화");
   const g4 = geom(true, true); g4.front.construction[2].dart.attach = { root: "front/center", t: 0.5 };
-  ok(sem(proj(7, g4)).fingerprint !== f1, "9: root 만 변경 → fingerprint 변화");
-  ok(sem(proj(7, geom(true, true))).fingerprint === f1, "9: 결정론");
-  PROJECT = proj(7, g1); const h1 = BC.complete().result.hash; PROJECT = proj(7, g2); const h2 = BC.complete().result.hash;
+  ok(sem(proj(8, g4)).fingerprint !== f1, "9: root 만 변경 → fingerprint 변화");
+  ok(sem(proj(8, geom(true, true))).fingerprint === f1, "9: 결정론");
+  PROJECT = proj(8, g1); const h1 = BC.complete().result.hash; PROJECT = proj(8, g2); const h2 = BC.complete().result.hash;
   ok(h1 === h2, "9: attachment 변경이 bodiceResult.hash 를 바꾸지 않음");
 }
 
@@ -271,7 +271,7 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   const dartsOf = (r) => r.darts.front.concat(r.darts.back);
   const ALLOWED = ["front-waist-a", "front-waist-b", "back-waist-d", "back-waist-e", "back-waist-f"];
   const tOf = (g, pc, id) => g[pc].construction.filter(p => p.dart && p.dart.id === id).map(p => p.dart.attach.t);
-  const run = (body) => { const g = geomW(); const before = JSON.stringify(g); const out = DB.computeGeometry(g, { body }); return { g, before, out, r: sem(proj(7, out)) }; };
+  const run = (body) => { const g = geomW(); const before = JSON.stringify(g); const out = DB.computeGeometry(g, { body }); return { g, before, out, r: sem(proj(8, out)) }; };
 
   // outward ease: 허용 다트 전부 complete, 좌표 불변, t 만 변경(같은 물리점)
   const e = run({ bustEaseCm: 4 });
@@ -306,9 +306,9 @@ const att = (r, id) => r.darts.front.find(d => d.id === id);
   const eNo = DB.computeGeometry(noAtt, { body: { bustEaseCm: 4 } });
   ok(strip(e.out) === strip(eNo), "11: 좌표·kind·개수·순서 불변(attach 외 차이 없음)");
   ok(!JSON.stringify(eNo).includes("\"attach\""), "11: attach 없는 데이터는 만들지 않음");
-  PROJECT = proj(7, e.out); const c1 = BC.complete();
+  PROJECT = proj(8, e.out); const c1 = BC.complete();
   const stale = JSON.parse(JSON.stringify(e.out)); stale.front.construction.forEach((p, i) => { p.dart.attach = e.g.front.construction[i].dart.attach; });
-  PROJECT = proj(7, stale); const c2 = BC.complete();
+  PROJECT = proj(8, stale); const c2 = BC.complete();
   ok(c1.ok && c2.ok && c1.result.hash === c2.result.hash && JSON.stringify(c1.result.armholeLengths) === JSON.stringify(c2.result.armholeLengths),
     "11: bodiceResult.hash·reported 측정 불변");
   ok(c1.result.semantics.fingerprint !== c2.result.semantics.fingerprint, "11: t 갱신으로 dart fingerprint 변화(의도)");

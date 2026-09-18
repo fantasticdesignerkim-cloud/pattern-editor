@@ -162,7 +162,7 @@ const proj = (sv, g) => ({ sourceBlock: { version: 1, schemaVersion: sv }, worki
 const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.test(x.id));
 [["unmoved", {}], ["ease 4", { bustEaseCm: 4 }], ["waist offset -2", { waistSideOffsetCm: -2 }], ["ease 4 + waist -1", { bustEaseCm: 4, waistSideOffsetCm: -1 }]].forEach(([name, body]) => {
   const g = DB.computeGeometry(geom0, { body });
-  const sem = BC.evaluateSemantics(proj(7, g));
+  const sem = BC.evaluateSemantics(proj(8, g));
   ok(waistRecs(sem).length === 5 && waistRecs(sem).every(x => x.attachment === "complete"), "5: " + name + " a/b/d/e/f attachment complete");
   ok(sem.darts.shared.length === 0 && sem.issues.indexOf("dart-attachment-misaligned") < 0, "5: " + name + " shared c 다트 record 없음·misaligned 없음");
   ["front", "back"].forEach(pc => {
@@ -179,12 +179,12 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
     const ext = g[pc].outline.filter(x => x.boundary && x.boundary.root === pc + "/side-seam-extension");
     ok(ext.length === 1 && nearPt(ext[0].from, S, 1e-9) && near(ext[0].to.x, S.x, 1e-9) && near(ext[0].to.y, S.y + 10, 1e-9), "5: " + pc + " 허리 아래 연장 = SIDE_BTM 에서 수직 10cm");
   });
-  ok(waistRecs(BC.evaluateSemantics(proj(7, g))).every(x => x.attachment === "complete"), "5: 길이 연장 후에도 허리다트 정합");
+  ok(waistRecs(BC.evaluateSemantics(proj(8, g))).every(x => x.attachment === "complete"), "5: 길이 연장 후에도 허리다트 정합");
 }
 {
   const r6 = BC.evaluateSemantics(proj(6, geom0));
   ok(r6.ready === false && r6.issues.indexOf("legacy-source") >= 0, "5: v6 출처는 legacy-source(현재 seam-ready 로 승격 안 함)");
-  ok(BC.evaluateSemantics(proj(7, geom0)).ready === true, "5: v7 동일 형상은 ready");
+  ok(BC.evaluateSemantics(proj(8, geom0)).ready === true, "5: v8 동일 형상은 ready");
 }
 
 // 6. 몸판 체크포인트 옆선 측정 = 유효 외곽(designOutline 우선)의 명시 side-seam 만. 측정 불가는 0cm 정합이 아니라 차단.
@@ -207,7 +207,7 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
   const LT = loadLT();
   const constr = (side) => (side === "front" ? engine.buildFrontOutline(p, d.formula, 83) : engine.buildBackOutline(p, d.formula, 83)).filter(x => x.disabled).map(x => ({ kind: "line", from: { ...x.from }, to: { ...x.to } }));
   const compose = (g, pc, lines) => { const ring = LT.buildPieceRing(LT.outlinePrimsToSegs(g[pc].outline), constr(pc)); const r = LT.composeDesignOutline(ring.ring, lines.map(LT.boundarySegsOf)); return r.ok ? r.outline : null; };
-  const projDO = (g, dO, pls) => { const pr = proj(7, g); pr.working.designOutline = dO; pr.working.patternLines = pls || []; return pr; };
+  const projDO = (g, dO, pls) => { const pr = proj(8, g); pr.working.designOutline = dO; pr.working.patternLines = pls || []; return pr; };
   const geomSide = (g, pc) => g[pc].outline.filter(x => x.edge === "side-seam").reduce((t, x) => t + (x.kind === "line" ? Math.hypot(x.to.x - x.from.x, x.to.y - x.from.y) : NaN), 0);
   const A = p.SIDE_TOP, S = p.SIDE_BTM;
   const bulge = (k, edge) => ({ id: "line-" + k, piece: "front", role: "boundary", segments: [Object.assign({ kind: "cubic", from: { ...A }, c1: { x: A.x - k, y: A.y + 5 }, c2: { x: S.x - k, y: S.y - 5 }, to: { ...S } }, edge ? { edge } : {})] });
@@ -295,6 +295,53 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
   }
 }
 
+
+// 7. v8 Design: 앞·뒤 조각에 c/2 반쪽(construction)을 싣고 몸판 변환 후에도 identity·귀속·위상·intake 보존,
+//    checkpoint 는 수직 옆선 17.383333 을 재고 c 는 group 으로 한 번(1.375)만 센다.
+{
+  const cLegs = (pc) => { const h = SC[pc]; return ["side", "intake"].map(leg => ({ kind: "line", from: { ...h.legs[leg] }, to: { ...h.apex },
+    dart: { id: h.id, boundary: "waist", apexAt: "to", attach: { root: h.attach[leg].root, t: h.attach[leg].t }, group: h.group, locked: true } })); };
+  const geomC = JSON.parse(JSON.stringify(geom0));
+  ["front", "back"].forEach(pc => { geomC[pc].construction = geomC[pc].construction.concat(cLegs(pc)); });
+  const P8 = (g, sv) => proj(sv || 8, g);
+  PROJECT = P8(geomC);
+  const c0 = BC.check(PROJECT);
+  ok(c0.sideSeam.status === "match" && near(c0.sideSeam.front, 17.383333333333333, 1e-9) && near(c0.sideSeam.back, 17.383333333333333, 1e-9), "7: 기본 옆선 측정 = 수직 17.383333 (앞·뒤)");
+  const sw = c0.sideWaistDart;
+  ok(sw.ok && sw.front.id === "front-side-waist-c" && sw.back.id === "back-side-waist-c" && near(sw.front.intakeCm, 0.6875) && near(sw.back.intakeCm, 0.6875) && near(sw.totalCm, 1.375),
+    "7: c 반쪽 record 앞·뒤 0.6875 · group 총량 1.375(한 번)");
+  const sem8 = BC.evaluateSemantics(P8(geomC));
+  const cRec = ["front", "back"].map(pc => sem8.darts[pc].find(x => x.group === "side-waist-c"));
+  ok(sem8.ready === true && cRec.every(r => r && r.locked && r.legCount === 2 && r.attachment === "complete" && near(r.apex.x, p.SIDE_TOP.x, 1e-4)), "7: v8 semantics ready · c 반쪽 locked·다리 2·attachment complete·apex SIDE_TOP");
+  ok(BC.evaluateSemantics(P8(geomC, 7)).issues.indexOf("legacy-source") >= 0, "7: v7 출처는 legacy-source(현재 형상으로 승격 안 함)");
+
+  const topo = (g, pc) => {   // 옆선 위끝·옆선∩허리 접점(명시 edge 위상) — 검사용
+    const ss = g[pc].outline.filter(x => x.edge === "side-seam" && x.boundary && x.boundary.root === pc + "/side-seam");
+    const eps = x => x.kind === "line" ? [x.from, x.to] : [x.commands[0].points[0], x.commands[x.commands.length - 1].points[2]];
+    const w = g[pc].outline.concat(g[pc].construction).filter(x => x.edge === "waist").flatMap(eps);
+    const e = eps(ss[0]), S = e.find(q => w.some(z => nearPt(q, z, 1e-6))), U = e.find(q => q !== S);
+    return { U, S };
+  };
+  [["ease 4", { bustEaseCm: 4 }], ["waist -2", { waistSideOffsetCm: -2 }], ["ease 4 + waist -1", { bustEaseCm: 4, waistSideOffsetCm: -1 }],
+   ["hip 10", { hemExtensionBelowWaistCm: 10 }], ["hip 10 + hem +2", { hemExtensionBelowWaistCm: 10, hemSideOffsetCm: 2 }],
+   ["hip 10 + waist -2 + curve 1", { hemExtensionBelowWaistCm: 10, waistSideOffsetCm: -2, sideSeamCurve: 1 }]].forEach(([name, body]) => {
+    const inStr = JSON.stringify(geomC);
+    const g = DB.computeGeometry(geomC, { body });
+    ok(JSON.stringify(geomC) === inStr, "7: " + name + " 입력 불변");
+    ["front", "back"].forEach(pc => {
+      const cs = g[pc].construction.filter(x => x.dart && x.dart.group === "side-waist-c");
+      const { U, S } = topo(g, pc);
+      const legEnds = cs.map(x => x.from), apexes = cs.map(x => x.to);
+      ok(cs.length === 2 && cs.every(x => x.dart.id === pc + "-side-waist-c" && x.dart.locked === true && !("edge" in x)), "7: " + name + " " + pc + " c 반쪽 identity·귀속·locked·외곽 아님");
+      ok(apexes.every(a => nearPt(a, U, 1e-9)) && legEnds.some(q => nearPt(q, S, 1e-9)), "7: " + name + " " + pc + " apex = 옆선 위끝 · 한 다리 = 옆선∩허리");
+      ok(near(Math.hypot(legEnds[0].x - legEnds[1].x, legEnds[0].y - legEnds[1].y), 0.6875, 1e-9), "7: " + name + " " + pc + " intake 0.6875 보존");
+      ok(g[pc].outline.every(x => !(x.dart && x.dart.group)), "7: " + name + " " + pc + " c 는 외곽에 없음");
+    });
+    PROJECT = P8(g);
+    const c = BC.check(PROJECT);
+    ok(c.sideWaistDart.ok && near(c.sideWaistDart.totalCm, 1.375) && c.sideSeam.status !== "unmeasured", "7: " + name + " c record 정합(attachment complete)·총 1.375 · 옆선 측정 가능");
+  });
+}
 
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }

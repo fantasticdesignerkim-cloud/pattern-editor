@@ -272,6 +272,24 @@
   //   underarm(U) 은 여유량 결과로 **고정**(실루엣이 안 건드림). 허리·밑단은 ease 폭 기준 독립 이동.
   //   프레임(C·S·g·p·widthOrig)을 **변환 전 한 번** 계산 → hem 후에도 목표점(Se·sideHemE)을 거리
   //   매칭으로 이동. outline 만 이동(construction=다트·waist 참고선 불변, 여유·실루엣은 옆선에만).
+  // 옆허리 다트 c 의 c/2 반쪽(construction, group "side-waist-c", 선언 apexAt). 생산자 선언으로만 식별한다.
+  function isSideWaistC(pr) { return !!(pr && pr.dart && pr.dart.group === "side-waist-c"); }
+  // c 반쪽을 조각 변환에 맞춰 결정론적으로 옮긴다: apex(진동밑 끝)는 진동밑 이동량 dU, 두 다리 끝(허리 위)은
+  //   옆선 허리점 이동량 dS 로 함께 평행 이동 → intake(다리 사이)·위상(apex=옆선 위끝, 한 다리=옆선∩허리) 보존.
+  //   다리 attachment t 는 새 허리 root(C→S') 위 같은 물리점으로 다시 계산한다(C 불변).
+  function moveSideWaistC(pr, dU, dS, C, S2) {
+    var o = movePrimPoints(pr, []);   // 값 복제(edge·dart·boundary 승계)
+    if (o.kind !== "line") return o;
+    var apexKey = pr.dart.apexAt === "from" ? "from" : "to", legKey = apexKey === "from" ? "to" : "from";
+    o[apexKey] = add(o[apexKey], dU);
+    o[legKey] = add(o[legKey], dS);
+    var at = o.dart && o.dart.attach;
+    if (at && typeof at.t === "number") {
+      var r = sub(S2, C), rr = dot(r, r);
+      if (rr > EPS) at.t = dot(sub(o[legKey], C), r) / rr;
+    }
+    return o;
+  }
   function shapePiece(piece, delta, waistOff, L, hemOff, curve) {
     var fr = pieceFrame(piece.outline);
     var C = fr.C, S = fr.S, g = fr.g, p = fr.p;
@@ -289,14 +307,19 @@
     // 3. 허리 옆선 이동(허리 들어간 형=음수·안쪽). Se(=side-ext 위·side-seam 아래) 만 이동 → 허리 꺾임.
     //    construction 도 함께(hem 후 construction 으로 옮겨진 waist 참고선이 옆선을 따라오도록;
     //    다트는 Se 에서 멀어 불변).
-    if (waistOff !== 0) { var mw = [{ pt: Se, d: mul(p, waistOff) }]; out2 = out2.map(function (pr) { return movePrimPoints(pr, mw); }); con2 = con2.map(function (pr) { return movePrimPoints(pr, mw); }); }
+    if (waistOff !== 0) { var mw = [{ pt: Se, d: mul(p, waistOff) }]; out2 = out2.map(function (pr) { return movePrimPoints(pr, mw); }); con2 = con2.map(function (pr) { return isSideWaistC(pr) ? pr : movePrimPoints(pr, mw); }); }
     // 4. 밑단 옆선 이동(A라인=양수·바깥). hem 이 있을 때만. ease 폭 기준이라 허리 이동과 독립.
-    if (hemOff !== 0 && sideHemE) { var mh = [{ pt: sideHemE, d: mul(p, hemOff) }]; out2 = out2.map(function (pr) { return movePrimPoints(pr, mh); }); con2 = con2.map(function (pr) { return movePrimPoints(pr, mh); }); }
+    if (hemOff !== 0 && sideHemE) { var mh = [{ pt: sideHemE, d: mul(p, hemOff) }]; out2 = out2.map(function (pr) { return movePrimPoints(pr, mh); }); con2 = con2.map(function (pr) { return isSideWaistC(pr) ? pr : movePrimPoints(pr, mh); }); }
     // 5. 옆선 곡선화(curve>0, side-seam 2세그먼트=hem 있을 때). 세 점 통과·허리 접선 연속.
     if (curve > 0) out2 = curveSideSeam(out2, curve);
     // 6. (P0.3b 증분 1) 허리 root 가 중심→옆 방향으로 늘거나 줄면 허리다트 다리의 선언 t 만 같은 물리점에 맞춘다.
     //    이 함수가 계산한 C·S(원래)·S'(여유량+허리 이동 반영)만 쓴다 — 좌표 근접으로 다트/root 를 찾지 않는다.
     if (delta !== 0 || waistOff !== 0) remapWaistDartAttach(piece.outline, out2, con2, C, S, add(Se, mul(p, waistOff)));
+    // 7. 옆허리 다트 c 반쪽: 진동밑 이동(여유량)·옆선 허리점 이동(여유량+허리 이동)에 맞춰 함께 이동. 소거·재배분 없음.
+    if (delta !== 0 || waistOff !== 0) {
+      var dU = mul(p, delta), S2 = add(Se, mul(p, waistOff)), dS = sub(S2, S);
+      con2 = con2.map(function (pr) { return isSideWaistC(pr) ? moveSideWaistC(pr, dU, dS, C, S2) : pr; });
+    }
     return { outline: out2, construction: con2 };
   }
 

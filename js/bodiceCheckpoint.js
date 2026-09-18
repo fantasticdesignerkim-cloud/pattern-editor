@@ -281,6 +281,7 @@
         : attachments.some(function (a) { return a.status === "missing"; }) ? "missing" : "complete";
       return {
         id: id, boundary: legs[0].dart.boundary || null, onFold: onFold,
+        group: (typeof legs[0].dart.group === "string") ? legs[0].dart.group : null, locked: legs.every(function (l) { return l.dart.locked === true; }),
         apex: { x: round4(apex.x), y: round4(apex.y) },
         legs: legPts.map(function (q) { return { x: round4(q.x), y: round4(q.y) }; }),
         intakeCm: intake, legCount: legs.length,
@@ -464,8 +465,8 @@
     var bnd = { front: boundarySpans(proj, "front"), back: boundarySpans(proj, "back") };
     var bMissing = bnd.front.missing.concat(bnd.back.missing), bMisaligned = bnd.front.misaligned.concat(bnd.back.misaligned);
     // v5 가 아닌 출처(구형 v2/v3/v4·미상)는 신규 의미를 보장하지 못한다.
-    // v7 이 아닌 출처(v2~v6·미상)는 현재 seam-ready 형상(옆선 조임 승격 포함)을 보장하지 못한다.
-    if (sv !== 7) issues.push("legacy-source");
+    // v8 이 아닌 출처(v2~v7·미상)는 현재 seam-ready 형상(수직 기본 옆선 + 옆허리 다트 c 반쪽)을 보장하지 못한다.
+    if (sv !== 8) issues.push("legacy-source");
     // legacy 는 identity 가 없는 것이 정상이라 legacy-source 로 이미 not-ready 다(누락을 지어내지 않음).
     if (sv >= 5 && bMissing.length) issues.push("boundary-identity-missing");
     // P0.3b 다트 attachment: v6 에서 선언이 없으면 incomplete, 선언이 최종 경계와 정렬되지 않으면 misaligned.
@@ -493,6 +494,22 @@
         missing: bMissing, misaligned: bMisaligned
       },
       boundaryFingerprint: boundaryFingerprint(bnd) };
+  }
+
+  // 옆허리 다트 c(논리 다트 하나 = 앞·뒤 c/2 반쪽 record). 예산에서는 group 총량을 한 번만 센다
+  //   (= 반쪽 intake 합; 반쪽과 총량을 따로 더하지 않는다). 반쪽마다 다리 2개·locked·apex 일치·attachment 정합이어야 ok.
+  var SIDE_WAIST_C_GROUP = "side-waist-c";
+  function sideWaistDartOf(darts) {
+    var half = function (pc) {
+      var rs = (darts[pc] || []).filter(function (d) { return d.group === SIDE_WAIST_C_GROUP; });
+      if (rs.length !== 1) return null;
+      var d = rs[0];
+      return { id: d.id, intakeCm: d.intakeCm, ok: d.complete && d.locked && d.legCount === 2 && d.attachment === "complete" && typeof d.intakeCm === "number" };
+    };
+    var f = half("front"), b = half("back");
+    var sharedC = (darts.shared || []).some(function (d) { return d.group === SIDE_WAIST_C_GROUP; });
+    var ok = !!(f && b && f.ok && b.ok && !sharedC);
+    return { group: SIDE_WAIST_C_GROUP, front: f, back: b, totalCm: (f && b && ok) ? round4(f.intakeCm + b.intakeCm) : null, ok: ok };
   }
 
   // ── 검사 ──
@@ -533,7 +550,8 @@
       armhole: { front: ahF.len, back: ahB.len, ok: ahF.ok && ahB.ok },
       neckline: { front: nkF, back: nkB, half: nkHalf, finished: 2 * nkHalf, ok: nkHalf > 0 },
       previews: { neckline: !manualBad, placket: !placketBad, ok: previewOk },
-      semantics: evaluateSemantics(proj)          // 완료 차단 아님 — 증거만
+      semantics: evaluateSemantics(proj),         // 완료 차단 아님 — 증거만
+      sideWaistDart: sideWaistDartOf({ front: dartRecords(proj, "front"), back: dartRecords(proj, "back"), shared: dartRecords(proj, "shared") })   // 증거(완료 차단 아님)
     };
   }
 

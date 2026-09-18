@@ -308,7 +308,7 @@
     } catch (e) { reason = (e && e.reason) || "start-failed"; }
     if (!project) {
       const note = document.getElementById("blockStatusNote");
-      if (note) note.textContent = "디자인을 시작할 수 없습니다 · 다시 시도하세요";
+      if (note) note.textContent = reason === "stale-schema-version" ? "원형 완료본이 이전 형식입니다 · 원형을 다시 완료하세요" : "디자인을 시작할 수 없습니다 · 다시 시도하세요";
       return; // draft 유지, project/version 오염 0
     }
     setWorkspaceStage("design"); // 성공 후에만(내부에서 hasProject·busy 게이트 재확인)

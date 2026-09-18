@@ -90,6 +90,10 @@ function defaultScene(mode) {
     out.push(lineEl("back", "outline", B_CENTER, "center"));
     out.push(lineEl("back", "construction", { x1: 300, y1: 60, x2: 320, y2: 80 }));
     out.push(lineEl("shared", "construction", { x1: 200, y1: 60, x2: 200, y2: 80 }));
+    // SV8 옆허리 다트 c 앞·뒤 반쪽(apex 옆선 위끝 240,100 · 다리 SIDE_BTM 240,300 · 다리 허리 위 235,300).
+    [["front", 240, 0], ["front", 235, 0.05], ["back", 240, 0], ["back", 235, 5 / 180]].forEach(([pc, x, t]) => out.push(el("line", { "data-piece": pc, "data-geometry-role": "construction",
+      x1: x, y1: 300, x2: 240, y2: 100, "data-dart-id": pc + "-side-waist-c", "data-dart-boundary": "waist", "data-dart-apex-at": "to",
+      "data-dart-attach-root": pc + "/waist", "data-dart-attach-t": t, "data-dart-group": "side-waist-c", "data-dart-locked": "true" })));
   }
   if (sleeve) {
     out.push(pathEl("sleeve", "outline", "M400,100 C420,120 440,140 460,160"));
@@ -305,10 +309,10 @@ function makeHarness() {
 {
   const h = makeHarness();
   const b = h.bw.complete();
-  ok(b.snapshot.schemaVersion === 7, "14: 신규 캡처 = v7");
+  ok(b.snapshot.schemaVersion === 8, "14: 신규 캡처 = v8");
   const dp = h.dw.startFromBlock(b);
   ok(dp.semanticStatus === "complete", "14: v7 → semanticStatus=complete");
-  ok(dp.sourceBlock.schemaVersion === 7, "14: sourceBlock.schemaVersion=7");
+  ok(dp.sourceBlock.schemaVersion === 8, "14: sourceBlock.schemaVersion=8");
   ok(Object.isFrozen(dp.sourceBlock), "14: sourceBlock frozen 유지");
 }
 
@@ -352,11 +356,21 @@ function makeHarness() {
   const mk = (sv) => { const h = makeHarness(); const b = h.bw.complete();
     return [h, { id: b.id, version: b.version, canonicalHash: b.canonicalHash,
       snapshot: { schemaVersion: sv, source: b.snapshot.source, geometry: b.snapshot.geometry } }]; };
-  [1, 8, undefined].forEach(sv => {
+  [1, 9, undefined].forEach(sv => {
     const [h, blk] = mk(sv);
     throws(() => h.dw.startFromBlock(blk), "unsupported-schema-version", "16: schemaVersion=" + sv + " 거부");
     ok(h.dw.current() === null, "16: 거부 후 current 불변(" + sv + ")");
   });
+}
+
+// 16a. v7(옆선을 c 사선으로 둔 폐기 의미)은 자동 변환·수용 없이 stale-schema-version 으로 거부
+{
+  const h = makeHarness(); const b = h.bw.complete();
+  const v7 = { id: b.id, version: b.version, canonicalHash: b.canonicalHash, snapshot: { schemaVersion: 7, source: b.snapshot.source, geometry: b.snapshot.geometry } };
+  throws(() => h.dw.startFromBlock(v7), "stale-schema-version", "16a: v7 완료본 거부(stale)");
+  ok(h.dw.current() === null, "16a: 거부 후 current 없음");
+  const dp = h.dw.startFromBlock(b);
+  ok(dp && dp.semanticStatus === "complete" && dp.sourceBlock.schemaVersion === 8, "16a: v8 완료본은 정상(complete)");
 }
 
 // 16b. v3 는 legacy 로 **수용**한다(거부 아님) — 신규 다트 의미가 없을 뿐.

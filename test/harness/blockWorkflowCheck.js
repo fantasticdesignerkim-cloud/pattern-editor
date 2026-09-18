@@ -83,6 +83,10 @@ function defaultScene(mode) {
     out.push(lineEl("back", "outline", B_CENTER, "center"));
     out.push(lineEl("back", "construction", { x1: 300, y1: 60, x2: 320, y2: 80 }));
     out.push(lineEl("shared", "construction", { x1: 200, y1: 60, x2: 200, y2: 80 }));
+    // SV8 옆허리 다트 c 앞·뒤 반쪽(apex 옆선 위끝 240,100 · 다리 SIDE_BTM 240,300 · 다리 허리 위 235,300).
+    [["front", 240, 0], ["front", 235, 0.05], ["back", 240, 0], ["back", 235, 5 / 180]].forEach(([pc, x, t]) => out.push(el("line", { "data-piece": pc, "data-geometry-role": "construction",
+      x1: x, y1: 300, x2: 240, y2: 100, "data-dart-id": pc + "-side-waist-c", "data-dart-boundary": "waist", "data-dart-apex-at": "to",
+      "data-dart-attach-root": pc + "/waist", "data-dart-attach-t": t, "data-dart-group": "side-waist-c", "data-dart-locked": "true" })));
   }
   if (sleeve) {
     out.push(pathEl("sleeve", "outline", "M400,100 C420,120 440,140 460,160"));
@@ -157,7 +161,7 @@ function makeHarness(cfg) {
   ok(b.version === 1, "1: v1");
   ok(typeof b.completedAt === "string" && b.completedAt.length > 0, "1: completedAt metadata");
   ok(typeof b.canonicalHash === "string" && /^[0-9a-f]{8}$/.test(b.canonicalHash), "1: canonicalHash 8hex");
-  ok(b.snapshot && b.snapshot.schemaVersion === 7 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
+  ok(b.snapshot && b.snapshot.schemaVersion === 8 && b.snapshot.source && b.snapshot.geometry, "1: snapshot 중첩");
   ok(h.wf.versions().length === 1 && h.wf.hasCompleted(), "1: 이력 1건");
 }
 
