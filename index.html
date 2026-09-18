@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026092301">
+<link rel="stylesheet" href="css/style.css?v=2026092001">
 </head>
 <body>
 
@@ -214,8 +214,6 @@
         <div class="row note" id="designBodyNote" aria-live="polite">허리선에서 엉덩이선까지 · 중심선 기준</div>
         <!-- 앞·뒤 옆선 봉제 길이 + 차이(봉제 정합 검증). 곡선화 반영 실측. -->
         <div class="row note" id="designSideLenNote" aria-live="polite"></div>
-        <!-- 원형 옆허리 억제(c) 보조수치(표시 전용): 원형 reference 기본 옆선에서 계산. 형상·hash·게이트 무관. -->
-        <div class="row note" id="designSideWaistNote" aria-live="polite"></div>
         <!-- 앞·뒤 목둘레 길이 + 합계(카라 단계 기준). parametric 네크라인 실측. -->
         <div class="row note" id="designNeckLenNote" aria-live="polite"></div>
         <!-- 앞중심 여밈(컷온 안단): computeGeometry 밖의 별도 파생. 현재 유효 앞판 외곽(designOutline
@@ -389,7 +387,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026092302"></script>
+<script src="js/render.js?v=2026092001"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -427,15 +425,13 @@
 <script src="js/collarCheckpoint.js?v=2026091920"></script>
 <!-- 카라 제도 보조수치 표시 모델(순수·표시 전용): window.collarAnnotation. 형상·hash 무관. -->
 <script src="js/collarAnnotation.js?v=2026092001"></script>
-<!-- 원형 옆허리 억제 보조 표시 모델(순수·표시 전용): window.sideWaistAnnotation. 형상·hash 무관. -->
-<script src="js/sideWaistAnnotation.js?v=2026092301"></script>
 <!-- Design 형상 통합: window.designResult. 세 완료본 + structuralLines(유효 cut) 묶음. 재단 아님. -->
 <script src="js/designResult.js?v=2026082701"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026092302"></script>
+<script src="js/ui.js?v=2026092201"></script>
 
 </body>
 </html>

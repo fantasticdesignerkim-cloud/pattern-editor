@@ -64,13 +64,12 @@ function makeHarness(cfg) {
   if (cfg.designGetter !== undefined) win.isDesignStageActive = cfg.designGetter;
   win.designWorkflow = designWorkflow;
   win.designRenderer = designRenderer;
-  if (cfg.sideWaist !== undefined) win.sideWaistAnnotationForRender = () => cfg.sideWaist;
 
   const sandbox = {
     svg, document, window: win,
     E(tag, a, txt) { const el = makeEl(tag); if (a) for (const k in a) el.setAttribute(k, a[k]); if (txt !== undefined) el.textContent = txt; return el; },
     line(x1, y1, x2, y2, cls) { const el = makeEl("line"); el.setAttribute("class", cls); return el; },
-    SC: 11, viewZ: 1, isMeasureDirty: false, c2p: (x, y) => [x * 10, y * 10],
+    SC: 11, viewZ: 1, isMeasureDirty: false,
     n: cfg.nValue !== undefined ? (() => cfg.nValue) : (() => 0),
     createDraft, drawSleeve, drawDartMoveOverlay, applyLayerVisibility, updateStatusBar,
     console: { log() {}, warn() {}, error() {} },
@@ -167,36 +166,6 @@ const PROJECT = () => ({
   const h = makeHarness({ designGetter: () => true, project: null, nValue: 83 });
   throws(() => h.render(), "design-project-missing", "9: project 없는 design → design-project-missing");
   ok(h.spies.createDraft.calls === 0, "9: 실패 시 draft fallback 0");
-}
-
-// 10. 원형 옆허리 억제 보조 표시: 모델 있으면 working 과 hit 사이 annotation root 1개, 조각 offset 동승, 없으면 기존 4 root
-{
-  const half = 0.6875;
-  const SW = { front: { available: true, underarm: { x: 23, y: 20 }, waist: { x: 23 + half, y: 38 }, guideBottom: { x: 23, y: 38 }, halfCm: half },
-    back: { available: true, underarm: { x: 23, y: 20 }, waist: { x: 23 - half, y: 38 }, guideBottom: { x: 23, y: 38 }, halfCm: half }, totalCm: 2 * half };
-  const pr = PROJECT(); pr.working.layout.front = { dx: 10, dy: 1 };
-  const h = makeHarness({ designGetter: () => true, project: pr, nValue: 83, sideWaist: SW });
-  h.render();
-  const roots = h.svg._appended, names = roots.map(r => r._attrs["data-design-root"]);
-  ok(roots.length === 5 && names[2] === "working" && names[3] === "side-waist-annotation" && names[4] === "hit", "10: working → side-waist-annotation → hit (" + names.join(",") + ")");
-  const grs = roots[3].childNodes;
-  ok(grs.length === 2 && grs.every(g => g._attrs["class"] === "side-waist-anno") && grs.map(g => g._attrs["data-side-waist"]).join(",") === "back,front", "10: 뒤·앞 각 1그룹(pointer-events:none 클래스)");
-  const fg = grs.find(g => g._attrs["data-side-waist"] === "front");
-  const workFront = roots[2].childNodes.find(c => c._attrs["data-layout-piece"] === "front");
-  ok(fg._attrs.transform === workFront._attrs.transform && grs[0]._attrs.transform === roots[2].childNodes.find(c => c._attrs["data-layout-piece"] === "back")._attrs.transform, "10: 조각 그룹 transform = 같은 조각 working offset");
-  const kinds = (g) => g.childNodes.map(c => c._attrs["data-anno"] || c._attrs["data-anno-text"] || c._attrs["class"]);
-  ok(kinds(fg).join(",") === "guide,half,side-waist-anno-dim,side-waist-anno-dim,front", "10: 수직 보조선·치수선·양끝 tick·라벨");
-  const guide = fg.childNodes[0]._attrs;
-  ok(guide.class === "side-waist-anno-guide" && guide.x1 === guide.x2 && guide.x1 === "230" && guide.y1 === "200" && guide.y2 === "380", "10: 보조선 = 진동밑 x 에서 허리 y 까지 수직");
-  ok(fg.childNodes[4].textContent === "원형 앞 c/2 0.69" && grs[0].childNodes[4].textContent === "원형 뒤 c/2 0.69", "10: 라벨 원형 앞/뒤 c/2 0.69");
-  const h2 = makeHarness({ designGetter: () => true, project: pr, nValue: 83, sideWaist: Object.assign({}, SW, { front: { available: false, reason: "working-side-unmeasured" } }) });
-  h2.render();
-  ok(h2.svg._appended[3].childNodes.length === 1 && h2.svg._appended[3].childNodes[0]._attrs["data-side-waist"] === "back", "10: 표시 불가 조각은 그리지 않음");
-  const h3 = makeHarness({ designGetter: () => true, project: pr, nValue: 83, sideWaist: null });
-  h3.render();
-  ok(h3.svg._appended.length === 4, "10: 모델 null(몸판 탭 아님 등) → annotation root 없음");
-  h.render();
-  ok(h.svg._appended.length === 5 && h.svg._appended.filter(r => r._attrs["data-design-root"] === "side-waist-annotation").length === 1, "10: 재렌더 중복 누적 없음");
 }
 
 console.log("══════════════════════════════════════════════");

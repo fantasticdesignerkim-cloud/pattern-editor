@@ -263,26 +263,6 @@ function _appendCollarAnnotation(root, model, off, scale){
   root.appendChild(g);
 }
 
-// 원형 옆허리 억제 보조 표시(표시 전용): sideWaistAnnotation 모델(reference 조각 좌표 cm)을 조각 offset 동승으로.
-//   조각마다 진동밑점 → 허리 높이 회색 점선 수직 보조선 + 보조선↔원형 옆선 허리점 치수선(원형 c/2).
-function _appendSideWaistAnnotation(root, model, L, scale){
-  if(!model) return;
-  const LABEL = { front: "앞", back: "뒤" }, TICK = 4;
-  ["back","front"].forEach(pc => {
-    const m = model[pc]; if(!m || !m.available) return;
-    const off = L[pc] || { dx:0, dy:0 };
-    const g = E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", class:"side-waist-anno", "data-side-waist":pc });
-    const [ux,uy]=c2p(m.underarm.x,m.underarm.y), [bx,by]=c2p(m.guideBottom.x,m.guideBottom.y), [wx,wy]=c2p(m.waist.x,m.waist.y);
-    g.appendChild(E("line",{ x1:ux, y1:uy, x2:bx, y2:by, class:"side-waist-anno-guide", "data-anno":"guide" }));
-    g.appendChild(E("line",{ x1:bx, y1:by, x2:wx, y2:wy, class:"side-waist-anno-dim", "data-anno":"half" }));
-    [bx,wx].forEach(x => g.appendChild(E("line",{ x1:x, y1:by-TICK, x2:x, y2:by+TICK, class:"side-waist-anno-dim" })));
-    const t = E("text",{ x:(bx+wx)/2, y:by+16, class:"side-waist-anno-text", "text-anchor": wx >= bx ? "start" : "end", "data-anno-text":pc },
-      "원형 " + LABEL[pc] + " c/2 " + (Math.round(Math.round(m.halfCm*1e4)/1e4*100)/100).toFixed(2));   // float 잡음 흡수 후 표시 반올림
-    g.appendChild(t);
-    root.appendChild(g);
-  });
-}
-
 // 카라 hit rect(collar-body manual 편집 시에만): designLineTool.pieceAt 이 "collar" 를 해석하도록.
 // 레이아웃 드래그는 designLayout 이 collar 를 PIECES 에서 제외해 무시한다(=편집 전용 hit).
 function _appendCollarHitRect(root, collarDraft, off, scale){
@@ -378,9 +358,6 @@ function render(){
       workRoot.appendChild(grp);
     });
     svg.appendChild(workRoot);
-    // 원형 옆허리 억제 보조 표시(몸판 서브탭·모델 있을 때만, 매 렌더 새 root — 중복 누적 없음).
-    const _sw = (typeof window.sideWaistAnnotationForRender === "function") ? window.sideWaistAnnotationForRender() : null;
-    if (_sw) { const swRoot = E("g"); swRoot.setAttribute("data-design-root", "side-waist-annotation"); _appendSideWaistAnnotation(swRoot, _sw, L, scale); svg.appendChild(swRoot); }
 
     // 파트 분리 미리보기(있을 때만): working 위, hit layer 아래. 두 파트 다른 색.
     if (Array.isArray(dp.working.parts) && dp.working.parts.length) {
