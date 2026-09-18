@@ -67,10 +67,13 @@
     return (g && Array.isArray(g.outline)) ? g.outline : null;
   }
 
-  // 옆선 봉제 길이(geometry edge==="side-seam"). 네크라인/여밈은 옆선 미영향이라 geometry 로 충분.
-  function sideSeamLen(geometry, piece) {
-    var b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
-    return b.outline.filter(function (s) { return s.edge === "side-seam"; }).reduce(function (t, s) { return t + segLen(s); }, 0);
+  // 옆선 봉제 길이 = **유효 외곽**(effectiveOutline: designOutline 우선)에서 edge==="side-seam" 으로 **명시된**
+  //   구간만 합산(side-seam-extension 포함 — 같은 edge). 좌표·형상 유사성으로 옆선을 추측하지 않는다.
+  //   명시 side-seam 이 하나도 없으면(예: unresolved 대체선이 옆선을 삼킴) 0 이 아니라 unavailable.
+  function measureSideSeam(outline) {
+    var segs = Array.isArray(outline) ? outline.filter(function (s) { return s && s.edge === "side-seam"; }) : [];
+    if (!segs.length) return { status: "unavailable", length: null };
+    return { status: "measured", length: segs.reduce(function (t, s) { return t + segLen(s); }, 0) };
   }
   // center edge 최상단 점(FNP/BNP). 진동 식별에서 네크라인 제외용.
   function centerTop(geometry, piece) {
@@ -494,8 +497,11 @@
     if (!proj) return { ok: false, fails: ["no-project"] };
     var g = proj.working.geometry;
     var conF = connectivityOk(proj, "front"), conB = connectivityOk(proj, "back");
-    var ssF = sideSeamLen(g, "front"), ssB = sideSeamLen(g, "back"), ssDiff = Math.abs(ssF - ssB);
-    var ssStatus = ssDiff <= MATCH ? "match" : (ssDiff <= CHECK ? "check" : "mismatch");
+    // 옆선: 앞·뒤 각각 유효 외곽의 명시 side-seam. 한쪽이라도 측정 불가면 unmeasured(0cm 정합 금지)·완료 차단.
+    var msF = measureSideSeam(effectiveOutline(proj, "front")), msB = measureSideSeam(effectiveOutline(proj, "back"));
+    var ssMeasured = msF.status === "measured" && msB.status === "measured";
+    var ssF = msF.length, ssB = msB.length, ssDiff = ssMeasured ? Math.abs(ssF - ssB) : null;
+    var ssStatus = !ssMeasured ? "unmeasured" : ssDiff <= MATCH ? "match" : (ssDiff <= CHECK ? "check" : "mismatch");
     var ahF = armholeLen(g, "front"), ahB = armholeLen(g, "back");
     var nkF = necklineHalf(proj, "front"), nkB = necklineHalf(proj, "back"), nkHalf = nkF + nkB;
     // preview 유효성: manual 인데 designOutline 없음 / placket 파라미터 있는데 frontPlacket 없음 = 무효.
@@ -508,6 +514,7 @@
     var fails = [];
     if (!conF) fails.push("front-outline-not-connected");
     if (!conB) fails.push("back-outline-not-connected");
+    if (ssStatus === "unmeasured") fails.push("side-seam-unmeasured");
     if (ssStatus === "mismatch") fails.push("side-seam-mismatch");
     if (!ahF.ok) fails.push("front-armhole-unmeasured");
     if (!ahB.ok) fails.push("back-armhole-unmeasured");
@@ -595,5 +602,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

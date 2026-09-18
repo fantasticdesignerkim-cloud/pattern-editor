@@ -102,6 +102,7 @@ const sb = { window: { designLineTool: { buildPieceRing: () => ({ ok: true }) },
 sb.globalThis = sb; vm.createContext(sb);
 ["designBodice.js", "bodiceCheckpoint.js"].forEach(f => vm.runInContext(JS(f), sb, { filename: f }));
 const DB = sb.window.designBodice, BC = sb.window.bodiceCheckpoint;
+function loadLT() { const s2 = { window: {}, document: {}, console: { log() {}, warn() {} }, structuredClone, Math, JSON, Object, Array, Number, isFinite, Error, Infinity, NaN }; s2.globalThis = s2; vm.createContext(s2); vm.runInContext(JS("designLineTool.js"), s2); return s2.window.designLineTool; }
 // 엔진 unmoved 외곽을 design geometry(line primitive + edge + boundary)로 옮긴다. 곡선도 샘플 line 으로 둔다.
 const EDGE = { "front-center": "center", "back-center": "center", "front-waist": "waist", "back-waist": "waist", "side-seam": "side-seam",
   "front-shoulder": "shoulder", "back-shoulder": "shoulder", "front-armhole-lower": "armhole", "front-armhole-upper": "armhole", "back-armhole": "armhole",
@@ -149,6 +150,82 @@ const waistRecs = (r) => r.darts.front.concat(r.darts.back).filter(x => /waist/.
   const r6 = BC.evaluateSemantics(proj(6, geom0));
   ok(r6.ready === false && r6.issues.indexOf("legacy-source") >= 0, "5: v6 출처는 legacy-source(현재 seam-ready 로 승격 안 함)");
   ok(BC.evaluateSemantics(proj(7, geom0)).ready === true, "5: v7 동일 형상은 ready");
+}
+
+// 6. 몸판 체크포인트 옆선 측정 = 유효 외곽(designOutline 우선)의 명시 side-seam 만. 측정 불가는 0cm 정합이 아니라 차단.
+{
+  // 기준 수치 고정: B83/W64/BL38 → totalDart 12.5, c = 11% = 1.375, 앞·뒤 각 0.6875
+  ok(near(d.darts.total, 12.5) && near(d.darts.c, 1.375) && near(p.FRONT_SIDE_WL.x - p.SIDE_TOP.x, 0.6875) && near(p.SIDE_TOP.x - p.BACK_SIDE_WL.x, 0.6875),
+    "6: c = 12.5×0.11 = 1.375, 앞·뒤 각 0.6875");
+  // 원형 → 디자인(no-op) 로컬 옆선 끝점 동일, c 는 dart id 로 나타나지 않음
+  const g0 = DB.computeGeometry(geom0, {});
+  ["front", "back"].forEach(pc => {
+    const S = pc === "front" ? p.FRONT_SIDE_WL : p.BACK_SIDE_WL, ss = g0[pc].outline.filter(x => x.edge === "side-seam");
+    ok(ss.length === 1 && [ss[0].from, ss[0].to].some(q => nearPt(q, S)) && [ss[0].from, ss[0].to].some(q => nearPt(q, p.SIDE_TOP)), "6: " + pc + " 디자인 옆선 = SIDE_TOP↔옆선 허리점(원형과 동일)");
+  });
+  const ids = ["front", "back", "shared"].flatMap(pc => (g0[pc] ? g0[pc].construction : []).filter(x => x.dart).map(x => x.dart.id));
+  ok(ids.length && ids.every(i => /-waist-[abdef]$/.test(i)), "6: 디자인 다트 id 는 a/b/d/e/f 뿐(c 없음)");
+
+  // 진동을 곡선 primitive 로 둔 fixture(체크포인트 진동 측정용). 좌표·edge·boundary 는 geom0 그대로.
+  const curveArm = (g) => { const o = JSON.parse(JSON.stringify(g)); ["front", "back"].forEach(pc => { o[pc].outline = o[pc].outline.map(x => (x.edge === "armhole" && x.kind === "line")
+    ? Object.assign({ kind: "path", commands: [{ type: "M", points: [x.from] }, { type: "C", points: [x.from, x.to, x.to] }] }, { edge: x.edge, boundary: x.boundary }) : x); }); return o; };
+  const G = curveArm(geom0);
+  const LT = loadLT();
+  const constr = (side) => (side === "front" ? engine.buildFrontOutline(p, d.formula, 83) : engine.buildBackOutline(p, d.formula, 83)).filter(x => x.disabled).map(x => ({ kind: "line", from: { ...x.from }, to: { ...x.to } }));
+  const compose = (g, pc, lines) => { const ring = LT.buildPieceRing(LT.outlinePrimsToSegs(g[pc].outline), constr(pc)); const r = LT.composeDesignOutline(ring.ring, lines.map(LT.boundarySegsOf)); return r.ok ? r.outline : null; };
+  const projDO = (g, dO, pls) => { const pr = proj(7, g); pr.working.designOutline = dO; pr.working.patternLines = pls || []; return pr; };
+  const geomSide = (g, pc) => g[pc].outline.filter(x => x.edge === "side-seam").reduce((t, x) => t + (x.kind === "line" ? Math.hypot(x.to.x - x.from.x, x.to.y - x.from.y) : NaN), 0);
+  const A = p.SIDE_TOP, S = p.FRONT_SIDE_WL;
+  const bulge = (k, edge) => ({ id: "line-" + k, piece: "front", role: "boundary", segments: [Object.assign({ kind: "cubic", from: { ...A }, c1: { x: A.x - k, y: A.y + 5 }, c2: { x: S.x - k, y: S.y - 5 }, to: { ...S } }, edge ? { edge } : {})] });
+
+  // 6a 정상(designOutline 없음): geometry 옆선 그대로 측정 — 기존 값·match·완료
+  PROJECT = projDO(G, null);
+  const c0 = BC.check(PROJECT);
+  ok(c0.sideSeam.status === "match" && near(c0.sideSeam.front, geomSide(G, "front"), 1e-9) && near(c0.sideSeam.back, geomSide(G, "back"), 1e-9) && near(c0.sideSeam.diff, 0, 1e-9),
+    "6a: designOutline 없음 → geometry 명시 옆선(기존 값) · match (" + c0.sideSeam.front.toFixed(4) + ")");
+  ok(c0.fails.indexOf("side-seam-unmeasured") < 0 && c0.fails.indexOf("side-seam-mismatch") < 0, "6a: 옆선 실패 사유 없음");
+  // 6b 옆선을 보존한 designOutline(다른 경계만 교체: 명시 edge 없는 generic 목선 대체 → unresolved 는 목선에만)
+  const fnp = g0.front.outline.filter(x => x.edge === "neckline"), nkEnds = fnp.flatMap(x => [x.from, x.to]);
+  const nkA = nkEnds.reduce((m, q) => q.y < m.y ? q : m), nkB = nkEnds.reduce((m, q) => q.x > m.x ? q : m);
+  const neckGeneric = { id: "line-n", piece: "front", role: "boundary", segments: [{ kind: "line", from: { ...nkA }, to: { ...nkB } }] };
+  const oNeck = compose(G, "front", [neckGeneric]);
+  ok(!!oNeck && oNeck.some(x => x.edgeStatus === "unresolved") && oNeck.filter(x => x.edge === "side-seam").length === 1, "6b: 목선만 generic 대체 → unresolved 는 목선, 명시 옆선 보존");
+  PROJECT = projDO(G, { front: { outline: oNeck, lineIds: ["line-n"] } }, [neckGeneric]);
+  const cN = BC.check(PROJECT);
+  ok(cN.sideSeam.status === "match" && near(cN.sideSeam.front, c0.sideSeam.front, 1e-9) && cN.fails.indexOf("side-seam-unmeasured") < 0, "6b: 다른 role 의 unresolved 는 옆선을 추측하지 않고 명시 옆선만 측정");
+  ok(cN.semantics.issues.indexOf("unresolved-replacement") >= 0, "6b: 목선 unresolved 는 semantics 증거로 남음(완료 차단으로 일괄 승격 안 함)");
+  // 6c 명시 side-seam 의미를 가진 대체선: 실제 새 길이 측정, 임계로 판정이 바뀜(원본 17.3969 재표시 금지)
+  [[0.8, "match"], [1.5, "check"], [2.5, "mismatch"]].forEach(([k, want]) => {
+    const bl = bulge(k, "side-seam"), o = compose(G, "front", [bl]);
+    PROJECT = projDO(G, { front: { outline: o, lineIds: [bl.id] } }, [bl]);
+    const c = BC.check(PROJECT), repl = o.filter(x => x.edge === "side-seam");
+    ok(repl.length === 1 && repl[0].kind === "cubic" && !repl[0].edgeStatus, "6c: 명시 의미 대체선 = side-seam 구간(unresolved 아님) k=" + k);
+    ok(c.sideSeam.status === want && c.sideSeam.front > c0.sideSeam.front + 0.05 && near(c.sideSeam.back, c0.sideSeam.back, 1e-9),
+      "6c: 대체 옆선 실제 길이 " + c.sideSeam.front.toFixed(4) + " ≠ 원본 " + c0.sideSeam.front.toFixed(4) + " → " + want);
+    if (want === "mismatch") ok(c.fails.indexOf("side-seam-mismatch") >= 0 && !BC.complete(PROJECT).ok && !PROJECT.working.bodiceResult, "6c: mismatch → 완료 차단·결과 없음");
+  });
+  // 6d 의미 없는 generic 대체선이 옆선을 삼킴 → 명시 옆선 없음 = unmeasured, 0cm 정합 금지, 완료 차단
+  {
+    const bl = bulge(1.5, null), o = compose(G, "front", [bl]);
+    ok(!!o && o.filter(x => x.edge === "side-seam").length === 0 && o.some(x => x.edgeStatus === "unresolved"), "6d: generic 대체선 → 앞 유효 외곽에 명시 옆선 없음(unresolved)");
+    PROJECT = projDO(G, { front: { outline: o, lineIds: [bl.id] } }, [bl]);
+    const c = BC.check(PROJECT);
+    ok(c.sideSeam.status === "unmeasured" && c.sideSeam.front === null && c.sideSeam.diff === null && near(c.sideSeam.back, c0.sideSeam.back, 1e-9), "6d: sideSeam = unmeasured(앞 null·diff null, 0cm 아님)");
+    ok(c.fails.indexOf("side-seam-unmeasured") >= 0 && !c.ok, "6d: side-seam-unmeasured 로 check 차단");
+    const r = BC.complete(PROJECT);
+    ok(!r.ok && r.check.fails.indexOf("side-seam-unmeasured") >= 0 && !PROJECT.working.bodiceResult, "6d: complete 차단 · bodiceResult 미생성");
+    ok(BC.measureSideSeam([]).status === "unavailable" && BC.measureSideSeam(null).length === null, "6d: measureSideSeam 빈 입력 = unavailable");
+  }
+  // 6e 길이 연장·허리 이동·곡선·여유량 조합: 명시 side-seam(연장 포함) 전체 합산, 앞·뒤 판정 유지
+  [{ hemExtensionBelowWaistCm: 10 }, { hemExtensionBelowWaistCm: 10, waistSideOffsetCm: -2, sideSeamCurve: 1 }, { bustEaseCm: 4, hemExtensionBelowWaistCm: 12, waistSideOffsetCm: -1.5, hemSideOffsetCm: 1, sideSeamCurve: 0.6 }].forEach((body, i) => {
+    const g = curveArm(DB.computeGeometry(geom0, { body }));
+    PROJECT = projDO(g, null);
+    const c = BC.check(PROJECT);
+    const segs = pc => g[pc].outline.filter(x => x.edge === "side-seam");
+    ok(segs("front").length === 2 && segs("front").some(x => x.boundary && x.boundary.root === "front/side-seam-extension"), "6e-" + i + ": 옆선 + 연장 두 구간 명시");
+    ok(c.sideSeam.status === "match" && near(c.sideSeam.front, BC.measureSideSeam(g.front.outline).length, 1e-12) && near(c.sideSeam.back, BC.measureSideSeam(g.back.outline).length, 1e-12) && c.sideSeam.front > 20,
+      "6e-" + i + ": 연장 포함 전체 합산 · 앞뒤 match (" + c.sideSeam.front.toFixed(4) + "/" + c.sideSeam.back.toFixed(4) + ")");
+  });
 }
 
 console.log("══════════════════════════════════════════════");

@@ -346,11 +346,6 @@
     return total;
   }
   const primEnds = (pr) => pr.kind === "line" ? [pr.from, pr.to] : [pr.commands[0].points[0], pr.commands[pr.commands.length - 1].points.slice(-1)[0]];
-  // 한 piece 의 side-seam edge(곡선화 반영) 봉제 길이.
-  function sideSeamLen(geometry, piece) {
-    const b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return 0;
-    return b.outline.filter(pr => pr.edge === "side-seam").reduce((s, pr) => s + primArcLen(pr), 0);
-  }
   // 구조 모서리(SV2). SV3 봉제 의미(neckline/shoulder/armhole)가 붙어도 아래 fallback 이
   // 기존과 같은 세그먼트를 고르도록 이 집합만 배제한다(측정 경로 교체 아님).
   const STRUCT_EDGE = { center: 1, waist: 1, "side-seam": 1, hem: 1 };
@@ -426,10 +421,15 @@
   function sideLenNote(project) {
     const g = project && project.working && project.working.geometry;
     const el = document.getElementById("designSideLenNote"); if (!el) return;
-    if (!g) { el.textContent = ""; el.removeAttribute("data-ok"); return; }
-    const f = sideSeamLen(g, "front"), b = sideSeamLen(g, "back"), diff = Math.abs(f - b);
-    el.textContent = "앞옆선 " + fmtL(f) + "cm · 뒤옆선 " + fmtL(b) + "cm · 차이 " + fmtL(diff) + "cm";
-    el.setAttribute("data-ok", diff <= 1 ? "1" : "0");
+    if (!g || !window.bodiceCheckpoint) { el.textContent = ""; el.removeAttribute("data-ok"); return; }
+    // 몸판 체크포인트와 같은 측정(유효 외곽의 명시 side-seam). 측정 불가를 0cm 로 보이지 않는다.
+    const ss = window.bodiceCheckpoint.check(project).sideSeam;
+    if (ss.status === "unmeasured") {
+      el.textContent = "앞옆선 " + (ss.front == null ? "측정 불가" : fmtL(ss.front) + "cm") + " · 뒤옆선 " + (ss.back == null ? "측정 불가" : fmtL(ss.back) + "cm");
+      el.setAttribute("data-ok", "0"); return;
+    }
+    el.textContent = "앞옆선 " + fmtL(ss.front) + "cm · 뒤옆선 " + fmtL(ss.back) + "cm · 차이 " + fmtL(ss.diff) + "cm";
+    el.setAttribute("data-ok", ss.diff <= 1 ? "1" : "0");
   }
   function setBodyNote(txt) { const n = document.getElementById("designBodyNote"); if (n) n.textContent = txt; }
   // 적용 중 상태 문구(여유량·길이·허리/밑단 옆선). 전부 0이면 기본 안내. 옆선은 부호 표시(안/밖).
@@ -606,11 +606,11 @@
   }
 
   // ── 몸판 모양 완료 체크포인트(bodiceCheckpoint) ──
-  function bodiceStatusStr(s) { return s === "match" ? "정합" : s === "check" ? "확인" : "불일치"; }
+  function bodiceStatusStr(s) { return s === "match" ? "정합" : s === "check" ? "확인" : s === "unmeasured" ? "측정 불가" : "불일치"; }
   function bodiceFailStr(reason) {
     const m = {
       "front-outline-not-connected": "앞판 외곽이 연결되지 않음", "back-outline-not-connected": "뒤판 외곽이 연결되지 않음",
-      "side-seam-mismatch": "옆선 봉제 길이 불일치(>0.3cm)", "front-armhole-unmeasured": "앞 진동둘레 측정 불가",
+      "side-seam-mismatch": "옆선 봉제 길이 불일치(>0.3cm)", "side-seam-unmeasured": "옆선 측정 불가(유효 외곽에 명시 옆선 없음)", "front-armhole-unmeasured": "앞 진동둘레 측정 불가",
       "back-armhole-unmeasured": "뒤 진동둘레 측정 불가", "neckline-unmeasured": "목둘레 측정 불가",
       "neckline-preview-invalid": "네크라인 미리보기 무효", "no-project": "프로젝트 없음"
     };
@@ -628,7 +628,7 @@
       return;
     }
     const c = window.bodiceCheckpoint.check(project);
-    if (checkNote) checkNote.textContent = "옆선 차 " + fmtL(c.sideSeam.diff) + "cm(" + bodiceStatusStr(c.sideSeam.status) + ") · 진동 앞 " + fmtL(c.armhole.front) + "·뒤 " + fmtL(c.armhole.back) + "cm · 반패턴 목둘레 " + fmtL(c.neckline.half) + "cm";
+    if (checkNote) checkNote.textContent = (c.sideSeam.status === "unmeasured" ? "옆선 측정 불가" : "옆선 차 " + fmtL(c.sideSeam.diff) + "cm(" + bodiceStatusStr(c.sideSeam.status) + ")") + " · 진동 앞 " + fmtL(c.armhole.front) + "·뒤 " + fmtL(c.armhole.back) + "cm · 반패턴 목둘레 " + fmtL(c.neckline.half) + "cm";
     if (btn) btn.disabled = !c.ok;
     const latest = window.bodiceCheckpoint.latest(project);
     if (statusNote) {
