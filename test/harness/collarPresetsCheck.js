@@ -130,6 +130,24 @@ function project(cd) { return { sourceBlock: { id: "block-1", version: 1, canoni
   ok(bad.ok === false && bad.stage === "stand" && !("draft" in bad), "6: 계산 실패 → draft 없음(원자)");
 }
 
+// 7. 완료본 provenance: presetId 보존(hash 제외)·legacy null·id 만 다르면 hash·stale·idempotency 불변
+{
+  BODICE = bodice("BH1");
+  const d1 = CP.composeDraft(CP.DEFAULT_ID, BODICE, DC).draft;
+  PROJECT = project(d1); const r1 = CC.complete(PROJECT);
+  ok(r1.ok && r1.result.presetId === "bunka-shirt-collar-M" && r1.result.baseMethod === "bunka-shirt-collar-M-v2", "7: 완료본에 presetId 보존");
+  PROJECT = project(legacyMDraft(BODICE)); const r0 = CC.complete(PROJECT);
+  ok(r0.ok && r0.result.presetId === null && "presetId" in r0.result, "7: legacy draft → presetId null");
+  const d2 = CP.composeDraft(CP.DEFAULT_ID, BODICE, DC).draft; d2.presetId = "other-preset-id";
+  PROJECT = project(d2); const r2 = CC.complete(PROJECT);
+  ok(r2.ok && r2.result.presetId === "other-preset-id" && r2.result.hash === r1.result.hash && r0.result.hash === r1.result.hash, "7: presetId 만 달라도 hash 동일");
+  PROJECT = project(d1); CC.complete(PROJECT); const done = PROJECT.working.collarResult;
+  PROJECT.working.collarDraft = d2;
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "7: presetId 만 다르면 stale 아님");
+  const again = CC.complete(PROJECT);
+  ok(again.idempotent === true && again.result === done && done.presetId === "bunka-shirt-collar-M", "7: presetId 만 다르면 idempotent(기존 완료본 유지)");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);
