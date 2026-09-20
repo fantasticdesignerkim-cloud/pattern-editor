@@ -1,28 +1,27 @@
 // ══════════════════════════════════════════════
-// designCollar.js — 카라 모양 단계 파생(순수). 2피스 셔츠 칼라의 **칼라 스탠드**.
+// designCollar.js — 카라 모양 단계 파생(순수). 칼라 밴드 달린 셔츠 칼라(family 3, M·N·P)와
+// 한 장 셔츠 칼라(family 2, G, P.147 computeOnePiece)의 생성기.
 //
 // 입력은 live 몸판이 아니라 **완료본에 고정된 bodiceResult**(bodiceCheckpoint.complete 결과):
 //   · 뒤목 봉제 = bodiceResult.necklineLengths.back  · 앞목 봉제 = .front  · 합 = .half(반패턴 합계).
 //     CB(뒤중심)는 접어 재단하는 반패턴.
 //   · 앞끝 여밈 연장 = bodiceResult.placket.parameters.overlapCm(여밈 없으면 0). 목둘레에 미포함.
 //
-// ── C1c 스탠드 곡률(직선+원호 복합, 어깨 경계) ──
-//   CB ─(뒤목 길이 직선)─ 어깨 경계 ─(앞목 길이 원호, CF 에서 frontRise 만큼 상승)─ CF ─(접선 여밈 연장)
-//   · 직선 길이 = necklineLengths.back, 원호 목표 길이 = necklineLengths.front → 아랫선 전체 봉제 = half.
-//   · 원호 시작 접선 = 뒤쪽 직선과 수평(접선 연속). 원호 끝 높이 = frontRiseCm.
-//   · 윗선 = 아랫선을 스탠드 높이만큼 법선(칼라쪽)으로 오프셋 — 직선부 평행(길이=뒤목), 원호부 동심(반경 R−H)
-//     → **윗선 앞목 구간이 아랫선보다 짧아짐**(곡선 스탠드 정상 성질).
-//   · frontRiseCm=0 → 현재 직선 스캐폴드(C1)와 **정확히 동일**(단일 목둘레 봉제선).
+// ── 칼라 밴드(교재 P.148 제도 방법) ──
+//   ① 목둘레 치수 ×+⊘ 를 **수평 직선**으로 긋고 ② CB 수직선 ③ 밴드 폭 ⑤ 앞 중심에서 올림 치수(수직) → Ⓑ.
+//   ⑥ ①을 3등분해 앞쪽 3분의 2 지점 Ⓐ ⑦ Ⓐ–Ⓑ 안내선 ⑧ Ⓑ에서 그 안내선에 **직각**으로 밴드 폭 → 밴드 앞 윗점.
+//   ⑨ ⑦과 평행한 윗선 안내 ⑩ 앞 중심선 ⑪ 앞 끝선(⑩과 평행, frontEndCm).
+//   ⑫⑬ 이음선·달림선을 완만하게 정리 ⑭ **Ⓑ에서 달림선 실측이 ×+⊘ 가 되도록 뒤 중심선을 수정**(길이 책임).
+//   → 달림선 전체 길이 = ×+⊘(보정 후), 밴드 윗선 ⒸⒹ 는 그보다 짧다(밴드가 서면서 생기는 정상 성질).
+//   교재 0.5 는 **밴드 앞 끝선**(앞 중심선 앞)이며 위 칼라 물림이 아니다.
 //
-// ★ **길이는 해석식 R·θ 메타값이 아니라 "실제 출력 primitive"를 adaptive flattening 으로 측정해 반환**한다.
-//   원호는 수학적 원호가 아니라 **원호형 cubic**이므로(끝점·접선은 원 위, 사이는 근사), 반환·검증은 실제
-//   cubic 길이 기준이어야 C2 칼라 본체가 흔들리지 않는다. 정확도를 위해 앞목 원호를 얕은 sub-cubic(≤30°)
-//   여러 개로 분할한다(θ 클 때 단일 cubic 오차·법선거리 드리프트 방지). 실측: 실제 봉제 합 vs half ≤1e-3,
-//   법선거리 vs standHeight ≤1e-2, 여밈 primitive vs extension 일치(designCollarCheck).
+// ★ **길이는 해석식이 아니라 "실제 출력 primitive"를 adaptive flattening 으로 측정해 반환**한다
+//   (달림선 실측 = ×+⊘, 밴드 윗선 실측 = 위 칼라 이음선 목표). 교재가 "완만하게/자연스럽게"로만 지시한
+//   곡선 정리는 이 파일의 관례(접선 연속 cubic · 핸들 = 현 길이 × 1/3, BAND_METHOD)로 고정하며
+//   **구현 관례이지 교재 수치가 아니다.**
 //
-// 원호 계약: 앞목 원호 목표 길이 L=necklineLengths.front, 앞끝 올림 h=frontRiseCm.
-//   L=R·θ, h=R·(1−cosθ) → θ 수치 결정 후 R=L/θ. 실패(원자적, 이전 유지): invalid-*/invalid-front-rise
-//   (θ 해 없음)/invalid-stand-offset(R−H≤0)/self-intersection.
+// 실패(원자적, 이전 유지): invalid-band-width / invalid-front-rise / invalid-front-end /
+//   invalid-guide-direction / self-intersection.
 //
 // 로컬 프레임(캔버스 y-down): CB x=0, 봉제 모서리 y=0, 스탠드는 위(−y). 카라는 소매에 비의존.
 // ══════════════════════════════════════════════
@@ -35,14 +34,11 @@
   function mid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
   function lineLen(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
 
-  // ── 교재 M형(bunka-shirt-collar-M-v2) 기본값 ──
-  //   밴드: 폭 3, 앞끝 올림 1(여밈 연장량 아님 — 인체 목 곡률용). 위 칼라는 아래 computeBody 의 제도 순서 참고.
+  // ── 교재 M(P.66) 밴드 기준값 ── 수치의 단일 출처는 collarPresets 레코드이고 여기는 엔진 fallback·참조.
   var DEFAULT_BAND_WIDTH = 3;     // cm — 교재 M 밴드 폭
   var DEFAULT_FRONT_RISE = 1;     // cm — 교재 M 앞 중심 올림
   var DEFAULT_FRONT_END = 0.5;    // cm — 교재 앞 끝선(앞 중심선 앞), M~R 공통 표기
-  var EPS_RISE = 1e-6;            // 이 미만이면 직선 스캐폴드(C1 정확 재현)
   var FLAT_TOL = 1e-5;           // adaptive de Casteljau 평탄 허용(길이 측정 정밀도. 형상 좌표엔 무영향)
-  var SUB_ARC_MAX = Math.PI / 6;  // 원호 sub-cubic 최대 각(30°) — 얕게 유지해 근사 오차 최소화
 
   function referenceParams() { return { bandWidthCm: DEFAULT_BAND_WIDTH, frontRiseCm: DEFAULT_FRONT_RISE, frontEndCm: DEFAULT_FRONT_END }; }
 
@@ -61,14 +57,6 @@
     return { ok: true, backCm: nl.back, frontCm: nl.front, overlapCm: overlap };
   }
 
-  // 앞목 원호 각: L(1−cosθ)/θ = h, θ∈(0,π). f 증가(f(0+)=0, f(π)=2L/π). h≥2L/π → 해 없음(null).
-  function solveArcAngle(Llen, h) {
-    var hi = Math.PI, fhi = Llen * (1 - Math.cos(hi)) / hi;   // = 2L/π
-    if (h >= fhi) return null;
-    var lo = 1e-9;
-    for (var i = 0; i < 80; i++) { var m = (lo + hi) / 2, fm = Llen * (1 - Math.cos(m)) / m; if (fm < h) lo = m; else hi = m; }
-    return (lo + hi) / 2;
-  }
 
   // ── adaptive de Casteljau: cubic 실제 호길이 + 조밀 점열(측정·자기교차 공용, 고정 N분할 금지) ──
   function distPtLine(p, a, b) {
@@ -89,22 +77,6 @@
   }
   function sumMeasure(segs) { return segs.reduce(function (t, s) { return t + segMeasure(s); }, 0); }
 
-  // 원호(center Cc, 반경 r)를 각 a0→a1(감소, 시계방향)로 sub-cubic 여러 개로. 각 sub 각 ≤ SUB_ARC_MAX.
-  //   travel(각 감소) 접선 = (sin a, −cos a). 얕은 호라 각 cubic 이 원에 near-exact.
-  function arcSubCubics(Cc, r, a0, a1, part) {
-    var span = a0 - a1, N = Math.max(1, Math.ceil(span / SUB_ARC_MAX)), da = span / N, out = [];
-    for (var i = 0; i < N; i++) {
-      var as = a0 - da * i, ae = a0 - da * (i + 1);
-      var P0 = { x: Cc.x + r * Math.cos(as), y: Cc.y + r * Math.sin(as) };
-      var P3 = { x: Cc.x + r * Math.cos(ae), y: Cc.y + r * Math.sin(ae) };
-      var k = (4 / 3) * r * Math.tan(da / 4);
-      var t0 = { x: Math.sin(as), y: -Math.cos(as) }, t1 = { x: Math.sin(ae), y: -Math.cos(ae) };
-      var s = { kind: "cubic", from: P0, c1: add(P0, t0, k), c2: add(P3, t1, -k), to: P3 };
-      if (part) s.part = part;
-      out.push(s);
-    }
-    return out;
-  }
   function reverseCubic(s, part) { var r = { kind: "cubic", from: cp(s.to), c1: cp(s.c2), c2: cp(s.c1), to: cp(s.from) }; if (part) r.part = part; return r; }
   function cloneSeg(s, part) {
     var r = s.kind === "cubic" ? { kind: "cubic", from: cp(s.from), c1: cp(s.c1), c2: cp(s.c2), to: cp(s.to) } : { kind: "line", from: cp(s.from), to: cp(s.to) };
@@ -326,7 +298,8 @@
     return Math.abs(seamLen - targetLen) <= CB_CORRECTION_TOL * 1e3 ? { x: x, seam: seam, seamLen: seamLen } : null;
   }
 
-  // standResult(computeStand 반환) + { gapCm, cbWidthCm, frontInsetCm(setback), frontProjectionCm, pointDiagonalCm, outerBowCm }.
+  // standResult(computeStand 반환) + { gapCm, cbWidthCm, frontProjectionCm, pointDiagonalCm, outerBowCm }.
+  //   이음선 앞끝은 밴드 윗선 앞 끝 Ⓒ 그대로(물림 없음)이고, 길이 목표는 밴드 윗선 ⒸⒹ **전체**다.
   //   반환 { ok, bodyGeometry:{outline,construction}, attachLenCm(=위칼라 이음선 실측), measure, anchors } | { ok:false, reason }.
   function computeBody(standResult, params) {
     if (!standResult || !standResult.ok || !Array.isArray(standResult.upperNeckPath) || !standResult.upperNeckPath.length) return { ok: false, reason: "invalid-stand" };

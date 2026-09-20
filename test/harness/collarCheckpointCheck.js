@@ -11,6 +11,7 @@ const path = require("path");
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(cond, name) { if (cond) PASS++; else { FAIL++; fails.push(name); } }
 const near = (a, b, e = 1e-3) => Math.abs(a - b) < e;
+const num = (v) => typeof v === "number" && isFinite(v);
 
 // 스텁 상태
 let BODICE = null, BODICE_STALE = false, SLEEVE = null, SLEEVE_CHANGED = false, SLEEVE_INVAL = false, PROJECT = null;
@@ -106,12 +107,23 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
 {
   reset(); PROJECT = fakeProject(); CC.complete(PROJECT);
   ok(CC.isCurrentCollarChanged(PROJECT) === false, "5: 완료 직후 미변경");
-  // 스탠드 파라미터 변경(형상 재생성) → 변경됨
-  const b = bodice("BH1"); const st = DC.computeStand(b, { standHeightCm: 4, frontRiseCm: 1.5 });
+  // 밴드 파라미터 변경(P.148 계약 키) → **유효한 새 형상**으로 교체한 뒤 변경 판정.
+  //   ★ 실패한 계산이나 undefined geometry 로 우연히 true 가 되면 안 되므로 성공을 먼저 assert 한다.
+  const b = bodice("BH1");
+  const stand2Params = { bandWidthCm: 4, frontRiseCm: 1.5, frontEndCm: 0.5 };
+  const st = DC.computeStand(b, stand2Params);
+  ok(st.ok && Array.isArray(st.standGeometry.outline) && st.standGeometry.outline.length > 0, "5: 새 밴드 계산 성공(" + (st.reason || "") + ")");
   const bd = DC.computeBody(st, BODY_P);
-  PROJECT.working.collarDraft.parameters.stand.standHeightCm = 4; PROJECT.working.collarDraft.standGeometry = st.standGeometry;
-  PROJECT.working.collarDraft.body.geometry = bd.bodyGeometry; PROJECT.working.collarDraft.body.attachLenCm = bd.attachLenCm; PROJECT.working.collarDraft.body.measure = bd.measure;
-  ok(CC.isCurrentCollarChanged(PROJECT) === true, "5: 스탠드 파라미터 변경 → 변경됨");
+  ok(bd.ok && Array.isArray(bd.bodyGeometry.outline) && bd.bodyGeometry.outline.length > 0 && num(bd.attachLenCm), "5: 새 위 칼라 계산 성공(" + (bd.reason || "") + ")");
+  const cd5 = PROJECT.working.collarDraft;
+  cd5.parameters.stand = Object.assign({}, stand2Params);
+  cd5.standGeometry = st.standGeometry;
+  cd5.body.geometry = bd.bodyGeometry; cd5.body.attachLenCm = bd.attachLenCm; cd5.body.measure = bd.measure;
+  ok(CC.check(PROJECT).ok, "5: 교체된 형상도 완료 게이트 통과(유효한 변경 경로)");
+  ok(CC.isCurrentCollarChanged(PROJECT) === true, "5: 밴드 파라미터 변경 → 변경됨");
+  // 다시 완료하면 새 형상 기준으로 미변경(변경 판정이 형상 signature 에서 온다는 확인)
+  const r5 = CC.complete(PROJECT);
+  ok(r5.ok && CC.isCurrentCollarChanged(PROJECT) === false, "5: 새 형상 재완료 → 미변경");
 }
 
 // 6. 몸판 hash 변경 → invalidatedByBodice(형상 무효) / 소매 변경은 무효화 아님

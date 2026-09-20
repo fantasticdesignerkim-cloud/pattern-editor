@@ -1146,7 +1146,7 @@
     updateCollarPanel(project);
   }
   // 선택 프리셋으로 초기화(현재 registry = 교재 M 기본형 하나): 스탠드·본체를 프리셋 기본값으로 **정확히**
-  //   복원한다(M: gap 3·setback 0.5·수평 돌출 1.5·실제 사선 6, √33.75 는 파생). "수치형으로 돌아가기"
+  //   복원한다(M: 밴드 폭 3·올림 1·앞 끝선 0.5·gap 3·수평 돌출 1.5·사선 6, √33.75 는 파생). "수치형으로 돌아가기"
   //   (직접 편집 전 사용자 파라미터 복귀)와 다르다: 이건 프리셋 기준값 복원이다.
   //   ★ manual(관리형 직접 편집) 중에는 금지 — 관리선을 묵시 삭제/덮어쓰기 하지 않는다(먼저 수치형으로 돌아가기).
   //   ★ 원자성: collarPresets.composeDraft 가 스탠드·본체를 모두 계산·검증한 뒤에만 새 draft 를 준다.
@@ -1245,7 +1245,7 @@
   }
   function setCollarBodyNote(t) { const n = document.getElementById("designCollarBodyNote"); if (n) n.textContent = t; }
   function collarBodyFailStr(reason) {
-    const m = { "invalid-stand": "스탠드를 먼저 적용", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-point-diagonal": "칼라 끝 사선 길이는 앞끝 돌출보다 커야 합니다", "invalid-gap": "CB 제도 간격 확인", "cb-correction-failed": "위칼라 이음선 길이를 밴드와 맞출 수 없습니다", "invalid-front-inset": "앞끝 물림 값 확인(0–3)", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "invalid-outer-bow": "외곽 휨 값 확인(−2–2)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
+    const m = { "invalid-stand": "스탠드를 먼저 적용", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-point-diagonal": "칼라 끝 사선 길이는 앞끝 돌출보다 커야 합니다", "invalid-gap": "CB 제도 간격 확인", "cb-correction-failed": "위칼라 이음선 길이를 밴드와 맞출 수 없습니다", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "invalid-outer-bow": "외곽 휨 값 확인(−2–2)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
     return m[reason] || "칼라 본체를 적용할 수 없습니다";
   }
   function onApplyCollarBody() {
@@ -1743,7 +1743,7 @@
     syncCollarPresetLabel();
     const collarBaseM = document.getElementById("btnCollarBaseM");
     if (collarBaseM) collarBaseM.addEventListener("click", () => { if (!collarBaseM.disabled) onCollarBaseM(); });
-    // 카라 본체(C2): CB 폭·앞폭·앞끝 물림·앞끝 돌출·외곽 휨 Enter 로 적용, 본체 적용/초기화.
+    // 위 칼라: CB 폭·끝 사선·앞끝 돌출·외곽 휨 Enter 로 적용, 본체 적용/초기화.
     ["inpCollarBodyWidth", "inpCollarBodyFrontWidth", "inpCollarBodyProjection", "inpCollarBodyBow"].forEach(id => {
       const el = document.getElementById(id); if (!el) return;
       el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyCollarBody(); } });

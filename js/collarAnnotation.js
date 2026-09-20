@@ -54,8 +54,8 @@
       }
       dim(dims, "cb-width", "dim", G, O, bp.cbWidthCm);
       if (A && T) {
-        var refTop = { x: A.x, y: T.y };      // setback 점의 CB 평행 수직 기준선
-        dim(dims, "setback-vertical", "ref", A, refTop, null);
+        var refTop = { x: A.x, y: T.y };      // Ⓒ(밴드 윗선 앞 끝)의 CB 평행 수직 기준선
+        dim(dims, "setback-vertical", "ref", A, refTop, null);   // dim id 는 표시 계약(안정 키)이라 유지, 의미는 Ⓒ 수직 기준선
         dim(dims, "projection", "dim", refTop, T, bp.frontProjectionCm);
         dim(dims, "point-diagonal", "dim", A, T, bp.pointDiagonalCm);
       }
