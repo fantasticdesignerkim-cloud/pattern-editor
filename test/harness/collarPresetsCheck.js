@@ -231,6 +231,68 @@ function project(cd) { return { sourceBlock: { id: "block-1", version: 1, canoni
   ok(r.ok && r.result.presetId === "bunka-shirt-collar-M" && r.result.hash === CC.complete(project(legacyMDraft(BODICE))).result.hash, "12: 완료 hash 불변");
 }
 
+// 13. 셔츠 칼라(한 장, family 2) G~L: 교재 순서·참고 도면 수치·전부 pending(적용 불가)
+const ONE = "shirt-collar-one-piece";
+{
+  const f = CP.family(ONE);
+  ok(f && f.order === 2 && f.symbol === "G" && f.page === 63 && f.availability === "pending-source" && f.generator === null, "13: family 2 셔츠 칼라(미구현)");
+  ok(f.reference && f.reference.methodPage === 147 && J(f.reference.pages) === J([63, 64, 65]) && /달림선 길이/.test(f.reference.attachLine) && /가봉/.test(f.reference.fitting), "13: family 참고 메모(제도법 P147·달림선 정합·가봉)");
+  const vs = CP.variants(ONE);
+  ok(J(vs.map(v => v.id)) === J(["G", "H", "I", "J", "K", "L"].map(x => "bunka-shirt-collar-" + x)), "13: G~L 교재 순서");
+  ok(vs.every(v => v.availability === "pending-source" && v.presetId === null && v.requiresMethodPage === 147), "13: 전부 pending·preset 없음·P147 필요");
+  ok(vs.every(v => !("stand" in v) && !("body" in v) && !("parameters" in v) && !("geometry" in v)), "13: 실행 수치·형상 없음(참고값과 분리)");
+  ok(J(vs.map(v => v.page)) === J([63, 63, 64, 64, 65, 65]), "13: variant 페이지 G·H 63 / I·J 64 / K·L 65");
+  // 사진에서 확인한 도면 수치(교차검증 대상)
+  const ref = (x) => CP.variant(ONE, "bunka-shirt-collar-" + x).reference;
+  ok(J(ref("G")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 3, riseCm: 2.5, frontEndMarkCm: 3, attachCurveMarkCm: 0.2, attachCurveDirection: "as-drawn" }), "13: G 허리 3·올림 2.5·앞표기 3·곡률 0.2");
+  ok(J(ref("H")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 1, riseCm: 8, frontEndMarkCm: 4.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }), "13: H 허리 1·올림 8·앞표기 4.5·곡률 0.3");
+  ok(J(ref("I")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }), "13: I 허리 2·올림 4.5·앞표기 3.5·곡률 0.3");
+  ok(J(ref("J")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 4, riseCm: 1, frontEndMarkCm: 2.5, attachCurveMarkCm: null, attachCurveDirection: "as-drawn" }), "13: J 허리 4·올림 1·앞표기 2.5·곡률 표기 없음");
+  ok(J(ref("K")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.6, attachCurveDirection: "reversed" }), "13: K = I 치수 + 곡률 0.6 반대 방향");
+  ok(J(ref("L")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: null, collarStandCm: 3, riseCm: null, frontEndMarkCm: null, attachCurveMarkCm: null, attachCurveDirection: null }), "13: L 뒤 폭 3.5·허리 3 만(나머지 미확정)");
+  ok(["G", "H", "I", "J"].every(x => ref(x).backCollarWidthCm === 3.5 && ref(x).frontCollarWidthCm === 6.5), "13: G~J 공통 폭 3.5/6.5");
+  ok(/반대로/.test(CP.variant(ONE, "bunka-shirt-collar-K").referenceNote) && /몸판/.test(CP.variant(ONE, "bunka-shirt-collar-L").referenceNote) && /직선에 가까운/.test(CP.variant(ONE, "bunka-shirt-collar-J").referenceNote), "13: K·L·J 설명");
+  // 불변
+  try { ref("G").collarStandCm = 9; } catch (_) {}
+  try { CP.variants(ONE).push({}); } catch (_) {}
+  ok(ref("G").collarStandCm === 3 && CP.variants(ONE).length === 6 && Object.isFrozen(ref("G")), "13: 참고 수치 변경 불가");
+}
+// 14. 참고 수치 표시 행(실행값 아님) + 표기 없는 항목 제외
+{
+  const rows = CP.referenceRows(ONE, "bunka-shirt-collar-G");
+  ok(rows.length === 6 && rows[0].key === "backCollarWidthCm" && rows[3].value === 2.5 && rows[5].value === 0.2 && rows.every(r => r.unit === "cm"), "14: G 표시 행 6개");
+  ok(J(CP.referenceRows(ONE, "bunka-shirt-collar-J").map(r => r.key)) === J(["backCollarWidthCm", "frontCollarWidthCm", "collarStandCm", "riseCm", "frontEndMarkCm"]), "14: J 는 곡률 표기 없음 → 행 제외");
+  const k = CP.referenceRows(ONE, "bunka-shirt-collar-K");
+  ok(k[k.length - 1].key === "attachCurveDirection" && k[k.length - 1].text === "반대 방향", "14: K 곡선 방향 표시");
+  ok(CP.referenceRows(ONE, "bunka-shirt-collar-L").length === 2, "14: L 은 확인된 두 수치만");
+  ok(CP.referenceRows("shirt-collar-with-band", "bunka-shirt-collar-M").length === 0 && CP.referenceRows("nope", "x").length === 0, "14: 실행 preset·없는 선택은 참고 행 없음");
+  ok(CP.referenceFields().map(f => f.key).join() === "backCollarWidthCm,frontCollarWidthCm,collarStandCm,riseCm,frontEndMarkCm,attachCurveMarkCm", "14: 참고 필드 의미 순서");
+  ok(/의미 미확정/.test(CP.referenceFields()[4].label), "14: 앞쪽 표기는 의미 미확정으로 표기");
+}
+// 15. G~L 은 적용 불가 — M 으로 대체되지 않는다
+{
+  BODICE = bodice("BH1");
+  const ids = ["G", "H", "I", "J", "K", "L"].map(x => "bunka-shirt-collar-" + x);
+  ok(ids.every(id => { const r = CP.resolve(ONE, id); return r.ok === false && r.reason === "collar-preset-unavailable" && !("presetId" in r); }), "15: G~L resolve 거부");
+  ok(ids.every(id => { const r = CP.composeDraft(id, BODICE, DC); return r.ok === false && r.reason === "unknown-collar-preset" && !("draft" in r); }), "15: G~L compose 거부(M 형상 안 만듦)");
+  ok(ids.every(id => CP.get(id) === null) && CP.list().length === 1, "15: G~L 은 실행 레코드가 아니다");
+  ok(J(CP.variantOptions(ONE)) === J(CP.variants(ONE).map(v => ({ value: v.id, label: v.label, available: false }))), "15: 옵션 전부 available:false");
+}
+// 16. 참고 수치 검증(조용히 수용 금지)
+{
+  const cat = () => JSON.parse(J(CP.families())), recs = () => JSON.parse(J(CP.list()));
+  const one = (c) => c[1].variants[0];
+  let c = cat(); one(c).reference.bogus = 1; throwsReason(() => CP.buildCatalog(c, recs()), "unknown-reference-key", "16: 알 수 없는 참고 키");
+  c = cat(); one(c).reference.collarStandCm = "3"; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-reference", "16: 문자열 수치");
+  c = cat(); one(c).reference.riseCm = 0; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-reference", "16: 0 이하 수치");
+  c = cat(); one(c).reference.attachCurveDirection = "sideways"; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-reference", "16: 알 수 없는 곡선 방향");
+  c = cat(); delete one(c).requiresMethodPage; throwsReason(() => CP.buildCatalog(c, recs()), "reference-without-method-page", "16: 제도법 페이지 없는 참고값");
+  c = cat(); c[2].variants[0].reference = { collarStandCm: 3 }; c[2].variants[0].requiresMethodPage = 147;
+  throwsReason(() => CP.buildCatalog(c, recs()), "reference-on-available-variant", "16: 적용 가능한 variant 에 참고값 금지");
+  c = cat(); c[1].reference.pages = ["63"]; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-reference", "16: family 참고 메모 형식");
+  c = cat(); c[1].reference.stand = { standHeightCm: 3 }; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-reference", "16: family 참고에 형상 키 금지");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

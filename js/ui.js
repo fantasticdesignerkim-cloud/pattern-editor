@@ -1038,6 +1038,18 @@
     const first = opts.filter(o => o.available)[0] || opts[0];
     sel.value = first ? first.value : "";
   }
+  // 미구현 variant 의 **참고 도면 수치**(실행값 아님) 한 줄 요약. 없으면 빈 문자열.
+  function collarReferenceStr(familyId, variantId) {
+    if (!window.collarPresets) return "";
+    const v = window.collarPresets.variant(familyId, variantId); if (!v) return "";
+    const rows = window.collarPresets.referenceRows(familyId, variantId);
+    const dims = rows.map(r => r.label + " " + (r.text != null ? r.text : fmtL(r.value) + (r.unit || ""))).join(" · ");
+    const parts = [];
+    if (dims) parts.push("참고 도면 수치: " + dims);
+    if (v.referenceNote) parts.push(v.referenceNote);
+    if (v.requiresMethodPage) parts.push("전체 제도법 P" + v.requiresMethodPage + " 필요 · 적용 불가");
+    return parts.join(" · ");
+  }
   // 버튼 문구 + 선택 상태 안내(형상은 안 건드린다).
   function syncCollarPresetLabel() {
     const btn = document.getElementById("btnCollarBaseM"), r = resolveCollarSelection();
@@ -1045,9 +1057,15 @@
     if (btn) btn.textContent = (rec ? rec.label : "선택 제도형") + "으로 초기화";
     const note = document.getElementById("designCollarCatalogNote");
     if (note && window.collarPresets) {
-      const f = window.collarPresets.family(selectedCollarFamilyId());
-      const head = f ? f.label + " " + f.symbol + " (교재 P" + f.page + ")" : "카라 종류";
-      note.textContent = r.ok ? head + " · " + rec.label + " 적용 가능" : head + " · " + collarSelectionStr(r.reason);
+      const fid = selectedCollarFamilyId(), f = window.collarPresets.family(fid);
+      const sv = window.collarPresets.variant(fid, selectedCollarVariantId());
+      const page = (sv && typeof sv.page === "number") ? sv.page : (f ? f.page : null);   // variant 가 다른 페이지면 그 페이지
+      const head = f ? f.label + " " + f.symbol + " (교재 P" + page + ")" : "카라 종류";
+      if (r.ok) note.textContent = head + " · " + rec.label + " 적용 가능";
+      else {
+        const ref = collarReferenceStr(fid, selectedCollarVariantId());
+        note.textContent = head + " · " + collarSelectionStr(r.reason) + (ref ? " · " + ref : "");
+      }
     }
   }
   function deriveCollar(project, standHeightCm, frontRiseCm) {

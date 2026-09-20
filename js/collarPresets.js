@@ -38,13 +38,58 @@
   //   나머지는 "pending-source"(형상·수치 없음 — 표시 슬롯만). variant 는 family 안의 세부 제도형이고,
   //   available variant 만 presetId 로 RECORDS 의 레코드를 가리킨다(미구현 variant 의 presetId 는 null).
   var PENDING_NOTE = "제도 자료 확인 후 제공";
+  // 참고 도면 수치(source facts)는 **실행 기본값이 아니다** — 교재 도면에서 읽은 치수를 기록만 한다.
+  //   제도 절차(교재 P.147)가 없으면 이 수치로 형상을 만들지 않는다(variant 는 pending 유지).
+  var METHOD_PAGE = 147;
   var PENDING_SHORT = "준비 중";        // select 옵션용 짧은 표식(전체 안내는 PENDING_NOTE)
   function pendingVariant(id, label) { return { id: id, label: label, availability: "pending-source", presetId: null, note: PENDING_NOTE }; }
+  // 참고 도면 수치 표시 순서·의미(라벨). frontEndMark 는 **도면 표기이고 기하학적 의미는 미확정**이라 그대로 적는다.
+  var REFERENCE_FIELDS = [
+    { key: "backCollarWidthCm", label: "뒤 칼라 폭", unit: "cm" },
+    { key: "frontCollarWidthCm", label: "앞 칼라 폭", unit: "cm" },
+    { key: "collarStandCm", label: "칼라 허리", unit: "cm" },
+    { key: "riseCm", label: "올림 치수(★)", unit: "cm" },
+    { key: "frontEndMarkCm", label: "도면 앞쪽 표기(의미 미확정)", unit: "cm" },
+    { key: "attachCurveMarkCm", label: "달림선 곡률 표기", unit: "cm" }
+  ];
+  var ONEPIECE_NOTES = {
+    "bunka-shirt-collar-J": "달림선은 직선에 가까운 완만한 곡선(도면에 곡률 표기 없음)",
+    "bunka-shirt-collar-K": "I 와 같은 치수, 앞 달림선 곡선을 반대로 그려 칼라 허리 부분을 늘린다",
+    "bunka-shirt-collar-L": "몸판 목둘레와 앞 꺾임선을 먼저 그린 뒤 그 치수로 제도(몸판 연동) · 도면 표기 4·1, 몸판 앞 꺾임 끝 8·4 는 의미 미확정"
+  };
+  // 셔츠 칼라(한 장) variant: 참고 도면 수치만 싣고 실행 기본값·생성기는 두지 않는다.
+  function onePieceVariant(id, label, page, ref) {
+    var v = pendingVariant(id, label);
+    v.page = page;
+    v.reference = ref;
+    v.requiresMethodPage = METHOD_PAGE;   // 전체 제도법이 오기 전에는 적용 불가
+    if (ONEPIECE_NOTES[id]) v.referenceNote = ONEPIECE_NOTES[id];
+    return v;
+  }
   var CATALOG = [
     // 스탠드 family: 교재에 A~F 세부형이 있으나 제도 수치·방식은 아직 확인 전이라 슬롯만 둔다(형상·수치 없음).
     { id: "stand-collar", order: 1, label: "스탠드 칼라", symbol: "A", page: 60, generator: null, availability: "pending-source", note: PENDING_NOTE,
       variants: ["A", "B", "C", "D", "E", "F"].map(function (v) { return pendingVariant("bunka-stand-collar-" + v, v + "형"); }) },
-    { id: "shirt-collar-one-piece", order: 2, label: "셔츠 칼라", symbol: "G", page: 63, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    // 셔츠 칼라(한 장 구조): 달림선·칼라 허리·꺾임선·외곽선·칼라 끝이 한 조각. family 3(M, 밴드+위칼라 2피스)와
+    //   생성 구조가 다르다. G~J 는 앞뒤 칼라 폭을 고정한 채 칼라 허리·올림(★)만 바꿔 비교한 계열,
+    //   K 는 I 의 앞 달림선 곡선을 반대로 그린 변형, L 은 꺾임선을 앞중심에서 떨어뜨린 오픈 칼라(몸판 연동).
+    //   ★ 도면 치수는 확인했으나 **제도 절차(P.147)가 없어 전부 pending** — 아래 reference 는 참고값이다.
+    { id: "shirt-collar-one-piece", order: 2, label: "셔츠 칼라", symbol: "G", page: 63, generator: null, availability: "pending-source", note: PENDING_NOTE,
+      reference: {
+        pages: [63, 64, 65], methodPage: METHOD_PAGE,
+        structure: "한 장 구조(달림선·칼라 허리·꺾임선·외곽선·칼라 끝)",
+        attachLine: "달림선 길이 = 몸판 뒤목(×) + 앞목(⊘)",
+        commonWidths: "G~J 공통 뒤 칼라 폭 3.5cm · 앞 칼라 폭 6.5cm",
+        fitting: "수치를 바꾸면 칼라 외곽 치수가 부족·과다해 가봉 필요(교재 본문)"
+      },
+      variants: [
+        onePieceVariant("bunka-shirt-collar-G", "G · 칼라 허리 3cm", 63, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 3, riseCm: 2.5, frontEndMarkCm: 3, attachCurveMarkCm: 0.2, attachCurveDirection: "as-drawn" }),
+        onePieceVariant("bunka-shirt-collar-H", "H · 칼라 허리 1cm", 63, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 1, riseCm: 8, frontEndMarkCm: 4.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }),
+        onePieceVariant("bunka-shirt-collar-I", "I · 칼라 허리 2cm", 64, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }),
+        onePieceVariant("bunka-shirt-collar-J", "J · 칼라 허리 4cm", 64, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 4, riseCm: 1, frontEndMarkCm: 2.5, attachCurveMarkCm: null, attachCurveDirection: "as-drawn" }),
+        onePieceVariant("bunka-shirt-collar-K", "K · 앞 달림선 곡선 반대", 65, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.6, attachCurveDirection: "reversed" }),
+        onePieceVariant("bunka-shirt-collar-L", "L · 오픈 칼라", 65, { backCollarWidthCm: 3.5, frontCollarWidthCm: null, collarStandCm: 3, riseCm: null, frontEndMarkCm: null, attachCurveMarkCm: null, attachCurveDirection: null })
+      ] },
     // 구현된 유일한 family: 밴드 + 위칼라 2피스(designCollar.computeStand/computeBody).
     { id: "shirt-collar-with-band", order: 3, label: "칼라 밴드 달린 셔츠 칼라", symbol: "M", page: 66, generator: "shirt-collar-with-band-v2", availability: "available", note: null,
       variants: [{ id: "bunka-shirt-collar-M", label: "교재 M 기본형", availability: "available", presetId: "bunka-shirt-collar-M", note: null }] },
@@ -117,6 +162,35 @@
   //   available variant 만 실제 레코드를 가리키고, pending 은 presetId null·형상/수치 키 없음.
   var AVAIL = { available: 1, "pending-source": 1 };
   var SHAPE_KEYS = ["stand", "body", "parameters", "geometry"];
+  var REFERENCE_KEYS = REFERENCE_FIELDS.map(function (f) { return f.key; }).concat(["attachCurveDirection"]);
+  var CURVE_DIR = { "as-drawn": 1, reversed: 1 };
+  // variant 참고 도면 수치: 알려진 키만, 값은 유한 숫자 또는 null(도면에 표기 없음). 형상·실행 데이터 금지.
+  function validateVariantReference(v) {
+    var ref = v.reference;
+    if (ref === undefined) return;
+    if (!ref || typeof ref !== "object" || Array.isArray(ref)) fail("invalid-reference", v.id);
+    Object.keys(ref).forEach(function (k) {
+      if (REFERENCE_KEYS.indexOf(k) < 0) fail("unknown-reference-key", v.id + "." + k);
+      var val = ref[k];
+      if (k === "attachCurveDirection") { if (!(val === null || CURVE_DIR[val])) fail("invalid-reference", v.id + "." + k); return; }
+      if (!(val === null || (typeof val === "number" && isFinite(val) && val > 0))) fail("invalid-reference", v.id + "." + k);
+    });
+    if (typeof v.requiresMethodPage !== "number" || v.requiresMethodPage <= 0) fail("reference-without-method-page", v.id);
+    if (v.availability !== "pending-source") fail("reference-on-available-variant", v.id);   // 참고값은 실행값이 아니다
+  }
+  // family 참고 메모: 문자열·유한 숫자·숫자 배열만(형상 키 금지).
+  function validateFamilyReference(f) {
+    var ref = f.reference;
+    if (ref === undefined) return;
+    if (!ref || typeof ref !== "object" || Array.isArray(ref)) fail("invalid-reference", f.id);
+    Object.keys(ref).forEach(function (k) {
+      if (SHAPE_KEYS.indexOf(k) >= 0) fail("invalid-reference", f.id + "." + k);
+      var val = ref[k];
+      var okVal = isStr(val) || (typeof val === "number" && isFinite(val))
+        || (Array.isArray(val) && val.length > 0 && val.every(function (n) { return typeof n === "number" && isFinite(n); }));
+      if (!okVal) fail("invalid-reference", f.id + "." + k);
+    });
+  }
   function validateFamily(f, presetIds, seenId, expectOrder) {
     if (!f || typeof f !== "object") fail("invalid-family");
     ["id", "label", "symbol"].forEach(function (k) { if (!isStr(f[k])) fail("missing-field", (f.id || "?") + "." + k); });
@@ -126,12 +200,14 @@
     if (f.availability === "available" ? !isStr(f.generator) : f.generator !== null) fail("invalid-generator", f.id);
     if (seenId[f.id]) fail("duplicate-id", f.id); seenId[f.id] = true;
     if (!Array.isArray(f.variants)) fail("invalid-variants", f.id);
+    validateFamilyReference(f);
     var anyAvail = false;
     f.variants.forEach(function (v) {
       if (!v || !isStr(v.id) || !isStr(v.label)) fail("missing-field", f.id + ".variant");
       if (seenId[v.id]) fail("duplicate-id", v.id); seenId[v.id] = true;
       if (!AVAIL[v.availability]) fail("invalid-availability", v.id);
-      SHAPE_KEYS.forEach(function (k) { if (k in v) fail("variant-shape-data", v.id); });   // 수치·형상은 catalog 에 두지 않는다
+      SHAPE_KEYS.forEach(function (k) { if (k in v) fail("variant-shape-data", v.id); });   // 실행 수치·형상은 catalog 에 두지 않는다
+      validateVariantReference(v);
       if (v.availability === "available") {
         if (f.availability !== "available") fail("unavailable-family-variant", v.id);
         if (!isStr(v.presetId) || !presetIds[v.presetId]) fail("unknown-variant-preset", v.id);
@@ -219,6 +295,19 @@
   function variantOptions(familyId) {
     return variants(familyId).map(function (v) { return { value: v.id, label: v.label, available: v.availability === "available" }; });
   }
+  // 참고 도면 수치 표시 행(순수). 표기가 없는 항목(null)은 내보내지 않는다. **실행값이 아니다.**
+  function referenceRows(familyId, variantId) {
+    var v = variant(familyId, variantId);
+    if (!v || !v.reference) return EMPTY;
+    var rows = [];
+    REFERENCE_FIELDS.forEach(function (f) {
+      var val = v.reference[f.key];
+      if (typeof val === "number") rows.push({ key: f.key, label: f.label, value: val, unit: f.unit });
+    });
+    if (v.reference.attachCurveDirection === "reversed") rows.push({ key: "attachCurveDirection", label: "앞 달림선 곡선", value: null, unit: null, text: "반대 방향" });
+    return Object.freeze(rows);
+  }
+
   // ★ 안전장치: (family, variant) → preset id 해석. **미구현·알 수 없음은 명시적으로 거부**하며
   //   절대 DEFAULT_ID(M) 로 대체하지 않는다. 호출부는 ok 일 때만 composeDraft 한다.
   function resolve(familyId, variantId) {
@@ -233,7 +322,7 @@
     DEFAULT_ID: DEFAULT_ID, DEFAULT_FAMILY_ID: DEFAULT_FAMILY_ID, PENDING_NOTE: PENDING_NOTE, PENDING_SHORT: PENDING_SHORT,
     list: list, get: get, defaults: defaults, options: options, fields: fields, matches: matches, composeDraft: composeDraft,
     families: families, family: family, variants: variants, variant: variant,
-    familyOptions: familyOptions, variantOptions: variantOptions, resolve: resolve,
+    familyOptions: familyOptions, variantOptions: variantOptions, resolve: resolve, referenceRows: referenceRows, referenceFields: function () { return clone(REFERENCE_FIELDS); },
     validateRecord: validateRecord, buildRegistry: buildRegistry,   // 순수(하네스·향후 레코드 추가 검증)
     validateFamily: validateFamily, buildCatalog: buildCatalog
   });
