@@ -24,8 +24,8 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "..", "js", "collarCh
 const DC = sandbox.window.designCollar, CC = sandbox.window.collarCheckpoint;
 
 function bodice(hash) { return { hash: hash || "BH1", sourceVersion: 1, necklineLengths: { back: 10, front: 8, half: 18, finished: 36 } }; }
-const STAND_P = { standHeightCm: 3, frontRiseCm: 1.5 };
-const BODY_P = { gapCm: 3, cbWidthCm: 4, frontInsetCm: 0.5, frontProjectionCm: 1.5, pointDiagonalCm: 6, outerBowCm: 0 };   // 교재 M 위 칼라
+const STAND_P = { bandWidthCm: 3, frontRiseCm: 1.5, frontEndCm: 0.5 };   // 교재 P.148 밴드 파라미터
+const BODY_P = { gapCm: 3, cbWidthCm: 4, frontProjectionCm: 1.5, pointDiagonalCm: 6, outerBowCm: 0 };   // 교재 M 위 칼라
 // 실제 stand/body 로 collarDraft 구성.
 function makeDraft(hash, opts) {
   opts = opts || {};
@@ -61,7 +61,7 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   ok(res.schemaVersion === 1 && res.type === "shirt-two-piece" && res.symmetry === "half-cb-fold", "1: schema·type·symmetry");
   ok(res.sourceBodiceHash === "BH1" && res.sourceBlock.version === 1, "1: sourceBodiceHash·sourceBlock");
   ok(res.stand.lengths && near(res.stand.lengths.lowerNeckSeam, 18, 0.01) && res.stand.geometry.outline.length, "1: stand.lengths·geometry");
-  ok(res.body.mode === "parametric" && near(res.body.attachLenCm, res.stand.lengths.upperNeckSegment - 0.5, 0.01) && res.body.manualSource === null, "1: body parametric·위칼라 이음선=밴드 기준 길이(upperNeck−0.5)·manualSource null");
+  ok(res.body.mode === "parametric" && near(res.body.attachLenCm, res.stand.lengths.upperNeckSegment, 0.01) && res.body.manualSource === null, "1: body parametric·위칼라 이음선 = 밴드 윗선 ⒸⒹ(P.148 step 3)·manualSource null");
   ok(typeof res.hash === "string" && typeof res.completedAt === "number" && Object.isFrozen(res), "1: hash·completedAt·deepFrozen");
 }
 
@@ -85,7 +85,7 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   reset(); PROJECT = fakeProject(); PROJECT.working.collarDraft.body.geometry = null; ok(CC.check(PROJECT).fails.indexOf("no-body") >= 0, "3: no-body");
   reset(); PROJECT = fakeProject(); PROJECT.working.collarDraft.body.attachLenCm = 999; ok(CC.check(PROJECT).fails.indexOf("seam-length-mismatch") >= 0, "3: 위칼라 이음선·밴드 길이 불일치 → seam-length-mismatch");
   reset(); PROJECT = fakeProject(); delete PROJECT.working.collarDraft.body.parameters.gapCm; ok(CC.check(PROJECT).fails.indexOf("gap-missing") >= 0, "3: CB 제도 간격 기록 없음 → gap-missing");
-  reset(); PROJECT = fakeProject(); PROJECT.working.collarDraft.body.parameters.frontInsetCm = 0.8; ok(CC.check(PROJECT).fails.indexOf("seam-length-mismatch") >= 0, "3: setback 기준이 바뀌면(형상 불변) 길이 정합 실패");
+  reset(); PROJECT = fakeProject(); PROJECT.working.collarDraft.parameters.stand.bandWidthCm = 4; ok(CC.check(PROJECT).fails.indexOf("seam-length-mismatch") >= 0, "3: 밴드 파라미터가 형상과 어긋나면 길이 정합 실패");
 }
 
 // 4. manual: 관리선 존재·invalid 아니면 완료 + manualSource 저장

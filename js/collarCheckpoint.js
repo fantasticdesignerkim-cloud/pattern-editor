@@ -91,10 +91,10 @@
       else {
         lengths = { lowerNeckSeam: standRe.lowerNeckSeamLenCm, lowerExtension: standRe.lowerExtensionLenCm, upperNeckSegment: standRe.upperNeckSegmentLenCm, upperExtension: standRe.upperExtensionLenCm, upperTotal: standRe.upperTotalLenCm };
         var bp = (cd.body && cd.body.parameters) || {};
-        var frontInset = bp.frontInsetCm, gapCm = bp.gapCm;
+        var gapCm = bp.gapCm;
         var seamLen = (cd.body) ? cd.body.attachLenCm : NaN;
-        var bandAttachLen = standRe.upperNeckSegmentLenCm - frontInset;
-        if (!num(standRe.upperNeckSegmentLenCm) || !num(frontInset) || !num(seamLen)) fails.push("unmeasured");
+        var bandAttachLen = standRe.upperNeckSegmentLenCm;   // P.148 step 3: 위칼라 이음선 = 밴드 윗선 ⒸⒹ
+        if (!num(standRe.upperNeckSegmentLenCm) || !num(seamLen)) fails.push("unmeasured");
         else if (!num(gapCm) || gapCm <= 0) fails.push("gap-missing");
         else if (Math.abs(seamLen - bandAttachLen) > 0.01) fails.push("seam-length-mismatch");
         else if (bandAttachLen > standRe.upperTotalLenCm - 1e-6 && standRe.upperExtensionLenCm > 0) fails.push("extension-included");   // 연장이 밴드 기준 길이에 포함되면 안 됨

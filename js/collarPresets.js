@@ -20,8 +20,9 @@
 
   // 섹션별 편집 필드(키 순서 = 기존 parameters 키 순서). min/minExclusive 는 엔진 실패 계약과 같은 하한.
   var STAND_FIELDS = [
-    { key: "standHeightCm", label: "밴드 폭", unit: "cm", min: 0, minExclusive: true },
-    { key: "frontRiseCm", label: "CF 앞끝 올림", unit: "cm", min: 0 }
+    { key: "bandWidthCm", label: "밴드 폭", unit: "cm", min: 0, minExclusive: true },
+    { key: "frontRiseCm", label: "앞 중심 올림", unit: "cm", min: 0 },
+    { key: "frontEndCm", label: "앞 끝선(앞 중심선 앞)", unit: "cm", min: 0 }
   ];
   // 한 장 셔츠 칼라(family 2, 교재 P.147) 실행 파라미터. 키 순서 = designCollar.computeOnePiece 계약.
   var ONE_PIECE_FIELDS = [
@@ -35,7 +36,6 @@
   var BODY_FIELDS = [
     { key: "gapCm", label: "위칼라 gap(CB)", unit: "cm", min: 0, minExclusive: true },
     { key: "cbWidthCm", label: "위칼라 CB 폭", unit: "cm", min: 0, minExclusive: true },
-    { key: "frontInsetCm", label: "setback(밴드 위선 CF→CB)", unit: "cm", min: 0 },
     { key: "frontProjectionCm", label: "수평 돌출", unit: "cm", min: 0 },
     { key: "pointDiagonalCm", label: "끝 사선", unit: "cm", min: 0, minExclusive: true },
     { key: "outerBowCm", label: "외곽 휨", unit: "cm" }
@@ -68,6 +68,15 @@
     "bunka-shirt-collar-L": "몸판 목둘레와 앞 꺾임선을 먼저 그린 뒤 그 치수로 제도(몸판 연동) · 도면 표기 4·1, 몸판 앞 꺾임 끝 8·4 는 의미 미확정"
   };
   // 셔츠 칼라(한 장) variant: 참고 도면 수치만 싣고 실행 기본값·생성기는 두지 않는다.
+  // family 3 참고 전용 variant(실행 수치 아님). 제도 근거가 확정되지 않은 O·Q·R.
+  //   unresolved = **이 수치를 좌표로 옮기려면 확정돼야 하는 기준(자유도)**. 비어 있지 않으면 실행하지 않는다.
+  function bandRefVariant(id, symbol, label, page, ref, note, methodPage, unresolved) {
+    var v = pendingVariant(id, symbol, label);
+    v.page = page; v.bandReference = ref; v.referenceNote = note;
+    if (methodPage) v.requiresMethodPage = methodPage;
+    if (unresolved) { v.unresolved = unresolved; v.note = "제도 기준 미확정"; }
+    return v;
+  }
   function onePieceVariant(id, symbol, label, page, ref) {
     var v = pendingVariant(id, symbol, label);
     v.page = page;
@@ -103,7 +112,29 @@
       ] },
     // 구현된 유일한 family: 밴드 + 위칼라 2피스(designCollar.computeStand/computeBody).
     { id: "shirt-collar-with-band", order: 3, label: "칼라 밴드 달린 셔츠 칼라", symbol: "M", page: 66, generator: "shirt-collar-with-band-v2", availability: "available", note: null,
-      variants: [{ id: "bunka-shirt-collar-M", symbol: "M", label: "교재 M 기본형", availability: "available", presetId: "bunka-shirt-collar-M", note: null }] },
+      variants: [
+        { id: "bunka-shirt-collar-M", symbol: "M", label: "M · 올림 1 · 간격 3", page: 66, availability: "available", presetId: "bunka-shirt-collar-M", note: null },
+        { id: "bunka-band-collar-N", symbol: "N", label: "N · 올림 3 · 간격 7", page: 66, availability: "available", presetId: "bunka-band-collar-N", note: null },
+        // O: 올림 8.5 는 P.61 D 처럼 기준 수평선에서 미리 줄여 제도한다(×+⊘−2.5, 수평선상 2). 2 의 기준이
+        //    P.61 도면만으로 유일하게 읽히지 않아 실행하지 않는다(reference-only).
+        bandRefVariant("bunka-band-collar-O", "O", "O · 올림 8.5 · 간격 14", 67,
+          { bandWidthCm: 3, frontRiseCm: 8.5, gapCm: 14, cbWidthCm: 4, frontProjectionCm: 4, pointDiagonalCm: 6, frontEndCm: 0.5 },
+          "기준 수평선 ×+⊘−2.5 · 수평선상 2 · P.61 D 방식", 61,
+          ["수평선상 2 의 기준: 기준선 대비 달림선 중간 상승인지, 3등분 점을 내리는 양인지, 비교용 곡선과의 간격인지 P.61 도면만으로 하나로 읽히지 않음"]),
+        { id: "bunka-band-collar-P", symbol: "P", label: "P · 밴드 폭 5 · 올림 3", page: 67, availability: "available", presetId: "bunka-band-collar-P", note: null },
+        bandRefVariant("bunka-band-collar-Q", "Q", "Q · 윙 칼라", 68,
+          { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 },
+          "밴드 앞끝에 칼라 끝을 이어 그리는 윙 칼라(도면 표기 7·1.5·4.5·0.5) · P.68 이 유일 출처", null,
+          ["7 의 기준: 꺾임선(수평) 길이인지 밴드 윗선 위 거리인지",
+           "1.5 의 기준점: 밴드 윗선에서 내린 양인지 앞 중심선 기준인지",
+           "4.5 가 칼라 끝 사선 길이인지 수직 높이인지"]),
+        bandRefVariant("bunka-band-collar-R", "R", "R · 밴드+위칼라 한 장", 68,
+          { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 },
+          "밴드와 위칼라를 한 장으로 연결(도면 표기 뒤 3.5·앞 6.5·0.5·×) · P.68 이 유일 출처", null,
+          ["밴드와 위칼라를 잇는 꺾임선의 작도(연결 지점·기울기)",
+           "상단 0.5 가 외곽선 휨인지 별도 평행선인지",
+           "외곽선에 표기된 × 를 어디서 어디로 옮기는지"])
+      ] },
     { id: "flat-collar", order: 4, label: "플랫 칼라", symbol: "S", page: 69, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
     { id: "sailor-collar", order: 5, label: "세일러 칼라", symbol: "U", page: 70, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
     { id: "bow-collar", order: 6, label: "보 칼라", symbol: "X", page: 71, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
@@ -118,16 +149,34 @@
     {
       id: "bunka-shirt-collar-M",
       label: "교재 M 기본형",
-      description: "2피스 셔츠 칼라(밴드 + 위칼라) 교재 M형 제도 기본값",
-      source: "『パターン製作の基礎』 셔츠 칼라 M형",
+      description: "칼라 밴드 달린 셔츠 칼라 M형(올림 1·간격 3)",
+      source: "『パターン製作の基礎』 칼라 밴드 달린 셔츠 칼라 M형(P.66) · 제도 방법 P.148",
       type: "shirt-two-piece",
-      baseMethod: "bunka-shirt-collar-M-v2",
+      baseMethod: "bunka-band-collar-P148-v1",
       // 몸판 셔츠 목선 전제(앞·뒤 SNP +1·앞 FNP 1 내림)는 몸판 네크라인 단계의 별도 프리셋이다.
       //   여기서는 기록만 한다 — 카라 적용이 bodiceResult 를 확인·변경하지 않는다.
       neckline: { requiredType: "shirt", enforcement: "metadata-only" },
       familyId: "shirt-collar-with-band",   // catalog family(생성 구조) 연결. 값·키 순서·hash 와 무관한 메타.
-      stand: { standHeightCm: 3, frontRiseCm: 1 },
-      body: { gapCm: 3, cbWidthCm: 4, frontInsetCm: 0.5, frontProjectionCm: 1.5, pointDiagonalCm: 6, outerBowCm: 0 }
+      stand: { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 },
+      body: { gapCm: 3, cbWidthCm: 4, frontProjectionCm: 1.5, pointDiagonalCm: 6, outerBowCm: 0 }
+    },
+    {
+      // 교재 N(P.66) — M 과 같은 P.148 제도, 앞 중심 올림 3·간격 7·앞 수평 2.
+      id: "bunka-band-collar-N", label: "교재 N", description: "칼라 밴드 달린 셔츠 칼라 N형(올림 3·간격 7)",
+      source: "『パターン製作の基礎』 칼라 밴드 달린 셔츠 칼라 N형(P.66) · 제도 방법 P.148",
+      type: "shirt-two-piece", baseMethod: "bunka-band-collar-P148-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "shirt-collar-with-band",
+      stand: { bandWidthCm: 3, frontRiseCm: 3, frontEndCm: 0.5 },
+      body: { gapCm: 7, cbWidthCm: 4, frontProjectionCm: 2, pointDiagonalCm: 6, outerBowCm: 0 }
+    },
+    {
+      // 교재 P(P.67) — 본문 "제도 방법은 N과 같다". 밴드 폭만 5.
+      id: "bunka-band-collar-P", label: "교재 P", description: "칼라 밴드 달린 셔츠 칼라 P형(밴드 폭 5·올림 3·간격 7)",
+      source: "『パターン製作の基礎』 칼라 밴드 달린 셔츠 칼라 P형(P.67) · 제도 방법 P.148",
+      type: "shirt-two-piece", baseMethod: "bunka-band-collar-P148-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "shirt-collar-with-band",
+      stand: { bandWidthCm: 5, frontRiseCm: 3, frontEndCm: 0.5 },
+      body: { gapCm: 7, cbWidthCm: 4, frontProjectionCm: 2, pointDiagonalCm: 6, outerBowCm: 0 }
     },
     {
       // 한 장 셔츠 칼라(family 2) 교재 G형. 아래 수치가 **유일한 출처**다(catalog 의 참고값과 중복 금지).
@@ -319,7 +368,8 @@
       measure: {
         lowerNeckSeamLenCm: standRe.lowerNeckSeamLenCm, lowerExtensionLenCm: standRe.lowerExtensionLenCm,
         upperNeckSegmentLenCm: standRe.upperNeckSegmentLenCm, upperExtensionLenCm: standRe.upperExtensionLenCm,
-        upperTotalLenCm: standRe.upperTotalLenCm, backNeckLenCm: standRe.backNeckLenCm, frontNeckLenCm: standRe.frontNeckLenCm
+        upperTotalLenCm: standRe.upperTotalLenCm, backNeckLenCm: standRe.backNeckLenCm, frontNeckLenCm: standRe.frontNeckLenCm,
+        neckTargetCm: standRe.neckTargetCm, cbTrimCm: standRe.cbTrimCm   // P.148 ⑭ 목표 목둘레·뒤 중심 보정량
       }
     } };
   }

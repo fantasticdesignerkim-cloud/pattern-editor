@@ -35,7 +35,7 @@
 
     if (sa) {
       var cbSeam = pt(sa.cbSeam), cbTop = pt(sa.cbTop), cfSeam = pt(sa.cfSeam), bandTopCf = pt(sa.upperNeckEnd);
-      dim(dims, "band-width", "dim", cbSeam, cbTop, sp.standHeightCm);
+      dim(dims, "band-width", "dim", cbSeam, cbTop, sp.bandWidthCm);
       if (cbSeam && cfSeam) {
         var riseBase = { x: cfSeam.x, y: cbSeam.y };   // CB 목점을 지나는 기준 수평선 위, CF 와 같은 x
         dim(dims, "cb-baseline", "ref", cbSeam, riseBase, null);
@@ -46,51 +46,52 @@
       if (cfSeam) labels.push({ id: "cf", at: cfSeam, text: "CF" });
     }
     if (ba) {
-      var bCb = pt(ba.bandTopCb), bCf = pt(ba.bandTopCf), G = pt(ba.upperCbSeam), O = pt(ba.cbOuter), A = pt(ba.setbackPoint), T = pt(ba.tip);
+      var bCb = pt(ba.bandTopCb), bCf = pt(ba.bandTopCf), G = pt(ba.upperCbSeam), O = pt(ba.cbOuter), A = pt(ba.attachFront), T = pt(ba.tip);
       if (bCb && G) {
         var gapTop = { x: bCb.x, y: G.y };   // gap 높이는 밴드 위선 CB 에서 수직; CB 보정은 그 높이에서 수평
         dim(dims, "gap", "dim", bCb, gapTop, bp.gapCm);
         dim(dims, "cb-correction", "ref", gapTop, G, null);
       }
       dim(dims, "cb-width", "dim", G, O, bp.cbWidthCm);
-      dim(dims, "setback", "dim", bCf, A, bp.frontInsetCm);
       if (A && T) {
         var refTop = { x: A.x, y: T.y };      // setback 점의 CB 평행 수직 기준선
         dim(dims, "setback-vertical", "ref", A, refTop, null);
         dim(dims, "projection", "dim", refTop, T, bp.frontProjectionCm);
         dim(dims, "point-diagonal", "dim", A, T, bp.pointDiagonalCm);
       }
-      if (A) labels.push({ id: "setback", at: A, text: "setback" });
+      if (A) labels.push({ id: "attach-front", at: A, text: "Ⓒ" });
     }
 
     var inputs = [
-      { key: "standHeightCm", label: "밴드 폭", value: val(sp.standHeightCm) },
-      { key: "frontRiseCm", label: "CF 앞끝 올림", value: val(sp.frontRiseCm) },
+      { key: "bandWidthCm", label: "밴드 폭", value: val(sp.bandWidthCm) },
+      { key: "frontRiseCm", label: "앞 중심 올림", value: val(sp.frontRiseCm) },
+      { key: "frontEndCm", label: "앞 끝선(앞 중심선 앞)", value: val(sp.frontEndCm) },
       { key: "gapCm", label: "위칼라 gap(CB)", value: body ? val(bp.gapCm) : null },
       { key: "cbWidthCm", label: "위칼라 CB 폭", value: body ? val(bp.cbWidthCm) : null },
-      { key: "frontInsetCm", label: "setback(밴드 위선 CF→CB)", value: body ? val(bp.frontInsetCm) : null },
       { key: "frontProjectionCm", label: "수평 돌출", value: body ? val(bp.frontProjectionCm) : null },
       { key: "pointDiagonalCm", label: "끝 사선", value: body ? val(bp.pointDiagonalCm) : null },
       { key: "outerBowCm", label: "외곽 휨", value: body ? val(bp.outerBowCm) : null }
     ];
     var nl = (bodice && bodice.necklineLengths) || {};
     var diff = val(bm.seamLengthDiffCm), corr = val(bm.cbCorrectionCm);
-    var actualSetback = (num(bm.bandTopNeckLenCm) && num(bm.bandAttachLenCm)) ? bm.bandTopNeckLenCm - bm.bandAttachLenCm : null;
+    // 목둘레 ↔ 밴드 달림선, 밴드 윗선 ↔ 위칼라 이음선의 실측 차이(P.148 ⑭·step 3 의 보정 결과).
+    var neckDiff = (num(nl.half) && num(sm.lowerNeckSeamLenCm)) ? sm.lowerNeckSeamLenCm - nl.half : null;
+    var cbTrim = val(sm.cbTrimCm);
     var results = [
       { key: "neckBack", label: "몸판 뒤목(반쪽)", value: val(nl.back) },
       { key: "neckFront", label: "몸판 앞목(반쪽)", value: val(nl.front) },
       { key: "neckHalf", label: "반패턴 목둘레 합계(앞반+뒤반)", value: val(nl.half) },
       { key: "neckFinished", label: "완성 목둘레(반패턴×2)", value: val(nl.finished) },
-      { key: "lowerNeckSeam", label: "밴드 아래선 목 봉제", value: val(sm.lowerNeckSeamLenCm) },
-      { key: "lowerExtension", label: "밴드 여밈 연장", value: val(sm.lowerExtensionLenCm) },
-      { key: "bandTopNeck", label: "밴드 위선 기준 길이", value: val(sm.upperNeckSegmentLenCm) },
-      { key: "bandAttach", label: "setback 이후 밴드 기준 봉제", value: val(bm.bandAttachLenCm) },
+      { key: "lowerNeckSeam", label: "밴드 달림선 실측", value: val(sm.lowerNeckSeamLenCm) },
+      { key: "neckDiff", label: "달림선 − 목둘레 합계", value: neckDiff, status: neckDiff == null ? null : (Math.abs(neckDiff) <= SEAM_MATCH_TOL ? "match" : "mismatch") },
+      { key: "cbTrim", label: "밴드 뒤중심 보정(그린 길이 − 목둘레)", value: cbTrim },
+      { key: "lowerExtension", label: "밴드 앞 끝선 연장", value: val(sm.lowerExtensionLenCm) },
+      { key: "bandTopNeck", label: "밴드 윗선 ⒸⒹ 실측", value: val(sm.upperNeckSegmentLenCm) },
       { key: "upperSeam", label: "위칼라 이음선 실제 길이", value: val(bm.upperCollarSeamLenCm) },
       { key: "seamDiff", label: "이음선 길이차", value: diff, status: diff == null ? null : (Math.abs(diff) <= SEAM_MATCH_TOL ? "match" : "mismatch") },
       { key: "cbCorrection", label: "CB 길이 보정", value: corr, text: corr == null ? null : (corr >= 0 ? "앞쪽 " : "뒤쪽 ") + Math.abs(corr).toFixed(2) },
       { key: "derivedVertical", label: "파생 세로성분 √(사선²−돌출²)", value: val(bm.frontWidthCm) },
       { key: "actualCbWidth", label: "실제 CB 폭", value: val(bm.cbWidthCm) },
-      { key: "actualSetback", label: "실제 setback(밴드 위선 − 기준 봉제)", value: actualSetback },
       { key: "actualProjection", label: "실제 수평 돌출", value: val(bm.frontProjectionCm) },
       { key: "actualDiagonal", label: "실제 사선", value: val(bm.pointDiagonalLenCm) }
     ];
@@ -149,7 +150,7 @@
     return { recipe: cd.baseMethod, mode: "parametric", note: null, dims: dims, labels: labels, inputs: inputs, results: results };
   }
 
-  var RECIPES = { "bunka-shirt-collar-M-v2": mRecipe, "bunka-shirt-collar-G-v1": gRecipe };
+  var RECIPES = { "bunka-band-collar-P148-v1": mRecipe, "bunka-shirt-collar-G-v1": gRecipe };
 
   // 스탠드가 없거나(stale 숨김 포함) recipe 가 등록돼 있지 않으면 null — 이전 수치를 current 처럼 남기지 않는다.
   function buildModel(collarDraft, bodiceResult) {
