@@ -1057,10 +1057,9 @@
     if (btn) btn.textContent = (rec ? rec.label : "선택 제도형") + "으로 초기화";
     const note = document.getElementById("designCollarCatalogNote");
     if (note && window.collarPresets) {
-      const fid = selectedCollarFamilyId(), f = window.collarPresets.family(fid);
-      const sv = window.collarPresets.variant(fid, selectedCollarVariantId());
-      const page = (sv && typeof sv.page === "number") ? sv.page : (f ? f.page : null);   // variant 가 다른 페이지면 그 페이지
-      const head = f ? f.label + " " + f.symbol + " (교재 P" + page + ")" : "카라 종류";
+      const fid = selectedCollarFamilyId();
+      const t = window.collarPresets.displayTitle(fid, selectedCollarVariantId());   // 선택 variant 의 표식·페이지(대표 symbol 아님)
+      const head = t ? t.familyLabel + " " + t.symbol + " (교재 P" + t.page + ")" : "카라 종류";
       if (r.ok) note.textContent = head + " · " + rec.label + " 적용 가능";
       else {
         const ref = collarReferenceStr(fid, selectedCollarVariantId());

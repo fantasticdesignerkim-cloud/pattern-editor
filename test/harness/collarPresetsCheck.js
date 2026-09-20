@@ -293,6 +293,23 @@ const ONE = "shirt-collar-one-piece";
   c = cat(); c[1].reference.stand = { standHeightCm: 3 }; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-reference", "16: family 참고에 형상 키 금지");
 }
 
+// 17. variant 표식(symbol)은 안정 필드 — 표시 제목은 선택 variant 의 표식·페이지를 쓴다(대표 symbol·label 파싱 아님)
+{
+  const title = (f, v) => { const t = CP.displayTitle(f, v); return t.familyLabel + " " + t.symbol + " (교재 P" + t.page + ")"; };
+  ok(J(CP.variants(ONE).map(v => v.symbol)) === J(["G", "H", "I", "J", "K", "L"]), "17: G~L symbol 필드");
+  ok(J(["G", "H", "I", "J", "K", "L"].map(x => title(ONE, "bunka-shirt-collar-" + x)))
+    === J(["셔츠 칼라 G (교재 P63)", "셔츠 칼라 H (교재 P63)", "셔츠 칼라 I (교재 P64)", "셔츠 칼라 J (교재 P64)", "셔츠 칼라 K (교재 P65)", "셔츠 칼라 L (교재 P65)"]), "17: G~L 제목이 각 variant 표식·페이지");
+  ok(title("shirt-collar-with-band", "bunka-shirt-collar-M") === "칼라 밴드 달린 셔츠 칼라 M (교재 P66)", "17: M 제목 불변");
+  ok(J(CP.variants("stand-collar").map(v => v.symbol)) === J(["A", "B", "C", "D", "E", "F"]) && title("stand-collar", "bunka-stand-collar-C") === "스탠드 칼라 C (교재 P60)", "17: 스탠드 A~F 표식");
+  ok(title("hood", "") === "후드 d (교재 P74)" && title("hood", "nope") === "후드 d (교재 P74)", "17: variant 없으면 family 대표 표식·페이지");
+  ok(CP.displayTitle("nope", "x") === null, "17: 알 수 없는 family → null");
+  const t = CP.displayTitle(ONE, "bunka-shirt-collar-L");
+  ok(Object.isFrozen(t) && t.variantId === "bunka-shirt-collar-L" && t.symbol === "L", "17: 제목 데이터 동결·선택 variant 식별");
+  const c = JSON.parse(J(CP.families())); delete c[1].variants[0].symbol;
+  throwsReason(() => CP.buildCatalog(c, JSON.parse(J(CP.list()))), "missing-field", "17: variant symbol 필수");
+  ok(CP.families().every(f => f.variants.every(v => Object.isFrozen(v) && typeof v.symbol === "string" && v.symbol.length > 0)), "17: 모든 variant 표식 동결·존재");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

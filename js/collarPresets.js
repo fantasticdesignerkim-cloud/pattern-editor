@@ -42,7 +42,8 @@
   //   제도 절차(교재 P.147)가 없으면 이 수치로 형상을 만들지 않는다(variant 는 pending 유지).
   var METHOD_PAGE = 147;
   var PENDING_SHORT = "준비 중";        // select 옵션용 짧은 표식(전체 안내는 PENDING_NOTE)
-  function pendingVariant(id, label) { return { id: id, label: label, availability: "pending-source", presetId: null, note: PENDING_NOTE }; }
+  // variant 의 교재 표식(symbol)은 **안정 필드**다 — 표시 제목은 label 문자열을 파싱하지 않고 이 값을 쓴다.
+  function pendingVariant(id, symbol, label) { return { id: id, symbol: symbol, label: label, availability: "pending-source", presetId: null, note: PENDING_NOTE }; }
   // 참고 도면 수치 표시 순서·의미(라벨). frontEndMark 는 **도면 표기이고 기하학적 의미는 미확정**이라 그대로 적는다.
   var REFERENCE_FIELDS = [
     { key: "backCollarWidthCm", label: "뒤 칼라 폭", unit: "cm" },
@@ -58,8 +59,8 @@
     "bunka-shirt-collar-L": "몸판 목둘레와 앞 꺾임선을 먼저 그린 뒤 그 치수로 제도(몸판 연동) · 도면 표기 4·1, 몸판 앞 꺾임 끝 8·4 는 의미 미확정"
   };
   // 셔츠 칼라(한 장) variant: 참고 도면 수치만 싣고 실행 기본값·생성기는 두지 않는다.
-  function onePieceVariant(id, label, page, ref) {
-    var v = pendingVariant(id, label);
+  function onePieceVariant(id, symbol, label, page, ref) {
+    var v = pendingVariant(id, symbol, label);
     v.page = page;
     v.reference = ref;
     v.requiresMethodPage = METHOD_PAGE;   // 전체 제도법이 오기 전에는 적용 불가
@@ -69,7 +70,7 @@
   var CATALOG = [
     // 스탠드 family: 교재에 A~F 세부형이 있으나 제도 수치·방식은 아직 확인 전이라 슬롯만 둔다(형상·수치 없음).
     { id: "stand-collar", order: 1, label: "스탠드 칼라", symbol: "A", page: 60, generator: null, availability: "pending-source", note: PENDING_NOTE,
-      variants: ["A", "B", "C", "D", "E", "F"].map(function (v) { return pendingVariant("bunka-stand-collar-" + v, v + "형"); }) },
+      variants: ["A", "B", "C", "D", "E", "F"].map(function (v) { return pendingVariant("bunka-stand-collar-" + v, v, v + "형"); }) },
     // 셔츠 칼라(한 장 구조): 달림선·칼라 허리·꺾임선·외곽선·칼라 끝이 한 조각. family 3(M, 밴드+위칼라 2피스)와
     //   생성 구조가 다르다. G~J 는 앞뒤 칼라 폭을 고정한 채 칼라 허리·올림(★)만 바꿔 비교한 계열,
     //   K 는 I 의 앞 달림선 곡선을 반대로 그린 변형, L 은 꺾임선을 앞중심에서 떨어뜨린 오픈 칼라(몸판 연동).
@@ -83,16 +84,16 @@
         fitting: "수치를 바꾸면 칼라 외곽 치수가 부족·과다해 가봉 필요(교재 본문)"
       },
       variants: [
-        onePieceVariant("bunka-shirt-collar-G", "G · 칼라 허리 3cm", 63, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 3, riseCm: 2.5, frontEndMarkCm: 3, attachCurveMarkCm: 0.2, attachCurveDirection: "as-drawn" }),
-        onePieceVariant("bunka-shirt-collar-H", "H · 칼라 허리 1cm", 63, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 1, riseCm: 8, frontEndMarkCm: 4.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }),
-        onePieceVariant("bunka-shirt-collar-I", "I · 칼라 허리 2cm", 64, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }),
-        onePieceVariant("bunka-shirt-collar-J", "J · 칼라 허리 4cm", 64, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 4, riseCm: 1, frontEndMarkCm: 2.5, attachCurveMarkCm: null, attachCurveDirection: "as-drawn" }),
-        onePieceVariant("bunka-shirt-collar-K", "K · 앞 달림선 곡선 반대", 65, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.6, attachCurveDirection: "reversed" }),
-        onePieceVariant("bunka-shirt-collar-L", "L · 오픈 칼라", 65, { backCollarWidthCm: 3.5, frontCollarWidthCm: null, collarStandCm: 3, riseCm: null, frontEndMarkCm: null, attachCurveMarkCm: null, attachCurveDirection: null })
+        onePieceVariant("bunka-shirt-collar-G", "G", "G · 칼라 허리 3cm", 63, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 3, riseCm: 2.5, frontEndMarkCm: 3, attachCurveMarkCm: 0.2, attachCurveDirection: "as-drawn" }),
+        onePieceVariant("bunka-shirt-collar-H", "H", "H · 칼라 허리 1cm", 63, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 1, riseCm: 8, frontEndMarkCm: 4.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }),
+        onePieceVariant("bunka-shirt-collar-I", "I", "I · 칼라 허리 2cm", 64, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }),
+        onePieceVariant("bunka-shirt-collar-J", "J", "J · 칼라 허리 4cm", 64, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 4, riseCm: 1, frontEndMarkCm: 2.5, attachCurveMarkCm: null, attachCurveDirection: "as-drawn" }),
+        onePieceVariant("bunka-shirt-collar-K", "K", "K · 앞 달림선 곡선 반대", 65, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.6, attachCurveDirection: "reversed" }),
+        onePieceVariant("bunka-shirt-collar-L", "L", "L · 오픈 칼라", 65, { backCollarWidthCm: 3.5, frontCollarWidthCm: null, collarStandCm: 3, riseCm: null, frontEndMarkCm: null, attachCurveMarkCm: null, attachCurveDirection: null })
       ] },
     // 구현된 유일한 family: 밴드 + 위칼라 2피스(designCollar.computeStand/computeBody).
     { id: "shirt-collar-with-band", order: 3, label: "칼라 밴드 달린 셔츠 칼라", symbol: "M", page: 66, generator: "shirt-collar-with-band-v2", availability: "available", note: null,
-      variants: [{ id: "bunka-shirt-collar-M", label: "교재 M 기본형", availability: "available", presetId: "bunka-shirt-collar-M", note: null }] },
+      variants: [{ id: "bunka-shirt-collar-M", symbol: "M", label: "교재 M 기본형", availability: "available", presetId: "bunka-shirt-collar-M", note: null }] },
     { id: "flat-collar", order: 4, label: "플랫 칼라", symbol: "S", page: 69, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
     { id: "sailor-collar", order: 5, label: "세일러 칼라", symbol: "U", page: 70, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
     { id: "bow-collar", order: 6, label: "보 칼라", symbol: "X", page: 71, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
@@ -203,7 +204,7 @@
     validateFamilyReference(f);
     var anyAvail = false;
     f.variants.forEach(function (v) {
-      if (!v || !isStr(v.id) || !isStr(v.label)) fail("missing-field", f.id + ".variant");
+      if (!v || !isStr(v.id) || !isStr(v.label) || !isStr(v.symbol)) fail("missing-field", f.id + ".variant");
       if (seenId[v.id]) fail("duplicate-id", v.id); seenId[v.id] = true;
       if (!AVAIL[v.availability]) fail("invalid-availability", v.id);
       SHAPE_KEYS.forEach(function (k) { if (k in v) fail("variant-shape-data", v.id); });   // 실행 수치·형상은 catalog 에 두지 않는다
@@ -296,6 +297,14 @@
     return variants(familyId).map(function (v) { return { value: v.id, label: v.label, available: v.availability === "available" }; });
   }
   // 참고 도면 수치 표시 행(순수). 표기가 없는 항목(null)은 내보내지 않는다. **실행값이 아니다.**
+  // 선택 variant 의 표시 제목 데이터(순수): 교재 분류명 + **선택 variant 의 표식·페이지**.
+  //   variant 가 없으면 family 대표 표식·페이지로 떨어진다. label 파싱 금지.
+  function displayTitle(familyId, variantId) {
+    var f = family(familyId); if (!f) return null;
+    var v = variant(familyId, variantId);
+    return Object.freeze({ familyLabel: f.label, symbol: (v && v.symbol) || f.symbol,
+      page: (v && typeof v.page === "number") ? v.page : f.page, variantId: v ? v.id : null });
+  }
   function referenceRows(familyId, variantId) {
     var v = variant(familyId, variantId);
     if (!v || !v.reference) return EMPTY;
@@ -322,7 +331,7 @@
     DEFAULT_ID: DEFAULT_ID, DEFAULT_FAMILY_ID: DEFAULT_FAMILY_ID, PENDING_NOTE: PENDING_NOTE, PENDING_SHORT: PENDING_SHORT,
     list: list, get: get, defaults: defaults, options: options, fields: fields, matches: matches, composeDraft: composeDraft,
     families: families, family: family, variants: variants, variant: variant,
-    familyOptions: familyOptions, variantOptions: variantOptions, resolve: resolve, referenceRows: referenceRows, referenceFields: function () { return clone(REFERENCE_FIELDS); },
+    familyOptions: familyOptions, variantOptions: variantOptions, resolve: resolve, referenceRows: referenceRows, displayTitle: displayTitle, referenceFields: function () { return clone(REFERENCE_FIELDS); },
     validateRecord: validateRecord, buildRegistry: buildRegistry,   // 순수(하네스·향후 레코드 추가 검증)
     validateFamily: validateFamily, buildCatalog: buildCatalog
   });
