@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026091902">
+<link rel="stylesheet" href="css/style.css?v=2026092003">
 </head>
 <body>
 
@@ -280,7 +280,9 @@
         <div class="subtab-panel" data-subtab="collar" hidden>
           <!-- 교재 M 기본형: 스탠드·본체를 교재 셔츠 칼라 M 기준값(밴드 3·앞끝올림 1·CB폭 4·물림 0.5·돌출 1.5·
                사선 6→앞폭 √33.75·외곽휨 0)으로 정확히 적용. '수치형으로 돌아가기'(직접 편집 전 사용자 값 복귀)와 다름. -->
-          <div class="row"><label for="selCollarPreset">카라 프리셋</label><select id="selCollarPreset"></select></div>
+          <div class="row row-stack"><label for="selCollarFamily">카라 종류</label><select id="selCollarFamily"></select></div>
+          <div class="row row-stack"><label for="selCollarPreset">세부 제도</label><select id="selCollarPreset"></select></div>
+          <div class="row note" id="designCollarCatalogNote" aria-live="polite"></div>
           <div class="row" style="margin-bottom:6px"><button class="btn" id="btnCollarBaseM">교재 M 기본형으로 초기화</button></div>
           <div class="row"><label for="inpCollarStandHeight">스탠드 완성높이 (cm)</label><input id="inpCollarStandHeight" type="number" min="1" max="8" step="0.1"></div>
           <div class="row"><label for="inpCollarFrontRise">앞끝 올림 (cm)</label><input id="inpCollarFrontRise" type="number" min="0" max="6" step="0.1"></div>
@@ -423,7 +425,7 @@
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
 <script src="js/designCollar.js?v=2026091920"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
-<script src="js/collarPresets.js?v=2026091901"></script>
+<script src="js/collarPresets.js?v=2026092002"></script>
 <!-- 카라 모양 완료 체크포인트: window.collarCheckpoint. 게이트 + working.collarResult 세션 스냅샷(형상 source=bodice, 소매=순서 게이트). -->
 <script src="js/collarCheckpoint.js?v=2026091930"></script>
 <!-- 카라 제도 보조수치 표시 모델(순수·표시 전용): window.collarAnnotation. 형상·hash 무관. -->
@@ -434,7 +436,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026091901"></script>
+<script src="js/ui.js?v=2026092002"></script>
 
 </body>
 </html>

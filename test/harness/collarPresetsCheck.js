@@ -148,6 +148,89 @@ function project(cd) { return { sourceBlock: { id: "block-1", version: 1, canoni
   ok(again.idempotent === true && again.result === done && done.presetId === "bunka-shirt-collar-M", "7: presetId 만 다르면 idempotent(기존 완료본 유지)");
 }
 
+// 8. catalog(교재 분류 11종): 순서·표식·페이지·availability·불변성
+{
+  const F = CP.families();
+  ok(Array.isArray(F) && F.length === 11 && Object.isFrozen(F), "8: family 11개·목록 frozen");
+  const want = [["stand-collar", 1, "스탠드 칼라", "A", 60], ["shirt-collar-one-piece", 2, "셔츠 칼라", "G", 63],
+    ["shirt-collar-with-band", 3, "칼라 밴드 달린 셔츠 칼라", "M", 66], ["flat-collar", 4, "플랫 칼라", "S", 69],
+    ["sailor-collar", 5, "세일러 칼라", "U", 70], ["bow-collar", 6, "보 칼라", "X", 71], ["frill-collar", 7, "프릴 칼라", "a", 72],
+    ["hood", 8, "후드", "d", 74], ["tailored-collar", 9, "테일러드 칼라", "h", 78], ["shawl-collar", 10, "숄 칼라", "j", 80],
+    ["high-neck", 11, "하이넥", "l", 82]];
+  ok(J(F.map(f => [f.id, f.order, f.label, f.symbol, f.page])) === J(want), "8: 교재 순서·id·표시명·표식·페이지 정확");
+  ok(F.filter(f => f.availability === "available").map(f => f.id).join() === "shirt-collar-with-band", "8: available family = M 하나");
+  ok(F.every(f => f.availability === "available" ? typeof f.generator === "string" : f.generator === null), "8: generator 는 구현된 family 만");
+  ok(F.filter(f => f.id !== "shirt-collar-with-band").every(f => f.note === CP.PENDING_NOTE), "8: 미구현 family 안내 문구");
+  const M = CP.family("shirt-collar-with-band");
+  ok(M && CP.family("nope") === null && CP.family("__proto__") === null, "8: family 조회·알 수 없는 id null");
+  try { F.push({}); } catch (_) {}
+  try { M.variants.push({}); } catch (_) {}
+  try { CP.family("stand-collar").page = 1; } catch (_) {}
+  ok(CP.families().length === 11 && M.variants.length === 1 && CP.family("stand-collar").page === 60 && Object.isFrozen(M.variants), "8: catalog 변경 불가");
+  ok(CP.families() === F, "8: families 결정론(같은 참조)");
+  ok(CP.get(CP.DEFAULT_ID).familyId === "shirt-collar-with-band" && CP.DEFAULT_FAMILY_ID === "shirt-collar-with-band", "8: M 레코드 ↔ family 연결");
+}
+// 9. 스탠드 A~F 슬롯: 형상·수치 없음·전부 미구현
+{
+  const vs = CP.variants("stand-collar");
+  ok(vs.length === 6 && J(vs.map(v => v.id)) === J(["A", "B", "C", "D", "E", "F"].map(x => "bunka-stand-collar-" + x)), "9: 스탠드 A~F 슬롯 6개");
+  ok(vs.every(v => v.availability === "pending-source" && v.presetId === null && v.note === CP.PENDING_NOTE), "9: 전부 미구현·preset 없음");
+  ok(vs.every(v => !("stand" in v) && !("body" in v) && !("parameters" in v) && !("geometry" in v)), "9: 수치·형상 데이터 없음");
+  ok(CP.variants("hood").length === 0 && CP.variants("nope").length === 0 && Object.isFrozen(CP.variants("nope")), "9: 다른 미구현 family 는 빈 슬롯");
+  ok(CP.variant("stand-collar", "bunka-stand-collar-A") === vs[0] && CP.variant("stand-collar", "nope") === null, "9: variant 조회");
+  ok(J(CP.variantOptions("stand-collar")) === J(vs.map(v => ({ value: v.id, label: v.label, available: false }))), "9: 옵션 available:false");
+  ok(J(CP.variantOptions("shirt-collar-with-band")) === J([{ value: "bunka-shirt-collar-M", label: "교재 M 기본형", available: true }]), "9: M variant 옵션");
+  const fo = CP.familyOptions();
+  ok(fo.length === 11 && fo[0].label === "스탠드 칼라 A (P60)" && fo[0].available === false && fo[2].available === true, "9: family 옵션(표식·페이지·availability)");
+}
+// 10. ★ 안전장치: 미구현·알 수 없음은 명시적 거부 — 절대 M 으로 fallback 하지 않는다
+{
+  ok(CP.resolve("shirt-collar-with-band", "bunka-shirt-collar-M").presetId === "bunka-shirt-collar-M", "10: M 해석 ok");
+  const cases = [["stand-collar", "bunka-stand-collar-A", "collar-preset-unavailable"], ["stand-collar", "", "unknown-collar-variant"],
+    ["hood", "", "unknown-collar-variant"], ["hood", "bunka-shirt-collar-M", "unknown-collar-variant"],
+    ["nope", "bunka-shirt-collar-M", "unknown-collar-family"], ["shirt-collar-with-band", "", "unknown-collar-variant"],
+    ["shirt-collar-with-band", null, "unknown-collar-variant"], ["stand-collar", "bunka-stand-collar-F", "collar-preset-unavailable"]];
+  ok(cases.every(([f, v, r]) => { const res = CP.resolve(f, v); return res.ok === false && res.reason === r && !("presetId" in res); }), "10: 미구현·알 수 없음 거부(presetId 미부여)");
+  ok(cases.every(([f, v]) => { const res = CP.resolve(f, v); return res.presetId !== CP.DEFAULT_ID; }), "10: DEFAULT_ID(M) fallback 없음");
+  // 거부된 id 로 compose 를 시도해도 M 형상이 만들어지지 않는다
+  BODICE = bodice("BH1");
+  ok(["bunka-stand-collar-A", "", null, undefined].every(id => { const r = CP.composeDraft(id, BODICE, DC); return r.ok === false && !("draft" in r); }), "10: 미구현 id compose 거부(draft 없음)");
+}
+// 11. catalog 검증 실패(조용히 수용 금지)
+{
+  const cat = () => JSON.parse(J(CP.families()));
+  const recs = () => JSON.parse(J(CP.list()));
+  ok(CP.buildCatalog(cat(), recs()).list.length === 11, "11: 유효 catalog 재구성");
+  throwsReason(() => CP.buildCatalog([], recs()), "empty-catalog", "11: 빈 catalog");
+  let c = cat(); c[1].order = 5; throwsReason(() => CP.buildCatalog(c, recs()), "bad-book-order", "11: 교재 순서 불일치");
+  c = cat(); c[0].id = c[1].id; throwsReason(() => CP.buildCatalog(c, recs()), "duplicate-id", "11: 중복 family id");
+  c = cat(); c[0].variants[1].id = c[0].variants[0].id; throwsReason(() => CP.buildCatalog(c, recs()), "duplicate-id", "11: 중복 variant id");
+  c = cat(); c[0].symbol = ""; throwsReason(() => CP.buildCatalog(c, recs()), "missing-field", "11: 표식 누락");
+  c = cat(); c[0].page = 0; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-page", "11: 잘못된 페이지");
+  c = cat(); c[0].availability = "soon"; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-availability", "11: 알 수 없는 상태");
+  c = cat(); c[0].generator = "made-up"; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-generator", "11: 미구현 family 에 generator 금지");
+  c = cat(); c[0].variants[0].availability = "available"; c[0].variants[0].presetId = "bunka-shirt-collar-M";
+  throwsReason(() => CP.buildCatalog(c, recs()), "unavailable-family-variant", "11: 미구현 family 의 available variant 금지");
+  c = cat(); c[2].variants[0].presetId = "nope"; throwsReason(() => CP.buildCatalog(c, recs()), "unknown-variant-preset", "11: 없는 preset 참조");
+  c = cat(); c[0].variants[0].presetId = "bunka-shirt-collar-M"; throwsReason(() => CP.buildCatalog(c, recs()), "pending-variant-preset", "11: 미구현 variant 는 preset 없음");
+  c = cat(); c[0].variants[0].body = { cbWidthCm: 4 }; throwsReason(() => CP.buildCatalog(c, recs()), "variant-shape-data", "11: variant 에 수치·형상 금지");
+  c = cat(); c[2].variants = []; throwsReason(() => CP.buildCatalog(c, recs()), "available-family-without-preset", "11: available family 는 preset 필요");
+  let r = recs(); r[0].familyId = "nope"; throwsReason(() => CP.buildCatalog(cat(), r), "unknown-preset-family", "11: 레코드의 알 수 없는 family");
+  r = recs(); const extra = JSON.parse(J(r[0])); extra.id = "loose"; r.push(extra);
+  throwsReason(() => CP.buildCatalog(cat(), r), "preset-without-variant", "11: variant 가 가리키지 않는 레코드");
+  r = recs(); delete r[0].familyId; throwsReason(() => CP.validateRecord(r[0]), "missing-field", "11: 레코드 familyId 필수");
+}
+// 12. catalog 추가 후에도 기존 M 적용·hash 불변(선택 층은 형상에 영향 없음)
+{
+  BODICE = bodice("BH1");
+  const sel = CP.resolve("shirt-collar-with-band", "bunka-shirt-collar-M");
+  const d = CP.composeDraft(sel.presetId, BODICE, DC).draft;
+  const noId = JSON.parse(J(d)); delete noId.presetId;
+  ok(J(noId) === J(legacyMDraft(BODICE)), "12: M draft 는 catalog 도입 후에도 byte-identical");
+  PROJECT = project(d); const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.presetId === "bunka-shirt-collar-M" && r.result.hash === CC.complete(project(legacyMDraft(BODICE))).result.hash, "12: 완료 hash 불변");
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

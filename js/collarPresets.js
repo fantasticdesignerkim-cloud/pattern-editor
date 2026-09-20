@@ -12,6 +12,8 @@
 //  - neckline 요구조건은 **메타데이터만** 기록한다. 카라 단계는 완료된 몸판을 변경하지 않는다.
 //  - stand/body 기본값의 키 순서는 기존 계약(collarCheckpoint 서명 JSON)과 동일하게 유지한다.
 //  - DOM·storage 미접근(순수). composeDraft 는 designCollar 를 인자로 받는다.
+//  - catalog(family/variant) 층은 교재 분류 표시·선택용이다. **미구현 family/variant 는 형상·수치를 갖지
+//    않으며, resolve() 가 명시적으로 거부한다 — 어떤 경로에서도 DEFAULT_ID(M) 로 fallback 하지 않는다.**
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
@@ -30,6 +32,32 @@
     { key: "outerBowCm", label: "외곽 휨", unit: "cm" }
   ];
 
+  // ── 교재 카라 분류 catalog(family 층) ──
+  //   교재 순서(order)·표식(symbol)·페이지(page)를 그대로 보존한다. family = 생성 구조(generator)의 단위이며,
+  //   수치 차이가 아니라 제도 방식이 다르면 다른 family 다. **검증된 제도 자료가 온 family 만 available**,
+  //   나머지는 "pending-source"(형상·수치 없음 — 표시 슬롯만). variant 는 family 안의 세부 제도형이고,
+  //   available variant 만 presetId 로 RECORDS 의 레코드를 가리킨다(미구현 variant 의 presetId 는 null).
+  var PENDING_NOTE = "제도 자료 확인 후 제공";
+  var PENDING_SHORT = "준비 중";        // select 옵션용 짧은 표식(전체 안내는 PENDING_NOTE)
+  function pendingVariant(id, label) { return { id: id, label: label, availability: "pending-source", presetId: null, note: PENDING_NOTE }; }
+  var CATALOG = [
+    // 스탠드 family: 교재에 A~F 세부형이 있으나 제도 수치·방식은 아직 확인 전이라 슬롯만 둔다(형상·수치 없음).
+    { id: "stand-collar", order: 1, label: "스탠드 칼라", symbol: "A", page: 60, generator: null, availability: "pending-source", note: PENDING_NOTE,
+      variants: ["A", "B", "C", "D", "E", "F"].map(function (v) { return pendingVariant("bunka-stand-collar-" + v, v + "형"); }) },
+    { id: "shirt-collar-one-piece", order: 2, label: "셔츠 칼라", symbol: "G", page: 63, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    // 구현된 유일한 family: 밴드 + 위칼라 2피스(designCollar.computeStand/computeBody).
+    { id: "shirt-collar-with-band", order: 3, label: "칼라 밴드 달린 셔츠 칼라", symbol: "M", page: 66, generator: "shirt-collar-with-band-v2", availability: "available", note: null,
+      variants: [{ id: "bunka-shirt-collar-M", label: "교재 M 기본형", availability: "available", presetId: "bunka-shirt-collar-M", note: null }] },
+    { id: "flat-collar", order: 4, label: "플랫 칼라", symbol: "S", page: 69, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    { id: "sailor-collar", order: 5, label: "세일러 칼라", symbol: "U", page: 70, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    { id: "bow-collar", order: 6, label: "보 칼라", symbol: "X", page: 71, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    { id: "frill-collar", order: 7, label: "프릴 칼라", symbol: "a", page: 72, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    { id: "hood", order: 8, label: "후드", symbol: "d", page: 74, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    { id: "tailored-collar", order: 9, label: "테일러드 칼라", symbol: "h", page: 78, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    { id: "shawl-collar", order: 10, label: "숄 칼라", symbol: "j", page: 80, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    { id: "high-neck", order: 11, label: "하이넥", symbol: "l", page: 82, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] }
+  ];
+
   var RECORDS = [
     {
       id: "bunka-shirt-collar-M",
@@ -41,6 +69,7 @@
       // 몸판 셔츠 목선 전제(앞·뒤 SNP +1·앞 FNP 1 내림)는 몸판 네크라인 단계의 별도 프리셋이다.
       //   여기서는 기록만 한다 — 카라 적용이 bodiceResult 를 확인·변경하지 않는다.
       neckline: { requiredType: "shirt", enforcement: "metadata-only" },
+      familyId: "shirt-collar-with-band",   // catalog family(생성 구조) 연결. 값·키 순서·hash 와 무관한 메타.
       stand: { standHeightCm: 3, frontRiseCm: 1 },
       body: { gapCm: 3, cbWidthCm: 4, frontInsetCm: 0.5, frontProjectionCm: 1.5, pointDiagonalCm: 6, outerBowCm: 0 }
     }
@@ -67,7 +96,7 @@
   // 한 레코드 검증(순수). 실패 시 throw(reason 포함).
   function validateRecord(r) {
     if (!r || typeof r !== "object") fail("invalid-record");
-    ["id", "label", "description", "source", "type", "baseMethod"].forEach(function (k) { if (!isStr(r[k])) fail("missing-field", (r.id || "?") + "." + k); });
+    ["id", "label", "description", "source", "type", "baseMethod", "familyId"].forEach(function (k) { if (!isStr(r[k])) fail("missing-field", (r.id || "?") + "." + k); });
     if (!r.neckline || !isStr(r.neckline.requiredType) || r.neckline.enforcement !== "metadata-only") fail("invalid-neckline", r.id);
     validateSection(r.stand, STAND_FIELDS, "stand", r.id);
     validateSection(r.body, BODY_FIELDS, "body", r.id);
@@ -84,8 +113,53 @@
     return { list: list, byId: Object.freeze(byId) };
   }
 
+  // ── catalog 검증·구성(순수) ── 교재 순서 1..N 연속·고유, 표식·페이지 필수, id 전역 고유(family/variant),
+  //   available variant 만 실제 레코드를 가리키고, pending 은 presetId null·형상/수치 키 없음.
+  var AVAIL = { available: 1, "pending-source": 1 };
+  var SHAPE_KEYS = ["stand", "body", "parameters", "geometry"];
+  function validateFamily(f, presetIds, seenId, expectOrder) {
+    if (!f || typeof f !== "object") fail("invalid-family");
+    ["id", "label", "symbol"].forEach(function (k) { if (!isStr(f[k])) fail("missing-field", (f.id || "?") + "." + k); });
+    if (f.order !== expectOrder) fail("bad-book-order", f.id);
+    if (typeof f.page !== "number" || !isFinite(f.page) || f.page <= 0 || f.page !== Math.round(f.page)) fail("invalid-page", f.id);
+    if (!AVAIL[f.availability]) fail("invalid-availability", f.id);
+    if (f.availability === "available" ? !isStr(f.generator) : f.generator !== null) fail("invalid-generator", f.id);
+    if (seenId[f.id]) fail("duplicate-id", f.id); seenId[f.id] = true;
+    if (!Array.isArray(f.variants)) fail("invalid-variants", f.id);
+    var anyAvail = false;
+    f.variants.forEach(function (v) {
+      if (!v || !isStr(v.id) || !isStr(v.label)) fail("missing-field", f.id + ".variant");
+      if (seenId[v.id]) fail("duplicate-id", v.id); seenId[v.id] = true;
+      if (!AVAIL[v.availability]) fail("invalid-availability", v.id);
+      SHAPE_KEYS.forEach(function (k) { if (k in v) fail("variant-shape-data", v.id); });   // 수치·형상은 catalog 에 두지 않는다
+      if (v.availability === "available") {
+        if (f.availability !== "available") fail("unavailable-family-variant", v.id);
+        if (!isStr(v.presetId) || !presetIds[v.presetId]) fail("unknown-variant-preset", v.id);
+        anyAvail = true;
+      } else if (v.presetId !== null) fail("pending-variant-preset", v.id);
+    });
+    if (f.availability === "available" && !anyAvail) fail("available-family-without-preset", f.id);
+    return true;
+  }
+  function buildCatalog(families, records) {
+    if (!Array.isArray(families) || families.length === 0) fail("empty-catalog");
+    var presetIds = {}; (records || []).forEach(function (r) { presetIds[r.id] = 1; });
+    var seenId = {};
+    families.forEach(function (f, i) { validateFamily(f, presetIds, seenId, i + 1); });
+    (records || []).forEach(function (r) {
+      var f = families.filter(function (x) { return x.id === r.familyId; })[0];
+      if (!f) fail("unknown-preset-family", r.id);
+      if (!f.variants.some(function (v) { return v.presetId === r.id; })) fail("preset-without-variant", r.id);
+    });
+    var list = deepFreeze(clone(families));
+    var byId = {}; list.forEach(function (f) { byId[f.id] = f; });
+    return { list: list, byId: Object.freeze(byId) };
+  }
+
   var REG = buildRegistry(RECORDS);
+  var CAT = buildCatalog(CATALOG, RECORDS);
   var DEFAULT_ID = REG.list[0].id;
+  var DEFAULT_FAMILY_ID = REG.list[0].familyId;
 
   function list() { return REG.list; }                                   // 동결 배열(정의 순서, 결정론)
   function get(id) { return Object.prototype.hasOwnProperty.call(REG.byId, id) ? REG.byId[id] : null; }
@@ -127,9 +201,40 @@
     } };
   }
 
+  // ── catalog 조회(전부 동결 데이터 반환) ──
+  var EMPTY = Object.freeze([]);
+  function families() { return CAT.list; }                               // 교재 순서(order 1..N)
+  function family(id) { return Object.prototype.hasOwnProperty.call(CAT.byId, id) ? CAT.byId[id] : null; }
+  function variants(familyId) { var f = family(familyId); return f ? f.variants : EMPTY; }
+  function variant(familyId, variantId) {
+    var vs = variants(familyId);
+    for (var i = 0; i < vs.length; i++) if (vs[i].id === variantId) return vs[i];
+    return null;
+  }
+  // 종류 select 옵션(교재 표식·페이지 포함, 미구현은 available:false).
+  function familyOptions() {
+    return CAT.list.map(function (f) { return { value: f.id, label: f.label + " " + f.symbol + " (P" + f.page + ")", available: f.availability === "available" }; });
+  }
+  // 세부 제도 select 옵션. 미구현 family 는 슬롯만(available:false) 또는 빈 목록.
+  function variantOptions(familyId) {
+    return variants(familyId).map(function (v) { return { value: v.id, label: v.label, available: v.availability === "available" }; });
+  }
+  // ★ 안전장치: (family, variant) → preset id 해석. **미구현·알 수 없음은 명시적으로 거부**하며
+  //   절대 DEFAULT_ID(M) 로 대체하지 않는다. 호출부는 ok 일 때만 composeDraft 한다.
+  function resolve(familyId, variantId) {
+    var f = family(familyId); if (!f) return { ok: false, reason: "unknown-collar-family" };
+    if (variantId === undefined || variantId === null || variantId === "") return { ok: false, reason: "unknown-collar-variant" };
+    var v = variant(familyId, variantId); if (!v) return { ok: false, reason: "unknown-collar-variant" };
+    if (f.availability !== "available" || v.availability !== "available" || !v.presetId || !get(v.presetId)) return { ok: false, reason: "collar-preset-unavailable" };
+    return { ok: true, familyId: f.id, variantId: v.id, presetId: v.presetId };
+  }
+
   window.collarPresets = Object.freeze({
-    DEFAULT_ID: DEFAULT_ID,
+    DEFAULT_ID: DEFAULT_ID, DEFAULT_FAMILY_ID: DEFAULT_FAMILY_ID, PENDING_NOTE: PENDING_NOTE, PENDING_SHORT: PENDING_SHORT,
     list: list, get: get, defaults: defaults, options: options, fields: fields, matches: matches, composeDraft: composeDraft,
-    validateRecord: validateRecord, buildRegistry: buildRegistry   // 순수(하네스·향후 레코드 추가 검증)
+    families: families, family: family, variants: variants, variant: variant,
+    familyOptions: familyOptions, variantOptions: variantOptions, resolve: resolve,
+    validateRecord: validateRecord, buildRegistry: buildRegistry,   // 순수(하네스·향후 레코드 추가 검증)
+    validateFamily: validateFamily, buildCatalog: buildCatalog
   });
 })();
