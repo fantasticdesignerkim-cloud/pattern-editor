@@ -36,6 +36,9 @@
     });
   }
 
+  // 카라 종류 판별: family 2(한 장, P.147) vs family 3(밴드+위칼라 2피스). 기본은 2피스(legacy draft 호환).
+  function isOnePiece(cd) { return !!(cd && cd.type === "shirt-one-piece"); }
+
   // ── 검사 ──
   function check(proj) {
     proj = proj || project();
@@ -53,6 +56,21 @@
     var sleeve = SC.latest(proj);
     if (!sleeve) fails.push("no-sleeve");
     else if (SC.isCurrentSleeveChanged(proj) || SC.invalidatedByBodice(proj)) fails.push("sleeve-stale");
+    // ── 한 장 셔츠 칼라(family 2): 스탠드/본체가 아니라 한 조각 geometry 를 검사한다(용어·게이트 분리) ──
+    if (isOnePiece(cd)) {
+      var op = cd.onePiece;
+      if (!(op && op.geometry)) fails.push("no-collar-piece");
+      else { var vo = DC.validateClosedOutline(op.geometry.outline); if (!vo.ok) fails.push("collar-" + vo.reason); }
+      var opRe = null;
+      if (bodice && cd.parameters && cd.parameters.onePiece) {
+        opRe = DC.computeOnePiece(bodice, cd.parameters.onePiece);
+        if (!opRe.ok) fails.push("collar-recompute");
+      } else fails.push("no-collar-params");
+      var m = op && op.measure;
+      if (!(m && num(m.attachLenCm) && num(m.neckTargetCm) && num(m.outerLenCm) && num(m.foldLenCm))) fails.push("unmeasured");
+      // ★ 달림선 실측과 목둘레(뒤목+앞목)의 차이는 **측정·표시만** 한다(교재: 외곽 치수는 가봉으로 조정).
+      return { ok: fails.length === 0, fails: fails, _bodice: bodice, _onePiece: opRe, _lengths: null, _stand: null };
+    }
     // 스탠드·본체 geometry: 폐곡선·자기교차
     if (!(cd && cd.standGeometry)) fails.push("no-stand");
     else { var vs = DC.validateClosedOutline(cd.standGeometry.outline); if (!vs.ok) fails.push("stand-" + vs.reason); }
@@ -87,6 +105,13 @@
 
   // 형상 전용 signature(hash): completedAt·layout·선택·snap·UI·다른 patternLines 제외.
   function signatureOf(res) {
+    if (res.type === "shirt-one-piece") {
+      return JSON.stringify({
+        sbh: res.sourceBodiceHash, nk: res.necklineLengths,
+        op: res.onePiece.parameters, og: canonGeom(res.onePiece.geometry), oc: canonSegs((res.onePiece.geometry || {}).construction), om: res.onePiece.measures,
+        sym: res.symmetry
+      });
+    }
     return JSON.stringify({
       sbh: res.sourceBodiceHash, nk: res.necklineLengths,
       sp: res.stand.parameters, sg: canonGeom(res.stand.geometry), sl: res.stand.lengths,
@@ -103,6 +128,24 @@
     var c = check(proj);
     if (!c.ok) return { ok: false, reason: c.fails[0], check: c };
     var cd = proj.working.collarDraft, sb = proj.sourceBlock || {}, bodice = c._bodice;
+    if (isOnePiece(cd)) {
+      var oneRes = {
+        schemaVersion: 1, type: "shirt-one-piece",
+        baseMethod: cd.baseMethod || null, presetId: cd.presetId || null,   // 출처 메타 — signatureOf 미포함
+        sourceBodiceHash: cd.sourceBodiceHash,
+        sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+        necklineLengths: clone(bodice.necklineLengths),
+        onePiece: { parameters: clone(cd.parameters.onePiece), geometry: clone(cd.onePiece.geometry), measures: clone(cd.onePiece.measure || {}) },
+        symmetry: "half-cb-fold"
+      };
+      oneRes.hash = hashStr(signatureOf(oneRes));
+      var prev = proj.working.collarResult;
+      if (prev && prev.hash === oneRes.hash) return { ok: true, result: prev, idempotent: true, check: c };
+      oneRes.completedAt = Date.now();
+      deepFreeze(oneRes);
+      proj.working.collarResult = oneRes;
+      return { ok: true, result: oneRes, check: c };
+    }
     var manualSource = null;
     if (cd.body.mode === "manual") {
       var line = (proj.working.patternLines || []).find(function (l) { return l.id === cd.body.lineId; });
@@ -137,6 +180,16 @@
     var cd = proj.working.collarDraft;
     var BC = window.bodiceCheckpoint, DC = window.designCollar, bodice = BC && BC.latest(proj);
     if (!cd || !bodice || !DC) return true;
+    if (isOnePiece(cd)) {
+      if (!cd.onePiece || !cd.onePiece.geometry || !cd.parameters || !cd.parameters.onePiece) return true;
+      if (res.type !== "shirt-one-piece") return true;                                  // 종류가 바뀌면 다른 형상
+      var re = DC.computeOnePiece(bodice, cd.parameters.onePiece); if (!re.ok) return true;
+      var curOne = { type: "shirt-one-piece", sourceBodiceHash: cd.sourceBodiceHash, necklineLengths: bodice.necklineLengths,
+        onePiece: { parameters: cd.parameters.onePiece, geometry: cd.onePiece.geometry, measures: cd.onePiece.measure || {} },
+        symmetry: "half-cb-fold" };
+      return hashStr(signatureOf(curOne)) !== res.hash;
+    }
+    if (res.type === "shirt-one-piece") return true;                                    // 2피스 draft vs 한 장 완료본
     if (!cd.standGeometry || !cd.body || !cd.body.geometry) return true;               // 카라 형상 없음/숨김
     if (cd.body.mode === "manual" && cd.body.invalid) return true;                     // 무효 편집
     if (!cd.parameters || !cd.parameters.stand) return true;

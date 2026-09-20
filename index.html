@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026092003">
+<link rel="stylesheet" href="css/style.css?v=2026092020">
 </head>
 <body>
 
@@ -284,8 +284,8 @@
           <div class="row row-stack"><label for="selCollarPreset">세부 제도</label><select id="selCollarPreset"></select></div>
           <div class="row note" id="designCollarCatalogNote" aria-live="polite"></div>
           <div class="row" style="margin-bottom:6px"><button class="btn" id="btnCollarBaseM">교재 M 기본형으로 초기화</button></div>
-          <div class="row"><label for="inpCollarStandHeight">스탠드 완성높이 (cm)</label><input id="inpCollarStandHeight" type="number" min="1" max="8" step="0.1"></div>
-          <div class="row"><label for="inpCollarFrontRise">앞끝 올림 (cm)</label><input id="inpCollarFrontRise" type="number" min="0" max="6" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarStandHeight">스탠드 완성높이 (cm)</label><input id="inpCollarStandHeight" type="number" min="1" max="8" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarFrontRise">앞끝 올림 (cm)</label><input id="inpCollarFrontRise" type="number" min="0" max="6" step="0.1"></div>
           <div class="row" style="gap:4px">
             <button class="btn action-primary" id="btnApplyCollar">카라 적용</button>
             <button class="btn" id="btnResetCollar">초기화</button>
@@ -293,23 +293,23 @@
           <div class="row note" id="designCollarNote" aria-live="polite"></div>
           <!-- C2 칼라 본체: 스탠드 윗선 primitive 를 부착선으로(여밈 연장 미포함). 부착 길이 = 윗선 목 − 앞끝 물림.
                스탠드 적용 후에만 활성. 스탠드(높이·앞끝올림) 변경 시 본체 stale → 재생성. 앞끝 물림은 CF→CB 방향. -->
-          <div class="row" style="margin-top:8px"><label>칼라 본체</label></div>
-          <div class="row"><label for="inpCollarBodyWidth">CB 칼라 폭 (cm)</label><input id="inpCollarBodyWidth" type="number" min="1" max="15" step="0.1"></div>
-          <div class="row"><label for="inpCollarBodyFrontWidth">칼라 끝 사선 길이 (cm)</label><input id="inpCollarBodyFrontWidth" type="number" min="1" max="15" step="0.1"></div>
-          <div class="row"><label for="inpCollarBodyInset">앞끝 setback (cm)</label><input id="inpCollarBodyInset" type="number" min="0" max="3" step="0.1"></div>
-          <div class="row"><label for="inpCollarBodyProjection">칼라 앞끝 돌출 (cm)</label><input id="inpCollarBodyProjection" type="number" min="0" max="15" step="0.1"></div>
-          <div class="row"><label for="inpCollarBodyBow">외곽 휨 (cm)</label><input id="inpCollarBodyBow" type="number" min="-2" max="2" step="0.1"></div>
-          <div class="row" style="gap:4px">
+          <div class="row" data-collar-kind="two-piece" style="margin-top:8px"><label>칼라 본체</label></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyWidth">CB 칼라 폭 (cm)</label><input id="inpCollarBodyWidth" type="number" min="1" max="15" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyFrontWidth">칼라 끝 사선 길이 (cm)</label><input id="inpCollarBodyFrontWidth" type="number" min="1" max="15" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyInset">앞끝 setback (cm)</label><input id="inpCollarBodyInset" type="number" min="0" max="3" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyProjection">칼라 앞끝 돌출 (cm)</label><input id="inpCollarBodyProjection" type="number" min="0" max="15" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyBow">외곽 휨 (cm)</label><input id="inpCollarBodyBow" type="number" min="-2" max="2" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece" style="gap:4px">
             <button class="btn action-primary" id="btnApplyCollarBody">본체 적용</button>
             <button class="btn" id="btnResetCollarBody">본체 초기화</button>
           </div>
           <!-- C3 직접 편집(관리형 선): parametric → manual 변환. 선택·편집 도구로 외곽·포인트 anchor/핸들 편집.
                endpoint(cbOuter·attachFront) 고정, 무효 시 빨강 점선. 기본형으로 돌아가기로만 관리선 제거. -->
-          <div class="row" style="gap:4px">
+          <div class="row" data-collar-kind="two-piece" style="gap:4px">
             <button class="btn" id="btnCollarBodyManual" disabled>본체 직접 수정</button>
             <button class="btn" id="btnCollarBodyRevert" hidden>수치형으로 돌아가기</button>
           </div>
-          <div class="row note" id="designCollarBodyNote" aria-live="polite"></div>
+          <div class="row note" data-collar-kind="two-piece" id="designCollarBodyNote" aria-live="polite"></div>
           <!-- 제도 보조수치(표시 전용): collarAnnotation 표시 모델. 형상·hash·완료 게이트와 무관. -->
           <div class="row" style="margin-top:8px"><label><input type="checkbox" id="chkCollarDraftDims" checked> 제도 치수 표시</label></div>
           <div class="row note" id="collarDraftModeNote" aria-live="polite"></div>
@@ -390,7 +390,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026092501"></script>
+<script src="js/render.js?v=2026092020"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -413,7 +413,7 @@
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
 <script src="js/designSleeve.js?v=2026082041"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
-<script src="js/designLayout.js?v=2026091902"></script>
+<script src="js/designLayout.js?v=2026092020"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026091620"></script>
 <!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
@@ -423,20 +423,20 @@
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
 <script src="js/sleeveCheckpoint.js?v=2026082041"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
-<script src="js/designCollar.js?v=2026091920"></script>
+<script src="js/designCollar.js?v=2026092020"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
-<script src="js/collarPresets.js?v=2026092012"></script>
+<script src="js/collarPresets.js?v=2026092020"></script>
 <!-- 카라 모양 완료 체크포인트: window.collarCheckpoint. 게이트 + working.collarResult 세션 스냅샷(형상 source=bodice, 소매=순서 게이트). -->
-<script src="js/collarCheckpoint.js?v=2026091930"></script>
+<script src="js/collarCheckpoint.js?v=2026092020"></script>
 <!-- 카라 제도 보조수치 표시 모델(순수·표시 전용): window.collarAnnotation. 형상·hash 무관. -->
-<script src="js/collarAnnotation.js?v=2026092001"></script>
+<script src="js/collarAnnotation.js?v=2026092020"></script>
 <!-- Design 형상 통합: window.designResult. 세 완료본 + structuralLines(유효 cut) 묶음. 재단 아님. -->
 <script src="js/designResult.js?v=2026082701"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026092012"></script>
+<script src="js/ui.js?v=2026092021"></script>
 
 </body>
 </html>

@@ -980,6 +980,26 @@
     btn.disabled = !ok; btn.title = ok ? "" : "소매 완료 후 활성";
     if (!ok && currentDesignSubtab() === "collar") { setDesignSubtab("body"); if (typeof render === "function") render(); }
   }
+  // ── 카라 종류(생성 구조) ── family 3 M = 밴드+위칼라 2피스 / family 2 G = 한 장.
+  //   M 전용 '밴드·본체' 입력·버튼·문구를 한 장 칼라에 재사용하지 않는다(행은 data-collar-kind 로 분리).
+  function draftCollarKind(project) {
+    const cd = project && project.working && project.working.collarDraft;
+    return cd ? (cd.type === "shirt-one-piece" ? "one-piece" : "two-piece") : null;
+  }
+  function selectedCollarKind() {
+    const r = resolveCollarSelection();
+    if (!r.ok) return null;
+    const rec = window.collarPresets.get(r.presetId);
+    return rec && rec.type === "shirt-one-piece" ? "one-piece" : "two-piece";
+  }
+  // 표시 종류는 **선택을 우선**한다(선택이 해석되면 그 종류의 행만 보인다) — 적용 버튼이 만드는 형상과 화면 행이
+  //   어긋나지 않도록. 선택이 미구현·불명이면 현재 초안의 종류로 떨어진다.
+  function activeCollarKind(project) { return selectedCollarKind() || draftCollarKind(project) || "two-piece"; }
+  function isOnePieceCollar(project) { return activeCollarKind(project) === "one-piece"; }
+  function syncCollarKindRows(project) {
+    const kind = activeCollarKind(project);
+    document.querySelectorAll("[data-collar-kind]").forEach(el => { el.hidden = el.getAttribute("data-collar-kind") !== kind; });
+  }
   function collarBodiceHash(project) { const b = project && window.bodiceCheckpoint && window.bodiceCheckpoint.latest(project); return b ? b.hash : null; }
   function committedCollar(project) {
     const cd = project && project.working && project.working.collarDraft;
@@ -1104,6 +1124,7 @@
   function onApplyCollar() {
     const project = designProjectNow(); if (!project) return;
     if (!collarGateOk(project)) { setCollarNote("소매 완료 후 카라를 편집할 수 있습니다"); return; }
+    if (selectedCollarKind() === "one-piece") { onCollarBaseM(); return; }   // 한 장 칼라: 교재 제도 기본값 적용(수치 입력 없음)
     const h = readNum("inpCollarStandHeight", 1, 8), fr = readNum("inpCollarFrontRise", 0, 6);
     if (!h.valid) { setCollarNote("스탠드 높이 범위를 확인하세요(1–8cm)"); return; }
     if (!fr.valid) { setCollarNote("앞끝 올림 범위를 확인하세요(0–6cm)"); return; }
@@ -1146,12 +1167,39 @@
     updateCollarPanel(project); updateCollarBodyPanel(project);
     setCollarNote(preset.label + " 적용 · 세션 전용");
   }
+  // 한 장 셔츠 칼라 패널(G): 수치 입력 없이 교재 제도 기본값을 적용한다(v1). 표시는 실측 결과 중심.
+  //   ★ 달림선 실측과 몸판 목둘레(뒤목+앞목) 차이는 **사실 표시**다 — 교재는 외곽을 목둘레에 맞추지 않고 가봉한다.
+  function onePieceMeasure(project) {
+    const cd = project && project.working && project.working.collarDraft;
+    return (cd && cd.type === "shirt-one-piece" && cd.onePiece) ? (cd.onePiece.measure || null) : null;
+  }
+  function onePieceSummary(m) {
+    const d = m.attachDiffCm;
+    return "달림선 " + fmtL(m.attachLenCm) + "cm(목둘레 " + fmtL(m.neckTargetCm) + "cm · 차이 " + (d >= 0 ? "+" : "−") + fmtL(Math.abs(d)) + "cm) · 뒤 폭 " +
+      fmtL(m.backCollarWidthCm) + "·허리 " + fmtL(m.collarStandCm) + "·앞 폭 " + fmtL(m.frontCollarWidthCm) + "cm · 꺾임선 " + fmtL(m.foldLenCm) + "·외곽 " + fmtL(m.outerLenCm) + "cm · 세션 전용";
+  }
+  function updateOnePieceCollarPanel(project, gate, pd) {
+    const applyBtn = document.getElementById("btnApplyCollar"), resetBtn = document.getElementById("btnResetCollar");
+    const m = onePieceMeasure(project), stale = collarStale(project);
+    if (applyBtn) applyBtn.disabled = !gate || !pd.ok || collarBodyManual(project);
+    if (resetBtn) resetBtn.disabled = !(project.working.collarDraft);
+    if (!gate) setCollarNote("소매 완료 후 카라를 편집할 수 있습니다");
+    else if (!pd.ok) setCollarNote(collarSelectionStr(pd.reason) + (m ? " · 현재 카라 형상은 그대로 유지" : ""));
+    else if (m && stale) setCollarNote("몸판 변경됨 · 카라 다시 적용 필요 · 세션 전용");
+    else if (m) setCollarNote(onePieceSummary(m));
+    else setCollarNote("교재 제도 기본값으로 한 장 셔츠 칼라를 만듭니다(달림선·꺾임선·외곽선 한 조각) · 세션 전용");
+    syncCollarBodyModeUI(project);
+    updateCollarCheckpointUI(project);
+    updateCollarDraftSummary(project);
+  }
   // refresh 훅: 입력 복원(포커스 중 안 덮음) + 버튼/게이트 + committed 기준 note.
   function updateCollarPanel(project) {
     if (!project) return;
     const gate = collarGateOk(project), c = committedCollar(project);
     const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
     const pd = collarPresetDefaults();   // 선택 제도형 stand 기본값(미구현이면 기본값 없음 → 입력 유지)
+    syncCollarKindRows(project);
+    if (isOnePieceCollar(project)) { updateOnePieceCollarPanel(project, gate, pd); return; }
     if (c.has && c.standHeightCm != null) setIf("inpCollarStandHeight", c.standHeightCm);
     else if (pd.ok) setIf("inpCollarStandHeight", pd.stand.standHeightCm);
     if (c.has && c.frontRiseCm != null) setIf("inpCollarFrontRise", c.frontRiseCm);
@@ -1175,7 +1223,7 @@
 
   // ── C2 칼라 본체 ── 스탠드 윗선 primitive 를 부착선으로. 스탠드가 준비(비스테일)됐을 때만.
   //   스탠드 높이·앞끝 올림이 바뀌면(deriveCollar 가 collarDraft 재생성) body 는 자동 소멸 → 명시적 재생성.
-  function collarStandReady(project) { const c = committedCollar(project); return !!(c.has && c.geom && !collarStale(project) && collarGateOk(project)); }
+  function collarStandReady(project) { const c = committedCollar(project); return !!(c.has && c.geom && !collarStale(project) && collarGateOk(project) && !isOnePieceCollar(project)); }
   function committedCollarBody(project) {
     const bd = project && project.working && project.working.collarDraft && project.working.collarDraft.body;
     return bd ? { has: true, params: bd.parameters, attachLenCm: bd.attachLenCm, measure: bd.measure } : { has: false, params: null, attachLenCm: null, measure: null };
@@ -1220,6 +1268,7 @@
   }
   function updateCollarBodyPanel(project) {
     if (!project) return;
+    if (isOnePieceCollar(project)) { syncCollarKindRows(project); return; }   // 한 장 칼라: 밴드/본체 UI 자체가 없다
     const ready = collarStandReady(project), cb = committedCollarBody(project);
     const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
     const pd = collarPresetDefaults();   // 선택 제도형 body 기본값(미구현이면 기본값 없음 → 입력 유지)
@@ -1365,7 +1414,11 @@
     const btn = document.getElementById("btnCompleteCollar");
     if (!project || !window.collarCheckpoint) { if (btn) btn.disabled = true; if (checkNote) checkNote.textContent = ""; if (statusNote) statusNote.textContent = "카라 미완료 · 세션 전용"; return; }
     const c = window.collarCheckpoint.check(project), cd = project.working.collarDraft;
-    if (checkNote) {
+    if (checkNote && cd && cd.type === "shirt-one-piece") {
+      const m = (cd.onePiece && cd.onePiece.measure) || null;
+      checkNote.textContent = m ? "한 장 칼라: 달림선 " + fmtL(m.attachLenCm) + "·목둘레 " + fmtL(m.neckTargetCm) + "·꺾임선 " + fmtL(m.foldLenCm) + "·외곽 " + fmtL(m.outerLenCm) + "cm" : "";
+    }
+    else if (checkNote) {
       if (cd && cd.measure && cd.body && cd.body.measure) {
         const sm = cd.measure, bm = cd.body.measure, bp = cd.body.parameters || {};
         checkNote.textContent = "스탠드: 목 봉제 " + fmtL(sm.lowerNeckSeamLenCm) + "·연장 " + fmtL(sm.lowerExtensionLenCm) + "·윗선 " + fmtL(sm.upperNeckSegmentLenCm) + "cm · 본체: 부착 " + fmtL(cd.body.attachLenCm) + "·CB폭 " + fmtL(bm.cbWidthCm != null ? bm.cbWidthCm : bp.cbWidthCm) + "·gap " + fmtL(bm.gapCm != null ? bm.gapCm : bp.gapCm) + "·끝 사선 " + fmtL(bm.pointDiagonalLenCm) + "·외곽 " + fmtL(bm.outerEdgeLenCm) + "cm";

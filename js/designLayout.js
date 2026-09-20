@@ -85,8 +85,9 @@
   function collarLocalBBox(project) {
     const cd = project && project.working && project.working.collarDraft; if (!cd) return null;
     let u = collarStandGeom(project) ? bboxOfStand(collarStandGeom(project)) : null;
-    const bodyG = cd.body && cd.body.geometry && Array.isArray(cd.body.geometry.outline) && cd.body.geometry.outline.length ? cd.body.geometry : null;
-    if (bodyG) { const bb = bboxOfStand(bodyG); u = u ? { minX: Math.min(u.minX, bb.minX), minY: Math.min(u.minY, bb.minY), maxX: Math.max(u.maxX, bb.maxX), maxY: Math.max(u.maxY, bb.maxY) } : bb; }
+    const merge = (g) => { if (!g || !Array.isArray(g.outline) || !g.outline.length) return; const bb = bboxOfStand(g); if (!bb) return; u = u ? { minX: Math.min(u.minX, bb.minX), minY: Math.min(u.minY, bb.minY), maxX: Math.max(u.maxX, bb.maxX), maxY: Math.max(u.maxY, bb.maxY) } : bb; };
+    merge(cd.body && cd.body.geometry);
+    merge(cd.onePiece && cd.onePiece.geometry);   // 한 장 셔츠 칼라(family 2)
     return u;
   }
 

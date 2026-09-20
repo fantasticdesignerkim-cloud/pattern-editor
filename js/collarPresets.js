@@ -23,6 +23,15 @@
     { key: "standHeightCm", label: "밴드 폭", unit: "cm", min: 0, minExclusive: true },
     { key: "frontRiseCm", label: "CF 앞끝 올림", unit: "cm", min: 0 }
   ];
+  // 한 장 셔츠 칼라(family 2, 교재 P.147) 실행 파라미터. 키 순서 = designCollar.computeOnePiece 계약.
+  var ONE_PIECE_FIELDS = [
+    { key: "riseCm", label: "올림 치수(★)", unit: "cm", min: 0, minExclusive: true },
+    { key: "backCollarWidthCm", label: "뒤 칼라 폭", unit: "cm", min: 0, minExclusive: true },
+    { key: "collarStandCm", label: "칼라 허리", unit: "cm", min: 0, minExclusive: true },
+    { key: "frontCollarWidthCm", label: "앞 칼라 폭", unit: "cm", min: 0, minExclusive: true },
+    { key: "tipProjectionCm", label: "칼라 끝(수평)", unit: "cm", min: 0 },
+    { key: "attachCurveCm", label: "달림선 곡률", unit: "cm", min: 0 }
+  ];
   var BODY_FIELDS = [
     { key: "gapCm", label: "위칼라 gap(CB)", unit: "cm", min: 0, minExclusive: true },
     { key: "cbWidthCm", label: "위칼라 CB 폭", unit: "cm", min: 0, minExclusive: true },
@@ -75,7 +84,7 @@
     //   생성 구조가 다르다. G~J 는 앞뒤 칼라 폭을 고정한 채 칼라 허리·올림(★)만 바꿔 비교한 계열,
     //   K 는 I 의 앞 달림선 곡선을 반대로 그린 변형, L 은 꺾임선을 앞중심에서 떨어뜨린 오픈 칼라(몸판 연동).
     //   ★ 도면 치수는 확인했으나 **제도 절차(P.147)가 없어 전부 pending** — 아래 reference 는 참고값이다.
-    { id: "shirt-collar-one-piece", order: 2, label: "셔츠 칼라", symbol: "G", page: 63, generator: null, availability: "pending-source", note: PENDING_NOTE,
+    { id: "shirt-collar-one-piece", order: 2, label: "셔츠 칼라", symbol: "G", page: 63, generator: "shirt-one-piece-v1", availability: "available", note: null,
       reference: {
         pages: [63, 64, 65], methodPage: METHOD_PAGE,
         structure: "한 장 구조(달림선·칼라 허리·꺾임선·외곽선·칼라 끝)",
@@ -84,7 +93,8 @@
         fitting: "수치를 바꾸면 칼라 외곽 치수가 부족·과다해 가봉 필요(교재 본문)"
       },
       variants: [
-        onePieceVariant("bunka-shirt-collar-G", "G", "G · 칼라 허리 3cm", 63, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 3, riseCm: 2.5, frontEndMarkCm: 3, attachCurveMarkCm: 0.2, attachCurveDirection: "as-drawn" }),
+        // G 만 실행 가능(P.147 제도법 확보). 수치는 RECORDS 의 onePiece 하나가 출처 — 여기 참고값을 두지 않는다.
+        { id: "bunka-shirt-collar-G", symbol: "G", label: "G · 칼라 허리 3cm", page: 63, availability: "available", presetId: "bunka-shirt-collar-G", note: null },
         onePieceVariant("bunka-shirt-collar-H", "H", "H · 칼라 허리 1cm", 63, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 1, riseCm: 8, frontEndMarkCm: 4.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }),
         onePieceVariant("bunka-shirt-collar-I", "I", "I · 칼라 허리 2cm", 64, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }),
         onePieceVariant("bunka-shirt-collar-J", "J", "J · 칼라 허리 4cm", 64, { backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 4, riseCm: 1, frontEndMarkCm: 2.5, attachCurveMarkCm: null, attachCurveDirection: "as-drawn" }),
@@ -118,10 +128,24 @@
       familyId: "shirt-collar-with-band",   // catalog family(생성 구조) 연결. 값·키 순서·hash 와 무관한 메타.
       stand: { standHeightCm: 3, frontRiseCm: 1 },
       body: { gapCm: 3, cbWidthCm: 4, frontInsetCm: 0.5, frontProjectionCm: 1.5, pointDiagonalCm: 6, outerBowCm: 0 }
+    },
+    {
+      // 한 장 셔츠 칼라(family 2) 교재 G형. 아래 수치가 **유일한 출처**다(catalog 의 참고값과 중복 금지).
+      //   제도 절차는 교재 P.147, 예시 도면은 P.63. 곡선 정리 규칙은 designCollar.ONE_PIECE_METHOD.
+      id: "bunka-shirt-collar-G",
+      label: "교재 G 기본형",
+      description: "한 장 셔츠 칼라(달림선·꺾임선·외곽선이 한 조각) 교재 G형 제도 기본값",
+      source: "『パターン製作の基礎』 셔츠 칼라 G형(P.63) · 제도 방법 P.147",
+      type: "shirt-one-piece",
+      baseMethod: "bunka-shirt-collar-G-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" },
+      familyId: "shirt-collar-one-piece",
+      onePiece: { riseCm: 2.5, backCollarWidthCm: 3.5, collarStandCm: 3, frontCollarWidthCm: 6.5, tipProjectionCm: 3, attachCurveCm: 0.2 }
     }
   ];
 
   function clone(v) { return JSON.parse(JSON.stringify(v)); }
+
   function deepFreeze(o) {
     if (o && typeof o === "object" && !Object.isFrozen(o)) { Object.freeze(o); Object.keys(o).forEach(function (k) { deepFreeze(o[k]); }); }
     return o;
@@ -140,10 +164,21 @@
     });
   }
   // 한 레코드 검증(순수). 실패 시 throw(reason 포함).
+  var RECORD_TYPES = { "shirt-two-piece": 1, "shirt-one-piece": 1 };
   function validateRecord(r) {
     if (!r || typeof r !== "object") fail("invalid-record");
     ["id", "label", "description", "source", "type", "baseMethod", "familyId"].forEach(function (k) { if (!isStr(r[k])) fail("missing-field", (r.id || "?") + "." + k); });
+    if (!RECORD_TYPES[r.type]) fail("unknown-record-type", r.id);
     if (!r.neckline || !isStr(r.neckline.requiredType) || r.neckline.enforcement !== "metadata-only") fail("invalid-neckline", r.id);
+    if (r.type === "shirt-one-piece") {
+      // 한 장 칼라: 밴드/본체 섹션을 쓰지 않는다(M 전용 의미를 빌려오지 않음).
+      ["stand", "body"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      validateSection(r.onePiece, ONE_PIECE_FIELDS, "onePiece", r.id);
+      if (!(r.onePiece.frontCollarWidthCm > r.onePiece.tipProjectionCm)) fail("out-of-range", r.id + ".onePiece.frontCollarWidthCm");   // 엔진 계약: 앞 폭 > 칼라 끝(수평)
+      if (!(r.onePiece.backCollarWidthCm > r.onePiece.collarStandCm)) fail("out-of-range", r.id + ".onePiece.collarStandCm");           // 뒤 폭 > 칼라 허리
+      return true;
+    }
+    if ("onePiece" in r) fail("mixed-record-sections", r.id + ".onePiece");
     validateSection(r.stand, STAND_FIELDS, "stand", r.id);
     validateSection(r.body, BODY_FIELDS, "body", r.id);
     if (!(r.body.pointDiagonalCm > r.body.frontProjectionCm)) fail("out-of-range", r.id + ".body.pointDiagonalCm");   // 엔진 계약: 사선 > 돌출
@@ -243,16 +278,18 @@
   // 편집용 기본값(deep clone). 알 수 없는 id 는 거부.
   function defaults(id) {
     var r = get(id); if (!r) return { ok: false, reason: "unknown-collar-preset" };
-    return { ok: true, id: r.id, stand: clone(r.stand), body: clone(r.body) };
+    if (r.type === "shirt-one-piece") return { ok: true, id: r.id, type: r.type, onePiece: clone(r.onePiece) };
+    return { ok: true, id: r.id, type: r.type, stand: clone(r.stand), body: clone(r.body) };
   }
   // 선택 UI 옵션 모델(registry 에서 생성).
   function options() { return REG.list.map(function (r) { return { value: r.id, label: r.label }; }); }
   // 섹션 필드 의미·단위(표시용).
-  function fields(section) { return clone(section === "stand" ? STAND_FIELDS : section === "body" ? BODY_FIELDS : []); }
+  function fields(section) { return clone(section === "stand" ? STAND_FIELDS : section === "body" ? BODY_FIELDS : section === "onePiece" ? ONE_PIECE_FIELDS : []); }
   // 편집값이 프리셋 기본값과 같은지(표시 판단용, 저장 없음).
   function matches(id, stand, body) {
     var r = get(id); if (!r) return false;
     var eq = function (a, b, fs) { return !!a && fs.every(function (f) { return a[f.key] === b[f.key]; }); };
+    if (r.type === "shirt-one-piece") return eq(stand, r.onePiece, ONE_PIECE_FIELDS);   // 한 장: 첫 인자 = onePiece 파라미터
     return eq(stand, r.stand, STAND_FIELDS) && eq(body, r.body, BODY_FIELDS);
   }
   // 프리셋 전체 적용 계획(순수·원자): 스탠드·본체를 모두 계산·검증한 뒤 새 collarDraft 를 반환한다.
@@ -261,6 +298,15 @@
     var d = defaults(id); if (!d.ok) return d;
     var r = get(id);
     if (!DC || !bodice) return { ok: false, stage: "stand", reason: "no-bodice" };
+    if (r.type === "shirt-one-piece") {
+      var oneRe = DC.computeOnePiece(bodice, d.onePiece);
+      if (!oneRe.ok) return { ok: false, stage: "collar", reason: oneRe.reason };
+      return { ok: true, draft: {
+        sourceBodiceHash: bodice.hash, type: r.type, baseMethod: r.baseMethod, presetId: r.id,
+        parameters: { onePiece: d.onePiece },
+        onePiece: { geometry: oneRe.geometry, measure: oneRe.measure, anchors: oneRe.anchors }   // anchors = 표시 전용(hash 미포함)
+      } };
+    }
     var standRe = DC.computeStand(bodice, d.stand);
     if (!standRe.ok) return { ok: false, stage: "stand", reason: standRe.reason };
     var bodyRe = DC.computeBody(standRe, d.body);

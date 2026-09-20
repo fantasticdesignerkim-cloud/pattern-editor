@@ -431,6 +431,95 @@
   }
 
   // 완료 게이트용: outline 폐곡선·자기교차·퇴화 검증. {ok, reason}.
+  // ══════════════════════════════════════════════
+  // 한 장 셔츠 칼라(교재 P.147 제도 방법, 예: 칼라 G P.63) — family 2 전용 생성기.
+  //   M(밴드+위칼라 2피스)과 데이터·의미를 섞지 않는다. 결과는 한 조각(달림선·꺾임선·외곽선·CB·앞끝).
+  //
+  // 로컬 좌표(M 과 같은 관례): CB = x 0, 기초 안내선 ① = y 0, 위쪽 = −y.
+  //   ① 수평 기초 안내선, ② CB 수직선.
+  //   ③ N0 = CB 에서 올림 치수 ★ 위 → (0, −rise)
+  //   ④ A  = N0 에서 CB 에 직각(수평)으로 뒤목 길이 × → (back, −rise)
+  //   ⑤ B  = A 에서 앞목 길이 ⊘ 를 기초선 ① 까지 → (A.x + √(⊘²−★²), 0)
+  //   ⑥ 달림선 = N0→A 직선 + A→B 곡선(현 중점에서 위쪽으로 attachCurve 만큼 볼록)
+  //   ⑦ C  = B 에서 수평으로 칼라 끝 치수 → (B.x + proj, 0)
+  //   ⑧⑨ D(앞끝) = C 수직선 위에서 |B→D| = 앞 칼라 폭 → (C.x, −√(앞폭²−proj²))
+  //   2-① 안내선 = A 에서 달림 기초선(N0→A, A→B)과 동일한 각도 = 두 수직선의 이등분 방향 u
+  //   2-② CB 에서 칼라 허리·뒤 칼라 폭을 잡고(뒤 중심선에 직각) 안내선 u 와 만난 점이 F_a·O_a
+  //   2-③④ 꺾임선 안내 = CB허리 → F_a → B / 외곽 안내 = CB폭 → O_a → D(칼라 끝)
+  //   2-⑤⑥ "완만한 선으로 수정" = 이 파일의 기존 관례(접선 연속 cubic, 핸들 = 현 길이 × 1/3)로 고정한다.
+  //        ★ 교재는 손으로 정리하라고만 하므로 **이 정리 규칙은 구현 관례**이고 교재 수치가 아니다.
+  //   외곽 길이는 목둘레에 맞추지 않는다(교재: 가봉 필요). 달림선 실측과 ×+⊘ 는 측정값으로만 보고.
+  var ONE_PIECE_METHOD = { page: 147, smoothing: "tangent-continuous-cubic", handleFraction: SEAM_HANDLE_FRACTION };
+  function upNormal(from, to) { var d = unit(sub(to, from)); return { x: d.y, y: -d.x }; }   // 위쪽(−y) 법선
+  // 안내 폴리라인 P0 → Pm → P1 을 "완만한 선"으로: 시작 접선 = 수평(+x, CB 에 직각), 그 외 = 현 방향, 핸들 1/3.
+  function smoothGuide(P0, Pm, P1, part) {
+    var chord = unit(sub(P1, P0));
+    var h1 = lineLen(P0, Pm) * SEAM_HANDLE_FRACTION, h2 = lineLen(Pm, P1) * SEAM_HANDLE_FRACTION;
+    var c1 = { kind: "cubic", from: cp(P0), c1: { x: P0.x + h1, y: P0.y }, c2: add(Pm, chord, -h1), to: cp(Pm), part: part };
+    var c2 = { kind: "cubic", from: cp(Pm), c1: add(Pm, chord, h2), c2: add(P1, chord, -h2), to: cp(P1), part: part };
+    return [c1, c2];
+  }
+  // 달림선 A→B: 현 중점에서 위쪽으로 bow 만큼 볼록(교재 0.2). bow=0 이면 직선.
+  function attachBow(A, B, bow, part) {
+    if (bow === 0) return [L(A, B, part)];
+    var chord = unit(sub(B, A)), bowMid = add(mid(A, B), upNormal(A, B), bow);
+    var h1 = lineLen(A, bowMid) * SEAM_HANDLE_FRACTION, h2 = lineLen(bowMid, B) * SEAM_HANDLE_FRACTION;
+    return [
+      { kind: "cubic", from: cp(A), c1: add(A, chord, h1), c2: add(bowMid, chord, -h1), to: cp(bowMid), part: part },
+      { kind: "cubic", from: cp(bowMid), c1: add(bowMid, chord, h2), c2: add(B, chord, -h2), to: cp(B), part: part }
+    ];
+  }
+  // params = { riseCm(★), backCollarWidthCm, collarStandCm(칼라 허리), frontCollarWidthCm, tipProjectionCm, attachCurveCm }
+  //   반환 { ok, geometry:{outline,construction}, measure, anchors } | { ok:false, reason }.
+  function computeOnePiece(bodiceResult, params) {
+    var b = readBodice(bodiceResult);
+    if (!b.ok) return b;
+    var P = params || {};
+    var rise = P.riseCm, backW = P.backCollarWidthCm, stand = P.collarStandCm;
+    var frontW = P.frontCollarWidthCm, proj = P.tipProjectionCm, bow = P.attachCurveCm;
+    if (!num(rise) || rise <= 0) return { ok: false, reason: "invalid-rise" };
+    if (!num(backW) || backW <= 0) return { ok: false, reason: "invalid-back-collar-width" };
+    if (!num(stand) || stand <= 0 || stand >= backW) return { ok: false, reason: "invalid-collar-stand" };
+    if (!num(proj) || proj < 0) return { ok: false, reason: "invalid-tip-projection" };
+    if (!num(frontW) || frontW <= proj) return { ok: false, reason: "invalid-front-collar-width" };
+    if (!num(bow) || bow < 0) return { ok: false, reason: "invalid-attach-curve" };
+    if (!(b.frontCm > rise)) return { ok: false, reason: "invalid-rise" };   // ⑤ 가 기초선에 닿지 않음
+
+    var N0 = { x: 0, y: -rise };
+    var A = { x: b.backCm, y: -rise };
+    var B = { x: A.x + Math.sqrt(b.frontCm * b.frontCm - rise * rise), y: 0 };
+    var C = { x: B.x + proj, y: 0 };
+    var D = { x: C.x, y: -Math.sqrt(frontW * frontW - proj * proj) };
+    // 2-①: A 에서 두 달림 기초선에 세운 수직선의 이등분 방향(각도기 없이 긋는 교재 방법과 동일).
+    var u = unit({ x: upNormal(N0, A).x + upNormal(A, B).x, y: upNormal(N0, A).y + upNormal(A, B).y });
+    if (!(u.y < 0)) return { ok: false, reason: "invalid-guide-direction" };
+    var F0 = { x: 0, y: N0.y - stand }, O0 = { x: 0, y: N0.y - backW };
+    var Fa = add(A, u, -stand / u.y), Oa = add(A, u, -backW / u.y);   // CB 에 직각인 수평선과 안내선의 교점
+
+    var attach = [L(N0, A, "attach")].concat(attachBow(A, B, bow, "attach"));
+    var fold = smoothGuide(F0, Fa, B, "fold");
+    var outerFwd = smoothGuide(O0, Oa, D, "outer");                    // CB → 칼라 끝
+    var outline = attach.slice();
+    outline.push(L(B, D, "front-end"));                                // 앞 칼라 폭(칼라 끝 선)
+    outerFwd.slice().reverse().forEach(function (sgm) { outline.push(reverseCubic(sgm, "outer")); });   // 칼라 끝 → CB
+    outline.push(L(O0, N0, "cb"));                                     // CB(접힘) → 달림선 시작
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    var attachLen = sumMeasure(attach);
+    return { ok: true,
+      geometry: { outline: outline, construction: fold.map(function (sgm) { return cloneSeg(sgm, "fold"); }) },
+      measure: {
+        riseCm: rise, backCollarWidthCm: backW, collarStandCm: stand, attachCurveCm: bow,
+        attachLenCm: attachLen, neckTargetCm: b.backCm + b.frontCm, attachDiffCm: attachLen - (b.backCm + b.frontCm),
+        backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm,
+        frontCollarWidthCm: lineLen(B, D), tipProjectionCm: D.x - B.x, tipRiseCm: -D.y,
+        foldLenCm: sumMeasure(fold), outerLenCm: sumMeasure(outerFwd)
+      },
+      anchors: { cbAttach: N0, a: A, b: B, tipBase: C, tip: D, cbFold: F0, cbOuter: O0, foldGuide: Fa, outerGuide: Oa,
+        guideDir: { x: u.x, y: u.y } } };
+  }
+
   function validateClosedOutline(outline) {
     if (!Array.isArray(outline) || outline.length < 3) return { ok: false, reason: "empty" };
     for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (!nx.from || !outline[i].to || lineLen(outline[i].to, nx.from) > 1e-4) return { ok: false, reason: "not-closed" }; }
@@ -445,6 +534,8 @@
     readBodice: readBodice,
     computeStand: computeStand,
     computeBody: computeBody,
+    computeOnePiece: computeOnePiece,   // family 2(한 장 셔츠 칼라, P.147)
+    ONE_PIECE_METHOD: ONE_PIECE_METHOD,
     collarBodyLineFromGeometry: collarBodyLineFromGeometry,
     computeFromBodyLine: computeFromBodyLine,
     validateClosedOutline: validateClosedOutline

@@ -247,6 +247,19 @@ function _appendCollarBody(root, collarDraft, off, scale){
   root.appendChild(g);
 }
 
+// 한 장 셔츠 칼라(family 2, collarDraft.onePiece.geometry): 달림선·꺾임선·외곽선이 한 조각.
+//   outline = 실선(외곽), construction = 꺾임선 점선. 카라 offset 동승. M 의 스탠드/본체와 별개 요소다.
+function _appendCollarOnePiece(root, collarDraft, off, scale){
+  const op=collarDraft && collarDraft.onePiece;
+  if(!op || !op.geometry || !Array.isArray(op.geometry.outline)) return;
+  const d=_partPathD(op.geometry.outline); if(!d) return;
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-collar":"one-piece" });
+  g.appendChild(E("path",{ d, class:"design-collar-onepiece", fill:"none" }));
+  const fd=_partPathD(op.geometry.construction||[]);
+  if(fd) g.appendChild(E("path",{ d:fd, class:"design-collar-fold", fill:"none" }));
+  root.appendChild(g);
+}
+
 // 카라 제도 보조수치 오버레이(표시 전용): collarAnnotation 표시 모델(카라 로컬 cm)을 카라 offset 동승으로 그린다.
 //   보조선=가는 점선, 치수선=양끝 tick + 라벨. 선 굵기는 px 고정(줌 무관). 형상·hash 무관.
 function _appendCollarAnnotation(root, model, off, scale){
@@ -387,11 +400,12 @@ function render(){
       svg.appendChild(pRoot);
     }
     // 카라 스탠드 파생(있을 때만): 별도 조각(L.collar offset). 몸판 hash 변경 시 standGeometry=null 로 숨김.
-    if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body)) {
+    if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body || dp.working.collarDraft.onePiece)) {
       const cOff = L.collar || { dx: 0, dy: 0 };
       const cRoot = E("g"); cRoot.setAttribute("data-design-root", "collar");
       _appendCollarStand(cRoot, dp.working.collarDraft, cOff, scale);
       _appendCollarBody(cRoot, dp.working.collarDraft, cOff, scale);
+      _appendCollarOnePiece(cRoot, dp.working.collarDraft, cOff, scale);
       // 제도 보조수치(카라 탭·토글 ON·유효 모델일 때만, 매 렌더 새 그룹 — 중복 누적 없음).
       if (typeof window.collarAnnotationForRender === "function") _appendCollarAnnotation(cRoot, window.collarAnnotationForRender(), cOff, scale);
       // 관리형 collar-body 선(무효 시 빨강 점선) + 편집 overlay(카라 offset transform 동승).

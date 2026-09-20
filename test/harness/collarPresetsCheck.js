@@ -30,7 +30,7 @@ function bodice(hash) { return { hash: hash || "BH1", sourceVersion: 1, neckline
 {
   ok(Object.isFrozen(CP) && typeof CP.composeDraft === "function", "1: API frozen");
   const L = CP.list();
-  ok(Array.isArray(L) && L.length === 1 && Object.isFrozen(L), "1: 레코드 1개·목록 frozen");
+  ok(Array.isArray(L) && L.length === 2 && Object.isFrozen(L), "1: 실행 레코드 2개(M·G)·목록 frozen");
   const M = L[0];
   ok(M.id === "bunka-shirt-collar-M" && CP.DEFAULT_ID === M.id && CP.get(M.id) === M, "1: M id·기본 id·get 동일 참조");
   ok(M.label === "교재 M 기본형" && M.type === "shirt-two-piece" && M.baseMethod === "bunka-shirt-collar-M-v2", "1: 표시 이름·type·baseMethod(기존 계약)");
@@ -53,7 +53,7 @@ function bodice(hash) { return { hash: hash || "BH1", sourceVersion: 1, neckline
   try { M.stand.standHeightCm = 9; } catch (_) {}
   try { M.body.cbWidthCm = 9; } catch (_) {}
   try { CP.list().push({}); } catch (_) {}
-  ok(J(M) === before && CP.list().length === 1 && Object.isFrozen(M.stand) && Object.isFrozen(M.body) && Object.isFrozen(M.neckline), "3: 레코드·섹션·목록 변경 불가");
+  ok(J(M) === before && CP.list().length === 2 && Object.isFrozen(M.stand) && Object.isFrozen(M.body) && Object.isFrozen(M.neckline), "3: 레코드·섹션·목록 변경 불가");
   const d = CP.defaults(M.id);
   ok(d.ok && !Object.isFrozen(d.stand) && d.stand !== M.stand && d.body !== M.body, "3: defaults 는 편집 가능한 clone");
   d.stand.standHeightCm = 5; d.body.cbWidthCm = 7;
@@ -84,7 +84,7 @@ function bodice(hash) { return { hash: hash || "BH1", sourceVersion: 1, neckline
 // 5. 옵션 모델·알 수 없는 id 거부
 {
   const o = CP.options();
-  ok(J(o) === J([{ value: "bunka-shirt-collar-M", label: "교재 M 기본형" }]), "5: 옵션 = registry 레코드");
+  ok(J(o) === J([{ value: "bunka-shirt-collar-M", label: "교재 M 기본형" }, { value: "bunka-shirt-collar-G", label: "교재 G 기본형" }]), "5: 옵션 = registry 레코드(M·G)");
   ok(CP.defaults("nope").ok === false && CP.defaults("nope").reason === "unknown-collar-preset", "5: defaults 알 수 없는 id 거부");
   ok(CP.composeDraft("nope", bodice(), DC).reason === "unknown-collar-preset", "5: composeDraft 알 수 없는 id 거부");
   ok(CP.matches(CP.DEFAULT_ID, { standHeightCm: 3, frontRiseCm: 1 }, CP.defaults(CP.DEFAULT_ID).body) === true
@@ -158,9 +158,9 @@ function project(cd) { return { sourceBlock: { id: "block-1", version: 1, canoni
     ["hood", 8, "후드", "d", 74], ["tailored-collar", 9, "테일러드 칼라", "h", 78], ["shawl-collar", 10, "숄 칼라", "j", 80],
     ["high-neck", 11, "하이넥", "l", 82]];
   ok(J(F.map(f => [f.id, f.order, f.label, f.symbol, f.page])) === J(want), "8: 교재 순서·id·표시명·표식·페이지 정확");
-  ok(F.filter(f => f.availability === "available").map(f => f.id).join() === "shirt-collar-with-band", "8: available family = M 하나");
+  ok(F.filter(f => f.availability === "available").map(f => f.id).join() === "shirt-collar-one-piece,shirt-collar-with-band", "8: available family = 셔츠 칼라(G)·밴드 셔츠 칼라(M)");
   ok(F.every(f => f.availability === "available" ? typeof f.generator === "string" : f.generator === null), "8: generator 는 구현된 family 만");
-  ok(F.filter(f => f.id !== "shirt-collar-with-band").every(f => f.note === CP.PENDING_NOTE), "8: 미구현 family 안내 문구");
+  ok(F.filter(f => f.availability === "pending-source").every(f => f.note === CP.PENDING_NOTE) && F.filter(f => f.availability === "pending-source").length === 9, "8: 미구현 family 9개 안내 문구");
   const M = CP.family("shirt-collar-with-band");
   ok(M && CP.family("nope") === null && CP.family("__proto__") === null, "8: family 조회·알 수 없는 id null");
   try { F.push({}); } catch (_) {}
@@ -235,32 +235,34 @@ function project(cd) { return { sourceBlock: { id: "block-1", version: 1, canoni
 const ONE = "shirt-collar-one-piece";
 {
   const f = CP.family(ONE);
-  ok(f && f.order === 2 && f.symbol === "G" && f.page === 63 && f.availability === "pending-source" && f.generator === null, "13: family 2 셔츠 칼라(미구현)");
+  ok(f && f.order === 2 && f.symbol === "G" && f.page === 63 && f.availability === "available" && f.generator === "shirt-one-piece-v1", "13: family 2 셔츠 칼라(G 구현 후 available)");
   ok(f.reference && f.reference.methodPage === 147 && J(f.reference.pages) === J([63, 64, 65]) && /달림선 길이/.test(f.reference.attachLine) && /가봉/.test(f.reference.fitting), "13: family 참고 메모(제도법 P147·달림선 정합·가봉)");
   const vs = CP.variants(ONE);
   ok(J(vs.map(v => v.id)) === J(["G", "H", "I", "J", "K", "L"].map(x => "bunka-shirt-collar-" + x)), "13: G~L 교재 순서");
-  ok(vs.every(v => v.availability === "pending-source" && v.presetId === null && v.requiresMethodPage === 147), "13: 전부 pending·preset 없음·P147 필요");
+  ok(vs[0].availability === "available" && vs[0].presetId === "bunka-shirt-collar-G" && !("reference" in vs[0]), "13: G 만 실행 가능(참고값 아님 — 수치는 레코드가 출처)");
+  ok(vs.slice(1).every(v => v.availability === "pending-source" && v.presetId === null && v.requiresMethodPage === 147), "13: H~L 은 계속 pending·preset 없음·P147 필요");
   ok(vs.every(v => !("stand" in v) && !("body" in v) && !("parameters" in v) && !("geometry" in v)), "13: 실행 수치·형상 없음(참고값과 분리)");
   ok(J(vs.map(v => v.page)) === J([63, 63, 64, 64, 65, 65]), "13: variant 페이지 G·H 63 / I·J 64 / K·L 65");
   // 사진에서 확인한 도면 수치(교차검증 대상)
   const ref = (x) => CP.variant(ONE, "bunka-shirt-collar-" + x).reference;
-  ok(J(ref("G")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 3, riseCm: 2.5, frontEndMarkCm: 3, attachCurveMarkCm: 0.2, attachCurveDirection: "as-drawn" }), "13: G 허리 3·올림 2.5·앞표기 3·곡률 0.2");
   ok(J(ref("H")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 1, riseCm: 8, frontEndMarkCm: 4.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }), "13: H 허리 1·올림 8·앞표기 4.5·곡률 0.3");
   ok(J(ref("I")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.3, attachCurveDirection: "as-drawn" }), "13: I 허리 2·올림 4.5·앞표기 3.5·곡률 0.3");
   ok(J(ref("J")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 4, riseCm: 1, frontEndMarkCm: 2.5, attachCurveMarkCm: null, attachCurveDirection: "as-drawn" }), "13: J 허리 4·올림 1·앞표기 2.5·곡률 표기 없음");
   ok(J(ref("K")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: 6.5, collarStandCm: 2, riseCm: 4.5, frontEndMarkCm: 3.5, attachCurveMarkCm: 0.6, attachCurveDirection: "reversed" }), "13: K = I 치수 + 곡률 0.6 반대 방향");
   ok(J(ref("L")) === J({ backCollarWidthCm: 3.5, frontCollarWidthCm: null, collarStandCm: 3, riseCm: null, frontEndMarkCm: null, attachCurveMarkCm: null, attachCurveDirection: null }), "13: L 뒤 폭 3.5·허리 3 만(나머지 미확정)");
-  ok(["G", "H", "I", "J"].every(x => ref(x).backCollarWidthCm === 3.5 && ref(x).frontCollarWidthCm === 6.5), "13: G~J 공통 폭 3.5/6.5");
+  ok(["H", "I", "J"].every(x => ref(x).backCollarWidthCm === 3.5 && ref(x).frontCollarWidthCm === 6.5)
+    && CP.get("bunka-shirt-collar-G").onePiece.backCollarWidthCm === 3.5 && CP.get("bunka-shirt-collar-G").onePiece.frontCollarWidthCm === 6.5, "13: G~J 공통 폭 3.5/6.5(G 는 실행 레코드에서)");
   ok(/반대로/.test(CP.variant(ONE, "bunka-shirt-collar-K").referenceNote) && /몸판/.test(CP.variant(ONE, "bunka-shirt-collar-L").referenceNote) && /직선에 가까운/.test(CP.variant(ONE, "bunka-shirt-collar-J").referenceNote), "13: K·L·J 설명");
   // 불변
-  try { ref("G").collarStandCm = 9; } catch (_) {}
+  try { ref("H").collarStandCm = 9; } catch (_) {}
   try { CP.variants(ONE).push({}); } catch (_) {}
-  ok(ref("G").collarStandCm === 3 && CP.variants(ONE).length === 6 && Object.isFrozen(ref("G")), "13: 참고 수치 변경 불가");
+  ok(ref("H").collarStandCm === 1 && CP.variants(ONE).length === 6 && Object.isFrozen(ref("H")), "13: 참고 수치 변경 불가");
 }
 // 14. 참고 수치 표시 행(실행값 아님) + 표기 없는 항목 제외
 {
-  const rows = CP.referenceRows(ONE, "bunka-shirt-collar-G");
-  ok(rows.length === 6 && rows[0].key === "backCollarWidthCm" && rows[3].value === 2.5 && rows[5].value === 0.2 && rows.every(r => r.unit === "cm"), "14: G 표시 행 6개");
+  const rows = CP.referenceRows(ONE, "bunka-shirt-collar-H");
+  ok(rows.length === 6 && rows[0].key === "backCollarWidthCm" && rows[3].value === 8 && rows[5].value === 0.3 && rows.every(r => r.unit === "cm"), "14: H 표시 행 6개");
+  ok(CP.referenceRows(ONE, "bunka-shirt-collar-G").length === 0, "14: G 는 실행 레코드라 참고 행 없음");
   ok(J(CP.referenceRows(ONE, "bunka-shirt-collar-J").map(r => r.key)) === J(["backCollarWidthCm", "frontCollarWidthCm", "collarStandCm", "riseCm", "frontEndMarkCm"]), "14: J 는 곡률 표기 없음 → 행 제외");
   const k = CP.referenceRows(ONE, "bunka-shirt-collar-K");
   ok(k[k.length - 1].key === "attachCurveDirection" && k[k.length - 1].text === "반대 방향", "14: K 곡선 방향 표시");
@@ -272,16 +274,17 @@ const ONE = "shirt-collar-one-piece";
 // 15. G~L 은 적용 불가 — M 으로 대체되지 않는다
 {
   BODICE = bodice("BH1");
-  const ids = ["G", "H", "I", "J", "K", "L"].map(x => "bunka-shirt-collar-" + x);
-  ok(ids.every(id => { const r = CP.resolve(ONE, id); return r.ok === false && r.reason === "collar-preset-unavailable" && !("presetId" in r); }), "15: G~L resolve 거부");
-  ok(ids.every(id => { const r = CP.composeDraft(id, BODICE, DC); return r.ok === false && r.reason === "unknown-collar-preset" && !("draft" in r); }), "15: G~L compose 거부(M 형상 안 만듦)");
-  ok(ids.every(id => CP.get(id) === null) && CP.list().length === 1, "15: G~L 은 실행 레코드가 아니다");
-  ok(J(CP.variantOptions(ONE)) === J(CP.variants(ONE).map(v => ({ value: v.id, label: v.label, available: false }))), "15: 옵션 전부 available:false");
+  const ids = ["H", "I", "J", "K", "L"].map(x => "bunka-shirt-collar-" + x);
+  ok(ids.every(id => { const r = CP.resolve(ONE, id); return r.ok === false && r.reason === "collar-preset-unavailable" && !("presetId" in r); }), "15: H~L resolve 거부");
+  ok(ids.every(id => { const r = CP.composeDraft(id, BODICE, DC); return r.ok === false && r.reason === "unknown-collar-preset" && !("draft" in r); }), "15: H~L compose 거부(G·M 형상 안 만듦)");
+  ok(ids.every(id => CP.get(id) === null) && CP.list().length === 2, "15: H~L 은 실행 레코드가 아니다(레코드 = M·G 둘)");
+  ok(J(CP.variantOptions(ONE)) === J(CP.variants(ONE).map((v, i) => ({ value: v.id, label: v.label, available: i === 0 })), "15: G 만 available"), "15: 옵션은 G 만 available");
 }
 // 16. 참고 수치 검증(조용히 수용 금지)
 {
   const cat = () => JSON.parse(J(CP.families())), recs = () => JSON.parse(J(CP.list()));
-  const one = (c) => c[1].variants[0];
+  const one = (c) => c[1].variants[1];   // H = 참고 전용 variant
+  const one0 = (c) => c[1].variants[1];   // H(참고 전용) 기준
   let c = cat(); one(c).reference.bogus = 1; throwsReason(() => CP.buildCatalog(c, recs()), "unknown-reference-key", "16: 알 수 없는 참고 키");
   c = cat(); one(c).reference.collarStandCm = "3"; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-reference", "16: 문자열 수치");
   c = cat(); one(c).reference.riseCm = 0; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-reference", "16: 0 이하 수치");
@@ -308,6 +311,80 @@ const ONE = "shirt-collar-one-piece";
   const c = JSON.parse(J(CP.families())); delete c[1].variants[0].symbol;
   throwsReason(() => CP.buildCatalog(c, JSON.parse(J(CP.list()))), "missing-field", "17: variant symbol 필수");
   ok(CP.families().every(f => f.variants.every(v => Object.isFrozen(v) && typeof v.symbol === "string" && v.symbol.length > 0)), "17: 모든 variant 표식 동결·존재");
+}
+
+// 18. 한 장 셔츠 칼라 G 실행 레코드·생성기(교재 P.147 작도) — 독립 재계산과 대조
+{
+  const G = CP.get("bunka-shirt-collar-G");
+  ok(G && G.type === "shirt-one-piece" && G.baseMethod === "bunka-shirt-collar-G-v1" && G.familyId === ONE, "18: G 레코드 type·baseMethod·family");
+  ok(J(G.onePiece) === J({ riseCm: 2.5, backCollarWidthCm: 3.5, collarStandCm: 3, frontCollarWidthCm: 6.5, tipProjectionCm: 3, attachCurveCm: 0.2 }), "18: G 교재 수치(★2.5·뒤3.5·허리3·앞6.5·끝3·곡률0.2)");
+  ok(!("stand" in G) && !("body" in G), "18: 한 장 레코드는 밴드/본체 섹션을 쓰지 않음");
+  ok(CP.fields("onePiece").map(f => f.key).join() === Object.keys(G.onePiece).join(), "18: onePiece 필드 순서 = 파라미터 키 순서");
+  BODICE = bodice("BH1");
+  const r = DC.computeOnePiece(BODICE, G.onePiece);
+  ok(r.ok, "18: computeOnePiece ok (" + (r.reason || "") + ")");
+  // 작도 규칙 독립 검증: ★·×·⊘·칼라 끝·앞 칼라 폭
+  const back = BODICE.necklineLengths.back, front = BODICE.necklineLengths.front, an = r.anchors;
+  const near = (a, b, e = 1e-9) => Math.abs(a - b) < e;
+  ok(near(an.cbAttach.x, 0) && near(an.cbAttach.y, -2.5), "18: ③ CB 에서 올림 ★ 2.5");
+  ok(near(an.a.x, back) && near(an.a.y, -2.5), "18: ④ A = CB 에 직각으로 뒤목 × (같은 높이)");
+  ok(near(Math.hypot(an.b.x - an.a.x, an.b.y - an.a.y), front) && near(an.b.y, 0), "18: ⑤ B = A 에서 앞목 ⊘, 기초선 위");
+  ok(near(an.tipBase.x - an.b.x, 3) && near(an.tipBase.y, 0), "18: ⑦ 칼라 끝 수평 3");
+  ok(near(an.tip.x, an.tipBase.x) && near(Math.hypot(an.tip.x - an.b.x, an.tip.y - an.b.y), 6.5), "18: ⑧⑨ 앞 칼라 폭 6.5(끝 수직선 위)");
+  ok(near(an.cbFold.y, an.cbAttach.y - 3) && near(an.cbOuter.y, an.cbAttach.y - 3.5) && near(an.cbFold.x, 0) && near(an.cbOuter.x, 0), "18: 2-② CB 허리 3·뒤 폭 3.5");
+  // 2-① 안내선 = 두 달림 기초선에 세운 수직선의 이등분(각도 동일)
+  const ang = (p, q) => Math.atan2(q.y - p.y, q.x - p.x), u = an.guideDir, uA = Math.atan2(u.y, u.x);
+  const acute = (a, b) => { let d = Math.abs(a - b) % Math.PI; return Math.min(d, Math.PI - d); };   // 선 사이 각(방향 무관)
+  ok(Math.abs(acute(uA, ang(an.cbAttach, an.a)) - acute(uA, ang(an.a, an.b))) < 1e-9, "18: 안내선이 두 달림 기초선과 같은 각(2-①)");
+  ok(near(an.foldGuide.y, an.cbFold.y) && near(an.outerGuide.y, an.cbOuter.y), "18: 허리·폭 수평선(뒤 중심선에 직각)과 안내선의 교점");
+  // 달림선 0.2 = A–B 현 중점에서 수직·칼라 쪽(위)으로
+  const attach = r.geometry.outline.filter(s => s.part === "attach");
+  ok(attach.length === 3 && attach[0].kind === "line" && attach[1].kind === "cubic" && attach[2].kind === "cubic", "18: 달림선 = CB→A 직선 + A→B 두 cubic");
+  const bowMid = attach[1].to, mx = (an.a.x + an.b.x) / 2, my = (an.a.y + an.b.y) / 2;
+  const d = Math.hypot(bowMid.x - mx, bowMid.y - my);
+  ok(near(d, 0.2, 1e-9) && bowMid.y < my, "18: 0.2 = 현 중점에서 위(칼라 쪽) 볼록");
+  // 조각 구성·닫힘·측정
+  ok(J(r.geometry.outline.map(s => s.part)) === J(["attach", "attach", "attach", "front-end", "outer", "outer", "cb"]), "18: 한 조각 = 달림선·앞끝·외곽·CB");
+  ok(r.geometry.construction.every(s => s.part === "fold") && r.geometry.construction.length === 2, "18: 꺾임선은 construction");
+  ok(DC.validateClosedOutline(r.geometry.outline).ok, "18: 폐곡선·자기교차 없음");
+  ok(r.measure.attachLenCm > r.measure.neckTargetCm && r.measure.attachLenCm - r.measure.neckTargetCm < 0.05
+    && near(r.measure.neckTargetCm, back + front, 1e-9) && near(r.measure.attachDiffCm, r.measure.attachLenCm - (back + front), 1e-9), "18: 달림선 실측 ≥ 목둘레(곡선분) · 차이는 측정값");
+  ok(near(r.measure.frontCollarWidthCm, 6.5, 1e-9) && near(r.measure.tipProjectionCm, 3, 1e-9) && r.measure.outerLenCm > 0 && r.measure.foldLenCm > 0, "18: 측정값(앞 폭·칼라 끝·외곽·꺾임)");
+  // 결정론 + 입력 불변
+  const snapshot = J(G.onePiece);
+  ok(J(DC.computeOnePiece(BODICE, G.onePiece)) === J(r) && J(G.onePiece) === snapshot, "18: 결정론·입력 불변");
+  // 실패 계약(원자)
+  const bad = (patch, reason) => { const p2 = Object.assign({}, G.onePiece, patch); const x = DC.computeOnePiece(BODICE, p2); return x.ok === false && x.reason === reason && !("geometry" in x); };
+  ok(bad({ riseCm: 0 }, "invalid-rise") && bad({ riseCm: front + 1 }, "invalid-rise"), "18: 올림 치수 실패");
+  ok(bad({ collarStandCm: 3.5 }, "invalid-collar-stand") && bad({ collarStandCm: 0 }, "invalid-collar-stand"), "18: 칼라 허리 ≥ 뒤 폭 거부");
+  ok(bad({ frontCollarWidthCm: 3 }, "invalid-front-collar-width") && bad({ tipProjectionCm: -1 }, "invalid-tip-projection") && bad({ attachCurveCm: -0.1 }, "invalid-attach-curve"), "18: 앞 폭·칼라 끝·곡률 실패");
+  ok(DC.computeOnePiece({ hash: "x" }, G.onePiece).reason === "no-bodice" || DC.computeOnePiece({ hash: "x" }, G.onePiece).reason === "no-neckline", "18: 몸판 없음 거부");
+  ok(J(DC.ONE_PIECE_METHOD) === J({ page: 147, smoothing: "tangent-continuous-cubic", handleFraction: 1 / 3 }), "18: 정리 규칙은 구현 관례로 명시(교재 수치 아님)");
+}
+// 19. G 초안·완료본: M 과 섞이지 않는 type 분리 + 선택 왕복 무변경
+{
+  BODICE = bodice("BH1");
+  const g = CP.composeDraft("bunka-shirt-collar-G", BODICE, DC);
+  ok(g.ok && g.draft.type === "shirt-one-piece" && g.draft.presetId === "bunka-shirt-collar-G" && g.draft.baseMethod === "bunka-shirt-collar-G-v1", "19: G draft type·출처");
+  ok(!("standGeometry" in g.draft) && !("body" in g.draft) && !("stand" in g.draft.parameters) && g.draft.parameters.onePiece && g.draft.onePiece.geometry, "19: 밴드/본체 필드 없음(거짓 재사용 금지)");
+  PROJECT = project(g.draft);
+  const rc = CC.complete(PROJECT);
+  ok(rc.ok && rc.result.type === "shirt-one-piece" && rc.result.onePiece.geometry && rc.result.symmetry === "half-cb-fold" && Object.isFrozen(rc.result), "19: G 완료 스냅샷(" + (rc.reason || "") + ")");
+  ok(!("stand" in rc.result) && !("body" in rc.result) && rc.result.presetId === "bunka-shirt-collar-G", "19: 완료본도 밴드/본체 없음·presetId 보존");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false && CC.complete(PROJECT).idempotent === true, "19: 변경 없음·idempotent");
+  // M draft 와 hash 가 다르고, 종류가 바뀌면 stale
+  const m = CP.composeDraft(CP.DEFAULT_ID, BODICE, DC).draft;
+  PROJECT.working.collarDraft = m;
+  ok(CC.isCurrentCollarChanged(PROJECT) === true, "19: 한 장 완료본 vs 2피스 draft → 변경됨");
+  const mDone = CC.complete(PROJECT);
+  ok(mDone.ok && mDone.result.type === "shirt-two-piece" && mDone.result.hash !== rc.result.hash, "19: M 완료본과 hash 분리");
+  PROJECT.working.collarDraft = CP.composeDraft("bunka-shirt-collar-G", BODICE, DC).draft;
+  ok(CC.isCurrentCollarChanged(PROJECT) === true && CC.complete(PROJECT).result.hash === rc.result.hash, "19: G 재적용 → 같은 형상 hash 복귀");
+  // 게이트: 형상 없는 한 장 draft 는 완료 불가(원자)
+  const broken = JSON.parse(J(g.draft)); delete broken.onePiece;
+  const P2 = project(broken); const before = P2.working.collarResult;
+  const rb = CC.complete(P2);
+  ok(rb.ok === false && rb.reason === "no-collar-piece" && P2.working.collarResult === before, "19: 형상 없는 한 장 draft 거부·불변");
 }
 
 console.log("══════════════════════════════════════════════");

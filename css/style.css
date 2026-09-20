@@ -137,6 +137,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .cds-list dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
 .cds-list dd[data-status="match"]{color:#0F8A4A;font-weight:600}
 .cds-list dd[data-status="mismatch"]{color:#cc3333;font-weight:600}
+/* 한 장 셔츠 칼라(family 2): 외곽 실선 + 꺾임선 점선. 스탠드(스틸블루)·본체(파랑)와 구분되는 색. */
+.design-collar-onepiece{stroke:#0E7490;stroke-width:2;fill:none;stroke-linejoin:round;stroke-linecap:round}
+.design-collar-fold{stroke:#0E7490;stroke-width:1.4;fill:none;opacity:.7;stroke-dasharray:5 3}
 /* 무효 카라 본체 관리선(C3 직접 편집): 빨강 점선. 카라 레이어는 .design-working 밖이라 전용 클래스. */
 .design-collar-invalid{fill:none;stroke:#cc3333;stroke-width:2;stroke-dasharray:5 3;stroke-linejoin:round;stroke-linecap:round}
 /* 무효 소매산 편집: 빨강 점선(마지막 유효 navy geometry 는 유지, 선택 무관 표시).

@@ -99,11 +99,63 @@
       dims: dims, labels: labels, inputs: inputs, results: results };
   }
 
-  var RECIPES = { "bunka-shirt-collar-M-v2": mRecipe };
+  // 한 장 셔츠 칼라(교재 P.147, 예 G P.63) 표시 모델. designCollar.computeOnePiece 의 named anchors·
+  //   parameters·measure 만 쓴다(좌표 추론 없음). 달림선 실측과 목둘레(뒤목+앞목) 차이는 **표시만**.
+  function gRecipe(cd) {
+    var op = cd.onePiece || null, P = (cd.parameters && cd.parameters.onePiece) || {}, m = (op && op.measure) || {};
+    var an = (op && op.anchors) || null;
+    var dims = [], labels = [];
+    if (an) {
+      var N0 = pt(an.cbAttach), A = pt(an.a), B = pt(an.b), C = pt(an.tipBase), D = pt(an.tip);
+      var F0 = pt(an.cbFold), O0 = pt(an.cbOuter), Fa = pt(an.foldGuide), Oa = pt(an.outerGuide);
+      if (N0 && B) {
+        var base = { x: N0.x, y: B.y };                       // 기초 안내선 ①(y = B 의 높이)
+        dim(dims, "baseline", "ref", base, B, null);
+        dim(dims, "rise", "dim", base, N0, P.riseCm);         // ③ 올림 치수 ★
+      }
+      dim(dims, "collar-stand", "dim", N0, F0, P.collarStandCm);        // ② 칼라 허리
+      dim(dims, "back-collar-width", "dim", N0, O0, P.backCollarWidthCm);
+      dim(dims, "back-neck", "dim", N0, A, m.backNeckLenCm);           // ④ 뒤 목둘레 ×(직선 치수)
+      dim(dims, "front-neck", "dim", A, B, m.frontNeckLenCm);          // ⑤ 앞 목둘레 ⊘(직선 치수)
+      dim(dims, "tip-projection", "dim", B, C, P.tipProjectionCm);     // ⑦ 칼라 끝(수평)
+      dim(dims, "front-collar-width", "dim", B, D, P.frontCollarWidthCm);   // ⑨ 앞 칼라 폭
+      dim(dims, "guide-fold", "ref", A, Fa, null);                     // 2-① 안내선 위의 허리·폭 점
+      dim(dims, "guide-outer", "ref", Fa, Oa, null);
+      if (N0) labels.push({ id: "cb", at: N0, text: "CB" });
+      if (A) labels.push({ id: "a", at: A, text: "A" });
+      if (B) labels.push({ id: "b", at: B, text: "B" });
+      if (D) labels.push({ id: "tip", at: D, text: "칼라 끝" });
+    }
+    var inputs = [
+      { key: "riseCm", label: "올림 치수(★)", value: val(P.riseCm) },
+      { key: "backCollarWidthCm", label: "뒤 칼라 폭", value: val(P.backCollarWidthCm) },
+      { key: "collarStandCm", label: "칼라 허리", value: val(P.collarStandCm) },
+      { key: "frontCollarWidthCm", label: "앞 칼라 폭", value: val(P.frontCollarWidthCm) },
+      { key: "tipProjectionCm", label: "칼라 끝(수평)", value: val(P.tipProjectionCm) },
+      { key: "attachCurveCm", label: "달림선 곡률", value: val(P.attachCurveCm) }
+    ];
+    var diff = num(m.attachDiffCm) ? m.attachDiffCm : null;
+    var results = [
+      { key: "backNeck", label: "몸판 뒤목(반쪽) ×", value: val(m.backNeckLenCm) },
+      { key: "frontNeck", label: "몸판 앞목(반쪽) ⊘", value: val(m.frontNeckLenCm) },
+      { key: "neckTarget", label: "목둘레 합(×+⊘)", value: val(m.neckTargetCm) },
+      { key: "attachLen", label: "달림선 실측 길이", value: val(m.attachLenCm) },
+      // 교재는 외곽 치수를 목둘레에 맞추지 않고 가봉으로 조정한다 → 차이는 정합 판정이 아니라 사실 표시.
+      { key: "attachDiff", label: "달림선 − 목둘레 합", value: diff, text: diff == null ? null : (diff >= 0 ? "+" : "−") + Math.abs(diff).toFixed(2) },
+      { key: "foldLen", label: "꺾임선 길이", value: val(m.foldLenCm) },
+      { key: "outerLen", label: "외곽선 길이", value: val(m.outerLenCm) },
+      { key: "tipRise", label: "칼라 끝 높이(파생)", value: val(m.tipRiseCm) }
+    ];
+    return { recipe: cd.baseMethod, mode: "parametric", note: null, dims: dims, labels: labels, inputs: inputs, results: results };
+  }
+
+  var RECIPES = { "bunka-shirt-collar-M-v2": mRecipe, "bunka-shirt-collar-G-v1": gRecipe };
 
   // 스탠드가 없거나(stale 숨김 포함) recipe 가 등록돼 있지 않으면 null — 이전 수치를 current 처럼 남기지 않는다.
   function buildModel(collarDraft, bodiceResult) {
-    if (!collarDraft || !collarDraft.standGeometry) return null;
+    if (!collarDraft) return null;
+    var onePiece = collarDraft.type === "shirt-one-piece";
+    if (onePiece ? !(collarDraft.onePiece && collarDraft.onePiece.geometry) : !collarDraft.standGeometry) return null;
     var fn = RECIPES[collarDraft.baseMethod];
     return fn ? fn(collarDraft, bodiceResult || null) : null;
   }
