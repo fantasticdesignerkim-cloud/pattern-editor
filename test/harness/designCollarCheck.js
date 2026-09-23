@@ -201,6 +201,60 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   ok(C.computeOnePiece(bodice(10, 8), BAND.M).ok === false, "9: 밴드 파라미터로는 한 장 칼라를 만들 수 없다");
 }
 
+// 11. 교재 O(P.67) — P.148 골격 + D(P.61) 방식 기초선 옵션. M·N·P 는 옵션 없이 완전히 동일해야 한다.
+{
+  const B = bodice(8.6087, 12.3874, 1.75), NECK = 8.6087 + 12.3874;
+  const O_STAND = { bandWidthCm: 3, frontRiseCm: 8.5, frontEndCm: 0.5 };
+  const O_BODY = { gapCm: 14, cbWidthCm: 4, frontProjectionCm: 4, pointDiagonalCm: 6, outerBowCm: 0 };
+  const O_CONS = { baselineReductionCm: 2.5, guideRiseCm: 2 };
+
+  // ① 옵션 없음 = 기존 제도(인자 생략·빈 객체·0 값이 전부 동일)
+  const plain = C.computeStand(B, BAND.M);
+  ok(J(C.computeStand(B, BAND.M, {})) === J(plain)
+    && J(C.computeStand(B, BAND.M, { baselineReductionCm: 0, guideRiseCm: 0 })) === J(plain), "11: 옵션 없음/0 은 기존 M 제도와 byte-identical");
+  ok(plain.baseLineLenCm === plain.neckTargetCm && plain.baselineReductionCm === 0 && plain.guideRiseCm === 0, "11: 옵션 없으면 기초선 = ×+⊘");
+
+  const o = C.computeStand(B, O_STAND, O_CONS);
+  ok(o.ok && C.validateClosedOutline(o.standGeometry.outline).ok, "11: O 밴드 폐곡선 생성");
+  // ★ 기초선만 줄인다 — ⑭ 목표 실측은 감산 전 ×+⊘ 그대로
+  ok(Math.abs(o.baseLineLenCm - (NECK - 2.5)) < 1e-9 && Math.abs(o.neckTargetCm - NECK) < 1e-9
+    && Math.abs(o.lowerNeckSeamLenCm - NECK) < 1e-6, "11: 기초선 = ×+⊘−2.5 · 달림선 실측 = ×+⊘");
+  ok(Math.abs(o.anchors.cfSeam.x - (NECK - 2.5)) < 1e-9 && Math.abs(o.anchors.cfSeam.y + 8.5) < 1e-9, "11: Ⓑ = 감산된 기초선 끝에서 올림 8.5");
+  // ⑥ 앞쪽 2/3 안내점 Ⓐ 를 기초선 위로 2 올린다(P.146 ⑥·P.148 ⑥ 의 유일한 명명 안내점)
+  ok(Math.abs(o.anchors.guideA.x - (NECK - 2.5) * 2 / 3) < 1e-9 && Math.abs(o.anchors.guideA.y + 2) < 1e-9, "11: Ⓐ = 감산 기초선의 앞쪽 2/3 · 2cm 올림");
+  ok(Math.abs(o.baselineReductionCm - 2.5) < 1e-12 && Math.abs(o.guideRiseCm - 2) < 1e-12, "11: 구성 옵션 실측 보고");
+
+  // ★ 교재 목적: "올림이 크면 달림선 오차가 커지므로 미리 뺀다" — 감산·Ⓐ 올림이 둘 다 ⑭ 보정량을 줄인다
+  const noOpt = C.computeStand(B, O_STAND);
+  const onlyRed = C.computeStand(B, O_STAND, { baselineReductionCm: 2.5, guideRiseCm: 0 });
+  ok(noOpt.ok && onlyRed.ok && noOpt.cbTrimCm > onlyRed.cbTrimCm && onlyRed.cbTrimCm > o.cbTrimCm && o.cbTrimCm > 0,
+    "11: 감산·Ⓐ 올림이 뒤 중심 보정량을 단조 감소(그린 길이 ≥ 목둘레 유지)");
+  // 방향 판정 근거: Ⓐ 를 **올릴수록** 그린 달림선이 짧아진다(= 교재가 말한 "오차를 줄인다").
+  //   내리는 경우는 엔진이 음수 올림을 거부하므로 위 실패 계약으로 대신 잠근다.
+  const raise1 = C.computeStand(B, O_STAND, { baselineReductionCm: 2.5, guideRiseCm: 1 });
+  ok(onlyRed.drawnAttachLenCm > raise1.drawnAttachLenCm && raise1.drawnAttachLenCm > o.drawnAttachLenCm,
+    "11: Ⓐ 올림이 커질수록 그린 달림선이 단조 감소");
+
+  // 위 칼라(간격 14·CB 폭 4·수평 4·사선 6)까지 연결
+  const body = C.computeBody(o, O_BODY);
+  ok(body.ok && C.validateClosedOutline(body.bodyGeometry.outline).ok
+    && Math.abs(body.attachLenCm - o.upperNeckSegmentLenCm) < 1e-6, "11: O 위 칼라 이음선 = 밴드 윗선 ⒸⒹ");
+  ok(Math.abs(body.measure.gapCm - 14) < 1e-9 && Math.abs(body.measure.cbWidthCm - 4) < 1e-9
+    && Math.abs(body.measure.frontProjectionCm - 4) < 1e-9 && Math.abs(body.measure.pointDiagonalLenCm - 6) < 1e-6, "11: O 위 칼라 교재 수치(14·4·4·6)");
+
+  // 실패 계약
+  ok(C.computeStand(B, O_STAND, { baselineReductionCm: -1, guideRiseCm: 2 }).reason === "invalid-construction-guide"
+    && C.computeStand(B, O_STAND, { baselineReductionCm: 2.5, guideRiseCm: -1 }).reason === "invalid-construction-guide"
+    && C.computeStand(B, O_STAND, { baselineReductionCm: NECK, guideRiseCm: 0 }).reason === "invalid-construction-guide", "11: 감산·올림 범위 밖 거부");
+  // 감산이 과하면 그린 달림선이 목둘레보다 짧아져 ⑭ 보정이 불가능 → 정직하게 거부
+  ok(C.computeStand(B, O_STAND, { baselineReductionCm: 8, guideRiseCm: 2 }).reason === "invalid-front-rise", "11: 보정으로 줄일 수 없으면 거부");
+  // M·N·P 는 옵션을 주지 않으므로 형상·실측 불변
+  ["M", "N", "P"].forEach(k => {
+    const a = C.computeStand(B, BAND[k]), b2 = C.computeStand(B, BAND[k], null);
+    ok(J(a.standGeometry) === J(b2.standGeometry) && a.lowerNeckSeamLenCm === b2.lowerNeckSeamLenCm, "11: " + k + " 은 옵션 도입과 무관하게 동일");
+  });
+}
+
 // 10. 오픈 칼라(교재 L, P.65 — 몸판 연동 전용 계약). G~K(한 장, P.147)와 섞이지 않는다.
 {
   // 앞판 외곽(SV3 의미 모서리): center(수직) + neckline(곡선) + shoulder. FNP = center∩neckline.

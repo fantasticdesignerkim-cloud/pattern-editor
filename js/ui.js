@@ -1096,7 +1096,10 @@
     const sel = resolveCollarSelection(); if (!sel.ok) return { ok: false, reason: sel.reason };
     const preset = window.collarPresets.get(sel.presetId);
     const bodice = window.bodiceCheckpoint.latest(project);
-    const r = window.designCollar.computeStand(bodice, { bandWidthCm: bandWidthCm, frontRiseCm: frontRiseCm, frontEndCm: frontEndCm });
+    // 교재 O 처럼 D(P.61) 방식 기초선 옵션이 있는 프리셋이면 그 construction 을 함께 적용한다
+    //   (밴드 폭·올림·앞 끝선은 사용자 편집값, construction 은 프리셋 고정 형상 옵션).
+    const construction = preset.construction ? JSON.parse(JSON.stringify(preset.construction)) : null;
+    const r = window.designCollar.computeStand(bodice, { bandWidthCm: bandWidthCm, frontRiseCm: frontRiseCm, frontEndCm: frontEndCm }, construction);
     if (!r.ok) return r;
     project.working.collarDraft = {
       sourceBodiceHash: bodice.hash,
@@ -1104,6 +1107,7 @@
       baseMethod: preset.baseMethod,   // 정본 제도법 출처(registry 레코드). hash 미포함 메타.
       presetId: preset.id,             // 선택 프리셋 identity(출처 메타). hash 미포함.
       parameters: { stand: { bandWidthCm: bandWidthCm, frontRiseCm: frontRiseCm, frontEndCm: frontEndCm } },
+      construction: construction,   // null 이면 기존 M·N·P 와 동일한 P.148 제도
       standGeometry: r.standGeometry,
       standAnchors: r.anchors,   // 표시 전용 named anchor(collarAnnotation) — checkpoint 스냅샷·hash 미포함
       collarGeometry: null,   // (미사용 예약)
@@ -1113,7 +1117,8 @@
         lowerNeckSeamLenCm: r.lowerNeckSeamLenCm, lowerExtensionLenCm: r.lowerExtensionLenCm,
         upperNeckSegmentLenCm: r.upperNeckSegmentLenCm, upperExtensionLenCm: r.upperExtensionLenCm,
         upperTotalLenCm: r.upperTotalLenCm, backNeckLenCm: r.backNeckLenCm, frontNeckLenCm: r.frontNeckLenCm,
-        neckTargetCm: r.neckTargetCm, cbTrimCm: r.cbTrimCm   // P.148 ⑭ 목표 목둘레·뒤 중심 보정량
+        neckTargetCm: r.neckTargetCm, cbTrimCm: r.cbTrimCm,   // P.148 ⑭ 목표 목둘레·뒤 중심 보정량
+        baseLineLenCm: r.baseLineLenCm, baselineReductionCm: r.baselineReductionCm, guideRiseCm: r.guideRiseCm
       }
     };
     return { ok: true, result: r };
@@ -1122,7 +1127,7 @@
   function collarFailStr(reason) {
     const m = { "no-bodice": "몸판 완료 필요", "no-neckline": "목둘레 측정 불가", "invalid-overlap": "여밈 값 확인", "front-extension-missing": "몸판에 앞여밈을 먼저 적용하세요",
       "invalid-band-width": "밴드 폭 값 확인(1–8)", "invalid-collar-width": "칼라 폭 값 확인", "invalid-top-setback": "앞 윗끝 물림 값 확인", "invalid-front-end": "앞 끝선 값 확인", "invalid-front-rise": "앞 중심 올림 값 확인(0 이상·과대 금지)", "invalid-guide-direction": "안내선 방향 오류", "stand-f-neckline-required": "몸판에서 스탠드 F 목선을 적용·완료하세요",
-      "invalid-stand-offset": "앞끝 올림 대비 스탠드 높이 과대(윗선 붕괴)",
+      "invalid-stand-offset": "앞끝 올림 대비 스탠드 높이 과대(윗선 붕괴)", "invalid-construction-guide": "기초선 감산·안내점 올림 값 확인",
       "invalid-back-collar-width": "뒤 칼라 폭 값 확인", "invalid-collar-stand": "칼라 허리 값 확인",
       "invalid-front-end-rise": "앞 끝 올림이 칼라 높이(허리+뒤 폭) 이상입니다", "invalid-front-straight": "앞 직선 구간 값 확인",
       "invalid-break-point": "앞목점→꺾임 끝 값이 여밈분보다 커야 합니다",
@@ -1276,7 +1281,9 @@
     // 윗선 목 구간(upperNeckSegmentLenCm)은 곡률 반영값 — C2 봉제 길이는 앞끝 여백과 함께 C2 에서 확정.
     else if (c.has && c.geom && c.measure) {
       const m = c.measure;
-      setCollarNote("달림선 " + fmtL(m.lowerNeckSeamLenCm) + "cm = 목둘레 " + fmtL(m.neckTargetCm != null ? m.neckTargetCm : m.lowerNeckSeamLenCm) + "cm(뒤중심 보정 " + fmtL(m.cbTrimCm || 0) + "cm) · 밴드 윗선 " + fmtL(m.upperNeckSegmentLenCm) + "cm · 앞 끝선 " + fmtL(m.lowerExtensionLenCm) + "cm · 앞 중심 올림 " + fmtL(c.frontRiseCm) + "cm · 세션 전용");
+      const red = (m.baselineReductionCm > 0 || m.guideRiseCm > 0)
+        ? " · 기초선 " + fmtL(m.baseLineLenCm) + "cm(감산 " + fmtL(m.baselineReductionCm) + "·2/3 안내점 " + fmtL(m.guideRiseCm) + " 올림)" : "";
+      setCollarNote("달림선 " + fmtL(m.lowerNeckSeamLenCm) + "cm = 목둘레 " + fmtL(m.neckTargetCm != null ? m.neckTargetCm : m.lowerNeckSeamLenCm) + "cm(뒤중심 보정 " + fmtL(m.cbTrimCm || 0) + "cm) · 밴드 윗선 " + fmtL(m.upperNeckSegmentLenCm) + "cm · 앞 끝선 " + fmtL(m.lowerExtensionLenCm) + "cm · 앞 중심 올림 " + fmtL(c.frontRiseCm) + "cm" + red + " · 세션 전용");
     }
     else setCollarNote("스탠드 높이·앞끝 올림 적용으로 카라 스탠드 생성 · 세션 전용");
     updateCollarBodyPanel(project);
@@ -1294,7 +1301,7 @@
     if (!window.designCollar || !window.bodiceCheckpoint) return { ok: false, reason: "no-module" };
     const cd = project.working.collarDraft; if (!cd) return { ok: false, reason: "invalid-stand" };
     // 스탠드 result 재생성(순수, upperNeckPath·anchors 확보) → 본체 파생.
-    const stand = window.designCollar.computeStand(window.bodiceCheckpoint.latest(project), cd.parameters.stand);
+    const stand = window.designCollar.computeStand(window.bodiceCheckpoint.latest(project), cd.parameters.stand, cd.construction);
     if (!stand.ok) return stand;
     const r = window.designCollar.computeBody(stand, bodyParams);
     if (!r.ok) return r;

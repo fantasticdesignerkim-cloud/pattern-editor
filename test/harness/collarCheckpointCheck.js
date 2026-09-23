@@ -196,5 +196,36 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   ok(gRes.ok && CC.isCurrentCollarChanged(PROJECT) === true, "8: 한 장 완료본 + L 초안 → 변경됨");
 }
 
+// 9. D 방식 기초선 옵션(교재 O): construction 이 형상 identity 에 들어가되, 없으면 서명에 키가 없다
+{
+  BODICE = bodice("BH1"); BODICE_STALE = false; SLEEVE = { id: "s" }; SLEEVE_CHANGED = false; SLEEVE_INVAL = false;
+  const CONS = { baselineReductionCm: 2.5, guideRiseCm: 2 };
+  const O_STAND = { bandWidthCm: 3, frontRiseCm: 8.5, frontEndCm: 0.5 };   // 감산은 올림이 클 때만 성립한다
+  const O_BODY = { gapCm: 14, cbWidthCm: 4, frontProjectionCm: 4, pointDiagonalCm: 6, outerBowCm: 0 };
+  const mk = (cons) => {
+    const b = bodice("BH1"), st = DC.computeStand(b, O_STAND, cons), bd = DC.computeBody(st, O_BODY);
+    const cd = { sourceBodiceHash: "BH1", type: "shirt-two-piece", parameters: { stand: Object.assign({}, O_STAND) },
+      standGeometry: st.standGeometry,
+      body: { parameters: Object.assign({}, O_BODY), geometry: bd.bodyGeometry, attachLenCm: bd.attachLenCm, measure: bd.measure } };
+    if (cons) cd.construction = JSON.parse(JSON.stringify(cons));
+    return cd;
+  };
+  PROJECT = { sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: mk(null), patternLines: [], collarResult: null } };
+  const plain = CC.complete(PROJECT);
+  ok(plain.ok && plain.result.stand.construction === null, "9: 옵션 없는 초안 완료 → construction null");
+  PROJECT.working.collarDraft = mk(CONS); PROJECT.working.collarResult = null;
+  const withCons = CC.complete(PROJECT);
+  ok(withCons.ok && JSON.stringify(withCons.result.stand.construction) === JSON.stringify(CONS), "9: 옵션 있는 초안 완료 → construction 보존");
+  ok(withCons.result.hash !== plain.result.hash, "9: 같은 파라미터라도 construction 이 다르면 hash 분리");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "9: 옵션 초안 완료 직후 미변경");
+  // 옵션만 제거하면 변경으로 잡힌다(스테일 판정에도 반영)
+  PROJECT.working.collarDraft = mk(null);
+  ok(CC.isCurrentCollarChanged(PROJECT) === true, "9: construction 제거 → 카라 변경됨");
+  // 감산이 과해 ⑭ 보정이 불가능하면 완료 게이트가 stand-recompute 로 차단
+  const bad = mk(CONS); bad.construction = { baselineReductionCm: 12, guideRiseCm: 2 };
+  ok(CC.check({ sourceBlock: {}, working: { collarDraft: bad, patternLines: [], collarResult: null } }).fails.indexOf("stand-recompute") >= 0,
+    "9: 재계산 불가한 construction → 완료 차단");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

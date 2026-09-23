@@ -33,6 +33,9 @@
     var ba = (body && !manual) ? body.anchors : null;   // manual: 과거 parametric anchor 를 현재 형상처럼 쓰지 않는다
     var dims = [], labels = [];
 
+    // 교재 O(P.67)처럼 D(P.61) 방식 기초선 옵션이 있는 경우에만 추가 표시한다 —
+    //   옵션이 없는 M·N·P 의 표시 모델(행·치수선)은 그대로 둔다.
+    var bc = cd.construction || null;
     if (sa) {
       var cbSeam = pt(sa.cbSeam), cbTop = pt(sa.cbTop), cfSeam = pt(sa.cfSeam), bandTopCf = pt(sa.upperNeckEnd);
       dim(dims, "band-width", "dim", cbSeam, cbTop, sp.bandWidthCm);
@@ -44,6 +47,14 @@
       dim(dims, "cf-perpendicular", "ref", cfSeam, bandTopCf, null);   // CF 올림점에서 밴드 아래선에 90°
       if (cbSeam) labels.push({ id: "cb", at: cbSeam, text: "CB" });
       if (cfSeam) labels.push({ id: "cf", at: cfSeam, text: "CF" });
+      // D 방식: 앞쪽 2/3 안내점 Ⓐ 를 기초선에서 올린 양(⑥). 기초선은 y=0(감산된 ×+⊘−2.5).
+      if (bc && bc.guideRiseCm > 0) {
+        var gA = pt(sa.guideA);
+        if (gA) {
+          dim(dims, "guide-rise", "dim", { x: gA.x, y: 0 }, gA, bc.guideRiseCm);
+          labels.push({ id: "guide-a", at: gA, text: "Ⓐ(2/3)" });
+        }
+      }
     }
     if (ba) {
       var bCb = pt(ba.bandTopCb), bCf = pt(ba.bandTopCf), G = pt(ba.upperCbSeam), O = pt(ba.cbOuter), A = pt(ba.attachFront), T = pt(ba.tip);
@@ -72,6 +83,10 @@
       { key: "pointDiagonalCm", label: "끝 사선", value: body ? val(bp.pointDiagonalCm) : null },
       { key: "outerBowCm", label: "외곽 휨", value: body ? val(bp.outerBowCm) : null }
     ];
+    if (bc) {
+      inputs.push({ key: "baselineReductionCm", label: "기초선 감산(D 방식)", value: val(bc.baselineReductionCm) });
+      inputs.push({ key: "guideRiseCm", label: "2/3 안내점 Ⓐ 올림", value: val(bc.guideRiseCm) });
+    }
     var nl = (bodice && bodice.necklineLengths) || {};
     var diff = val(bm.seamLengthDiffCm), corr = val(bm.cbCorrectionCm);
     // 목둘레 ↔ 밴드 달림선, 밴드 윗선 ↔ 위칼라 이음선의 실측 차이(P.148 ⑭·step 3 의 보정 결과).
@@ -95,6 +110,7 @@
       { key: "actualProjection", label: "실제 수평 돌출", value: val(bm.frontProjectionCm) },
       { key: "actualDiagonal", label: "실제 사선", value: val(bm.pointDiagonalLenCm) }
     ];
+    if (bc) results.splice(5, 0, { key: "baseLineLen", label: "기초 수평선(×+⊘−감산)", value: val(sm.baseLineLenCm) });
     return { recipe: cd.baseMethod, mode: manual ? "manual" : "parametric",
       note: manual ? "직접 수정 중 · 제도 기준 치수는 참고값(본체 보조선 숨김)" : null,
       dims: dims, labels: labels, inputs: inputs, results: results };

@@ -122,7 +122,7 @@
     //   gap(CB 제도 간격)은 양수로 기록돼 있어야 한다. 길이 차이는 위칼라 CB 수평 보정으로 이미 0 이어야 한다.
     var lengths = null, standRe = null;
     if (cd && bodice && cd.parameters && cd.parameters.stand) {
-      standRe = DC.computeStand(bodice, cd.parameters.stand);
+      standRe = DC.computeStand(bodice, cd.parameters.stand, cd.construction);   // 교재 O = D 방식 기초선 옵션
       if (!standRe.ok) fails.push("stand-recompute");
       else {
         lengths = { lowerNeckSeam: standRe.lowerNeckSeamLenCm, lowerExtension: standRe.lowerExtensionLenCm, upperNeckSegment: standRe.upperNeckSegmentLenCm, upperExtension: standRe.upperExtensionLenCm, upperTotal: standRe.upperTotalLenCm };
@@ -163,9 +163,11 @@
         sym: res.symmetry
       });
     }
+    // ★ construction 은 **있을 때만** 서명에 넣는다(undefined 는 JSON 에서 키가 사라짐) —
+    //   옵션 없는 M·N·P 의 서명 문자열·hash 를 그대로 보존하기 위한 계약이다.
     return JSON.stringify({
       sbh: res.sourceBodiceHash, nk: res.necklineLengths,
-      sp: res.stand.parameters, sg: canonGeom(res.stand.geometry), sl: res.stand.lengths,
+      sp: res.stand.parameters, sc: res.stand.construction || undefined, sg: canonGeom(res.stand.geometry), sl: res.stand.lengths,
       bm: res.body.mode, bp: res.body.parameters, bg: canonGeom(res.body.geometry), ba: round4(res.body.attachLenCm), bx: res.body.measures,
       ms: res.body.manualSource ? canonSegs(res.body.manualSource.segments) : null,
       sym: res.symmetry
@@ -244,7 +246,7 @@
       sourceBodiceHash: cd.sourceBodiceHash,
       sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
       necklineLengths: clone(bodice.necklineLengths),
-      stand: { parameters: clone(cd.parameters.stand), geometry: clone(cd.standGeometry), lengths: { lowerNeckSeam: round4(c._lengths.lowerNeckSeam), lowerExtension: round4(c._lengths.lowerExtension), upperNeckSegment: round4(c._lengths.upperNeckSegment), upperExtension: round4(c._lengths.upperExtension), upperTotal: round4(c._lengths.upperTotal) } },
+      stand: { parameters: clone(cd.parameters.stand), construction: cd.construction ? clone(cd.construction) : null, geometry: clone(cd.standGeometry), lengths: { lowerNeckSeam: round4(c._lengths.lowerNeckSeam), lowerExtension: round4(c._lengths.lowerExtension), upperNeckSegment: round4(c._lengths.upperNeckSegment), upperExtension: round4(c._lengths.upperExtension), upperTotal: round4(c._lengths.upperTotal) } },
       body: { mode: cd.body.mode === "manual" ? "manual" : "parametric", parameters: clone(cd.body.parameters), geometry: clone(cd.body.geometry), attachLenCm: round4(cd.body.attachLenCm), measures: clone(cd.body.measure || {}), manualSource: manualSource },
       symmetry: "half-cb-fold"
     };
@@ -297,10 +299,10 @@
     if (!cd.standGeometry || !cd.body || !cd.body.geometry) return true;               // 카라 형상 없음/숨김
     if (cd.body.mode === "manual" && cd.body.invalid) return true;                     // 무효 편집
     if (!cd.parameters || !cd.parameters.stand) return true;
-    var standRe = DC.computeStand(bodice, cd.parameters.stand); if (!standRe.ok) return true;
+    var standRe = DC.computeStand(bodice, cd.parameters.stand, cd.construction); if (!standRe.ok) return true;
     var cur = {
       sourceBodiceHash: cd.sourceBodiceHash, necklineLengths: bodice.necklineLengths,
-      stand: { parameters: cd.parameters.stand, geometry: cd.standGeometry, lengths: { lowerNeckSeam: round4(standRe.lowerNeckSeamLenCm), lowerExtension: round4(standRe.lowerExtensionLenCm), upperNeckSegment: round4(standRe.upperNeckSegmentLenCm), upperExtension: round4(standRe.upperExtensionLenCm), upperTotal: round4(standRe.upperTotalLenCm) } },
+      stand: { parameters: cd.parameters.stand, construction: cd.construction || null, geometry: cd.standGeometry, lengths: { lowerNeckSeam: round4(standRe.lowerNeckSeamLenCm), lowerExtension: round4(standRe.lowerExtensionLenCm), upperNeckSegment: round4(standRe.upperNeckSegmentLenCm), upperExtension: round4(standRe.upperExtensionLenCm), upperTotal: round4(standRe.upperTotalLenCm) } },
       body: { mode: cd.body.mode === "manual" ? "manual" : "parametric", parameters: cd.body.parameters, geometry: cd.body.geometry, attachLenCm: round4(cd.body.attachLenCm), measures: cd.body.measure || {}, manualSource: cd.body.mode === "manual" ? { segments: ((proj.working.patternLines || []).find(function (l) { return l.id === cd.body.lineId; }) || {}).segments } : null },
       symmetry: "half-cb-fold"
     };

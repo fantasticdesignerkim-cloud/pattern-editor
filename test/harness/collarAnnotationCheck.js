@@ -246,5 +246,36 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
   ok(CA.buildModel({ type: "shirt-open-collar", baseMethod: "bunka-open-collar-L-v1", openCollar: {} }, B) === null, "11: 형상 없으면 표시 모델 없음");
 }
 
+// 12. 교재 O: D 방식 기초선 옵션 표시(옵션 없는 M·N·P 표시 모델은 불변)
+{
+  const P = { bandWidthCm: 3, frontRiseCm: 8.5, frontEndCm: 0.5 };
+  const BP = { gapCm: 14, cbWidthCm: 4, frontProjectionCm: 4, pointDiagonalCm: 6, outerBowCm: 0 };
+  const CONS = { baselineReductionCm: 2.5, guideRiseCm: 2 };
+  const st = DC.computeStand(BODICE, P, CONS), bd = DC.computeBody(st, BP);
+  const cd = { sourceBodiceHash: "BH1", type: "shirt-two-piece", baseMethod: "bunka-band-collar-P148-v1",
+    construction: CONS, parameters: { stand: P }, standGeometry: st.standGeometry, standAnchors: st.anchors, collarGeometry: null,
+    body: { parameters: BP, geometry: bd.bodyGeometry, attachLenCm: bd.attachLenCm, measure: bd.measure, anchors: bd.anchors },
+    measure: { lowerNeckSeamLenCm: st.lowerNeckSeamLenCm, lowerExtensionLenCm: st.lowerExtensionLenCm, upperNeckSegmentLenCm: st.upperNeckSegmentLenCm,
+      upperExtensionLenCm: st.upperExtensionLenCm, upperTotalLenCm: st.upperTotalLenCm, backNeckLenCm: st.backNeckLenCm, frontNeckLenCm: st.frontNeckLenCm,
+      neckTargetCm: st.neckTargetCm, cbTrimCm: st.cbTrimCm, baseLineLenCm: st.baseLineLenCm,
+      baselineReductionCm: st.baselineReductionCm, guideRiseCm: st.guideRiseCm } };
+  const model = CA.buildModel(cd, BODICE), inputs = {}, results = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  model.results.forEach(r => { results[r.key] = r.value; });
+  ok(inputs.baselineReductionCm === 2.5 && inputs.guideRiseCm === 2, "12: O 구성 옵션 두 행 표시");
+  ok(Math.abs(results.baseLineLen - (BODICE.necklineLengths.half - 2.5)) < 1e-9, "12: 기초 수평선(×+⊘−감산) 결과 행");
+  const gr = model.dims.filter(d => d.id === "guide-rise")[0];
+  ok(gr && gr.kind === "dim" && gr.text === 2 && Math.abs(gr.from.y) < 1e-12 && Math.abs(gr.to.y + 2) < 1e-12
+    && Math.abs(gr.from.x - st.anchors.guideA.x) < 1e-12, "12: Ⓐ 올림 치수선 = 기초선(y0) → Ⓐ");
+  ok(model.labels.some(l => l.id === "guide-a" && /2\/3/.test(l.text)), "12: Ⓐ(2/3) 라벨");
+  ok(results.neckDiff != null && Math.abs(results.neckDiff) <= CA.SEAM_MATCH_TOL, "12: 달림선 − 목둘레 정합(감산은 기초선에만)");
+
+  // 옵션 없는 M 은 새 행·치수선이 생기지 않는다(표시 모델 불변)
+  const m = draft(true).cd, mModel = CA.buildModel(m, BODICE);
+  ok(!mModel.inputs.some(r => r.key === "baselineReductionCm" || r.key === "guideRiseCm")
+    && !mModel.results.some(r => r.key === "baseLineLen")
+    && !mModel.dims.some(d => d.id === "guide-rise") && !mModel.labels.some(l => l.id === "guide-a"), "12: M 표시 모델에는 D 방식 행·치수선 없음");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

@@ -124,12 +124,9 @@
       variants: [
         { id: "bunka-shirt-collar-M", symbol: "M", label: "M · 올림 1 · 간격 3", page: 66, availability: "available", presetId: "bunka-shirt-collar-M", note: null },
         { id: "bunka-band-collar-N", symbol: "N", label: "N · 올림 3 · 간격 7", page: 66, availability: "available", presetId: "bunka-band-collar-N", note: null },
-        // O: 올림 8.5 는 P.61 D 처럼 기준 수평선에서 미리 줄여 제도한다(×+⊘−2.5, 수평선상 2). 2 의 기준이
-        //    P.61 도면만으로 유일하게 읽히지 않아 실행하지 않는다(reference-only).
-        bandRefVariant("bunka-band-collar-O", "O", "O · 올림 8.5 · 간격 14", 67,
-          { bandWidthCm: 3, frontRiseCm: 8.5, gapCm: 14, cbWidthCm: 4, frontProjectionCm: 4, pointDiagonalCm: 6, frontEndCm: 0.5 },
-          "기준 수평선 ×+⊘−2.5 · 수평선상 2 · P.61 D 방식", 61,
-          ["수평선상 2 의 기준: 기준선 대비 달림선 중간 상승인지, 3등분 점을 내리는 양인지, 비교용 곡선과의 간격인지 P.61 도면만으로 하나로 읽히지 않음"]),
+        // O: 올림 8.5 라 D(P.61) 방식으로 기초선을 ×+⊘−2.5 로 줄이고 앞쪽 2/3 안내점 Ⓐ 를 2 올린다.
+        //    (P.146 ⑥·P.148 ⑥ 의 유일한 명명 안내점이 Ⓐ 이고, 올려야 ⑭ 뒤 중심 수정이 성립한다.)
+        { id: "bunka-band-collar-O", symbol: "O", label: "O · 올림 8.5 · 간격 14", page: 67, availability: "available", presetId: "bunka-band-collar-O", note: null },
         { id: "bunka-band-collar-P", symbol: "P", label: "P · 밴드 폭 5 · 올림 3", page: 67, availability: "available", presetId: "bunka-band-collar-P", note: null },
         bandRefVariant("bunka-band-collar-Q", "Q", "Q · 윙 칼라", 68,
           { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 },
@@ -238,6 +235,19 @@
       neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "shirt-collar-with-band",
       stand: { bandWidthCm: 3, frontRiseCm: 3, frontEndCm: 0.5 },
       body: { gapCm: 7, cbWidthCm: 4, frontProjectionCm: 2, pointDiagonalCm: 6, outerBowCm: 0 }
+    },
+    {
+      // 교재 O(P.67) — 본문 "칼라 밴드는 앞 중심에서 올리는 치수가 많으므로 Ⓓ(P.61)와 같이
+      //   수평선상에서 줄여둔다. 치수를 맞추는 방법은 Ⓝ과 같다."
+      //   → 제도법은 M·N·P 와 같은 P.148 이고, 기초선에만 D(P.61) 방식 감산·안내점 올림을 더한다.
+      //   construction 은 형상 옵션이며 stand 파라미터(밴드 폭·올림·앞 끝선)와 의미를 섞지 않는다.
+      id: "bunka-band-collar-O", label: "교재 O", description: "칼라 밴드 달린 셔츠 칼라 O형(올림 8.5·간격 14·기초선 −2.5·2/3 안내점 2 올림)",
+      source: "『パターン製作の基礎』 칼라 밴드 달린 셔츠 칼라 O형(P.67) · 제도 방법 P.148 · 기초선 감산은 스탠드 칼라 D형(P.61·제도 방법 P.146) 방식",
+      type: "shirt-two-piece", baseMethod: "bunka-band-collar-P148-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "shirt-collar-with-band",
+      construction: { baselineReductionCm: 2.5, guideRiseCm: 2 },
+      stand: { bandWidthCm: 3, frontRiseCm: 8.5, frontEndCm: 0.5 },
+      body: { gapCm: 14, cbWidthCm: 4, frontProjectionCm: 4, pointDiagonalCm: 6, outerBowCm: 0 }
     },
     {
       // 교재 P(P.67) — 본문 "제도 방법은 N과 같다". 밴드 폭만 5.
@@ -398,6 +408,15 @@
       return true;
     }
     ["onePiece", "openCollar", "standalone"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+    // 선택적 형상 옵션(교재 O = D 방식 기초선 감산·안내점 올림). 없으면 기존 M·N·P 와 완전히 동일한 제도다.
+    if ("construction" in r) {
+      var bc = r.construction;
+      if (!bc || typeof bc !== "object" || Array.isArray(bc)) fail("invalid-construction", r.id);
+      var bk = Object.keys(bc);
+      if (bk.length !== 2 || bk[0] !== "baselineReductionCm" || bk[1] !== "guideRiseCm") fail("invalid-construction", r.id);
+      if (typeof bc.baselineReductionCm !== "number" || !isFinite(bc.baselineReductionCm) || bc.baselineReductionCm < 0
+        || typeof bc.guideRiseCm !== "number" || !isFinite(bc.guideRiseCm) || bc.guideRiseCm < 0) fail("invalid-construction", r.id);
+    }
     validateSection(r.stand, STAND_FIELDS, "stand", r.id);
     validateSection(r.body, BODY_FIELDS, "body", r.id);
     if (!(r.body.pointDiagonalCm > r.body.frontProjectionCm)) fail("out-of-range", r.id + ".body.pointDiagonalCm");   // 엔진 계약: 사선 > 돌출
@@ -501,7 +520,9 @@
     if (r.type === "shirt-one-piece") return { ok: true, id: r.id, type: r.type, onePiece: clone(r.onePiece) };
     if (r.type === "shirt-open-collar") return { ok: true, id: r.id, type: r.type, openCollar: clone(r.openCollar) };
     if (r.type === "stand-collar") return { ok: true, id: r.id, type: r.type, standalone: clone(r.standalone), construction: clone(r.construction) };
-    return { ok: true, id: r.id, type: r.type, stand: clone(r.stand), body: clone(r.body) };
+    var d2 = { ok: true, id: r.id, type: r.type, stand: clone(r.stand), body: clone(r.body) };
+    if (r.construction) d2.construction = clone(r.construction);
+    return d2;
   }
   // 선택 UI 옵션 모델(registry 에서 생성).
   function options() { return REG.list.map(function (r) { return { value: r.id, label: r.label }; }); }
@@ -552,11 +573,11 @@
         standalone: { geometry: standaloneRe.geometry, measure: standaloneRe.measure, anchors: standaloneRe.anchors }
       } };
     }
-    var standRe = DC.computeStand(bodice, d.stand);
+    var standRe = DC.computeStand(bodice, d.stand, d.construction);
     if (!standRe.ok) return { ok: false, stage: "stand", reason: standRe.reason };
     var bodyRe = DC.computeBody(standRe, d.body);
     if (!bodyRe.ok) return { ok: false, stage: "body", reason: bodyRe.reason };
-    return { ok: true, draft: {
+    var twoPieceDraft = {
       sourceBodiceHash: bodice.hash, type: r.type, baseMethod: r.baseMethod, presetId: r.id,
       parameters: { stand: d.stand },
       standGeometry: standRe.standGeometry, standAnchors: standRe.anchors, collarGeometry: null,   // standAnchors·body.anchors = 표시 전용(hash 미포함)
@@ -565,9 +586,12 @@
         lowerNeckSeamLenCm: standRe.lowerNeckSeamLenCm, lowerExtensionLenCm: standRe.lowerExtensionLenCm,
         upperNeckSegmentLenCm: standRe.upperNeckSegmentLenCm, upperExtensionLenCm: standRe.upperExtensionLenCm,
         upperTotalLenCm: standRe.upperTotalLenCm, backNeckLenCm: standRe.backNeckLenCm, frontNeckLenCm: standRe.frontNeckLenCm,
-        neckTargetCm: standRe.neckTargetCm, cbTrimCm: standRe.cbTrimCm   // P.148 ⑭ 목표 목둘레·뒤 중심 보정량
+        neckTargetCm: standRe.neckTargetCm, cbTrimCm: standRe.cbTrimCm,   // P.148 ⑭ 목표 목둘레·뒤 중심 보정량
+        baseLineLenCm: standRe.baseLineLenCm, baselineReductionCm: standRe.baselineReductionCm, guideRiseCm: standRe.guideRiseCm
       }
-    } };
+    };
+    if (d.construction) twoPieceDraft.construction = d.construction;   // D 방식 형상 옵션(있을 때만)
+    return { ok: true, draft: twoPieceDraft };
   }
 
   // ── catalog 조회(전부 동결 데이터 반환) ──

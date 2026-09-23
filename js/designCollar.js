@@ -248,16 +248,29 @@
   }
 
   // params = { bandWidthCm(밴드 폭), frontRiseCm(앞 중심 올림), frontEndCm(앞 끝선 = 앞 중심선 앞 0.5) }
-  function computeStand(bodiceResult, params) {
+  //   options(선택, 기본 0 = M·N·P 무변경) — 교재 O(P.67) 가 인용하는 D(P.61) 방식:
+  //     baselineReductionCm : ① 기초 수평선을 ×+⊘ 대신 **×+⊘ − 감산**으로 긋는다.
+  //     guideRiseCm         : ⑥ 앞쪽 2/3 안내점 Ⓐ 를 기초선에서 그만큼 **위로** 올린다.
+  //   근거 — P.61 D 본문 "앞 중심에서 올리는 치수가 많아질수록 칼라 달림선과의 오차가 커지기 때문에
+  //   미리 수평선상에서 뺀다. 제도 후 달림선 치수를 재고, 뒤 중심에서 수정한다."
+  //   P.146 ⑥·P.148 ⑥ 에서 기초선 위의 유일한 명명 안내점이 Ⓐ(앞쪽 2/3)이고, Ⓐ 를 올려야만
+  //   그린 달림선이 짧아져(=오차 감소) ⑭ 뒤 중심 **수정(잘라냄)** 이 성립한다(내리면 길어져 반대).
+  //   ★ 목표 실측(⑭)은 감산 전 ×+⊘ 그대로다 — 감산은 기초선에만 적용한다.
+  function computeStand(bodiceResult, params, options) {
     var b = readBodice(bodiceResult);
     if (!b.ok) return b;
-    var P = params || {};
+    var P = params || {}, O = options || {};
     var W = P.bandWidthCm, rise = P.frontRiseCm, endCm = P.frontEndCm;
+    var reduction = num(O.baselineReductionCm) ? O.baselineReductionCm : 0;
+    var guideRise = num(O.guideRiseCm) ? O.guideRiseCm : 0;
     if (!num(W) || W <= 0) return { ok: false, reason: "invalid-band-width" };
     if (!num(rise) || rise < 0) return { ok: false, reason: "invalid-front-rise" };
     if (!num(endCm) || endCm < 0) return { ok: false, reason: "invalid-front-end" };
-    var N = b.backCm + b.frontCm;                       // ① 목둘레 치수 ×+⊘
-    var CB0 = { x: 0, y: 0 }, A = { x: N * 2 / 3, y: 0 }, B = { x: N, y: -rise };   // ⑥ Ⓐ / ⑤ Ⓑ
+    if (reduction < 0 || guideRise < 0) return { ok: false, reason: "invalid-construction-guide" };
+    var N = b.backCm + b.frontCm;                       // ① 목둘레 치수 ×+⊘(⑭ 목표 실측)
+    var baseLen = N - reduction;                        // 기초 수평선 길이(D 방식이면 ×+⊘−감산)
+    if (!(baseLen > 0)) return { ok: false, reason: "invalid-construction-guide" };
+    var CB0 = { x: 0, y: 0 }, A = { x: baseLen * 2 / 3, y: -guideRise }, B = { x: baseLen, y: -rise };   // ⑥ Ⓐ / ⑤ Ⓑ
     var u = unit(sub(B, A));                            // ⑦ 안내선 방향
     var n = { x: u.y, y: -u.x };                        // 위쪽 법선
     if (!(n.y < 0)) return { ok: false, reason: "invalid-guide-direction" };
@@ -293,6 +306,7 @@
       lowerNeckSeamLenCm: attachLen, lowerExtensionLenCm: endCm,
       upperNeckSegmentLenCm: topLen, upperExtensionLenCm: endCm, upperTotalLenCm: topLen + endCm,
       bandWidthCm: W, frontRiseCm: rise, frontEndCm: endCm,
+      baseLineLenCm: baseLen, baselineReductionCm: reduction, guideRiseCm: guideRise,   // D 방식 기초선(감산·Ⓐ 올림)
       backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm, neckTargetCm: N,
       drawnAttachLenCm: drawnLen, cbTrimCm: drawnLen - N,   // ⑭ 뒤 중심 수정량(그린 길이 − 목둘레)
       anchors: { cbSeam: cbSeam, cbTop: cbTop, guideA: A, cfSeam: B, cfTop: Btop,
