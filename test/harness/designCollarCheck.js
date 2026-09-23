@@ -177,7 +177,127 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
 {
   const g = C.computeOnePiece(bodice(7.6926, 11.129, 1.75), { riseCm: 2.5, backCollarWidthCm: 3.5, collarStandCm: 3, frontCollarWidthCm: 6.5, tipProjectionCm: 3, attachCurveCm: 0.2 });
   ok(g.ok && g.geometry.outline.some(s => s.part === "front-end") && !g.geometry.outline.some(s => s.part === "top"), "9: 한 장 칼라는 자체 구성(밴드 윗선 없음)");
+  const h = C.computeOnePiece(bodice(7.6926, 11.129, 1.75), { riseCm: 8, backCollarWidthCm: 3.5, collarStandCm: 1, frontCollarWidthCm: 6.5, tipProjectionCm: 4.5, attachCurveCm: 0.3 });
+  ok(h.ok && C.validateClosedOutline(h.geometry.outline).ok && h.measure.riseCm === 8 && h.measure.collarStandCm === 1 && Math.abs(h.measure.tipProjectionCm - 4.5) < 1e-9, "9: H 수치로 한 장 폐곡선 생성(올림8·허리1·앞끝4.5)");
+  ok(JSON.stringify(h.geometry) !== JSON.stringify(g.geometry) && h.measure.outerLenCm !== g.measure.outerLenCm, "9: H 는 G fallback 이 아닌 별도 실루엣");
+  const i = C.computeOnePiece(bodice(7.6926, 11.129, 1.75), { riseCm: 4.5, backCollarWidthCm: 3.5, collarStandCm: 2, frontCollarWidthCm: 6.5, tipProjectionCm: 3.5, attachCurveCm: 0.3 });
+  ok(i.ok && C.validateClosedOutline(i.geometry.outline).ok && i.measure.riseCm === 4.5 && i.measure.collarStandCm === 2 && Math.abs(i.measure.tipProjectionCm - 3.5) < 1e-9, "9: I 수치로 한 장 폐곡선 생성(올림4.5·허리2·앞끝3.5)");
+  ok(JSON.stringify(i.geometry) !== JSON.stringify(g.geometry) && JSON.stringify(i.geometry) !== JSON.stringify(h.geometry), "9: I 는 G/H fallback 이 아닌 별도 실루엣");
+  const j = C.computeOnePiece(bodice(7.6926, 11.129, 1.75), { riseCm: 1, backCollarWidthCm: 3.5, collarStandCm: 4, frontCollarWidthCm: 6.5, tipProjectionCm: 2.5, attachCurveCm: 0 });
+  ok(j.ok && C.validateClosedOutline(j.geometry.outline).ok && j.measure.riseCm === 1 && j.measure.collarStandCm === 4 && Math.abs(j.measure.tipProjectionCm - 2.5) < 1e-9, "9: J 수치로 한 장 폐곡선 생성(올림1·허리4·앞끝2.5·별도 곡률 무표기)");
+  ok(Math.abs(j.anchors.cbFold.y - (j.anchors.cbAttach.y - 4)) < 1e-9
+    && Math.abs(j.anchors.cbOuter.y - (j.anchors.cbFold.y - 3.5)) < 1e-9
+    && Math.abs(j.anchors.cbOuter.y - (j.anchors.cbAttach.y - 7.5)) < 1e-9, "9: J CB = 허리4 + 뒤 폭3.5(허리가 뒤 폭보다 커도 독립 구간)");
+  ok(JSON.stringify(j.geometry) !== JSON.stringify(g.geometry) && JSON.stringify(j.geometry) !== JSON.stringify(h.geometry)
+    && JSON.stringify(j.geometry) !== JSON.stringify(i.geometry), "9: J 는 G/H/I fallback 이 아닌 별도 실루엣");
+  const k = C.computeOnePiece(bodice(7.6926, 11.129, 1.75), { riseCm: 4.5, backCollarWidthCm: 3.5, collarStandCm: 2, frontCollarWidthCm: 6.5, tipProjectionCm: 3.5, attachCurveCm: 0.6, attachCurveDirection: "reversed" });
+  ok(k.ok && C.validateClosedOutline(k.geometry.outline).ok && k.measure.attachCurveDirection === "reversed" && k.measure.attachCurveCm === 0.6, "9: K 수치로 한 장 폐곡선 생성(I 치수·곡률0.6 반대 방향)");
+  const iAttach = i.geometry.outline.filter(s => s.part === "attach"), kAttach = k.geometry.outline.filter(s => s.part === "attach");
+  const midY = (k.anchors.a.y + k.anchors.b.y) / 2;
+  ok(iAttach.length === 3 && kAttach.length === 3 && iAttach[1].to.y < midY && kAttach[1].to.y > midY, "9: I는 칼라 쪽·K는 반대쪽으로 앞 달림선 곡률");
+  ok(k.anchors.a.x === i.anchors.a.x && k.anchors.a.y === i.anchors.a.y && k.anchors.b.x === i.anchors.b.x && k.anchors.b.y === i.anchors.b.y
+    && JSON.stringify(k.geometry) !== JSON.stringify(i.geometry), "9: K는 I 기준점·치수 유지 + 달림선 형상만 변경");
+  ok(C.computeOnePiece(bodice(7.6926, 11.129), { riseCm: 4.5, backCollarWidthCm: 3.5, collarStandCm: 2, frontCollarWidthCm: 6.5, tipProjectionCm: 3.5, attachCurveCm: 0.6, attachCurveDirection: "sideways" }).reason === "invalid-attach-curve-direction", "9: 알 수 없는 곡률 방향 거부");
   ok(C.computeOnePiece(bodice(10, 8), BAND.M).ok === false, "9: 밴드 파라미터로는 한 장 칼라를 만들 수 없다");
+}
+
+// 10. 오픈 칼라(교재 L, P.65 — 몸판 연동 전용 계약). G~K(한 장, P.147)와 섞이지 않는다.
+{
+  // 앞판 외곽(SV3 의미 모서리): center(수직) + neckline(곡선) + shoulder. FNP = center∩neckline.
+  const frontOutline = (nk) => [
+    { kind: "line", from: { x: 40, y: 2 }, to: { x: 40, y: 38 }, edge: "center" },
+    nk || { kind: "path", commands: [{ type: "M", points: [{ x: 40, y: 2 }] },
+      { type: "C", points: [{ x: 35.6, y: 2 }, { x: 31.4, y: 0.2 }, { x: 29.2, y: -2.4 }] }], edge: "neckline" },
+    { kind: "line", from: { x: 29.2, y: -2.4 }, to: { x: 21, y: 1.2 }, edge: "shoulder" }
+  ];
+  const openBodice = (overlap, nk) => { const b = bodice(7.6926, 11.129, overlap); b.front = { outline: frontOutline(nk) }; return b; };
+  const L_PARAMS = { backCollarWidthCm: 3.5, collarStandCm: 3, frontEndRiseCm: 1, frontStraightCm: 4, breakPointDistanceCm: 8 };
+  const B = openBodice(1.75), NECK = 7.6926 + 11.129;
+  const r = C.computeOpenCollar(B, L_PARAMS);
+
+  ok(typeof C.computeOpenCollar === "function" && J(C.OPEN_COLLAR_METHOD) === J({ page: 65, methodPage: 147,
+    smoothing: "tangent-continuous-cubic", handleFraction: 1 / 3, lengthResponsibility: "attach-equals-neck", bodyLinked: true }),
+    "10: 오픈 칼라 API·제도법 메타(곡선 정리는 구현 관례·길이 책임은 달림선)");
+  ok(r.ok && C.validateClosedOutline(r.geometry.outline).ok, "10: L 기본 수치로 폐곡선 생성");
+
+  // ★ 길이 책임(사용자 확정 A안): 달림선 실측 = ×+⊘. 독립 dense 측정으로 재검산한다.
+  const attachSegs = r.geometry.outline.filter(s => s.part === "attach" || s.part === "attach-front");
+  const attachDense = attachSegs.reduce((t, s) => t + denseLen(s), 0);
+  ok(Math.abs(attachDense - NECK) < 1e-3 && Math.abs(r.measure.attachLenCm - NECK) < 1e-6,
+    "10: 달림선 실측 = 목둘레 ×+⊘(독립 측정 재검산)");
+  // 앞 끝 직선 구간은 교재 4cm 그대로(그려진 직선의 길이)
+  const straight = r.geometry.outline.filter(s => s.part === "attach-front");
+  ok(straight.length === 1 && straight[0].kind === "line" && Math.abs(denseLen(straight[0]) - 4) < 1e-6, "10: 앞 끝 직선 구간 = 4cm(직선 1개)");
+  // 기초선은 파생값(달림선이 올라가므로 ×+⊘ 보다 짧다) — 독립 목표 수치가 아니다
+  ok(r.measure.baseLineLenCm < NECK && NECK - r.measure.baseLineLenCm < 0.2 && Math.abs(r.anchors.baseEnd.x - r.measure.baseLineLenCm) < 1e-9,
+    "10: 기초선 길이 = 파생(×+⊘ 보다 약간 짧음)");
+  // 꺾임점 들림도 파생: 0 < lift < 앞 끝 올림
+  ok(r.measure.foldJunctionLiftCm > 0 && r.measure.foldJunctionLiftCm < L_PARAMS.frontEndRiseCm
+    && Math.abs(-r.anchors.foldJunction.y - r.measure.foldJunctionLiftCm) < 1e-12, "10: 꺾임점 들림 = 파생값(0 < 들림 < 앞 끝 올림)");
+  ok(Math.abs(Math.hypot(r.anchors.frontEnd.x - r.anchors.foldJunction.x, r.anchors.frontEnd.y - r.anchors.foldJunction.y) - 4) < 1e-9,
+    "10: 꺾임점은 앞 끝에서 직선 4cm");
+
+  // CB: 허리 3 → 이어서 뒤 폭 3.5(포개 재지 않음), 앞 끝은 기초선에서 수직 1 위
+  ok(Math.abs(r.anchors.cbFold.y + 3) < 1e-12 && Math.abs(r.anchors.cbOuter.y + 6.5) < 1e-12
+    && Math.abs(r.anchors.cbAttach.x) < 1e-12 && Math.abs(r.anchors.cbAttach.y) < 1e-12, "10: CB = 허리 3 + 뒤 폭 3.5(합 6.5)");
+  ok(Math.abs(r.anchors.frontEnd.y + 1) < 1e-12 && Math.abs(r.anchors.frontEnd.x - r.anchors.baseEnd.x) < 1e-12, "10: 앞 끝 = 기초선 오른쪽 끝에서 수직 1cm 위");
+  const outer = r.geometry.outline.filter(s => s.part === "outer")[0], frontEdge = r.geometry.outline.filter(s => s.part === "front-end")[0];
+  ok(outer && outer.kind === "line" && Math.abs(outer.from.y - outer.to.y) < 1e-12 && Math.abs(r.measure.outerLenCm - r.measure.baseLineLenCm) < 1e-9,
+    "10: 외곽선은 기초선과 나란한 수평 직선(골선 재단 가능)");
+  ok(frontEdge && Math.abs(frontEdge.from.x - frontEdge.to.x) < 1e-12 && Math.abs(r.measure.frontEdgeLenCm - 5.5) < 1e-9, "10: 앞 끝선은 수직 5.5cm(6.5 − 1)");
+  // 꺾임선(구성선)은 CB 허리점 → 꺾임점
+  const fold = r.geometry.construction.filter(s => s.part === "fold");
+  ok(r.geometry.construction.some(s => s.part === "baseline") && fold.length === 1
+    && Math.abs(fold[0].from.y + 3) < 1e-12 && Math.abs(fold[0].to.x - r.anchors.foldJunction.x) < 1e-12, "10: 구성선 = 기초선 + CB 허리점→꺾임점 꺾임선");
+
+  // ── 몸판 연동: 실제 목둘레선·여밈 끝선에서 꺾임선을 읽는다 ──
+  const bl = r.bodyLink, nk = C.frontNecklineFromBodice(B);
+  ok(bl && Math.abs(bl.frontNeckPoint.x - 40) < 1e-9 && Math.abs(bl.frontNeckPoint.y - 2) < 1e-9, "10: 앞 중심 목점 = center∩neckline 공유 끝점");
+  // breakTop 은 목둘레 곡선 위 호길이 4 지점(독립 dense 샘플로 재검산)
+  const chain = nk.chain, sample = [];
+  chain.forEach(s => { let pr = s.from; for (let i = 1; i <= 4000; i++) { const p = s.kind === "line"
+    ? { x: s.from.x + (s.to.x - s.from.x) * i / 4000, y: s.from.y + (s.to.y - s.from.y) * i / 4000 } : cubicPt(s, i / 4000);
+    sample.push({ p, d: Math.hypot(p.x - pr.x, p.y - pr.y) }); pr = p; } });
+  let acc = 0, arcAtTop = null;
+  sample.forEach(({ p, d }) => { acc += d; if (arcAtTop === null && Math.hypot(p.x - bl.breakTop.x, p.y - bl.breakTop.y) < 5e-3) arcAtTop = acc; });
+  ok(arcAtTop !== null && Math.abs(arcAtTop - 4) < 1e-2, "10: 꺾임선 윗 끝 = 앞목점에서 목둘레 호길이 4cm");
+  ok(Math.abs(Math.hypot(bl.breakEnd.x - bl.frontNeckPoint.x, bl.breakEnd.y - bl.frontNeckPoint.y) - 8) < 1e-9, "10: 꺾임 끝 = 앞목점에서 두 점 사이 직선 8cm");
+  ok(Math.abs(bl.breakEnd.x - (bl.frontNeckPoint.x + 1.75)) < 1e-9 && bl.breakEnd.y > bl.frontNeckPoint.y, "10: 꺾임 끝은 여밈 끝선(앞중심+1.75) 위·아래쪽");
+  ok(bl.breakLine.length === 1 && bl.breakLine[0].kind === "line" && Math.abs(r.measure.breakLineLenCm - denseLen(bl.breakLine[0])) < 1e-9, "10: 꺾임선 = 직선 1개·길이 실측");
+  // 여밈 0 → 꺾임 끝은 앞 중심선 위(교재 수치 그대로 적용)
+  const r0 = C.computeOpenCollar(openBodice(0), L_PARAMS);
+  ok(r0.ok && Math.abs(r0.bodyLink.breakEnd.x - 40) < 1e-12 && Math.abs(r0.measure.breakDropCm - 8) < 1e-12, "10: 여밈 0 이면 꺾임 끝이 앞 중심선 위(내림 8)");
+  // 몸판 목둘레 **곡선**이 달라지면(같은 길이 입력이어도) 꺾임선이 달라진다 = 실제 몸판 연동
+  const other = { kind: "path", commands: [{ type: "M", points: [{ x: 40, y: 2 }] },
+    { type: "C", points: [{ x: 37.5, y: 2 }, { x: 31.8, y: -1.6 }, { x: 29.2, y: -2.4 }] }], edge: "neckline" };
+  const r2 = C.computeOpenCollar(openBodice(1.75, other), L_PARAMS);
+  ok(r2.ok && J(r2.bodyLink.breakTop) !== J(bl.breakTop) && J(r2.geometry) === J(r.geometry),
+    "10: 목둘레 곡선이 달라지면 꺾임선만 달라진다(칼라 형상은 목둘레 길이 기반)");
+
+  // ── 실패 계약(원자적) ──
+  const noNeck = openBodice(1.75); noNeck.front = { outline: [{ kind: "line", from: { x: 40, y: 2 }, to: { x: 40, y: 38 }, edge: "center" }] };
+  ok(C.computeOpenCollar(noNeck, L_PARAMS).reason === "no-body-neckline", "10: 몸판 목둘레선 없음 거부");
+  const noCenter = openBodice(1.75); noCenter.front = { outline: frontOutline().filter(s => s.edge !== "center") };
+  ok(C.computeOpenCollar(noCenter, L_PARAMS).reason === "no-body-center", "10: 몸판 앞 중심선 없음 거부");
+  const twoJoin = openBodice(1.75);
+  twoJoin.front = { outline: frontOutline().concat([{ kind: "line", from: { x: 40, y: 38 }, to: { x: 33, y: 38 }, edge: "neckline" }]) };
+  ok(C.computeOpenCollar(twoJoin, L_PARAMS).reason === "ambiguous-front-neck-point", "10: 목점 후보 복수 거부(추측 금지)");
+  ok(C.computeOpenCollar(B, { ...L_PARAMS, frontStraightCm: 13 }).reason === "break-start-out-of-neckline", "10: 앞 직선 구간 > 앞 목둘레선 거부");
+  ok(C.computeOpenCollar(B, { ...L_PARAMS, breakPointDistanceCm: 1.5 }).reason === "invalid-break-point", "10: 꺾임 끝 거리 ≤ 여밈분 거부");
+  ok(C.computeOpenCollar(B, { ...L_PARAMS, frontEndRiseCm: 6.5 }).reason === "invalid-front-end-rise", "10: 앞 끝 올림 ≥ 칼라 높이 거부");
+  ok(C.computeOpenCollar(B, { ...L_PARAMS, backCollarWidthCm: 0 }).reason === "invalid-back-collar-width"
+    && C.computeOpenCollar(B, { ...L_PARAMS, collarStandCm: -1 }).reason === "invalid-collar-stand"
+    && C.computeOpenCollar(B, { ...L_PARAMS, frontStraightCm: 0 }).reason === "invalid-front-straight", "10: 비유한·범위 밖 파라미터 거부");
+  ok(C.computeOpenCollar(null, L_PARAMS).reason === "no-bodice" && C.computeOpenCollar({}, L_PARAMS).reason === "no-neckline", "10: 몸판·목둘레 없음 거부");
+  // 한 장(G~K) 파라미터로는 오픈 칼라를 만들 수 없다(의미 혼용 금지)
+  ok(C.computeOpenCollar(B, { riseCm: 2.5, backCollarWidthCm: 3.5, collarStandCm: 3, frontCollarWidthCm: 6.5, tipProjectionCm: 3, attachCurveCm: 0.2 }).ok === false,
+    "10: G~K 파라미터로는 오픈 칼라 생성 불가");
+  // 입력 불변(몸판 결과를 변형하지 않는다)
+  const snap = J(B);
+  C.computeOpenCollar(B, L_PARAMS);
+  ok(J(B) === snap, "10: 입력 bodiceResult 비변형(몸판 원본 geometry 무변경)");
+  // 결정론
+  ok(J(C.computeOpenCollar(B, L_PARAMS)) === J(r), "10: 같은 입력 → 같은 결과(결정론)");
 }
 
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);

@@ -238,6 +238,15 @@ function _appendCollarStand(root, collarDraft, off, scale){
   g.appendChild(E("path",{ d, class:"design-collar-stand", fill:"none" }));
   root.appendChild(g);
 }
+// 단독 스탠드 칼라(family 1): 셔츠 칼라 밴드와 데이터 의미를 분리해 렌더한다.
+function _appendCollarStandalone(root, collarDraft, off, scale){
+  const sa=collarDraft && collarDraft.standalone;
+  if(!sa || !sa.geometry || !Array.isArray(sa.geometry.outline)) return;
+  const d=_partPathD(sa.geometry.outline); if(!d) return;
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-collar":"standalone" });
+  g.appendChild(E("path",{ d, class:"design-collar-stand", fill:"none" }));
+  root.appendChild(g);
+}
 // 카라 본체(C2, collarDraft.body.geometry): 스탠드 윗선에 부착되는 닫힌 조각. 카라 offset 동승.
 function _appendCollarBody(root, collarDraft, off, scale){
   if(!collarDraft || !collarDraft.body || !collarDraft.body.geometry || !Array.isArray(collarDraft.body.geometry.outline)) return;
@@ -257,6 +266,20 @@ function _appendCollarOnePiece(root, collarDraft, off, scale){
   g.appendChild(E("path",{ d, class:"design-collar-onepiece", fill:"none" }));
   const fd=_partPathD(op.geometry.construction||[]);
   if(fd) g.appendChild(E("path",{ d:fd, class:"design-collar-fold", fill:"none" }));
+  root.appendChild(g);
+}
+
+// 오픈 칼라(family 2 · 몸판 연동 L, collarDraft.openCollar.geometry): 달림선·외곽·앞 끝선이 한 조각.
+//   outline = 실선, construction = 기초선·꺾임선 점선. 몸판 쪽 꺾임선(bodyLink)은 **몸판 프레임 좌표**라
+//   여기서 그리지 않는다(몸판 렌더는 변경하지 않는다 — 수치는 카라 패널·annotation 이 보고).
+function _appendCollarOpen(root, collarDraft, off, scale){
+  const oc=collarDraft && collarDraft.openCollar;
+  if(!oc || !oc.geometry || !Array.isArray(oc.geometry.outline)) return;
+  const d=_partPathD(oc.geometry.outline); if(!d) return;
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-collar":"open" });
+  g.appendChild(E("path",{ d, class:"design-collar-onepiece", fill:"none" }));
+  const cd2=_partPathD(oc.geometry.construction||[]);
+  if(cd2) g.appendChild(E("path",{ d:cd2, class:"design-collar-fold", fill:"none" }));
   root.appendChild(g);
 }
 
@@ -285,7 +308,7 @@ function _appendCollarHitRect(root, collarDraft, off, scale){
   if(!window.designLayout || !window.designLayout.bboxOfStand) return;
   let bb=null;
   const add=(g)=>{ if(!g||!Array.isArray(g.outline)||!g.outline.length) return; const b=window.designLayout.bboxOfStand(g); if(!b) return; bb=bb?{minX:Math.min(bb.minX,b.minX),minY:Math.min(bb.minY,b.minY),maxX:Math.max(bb.maxX,b.maxX),maxY:Math.max(bb.maxY,b.maxY)}:b; };
-  add(collarDraft.standGeometry); add(collarDraft.body && collarDraft.body.geometry);
+  add(collarDraft.standGeometry); add(collarDraft.body && collarDraft.body.geometry); add(collarDraft.standalone && collarDraft.standalone.geometry);
   if(!bb) return;
   const [x1,y1]=c2p(bb.minX,bb.minY), [x2,y2]=c2p(bb.maxX,bb.maxY), pad=3;
   root.appendChild(E("rect",{ x:Math.min(x1,x2)-pad, y:Math.min(y1,y2)-pad, width:Math.abs(x2-x1)+2*pad, height:Math.abs(y2-y1)+2*pad,
@@ -400,12 +423,14 @@ function render(){
       svg.appendChild(pRoot);
     }
     // 카라 스탠드 파생(있을 때만): 별도 조각(L.collar offset). 몸판 hash 변경 시 standGeometry=null 로 숨김.
-    if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body || dp.working.collarDraft.onePiece)) {
+    if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body || dp.working.collarDraft.onePiece || dp.working.collarDraft.openCollar || dp.working.collarDraft.standalone)) {
       const cOff = L.collar || { dx: 0, dy: 0 };
       const cRoot = E("g"); cRoot.setAttribute("data-design-root", "collar");
       _appendCollarStand(cRoot, dp.working.collarDraft, cOff, scale);
+      _appendCollarStandalone(cRoot, dp.working.collarDraft, cOff, scale);
       _appendCollarBody(cRoot, dp.working.collarDraft, cOff, scale);
       _appendCollarOnePiece(cRoot, dp.working.collarDraft, cOff, scale);
+      _appendCollarOpen(cRoot, dp.working.collarDraft, cOff, scale);
       // 제도 보조수치(카라 탭·토글 ON·유효 모델일 때만, 매 렌더 새 그룹 — 중복 누적 없음).
       if (typeof window.collarAnnotationForRender === "function") _appendCollarAnnotation(cRoot, window.collarAnnotationForRender(), cOff, scale);
       // 관리형 collar-body 선(무효 시 빨강 점선) + 편집 overlay(카라 offset transform 동승).
@@ -1533,5 +1558,4 @@ function drawPoints(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatte
 
   svg.appendChild(gp);
 }
-
 

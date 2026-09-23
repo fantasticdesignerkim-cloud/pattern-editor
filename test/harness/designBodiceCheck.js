@@ -423,6 +423,18 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
     ok(eq(rBogus, ref) && !sharesRef(rBogus, ref), "4h: 알 수 없는 type = 미적용 no-op(round 아님)");
     ok(JSON.stringify(rBogus) !== JSON.stringify(rRound), "4h: 알 수 없는 type ≠ round 결과");
   }
+
+  // 4h-2. 스탠드 F 전용 몸판 목선(P.62): 뒤중심 2·SNP와 앞중심 3을 명시한 round 계열.
+  {
+    const P = { neckWidthCm: 3, frontDepthCm: 3, backDepthCm: 2, curveAmountNorm: 1 };
+    const rF = DB.computeGeometry(ref, nlT("stand-f", P));
+    const rRound = DB.computeGeometry(ref, nlT("round", P));
+    ok(eq(rF, rRound), "4h-2: stand-f = 동일 수치 round 형상(타입 identity는 checkpoint metadata)");
+    ok(typeof rF.front.necklineLenCm === "number" && rF.front.necklineLenCm > 0 &&
+       typeof rF.back.necklineLenCm === "number" && rF.back.necklineLenCm > 0,
+       "4h-2: F 목선 앞·뒤 길이 측정 가능");
+    ok(eq(rF, DB.computeGeometry(ref, nlT("stand-f", P))), "4h-2: F 목선 재적용 결정론");
+  }
 }
 
 // 4i(SV3). 봉제 경계 의미(neckline/shoulder/armhole) 보존:

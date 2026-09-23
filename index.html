@@ -188,6 +188,7 @@
         <div class="neck-cards" id="necklineCards" role="radiogroup" aria-label="네크라인 형태">
           <button type="button" class="neck-card" data-neck="original" aria-pressed="true">원형 유지</button>
           <button type="button" class="neck-card" data-neck="shirt" aria-pressed="false">셔츠 목선</button>
+          <button type="button" class="neck-card" data-neck="stand-f" aria-pressed="false">스탠드 F 목선</button>
           <button type="button" class="neck-card" data-neck="round" aria-pressed="false">라운드</button>
           <button type="button" class="neck-card" data-neck="v" aria-pressed="false">V넥</button>
           <button type="button" class="neck-card" data-neck="square" aria-pressed="false">스퀘어</button>
@@ -196,7 +197,7 @@
         <div class="row" data-neck-for="common" hidden><label for="inpNeckWidth">목너비 (cm)</label><input id="inpNeckWidth" type="number" min="-15" max="15" step="0.1"></div>
         <div class="row" data-neck-for="common" hidden><label for="inpNeckFrontDepth">앞목 깊이 (cm)</label><input id="inpNeckFrontDepth" type="number" min="-10" max="20" step="0.1"></div>
         <div class="row" data-neck-for="common" hidden><label for="inpNeckBackDepth">뒤목 깊이 (cm)</label><input id="inpNeckBackDepth" type="number" min="-10" max="20" step="0.1"></div>
-        <div class="row" data-neck-for="round boat shirt" hidden><label for="inpNeckCurveAmount">곡선 정도 (0–1)</label><input id="inpNeckCurveAmount" type="number" min="0" max="1" step="0.05"></div>
+        <div class="row" data-neck-for="round boat shirt stand-f" hidden><label for="inpNeckCurveAmount">곡선 정도 (0–1)</label><input id="inpNeckCurveAmount" type="number" min="0" max="1" step="0.05"></div>
         <div class="row" data-neck-for="v" hidden><label for="inpNeckVDepth">V끝점 깊이 (cm)</label><input id="inpNeckVDepth" type="number" min="0" max="20" step="0.1"></div>
         <div class="row" data-neck-for="square" hidden><label for="inpNeckSquareWidth">가로폭 (cm)</label><input id="inpNeckSquareWidth" type="number" min="0" max="20" step="0.1"></div>
         <div class="row" data-neck-for="square" hidden><label for="inpNeckCornerRadius">모서리 둥글기 (cm)</label><input id="inpNeckCornerRadius" type="number" min="0" max="10" step="0.1"></div>
@@ -274,8 +275,8 @@
           </div>
           <div class="row note" id="designSleeveStatusNote" aria-live="polite">소매 미완료 · 세션 전용</div>
         </div><!-- /subtab sleeve -->
-        <!-- 카라 모양. 칼라 밴드 달린 셔츠 칼라(M·N·P)는 designCollar.computeStand/computeBody 가 교재 P.148
-             제도법으로, 한 장 셔츠 칼라(G)는 computeOnePiece 가 P.147 로 만든다. 소매 완료·비스테일일 때만 활성.
+        <!-- 카라 모양. 단독 스탠드 칼라(A)는 computeStandaloneStand 가 P.146으로, 칼라 밴드 달린 셔츠 칼라(M·N·P)는
+             computeStand/computeBody 가 P.148로, 한 장 셔츠 칼라(G·H·I·J·K)는 computeOnePiece 가 P.147로 만든다. 소매 완료·비스테일일 때만 활성.
              몸판 hash 변경 시 geometry 를 숨기고 stale 표시(파라미터 보존, 명시적 재적용 필요). -->
         <div class="subtab-panel" data-subtab="collar" hidden>
           <!-- 선택 제도형으로 초기화: 밴드·위 칼라를 그 preset 기준값으로 정확히 적용(M: 밴드 3·올림 1·앞 끝선 0.5·
@@ -389,7 +390,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026092020"></script>
+<script src="js/render.js?v=2026092320"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -406,36 +407,36 @@
 <!-- 디자인 geometry renderer D2(builder만): window.designRenderer. render.js hook·append 없음. -->
 <script src="js/designRenderer.js?v=2026092402"></script>
 <!-- DB1a 몸판 grain-기준 길이 연장 순수 변환: window.designBodice.computeGeometry. UI·render hook·working 대입 없음. -->
-<script src="js/designBodice.js?v=2026092402"></script>
+<script src="js/designBodice.js?v=2026092403"></script>
 <!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
 <script src="js/designPlacket.js?v=2026082001"></script>
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
 <script src="js/designSleeve.js?v=2026082041"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
-<script src="js/designLayout.js?v=2026092020"></script>
+<script src="js/designLayout.js?v=2026092320"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026091620"></script>
 <!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
-<script src="js/bodiceCheckpoint.js?v=2026092501"></script>
+<script src="js/bodiceCheckpoint.js?v=2026092502"></script>
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
 <script src="js/sleeveMeasure.js?v=2026082011"></script>
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
 <script src="js/sleeveCheckpoint.js?v=2026082041"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
-<script src="js/designCollar.js?v=2026092101"></script>
+<script src="js/designCollar.js?v=2026092320"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
-<script src="js/collarPresets.js?v=2026092033"></script>
+<script src="js/collarPresets.js?v=2026092320"></script>
 <!-- 카라 모양 완료 체크포인트: window.collarCheckpoint. 게이트 + working.collarResult 세션 스냅샷(형상 source=bodice, 소매=순서 게이트). -->
-<script src="js/collarCheckpoint.js?v=2026092101"></script>
+<script src="js/collarCheckpoint.js?v=2026092320"></script>
 <!-- 카라 제도 보조수치 표시 모델(순수·표시 전용): window.collarAnnotation. 형상·hash 무관. -->
-<script src="js/collarAnnotation.js?v=2026092101"></script>
+<script src="js/collarAnnotation.js?v=2026092320"></script>
 <!-- Design 형상 통합: window.designResult. 세 완료본 + structuralLines(유효 cut) 묶음. 재단 아님. -->
 <script src="js/designResult.js?v=2026082701"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026092101"></script>
+<script src="js/ui.js?v=2026092320"></script>
 
 </body>
 </html>

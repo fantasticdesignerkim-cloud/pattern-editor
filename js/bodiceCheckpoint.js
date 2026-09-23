@@ -590,6 +590,7 @@
     if (!c.ok) return { ok: false, reason: c.fails[0], check: c };
     var effF = effectiveOutline(proj, "front"), effB = effectiveOutline(proj, "back");
     var g = proj.working.geometry;
+    var necklineProfile = proj.working.parameters && proj.working.parameters.neckline;
     var ahF = armholeLen(g, "front"), ahB = armholeLen(g, "back");
     // 소매가 참조할 형상 hash(형상 전용: 유효 외곽·진동·목둘레·여밈. 배치·선택·guide 제외).
     var placketParams = proj.working.frontPlacket ? proj.working.frontPlacket.parameters : null;
@@ -603,6 +604,8 @@
       armhole: { front: clone(ahF.segs), back: clone(ahB.segs) },
       armholeLengths: { front: round4(c.armhole.front), back: round4(c.armhole.back) },
       necklineLengths: { front: round4(c.neckline.front), back: round4(c.neckline.back), half: round4(c.neckline.half), finished: round4(c.neckline.finished) },
+      // 칼라 F 같은 몸판-종속 제도가 형상 수치와 함께 확인할 명시적 목선 출처(형상 hash 미포함).
+      necklineProfile: necklineProfile ? clone(necklineProfile) : null,
       placket: proj.working.frontPlacket ? clone(proj.working.frontPlacket) : null,
       // 편집 후 봉제 의미 readiness(복수 원인 보존). **hash signature 에 미포함** — 형상 identity 불변.
       semantics: evaluateSemantics(proj),

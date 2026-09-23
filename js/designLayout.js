@@ -88,6 +88,8 @@
     const merge = (g) => { if (!g || !Array.isArray(g.outline) || !g.outline.length) return; const bb = bboxOfStand(g); if (!bb) return; u = u ? { minX: Math.min(u.minX, bb.minX), minY: Math.min(u.minY, bb.minY), maxX: Math.max(u.maxX, bb.maxX), maxY: Math.max(u.maxY, bb.maxY) } : bb; };
     merge(cd.body && cd.body.geometry);
     merge(cd.onePiece && cd.onePiece.geometry);   // 한 장 셔츠 칼라(family 2)
+    merge(cd.openCollar && cd.openCollar.geometry); // 오픈 칼라(family 2, 몸판 연동 L)
+    merge(cd.standalone && cd.standalone.geometry); // 단독 스탠드 칼라(family 1)
     return u;
   }
 

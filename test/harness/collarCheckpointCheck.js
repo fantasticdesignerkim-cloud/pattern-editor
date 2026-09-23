@@ -146,5 +146,55 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   ok(r2.idempotent === true && r2.result === r1.result, "7: 다른 patternLine 추가는 hash 무관(idempotent 유지)");
 }
 
+// 8. 오픈 칼라 L: 종류별 스냅샷 분리 + 몸판 무효화 vs 소매 순서 게이트(한 장·2피스와 같은 계약)
+{
+  const b = bodice("BHL");
+  b.front = { outline: [
+    { kind: "line", from: { x: 40, y: 2 }, to: { x: 40, y: 38 }, edge: "center" },
+    { kind: "path", commands: [{ type: "M", points: [{ x: 40, y: 2 }] },
+      { type: "C", points: [{ x: 35.6, y: 2 }, { x: 31.4, y: 0.2 }, { x: 29.2, y: -2.4 }] }], edge: "neckline" },
+    { kind: "line", from: { x: 29.2, y: -2.4 }, to: { x: 21, y: 1.2 }, edge: "shoulder" }
+  ] };
+  const P = { backCollarWidthCm: 3.5, collarStandCm: 3, frontEndRiseCm: 1, frontStraightCm: 4, breakPointDistanceCm: 8 };
+  const made = DC.computeOpenCollar(b, P);
+  const openDraft = () => ({ sourceBodiceHash: "BHL", type: "shirt-open-collar", baseMethod: "bunka-open-collar-L-v1", presetId: "bunka-shirt-collar-L",
+    parameters: { openCollar: Object.assign({}, P) },
+    openCollar: { geometry: JSON.parse(JSON.stringify(made.geometry)), measure: JSON.parse(JSON.stringify(made.measure)),
+      anchors: made.anchors, bodyLink: JSON.parse(JSON.stringify(made.bodyLink)) } });
+
+  BODICE = b; BODICE_STALE = false; SLEEVE = { id: "s" }; SLEEVE_CHANGED = false; SLEEVE_INVAL = false;
+  PROJECT = { sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: openDraft(), patternLines: [], collarResult: null } };
+  ok(made.ok && CC.check(PROJECT).ok, "8: L 초안이 완료 게이트 통과");
+  const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.type === "shirt-open-collar" && Object.isFrozen(r.result) && Object.isFrozen(r.result.openCollar.bodyLink)
+    && r.result.baseMethod === "bunka-open-collar-L-v1" && r.result.presetId === "bunka-shirt-collar-L", "8: L 완료 스냅샷 동결·출처 메타");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "8: 완료 직후 미변경");
+  // 파라미터 변경 → 변경됨(형상 전용 signature)
+  PROJECT.working.collarDraft = (function () { const d = openDraft(); const p2 = Object.assign({}, P, { collarStandCm: 4 });
+    const m2 = DC.computeOpenCollar(b, p2); d.parameters.openCollar = p2; d.openCollar.geometry = m2.geometry; d.openCollar.measure = m2.measure; d.openCollar.bodyLink = m2.bodyLink; return d; })();
+  ok(CC.isCurrentCollarChanged(PROJECT) === true, "8: 칼라 허리 변경 → 카라 변경됨");
+  // 소매만 변경되면 카라 형상은 무효가 아니다(작업 순서 표시)
+  PROJECT.working.collarDraft = openDraft(); CC.complete(PROJECT);
+  SLEEVE_CHANGED = true;
+  ok(CC.isCurrentCollarChanged(PROJECT) === false && CC.invalidatedByBodice(PROJECT) === false && CC.sleeveStepChanged(PROJECT) === true,
+    "8: 소매 변경은 카라 무효화 아님(순서 게이트만)");
+  SLEEVE_CHANGED = false;
+  // 몸판 hash 변경 → 카라 무효
+  BODICE = bodice("BHL2"); BODICE.front = b.front;
+  ok(CC.invalidatedByBodice(PROJECT) === true, "8: 몸판 hash 변경 → 카라 무효");
+  BODICE = b;
+  // 종류가 다른 완료본과 섞이지 않는다
+  const onePieceDraft = (function () {
+    const o = DC.computeOnePiece(b, { riseCm: 2.5, backCollarWidthCm: 3.5, collarStandCm: 3, frontCollarWidthCm: 6.5, tipProjectionCm: 3, attachCurveCm: 0.2 });
+    return { sourceBodiceHash: "BHL", type: "shirt-one-piece", baseMethod: "bunka-shirt-collar-G-v1", parameters: { onePiece: { riseCm: 2.5, backCollarWidthCm: 3.5, collarStandCm: 3, frontCollarWidthCm: 6.5, tipProjectionCm: 3, attachCurveCm: 0.2 } },
+      onePiece: { geometry: o.geometry, measure: o.measure, anchors: o.anchors } };
+  })();
+  PROJECT.working.collarDraft = onePieceDraft;
+  ok(CC.isCurrentCollarChanged(PROJECT) === true, "8: L 완료본 + 한 장 초안 → 변경됨(종류 혼동 없음)");
+  const gRes = CC.complete(PROJECT);
+  PROJECT.working.collarDraft = openDraft();
+  ok(gRes.ok && CC.isCurrentCollarChanged(PROJECT) === true, "8: 한 장 완료본 + L 초안 → 변경됨");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

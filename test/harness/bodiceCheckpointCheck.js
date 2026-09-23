@@ -106,6 +106,8 @@ function fakeProject(backSideTopY, opts) {
   ok(res && res.sourceVersion === 2 && res.front && res.back && res.armholeLengths && res.necklineLengths && typeof res.completedAt === "number", "6: bodiceResult spec 필드");
   ok(Object.isFrozen(res) && Object.isFrozen(res.front) && Object.isFrozen(res.armholeLengths) && Object.isFrozen(res.armhole), "6: deepFrozen");
   ok(res.placket === null, "6: placket 없으면 null");
+  ok(res.necklineProfile && res.necklineProfile.type === "round" && res.necklineProfile.mode === "parametric",
+    "6: 완료 형상과 정렬된 목선 profile 보존");
   ok(BC.latest() === res, "6: latest = bodiceResult");
   // 항목 1: 진동선 primitive 자체 저장(길이값 아님). 앞 곡선 ≥1개.
   ok(res.armhole && Array.isArray(res.armhole.front) && res.armhole.front.length >= 1 && res.armhole.back.length >= 1, "6: armhole primitive 저장(front/back segs)");

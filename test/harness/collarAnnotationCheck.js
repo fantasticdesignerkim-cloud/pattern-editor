@@ -123,5 +123,128 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
   ok(CC.isCurrentCollarChanged(PROJECT) === false, "5: 표시 anchors 제거해도 변경 아님");
 }
 
+// 6. F형 보조수치: 벌림 횟수 단위와 몸판 목선 이동은 값 손실 없이 표시 모델에 남는다.
+{
+  const fb = JSON.parse(JSON.stringify(BODICE));
+  fb.necklineProfile = { mode: "parametric", type: "stand-f", parameters: {
+    neckWidthCm: 3, frontDepthCm: 3, backDepthCm: 2, curveAmountNorm: 1
+  } };
+  const construction = { fitNeckSeam: false, baselineReductionCm: 0, guideRiseCm: 0,
+    requiresNecklineProfile: "stand-f", slashSpreadCm: 0.2, slashCount: 3 };
+  const params = { collarWidthCm: 3, frontRiseCm: 0, topSetbackCm: 0 };
+  const made = DC.computeStandaloneStand(fb, params, construction);
+  const cd = { sourceBodiceHash: fb.hash, type: "stand-collar", baseMethod: "bunka-stand-collar-F-P146-v1",
+    construction, parameters: { standalone: params }, standalone: { geometry: made.geometry, measure: made.measure, anchors: made.anchors } };
+  const model = CA.buildModel(cd, fb), count = model.inputs.find(r => r.key === "slashCount");
+  const offsets = model.results.find(r => r.key === "neckOffsets"), spread = model.results.find(r => r.key === "totalSpread");
+  ok(count.value === 3 && count.unit === "개", "6: 벌림 위치 수 = 3개(cm 아님)");
+  ok(offsets.value === null && offsets.text === "2.00 · 3.00 cm", "6: F 목선 이동(뒤2·SNP/앞3) text 보존");
+  ok(Math.abs(spread.value - 0.6) < 1e-5, "6: 외곽 총 벌림 0.60cm 표시");
+}
+
+// 7. H형은 G와 같은 P.147 표시 구조를 쓰되 H 전용 baseMethod·수치를 그대로 노출한다.
+{
+  const P = { riseCm: 8, backCollarWidthCm: 3.5, collarStandCm: 1, frontCollarWidthCm: 6.5, tipProjectionCm: 4.5, attachCurveCm: 0.3 };
+  const made = DC.computeOnePiece(BODICE, P);
+  const cd = { sourceBodiceHash: BODICE.hash, type: "shirt-one-piece", baseMethod: "bunka-shirt-collar-H-v1",
+    parameters: { onePiece: P }, onePiece: { geometry: made.geometry, measure: made.measure, anchors: made.anchors } };
+  const model = CA.buildModel(cd, BODICE), inputs = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  ok(model && model.recipe === "bunka-shirt-collar-H-v1" && model.mode === "parametric", "7: H 전용 recipe 등록");
+  ok(inputs.riseCm === 8 && inputs.collarStandCm === 1 && inputs.tipProjectionCm === 4.5 && inputs.attachCurveCm === 0.3, "7: H 보조수치(올림8·허리1·앞끝4.5·곡률0.3)");
+  ok(model.dims.find(d => d.id === "rise").text === 8 && model.dims.find(d => d.id === "collar-stand").text === 1, "7: H 치수선은 named anchors 기반");
+  ok(CA.recipes().indexOf("bunka-shirt-collar-H-v1") >= 0, "7: H recipe 목록 노출");
+}
+
+// 8. I형도 독립 recipe 로 등록하고 P.64 수치를 그대로 표시한다.
+{
+  const P = { riseCm: 4.5, backCollarWidthCm: 3.5, collarStandCm: 2, frontCollarWidthCm: 6.5, tipProjectionCm: 3.5, attachCurveCm: 0.3 };
+  const made = DC.computeOnePiece(BODICE, P);
+  const cd = { sourceBodiceHash: BODICE.hash, type: "shirt-one-piece", baseMethod: "bunka-shirt-collar-I-v1",
+    parameters: { onePiece: P }, onePiece: { geometry: made.geometry, measure: made.measure, anchors: made.anchors } };
+  const model = CA.buildModel(cd, BODICE), inputs = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  ok(model && model.recipe === "bunka-shirt-collar-I-v1" && model.mode === "parametric", "8: I 전용 recipe 등록");
+  ok(inputs.riseCm === 4.5 && inputs.collarStandCm === 2 && inputs.tipProjectionCm === 3.5 && inputs.attachCurveCm === 0.3, "8: I 보조수치(올림4.5·허리2·앞끝3.5·곡률0.3)");
+  const backWidth = model.dims.find(d => d.id === "back-collar-width"), fold = made.anchors.cbFold, outer = made.anchors.cbOuter;
+  ok(same(backWidth.from, fold) && same(backWidth.to, outer) && Math.abs(Math.hypot(outer.x - fold.x, outer.y - fold.y) - 3.5) < 1e-9, "8: 뒤 칼라 폭은 허리 위 F0→O0 구간(포개 측정 아님)");
+  ok(model.dims.find(d => d.id === "rise").text === 4.5 && model.dims.find(d => d.id === "collar-stand").text === 2, "8: I 치수선은 named anchors 기반");
+  ok(CA.recipes().indexOf("bunka-shirt-collar-I-v1") >= 0, "8: I recipe 목록 노출");
+}
+
+// 9. J형은 허리4 + 뒤 폭3.5를 독립 치수로 표시하고, 교재에 없는 곡률값을 사실처럼 표시하지 않는다.
+{
+  const P = { riseCm: 1, backCollarWidthCm: 3.5, collarStandCm: 4, frontCollarWidthCm: 6.5, tipProjectionCm: 2.5, attachCurveCm: 0 };
+  const made = DC.computeOnePiece(BODICE, P);
+  const cd = { sourceBodiceHash: BODICE.hash, type: "shirt-one-piece", baseMethod: "bunka-shirt-collar-J-v1",
+    parameters: { onePiece: P }, onePiece: { geometry: made.geometry, measure: made.measure, anchors: made.anchors } };
+  const model = CA.buildModel(cd, BODICE), inputs = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  ok(model && model.recipe === "bunka-shirt-collar-J-v1" && model.mode === "parametric", "9: J 전용 recipe 등록");
+  ok(inputs.riseCm === 1 && inputs.collarStandCm === 4 && inputs.tipProjectionCm === 2.5 && inputs.attachCurveCm === 0, "9: J 보조수치(올림1·허리4·앞끝2.5·별도 오프셋 없음)");
+  const stand = model.dims.find(d => d.id === "collar-stand"), width = model.dims.find(d => d.id === "back-collar-width");
+  ok(same(stand.from, made.anchors.cbAttach) && same(stand.to, made.anchors.cbFold)
+    && same(width.from, made.anchors.cbFold) && same(width.to, made.anchors.cbOuter), "9: J 허리 N0→F0·뒤 폭 F0→O0 분리 표시");
+  const attach = made.geometry.outline.filter(s => s.part === "attach");
+  ok(attach.length === 2 && attach.every(s => s.kind === "line"), "9: 곡률 무표기 구현 기준은 별도 볼록 오프셋 없는 두 기초 구간");
+  ok(/곡률 수치를 표기하지/.test(model.note) && /구현 기준/.test(model.note), "9: 0cm를 교재 수치로 오인하지 않는 안내");
+  ok(CA.recipes().indexOf("bunka-shirt-collar-J-v1") >= 0, "9: J recipe 목록 노출");
+}
+
+// 10. K형은 I형과 같은 기준 치수와 반대 곡률 방향을 함께 표시한다.
+{
+  const P = { riseCm: 4.5, backCollarWidthCm: 3.5, collarStandCm: 2, frontCollarWidthCm: 6.5, tipProjectionCm: 3.5, attachCurveCm: 0.6, attachCurveDirection: "reversed" };
+  const made = DC.computeOnePiece(BODICE, P);
+  const cd = { sourceBodiceHash: BODICE.hash, type: "shirt-one-piece", baseMethod: "bunka-shirt-collar-K-v1",
+    parameters: { onePiece: P }, onePiece: { geometry: made.geometry, measure: made.measure, anchors: made.anchors } };
+  const model = CA.buildModel(cd, BODICE), inputs = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.text != null ? r.text : r.value; });
+  ok(model && model.recipe === "bunka-shirt-collar-K-v1" && model.mode === "parametric", "10: K 전용 recipe 등록");
+  ok(inputs.riseCm === 4.5 && inputs.collarStandCm === 2 && inputs.tipProjectionCm === 3.5 && inputs.attachCurveCm === 0.6
+    && inputs.attachCurveDirection === "반대 방향", "10: K 보조수치(I 치수·곡률0.6·반대 방향)");
+  ok(/I형과 같은 치수/.test(model.note) && /반대 방향/.test(model.note), "10: K 곡률 방향 변경 안내");
+  const attach = made.geometry.outline.filter(s => s.part === "attach"), midY = (made.anchors.a.y + made.anchors.b.y) / 2;
+  ok(attach.length === 3 && attach[1].to.y > midY, "10: K 보조수치의 반대 방향과 실제 곡률 형상 일치");
+  ok(CA.recipes().indexOf("bunka-shirt-collar-K-v1") >= 0, "10: K recipe 목록 노출");
+}
+
+// 11. 오픈 칼라 L(P.65, 몸판 연동) 표시 모델 — 몸판 프레임 좌표를 카라 로컬 dims 에 섞지 않는다
+{
+  const B = JSON.parse(JSON.stringify(BODICE));
+  B.front = { outline: [
+    { kind: "line", from: { x: 40, y: 2 }, to: { x: 40, y: 38 }, edge: "center" },
+    { kind: "path", commands: [{ type: "M", points: [{ x: 40, y: 2 }] },
+      { type: "C", points: [{ x: 35.6, y: 2 }, { x: 31.4, y: 0.2 }, { x: 29.2, y: -2.4 }] }], edge: "neckline" },
+    { kind: "line", from: { x: 29.2, y: -2.4 }, to: { x: 21, y: 1.2 }, edge: "shoulder" }
+  ] };
+  const P = { backCollarWidthCm: 3.5, collarStandCm: 3, frontEndRiseCm: 1, frontStraightCm: 4, breakPointDistanceCm: 8 };
+  const made = DC.computeOpenCollar(B, P);
+  const cd = { sourceBodiceHash: B.hash, type: "shirt-open-collar", baseMethod: "bunka-open-collar-L-v1",
+    parameters: { openCollar: P }, openCollar: { geometry: made.geometry, measure: made.measure, anchors: made.anchors, bodyLink: made.bodyLink } };
+  const model = CA.buildModel(cd, B), inputs = {}, results = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.text != null ? r.text : r.value; });
+  model.results.forEach(r => { results[r.key] = r; });
+  ok(model && model.recipe === "bunka-open-collar-L-v1" && model.mode === "parametric" && CA.recipes().indexOf("bunka-open-collar-L-v1") >= 0, "11: L 전용 recipe 등록");
+  ok(inputs.backCollarWidthCm === 3.5 && inputs.collarStandCm === 3 && inputs.frontEndRiseCm === 1
+    && inputs.frontStraightCm === 4 && inputs.breakPointDistanceCm === 8, "11: L 제도 입력값 5개");
+  ok(results.attachDiff.status === "match" && Math.abs(results.attachLen.value - results.neckTarget.value) <= CA.SEAM_MATCH_TOL,
+    "11: 달림선 = 목둘레 정합 판정(L 은 길이 책임이 달림선에 있다)");
+  ok(results.baseLineLen.value === made.measure.baseLineLenCm && results.foldLift.value === made.measure.foldJunctionLiftCm
+    && /파생/.test(results.baseLineLen.label) && /파생/.test(results.foldLift.label), "11: 기초선·꺾임점 들림은 파생값으로 표시");
+  ok(results.breakLineLen.value === made.measure.breakLineLenCm && results.breakDrop.value === made.measure.breakDropCm
+    && results.frontOverlap.value === 1.75, "11: 몸판 꺾임선 수치 보고(길이·내림·여밈분)");
+  // ★ dims 는 카라 로컬 좌표만 — 몸판 프레임(x≈40)의 꺾임선 점이 섞이면 잘못된 위치에 그려진다
+  const allPts = [];
+  model.dims.forEach(d => { allPts.push(d.from, d.to); });
+  model.labels.forEach(l => allPts.push(l.at));
+  ok(allPts.length > 0 && allPts.every(p => p.x <= made.measure.baseLineLenCm + 1e-9 && p.x >= -1e-9), "11: 표시 좌표는 카라 로컬 프레임 안(몸판 좌표 미혼입)");
+  const ids = model.dims.map(d => d.id);
+  ok(ids.indexOf("collar-stand") >= 0 && ids.indexOf("back-collar-width") >= 0 && ids.indexOf("front-end-rise") >= 0
+    && ids.indexOf("front-straight") >= 0 && ids.indexOf("baseline") >= 0, "11: 치수선 = 허리·뒤 폭·앞 끝 올림·앞 직선 + 기초선 참조");
+  ok(/몸판/.test(model.note), "11: 몸판 연동 제도 안내");
+  // 형상 없으면 이전 수치를 현재처럼 남기지 않는다
+  ok(CA.buildModel({ type: "shirt-open-collar", baseMethod: "bunka-open-collar-L-v1", openCollar: {} }, B) === null, "11: 형상 없으면 표시 모델 없음");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

@@ -9,6 +9,7 @@
 //
 // 완료 게이트(모두 통과): bodiceResult 존재·비스테일 / collarDraft.sourceBodiceHash===bodice.hash /
 //   현재 sleeveResult 존재·비스테일(순서 게이트) / 스탠드·본체 geometry 존재·폐곡선·자기교차 없음 /
+//   (오픈 칼라 L: 한 조각 폐곡선 + 달림선 실측 = ×+⊘ + 몸판 꺾임선 출처 존재) /
 //   body manual 이면 관리선 존재·invalid===false / gap(CB 제도 간격) 기록 / 위칼라 이음선 길이 = 밴드 기준 봉제 길이
 //   (= 밴드 윗선 ⒸⒹ 전체, 앞 끝선 연장 미포함 — P.148 step 3) / 실측·파라미터 유한. 실패 시 기존 collarResult·현재 geometry 불변.
 // ══════════════════════════════════════════════
@@ -38,6 +39,9 @@
 
   // 카라 종류 판별: family 2(한 장, P.147) vs family 3(밴드+위칼라 2피스). 기본은 2피스(legacy draft 호환).
   function isOnePiece(cd) { return !!(cd && cd.type === "shirt-one-piece"); }
+  // family 2 안의 몸판 연동 제도(오픈 칼라 L, P.65). 한 장(G~K)과 게이트·스냅샷을 분리한다.
+  function isOpenCollar(cd) { return !!(cd && cd.type === "shirt-open-collar"); }
+  function isStandalone(cd) { return !!(cd && cd.type === "stand-collar"); }
 
   // ── 검사 ──
   function check(proj) {
@@ -70,6 +74,38 @@
       if (!(m && num(m.attachLenCm) && num(m.neckTargetCm) && num(m.outerLenCm) && num(m.foldLenCm))) fails.push("unmeasured");
       // ★ 달림선 실측과 목둘레(뒤목+앞목)의 차이는 **측정·표시만** 한다(교재: 외곽 치수는 가봉으로 조정).
       return { ok: fails.length === 0, fails: fails, _bodice: bodice, _onePiece: opRe, _lengths: null, _stand: null };
+    }
+    // ── 오픈 칼라(family 2, 몸판 연동 L): 달림선 실측 = ×+⊘ 길이 책임 + 몸판 꺾임선 출처를 함께 검사 ──
+    if (isOpenCollar(cd)) {
+      var oc = cd.openCollar;
+      if (!(oc && oc.geometry)) fails.push("no-collar-piece");
+      else { var voc = DC.validateClosedOutline(oc.geometry.outline); if (!voc.ok) fails.push("collar-" + voc.reason); }
+      var ocRe = null;
+      if (bodice && cd.parameters && cd.parameters.openCollar) {
+        ocRe = DC.computeOpenCollar(bodice, cd.parameters.openCollar);
+        if (!ocRe.ok) fails.push("collar-recompute");
+      } else fails.push("no-collar-params");
+      var om = oc && oc.measure;
+      if (!(om && num(om.attachLenCm) && num(om.neckTargetCm) && num(om.outerLenCm) && num(om.foldLenCm) && num(om.baseLineLenCm))) fails.push("unmeasured");
+      // ★ 길이 책임(사용자 확정): 달림선 실측 = ×+⊘. 한 장 G~K 와 달리 차이를 표시만 하지 않고 게이트로 잡는다.
+      else if (Math.abs(om.attachLenCm - om.neckTargetCm) > 0.01) fails.push("attach-length-mismatch");
+      var bl = oc && oc.bodyLink;
+      if (!(bl && bl.frontNeckPoint && bl.breakTop && bl.breakEnd && Array.isArray(bl.breakLine) && bl.breakLine.length)) fails.push("break-line-missing");
+      return { ok: fails.length === 0, fails: fails, _bodice: bodice, _openCollar: ocRe, _lengths: null, _stand: null };
+    }
+    // ── 단독 스탠드 칼라 A~F(family 1): 밴드+본체 게이트와 분리한다. ──
+    if (isStandalone(cd)) {
+      var sa = cd.standalone;
+      if (!(sa && sa.geometry)) fails.push("no-standalone");
+      else { var sva = DC.validateClosedOutline(sa.geometry.outline); if (!sva.ok) fails.push("standalone-" + sva.reason); }
+      var saRe = null;
+      if (bodice && cd.parameters && cd.parameters.standalone) {
+        saRe = DC.computeStandaloneStand(bodice, cd.parameters.standalone, cd.construction || {});
+        if (!saRe.ok) fails.push("standalone-recompute");
+      } else fails.push("no-collar-params");
+      var sam = sa && sa.measure;
+      if (!(sam && num(sam.attachLenCm) && num(sam.neckTargetCm) && num(sam.outerLenCm))) fails.push("unmeasured");
+      return { ok: fails.length === 0, fails: fails, _bodice: bodice, _standalone: saRe, _lengths: null, _stand: null };
     }
     // 스탠드·본체 geometry: 폐곡선·자기교차
     if (!(cd && cd.standGeometry)) fails.push("no-stand");
@@ -112,6 +148,21 @@
         sym: res.symmetry
       });
     }
+    if (res.type === "shirt-open-collar") {
+      return JSON.stringify({
+        sbh: res.sourceBodiceHash, nk: res.necklineLengths,
+        oc: res.openCollar.parameters, og: canonGeom(res.openCollar.geometry), occ: canonSegs((res.openCollar.geometry || {}).construction),
+        om: res.openCollar.measures, bl: canonSegs((res.openCollar.bodyLink || {}).breakLine),   // 몸판 연동 꺾임선도 형상 identity 에 포함
+        sym: res.symmetry
+      });
+    }
+    if (res.type === "stand-collar") {
+      return JSON.stringify({
+        sbh: res.sourceBodiceHash, nk: res.necklineLengths,
+        sa: res.standalone.parameters, sc: res.standalone.construction, sg: canonGeom(res.standalone.geometry), sm: res.standalone.measures,
+        sym: res.symmetry
+      });
+    }
     return JSON.stringify({
       sbh: res.sourceBodiceHash, nk: res.necklineLengths,
       sp: res.stand.parameters, sg: canonGeom(res.stand.geometry), sl: res.stand.lengths,
@@ -145,6 +196,41 @@
       deepFreeze(oneRes);
       proj.working.collarResult = oneRes;
       return { ok: true, result: oneRes, check: c };
+    }
+    if (isOpenCollar(cd)) {
+      var openRes = {
+        schemaVersion: 1, type: "shirt-open-collar",
+        baseMethod: cd.baseMethod || null, presetId: cd.presetId || null,   // 출처 메타 — signatureOf 미포함
+        sourceBodiceHash: cd.sourceBodiceHash,
+        sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+        necklineLengths: clone(bodice.necklineLengths),
+        openCollar: { parameters: clone(cd.parameters.openCollar), geometry: clone(cd.openCollar.geometry),
+          measures: clone(cd.openCollar.measure || {}), bodyLink: clone(cd.openCollar.bodyLink || {}) },
+        symmetry: "half-cb-fold"
+      };
+      openRes.hash = hashStr(signatureOf(openRes));
+      var prevOpen = proj.working.collarResult;
+      if (prevOpen && prevOpen.hash === openRes.hash) return { ok: true, result: prevOpen, idempotent: true, check: c };
+      openRes.completedAt = Date.now(); deepFreeze(openRes);
+      proj.working.collarResult = openRes;
+      return { ok: true, result: openRes, check: c };
+    }
+    if (isStandalone(cd)) {
+      var standAloneRes = {
+        schemaVersion: 1, type: "stand-collar",
+        baseMethod: cd.baseMethod || null, presetId: cd.presetId || null,
+        sourceBodiceHash: cd.sourceBodiceHash,
+        sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+        necklineLengths: clone(bodice.necklineLengths),
+        standalone: { parameters: clone(cd.parameters.standalone), construction: clone(cd.construction || {}), geometry: clone(cd.standalone.geometry), measures: clone(cd.standalone.measure || {}) },
+        symmetry: "half-cb-fold"
+      };
+      standAloneRes.hash = hashStr(signatureOf(standAloneRes));
+      var oldStandalone = proj.working.collarResult;
+      if (oldStandalone && oldStandalone.hash === standAloneRes.hash) return { ok: true, result: oldStandalone, idempotent: true, check: c };
+      standAloneRes.completedAt = Date.now(); deepFreeze(standAloneRes);
+      proj.working.collarResult = standAloneRes;
+      return { ok: true, result: standAloneRes, check: c };
     }
     var manualSource = null;
     if (cd.body.mode === "manual") {
@@ -189,7 +275,25 @@
         symmetry: "half-cb-fold" };
       return hashStr(signatureOf(curOne)) !== res.hash;
     }
-    if (res.type === "shirt-one-piece") return true;                                    // 2피스 draft vs 한 장 완료본
+    if (isOpenCollar(cd)) {
+      if (!cd.openCollar || !cd.openCollar.geometry || !cd.parameters || !cd.parameters.openCollar) return true;
+      if (res.type !== "shirt-open-collar") return true;
+      var openRe = DC.computeOpenCollar(bodice, cd.parameters.openCollar); if (!openRe.ok) return true;
+      var curOpen = { type: "shirt-open-collar", sourceBodiceHash: cd.sourceBodiceHash, necklineLengths: bodice.necklineLengths,
+        openCollar: { parameters: cd.parameters.openCollar, geometry: cd.openCollar.geometry, measures: cd.openCollar.measure || {}, bodyLink: cd.openCollar.bodyLink || {} },
+        symmetry: "half-cb-fold" };
+      return hashStr(signatureOf(curOpen)) !== res.hash;
+    }
+    if (isStandalone(cd)) {
+      if (!cd.standalone || !cd.standalone.geometry || !cd.parameters || !cd.parameters.standalone) return true;
+      if (res.type !== "stand-collar") return true;
+      var standaloneRe = DC.computeStandaloneStand(bodice, cd.parameters.standalone, cd.construction || {}); if (!standaloneRe.ok) return true;
+      var curStandalone = { type: "stand-collar", sourceBodiceHash: cd.sourceBodiceHash, necklineLengths: bodice.necklineLengths,
+        standalone: { parameters: cd.parameters.standalone, construction: cd.construction || {}, geometry: cd.standalone.geometry, measures: cd.standalone.measure || {} },
+        symmetry: "half-cb-fold" };
+      return hashStr(signatureOf(curStandalone)) !== res.hash;
+    }
+    if (res.type === "shirt-one-piece" || res.type === "shirt-open-collar" || res.type === "stand-collar") return true;   // 2피스 draft vs 다른 종류 완료본
     if (!cd.standGeometry || !cd.body || !cd.body.geometry) return true;               // 카라 형상 없음/숨김
     if (cd.body.mode === "manual" && cd.body.invalid) return true;                     // 무효 편집
     if (!cd.parameters || !cd.parameters.stand) return true;

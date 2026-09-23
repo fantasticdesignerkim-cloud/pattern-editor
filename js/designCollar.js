@@ -54,7 +54,8 @@
         overlap = o;
       }
     }
-    return { ok: true, backCm: nl.back, frontCm: nl.front, overlapCm: overlap };
+    return { ok: true, backCm: nl.back, frontCm: nl.front, overlapCm: overlap,
+      necklineProfile: bodiceResult.necklineProfile || null };
   }
 
 
@@ -176,6 +177,76 @@
     ];
   }
 
+  // 원호를 cubic 조각으로 만든다. F형의 잘라서 벌림 0.2cm×3을
+  // 달림선을 축으로 한 연속 환형 부채꼴로 정리하는 구현 관례에 쓴다.
+  function arcPoint(center, radius, angle) { return { x: center.x + radius * Math.cos(angle), y: center.y + radius * Math.sin(angle) }; }
+  function arcPath(center, radius, startAngle, sweep, pieces, part) {
+    var out = [], da = sweep / pieces;
+    for (var i = 0; i < pieces; i++) {
+      var a0 = startAngle + da * i, a1 = a0 + da, k = 4 / 3 * Math.tan(da / 4);
+      var p0 = arcPoint(center, radius, a0), p1 = arcPoint(center, radius, a1);
+      out.push({ kind: "cubic", from: p0,
+        c1: { x: p0.x - k * radius * Math.sin(a0), y: p0.y + k * radius * Math.cos(a0) },
+        c2: { x: p1.x + k * radius * Math.sin(a1), y: p1.y - k * radius * Math.cos(a1) },
+        to: p1, part: part });
+    }
+    return out;
+  }
+  function isStandFProfile(profile) {
+    if (!profile || profile.mode !== "parametric" || profile.type !== "stand-f") return false;
+    var p = profile.parameters || {}, near = function (a, b) { return num(a) && Math.abs(a - b) < 1e-9; };
+    return near(p.neckWidthCm, 3) && near(p.frontDepthCm, 3) && near(p.backDepthCm, 2) && near(p.curveAmountNorm, 1);
+  }
+  function computeSpreadStandalone(b, P, O) {
+    if (O.requiresNecklineProfile === "stand-f" && !isStandFProfile(b.necklineProfile)) return { ok: false, reason: "stand-f-neckline-required" };
+    var W = P.collarWidthCm, spread = O.slashSpreadCm, count = O.slashCount;
+    if (!num(W) || W <= 0) return { ok: false, reason: "invalid-collar-width" };
+    if (!num(spread) || spread <= 0 || !Number.isInteger(count) || count <= 0) return { ok: false, reason: "invalid-construction-guide" };
+    var N = b.backCm + b.frontCm, targetSweep = spread * count / W;
+    var unitCenter = { x: 0, y: 1 }, start = -Math.PI / 2;
+    var unitLen = sumMeasure(arcPath(unitCenter, 1, start, targetSweep, count, "neck-seam"));
+    var R = N / unitLen, center = { x: 0, y: R };
+    var attach = arcPath(center, R, start, targetSweep, count, "neck-seam");
+    // adaptive 길이 측정의 절대 허용치 때문에 단위 원호를 확대하면 약 1e-5cm 차이가 날 수 있다.
+    // 같은 canonical 측정기로 한 번 재비례해 달림선 자체를 목표 목둘레에 맞춘다(형상 보정이 아니라 수치 정규화).
+    var firstAttachLen = sumMeasure(attach);
+    R *= N / firstAttachLen; center = { x: 0, y: R };
+    attach = arcPath(center, R, start, targetSweep, count, "neck-seam");
+    var outer = arcPath(center, R + W, start, targetSweep, count, "outer");
+    var cbSeam = cp(attach[0].from), cfSeam = cp(attach[attach.length - 1].to);
+    var cbOuter = cp(outer[0].from), cfOuter = cp(outer[outer.length - 1].to);
+    var outline = attach.map(function (s) { return cloneSeg(s, "neck-seam"); });
+    outline.push(L(cfSeam, cfOuter, "front-edge"));
+    outer.slice().reverse().forEach(function (s) { outline.push(reverseSeg2(s, "outer")); });
+    outline.push(L(cbOuter, cbSeam, "cb-fold"));
+    var closed = validateClosedOutline(outline); if (!closed.ok) return { ok: false, reason: closed.reason };
+    // 교재의 세 벌림 위치: 전체 1/3·2/3 + 앞·뒤 어깨 맞댐 지점(뒤목/전체).
+    var shoulderFraction = b.backCm / N;
+    var slashFractions = [1 / 3, shoulderFraction, 2 / 3].sort(function (a, z) { return a - z; });
+    var slashLines = slashFractions.map(function (f) {
+      var a = start + targetSweep * f;
+      return L(arcPoint(center, R, a), arcPoint(center, R + W, a), "slash-guide");
+    });
+    var attachLen = sumMeasure(attach), outerLen = sumMeasure(outer);
+    return { ok: true,
+      geometry: { outline: outline, construction: slashLines },
+      measure: {
+        collarWidthCm: W, frontRiseCm: 0, topSetbackCm: 0,
+        baselineReductionCm: 0, guideRiseCm: 0, frontExtensionCm: 0,
+        backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm, neckTargetCm: N,
+        attachLenCm: attachLen, attachDiffCm: attachLen - N,
+        drawnAttachLenCm: attachLen, cbTrimCm: 0, outerLenCm: outerLen,
+        frontEdgeLenCm: lineLen(cfSeam, cfOuter), spreadEachCm: spread,
+        spreadCount: count, totalSpreadCm: outerLen - attachLen, shoulderFraction: shoulderFraction,
+        neckWidthCm: 3, frontNeckDropCm: 3, backNeckDropCm: 2
+      },
+      anchors: { cbSeam: cbSeam, cbOuter: cbOuter, guideA: arcPoint(center, R, start + targetSweep * 2 / 3),
+        cfSeam: cfSeam, cfOuterGuide: cfOuter, cfOuter: cfOuter,
+        frontEdgeSeam: cfSeam, frontEdgeOuter: cfOuter, slashLines: slashLines,
+        guideDir: { x: Math.cos(targetSweep), y: Math.sin(targetSweep) } }
+    };
+  }
+
   // params = { bandWidthCm(밴드 폭), frontRiseCm(앞 중심 올림), frontEndCm(앞 끝선 = 앞 중심선 앞 0.5) }
   function computeStand(bodiceResult, params) {
     var b = readBodice(bodiceResult);
@@ -229,6 +300,78 @@
     };
   }
   function reverseSeg2(s, part) { var r = reverseSeg(s); r.part = part; return r; }
+
+  // ══ 스탠드 칼라 A~F(교재 P.60~62, 제도법 P.146) ══
+  // 셔츠 칼라의 밴드가 아니라 단독 스탠드 칼라 한 조각이다. 앞 윗점 0.5cm는 앞끝 연장이 아니라
+  // 앞 중심 기준선의 윗점에서 뒤 중심 방향(윗선 안내 방향)으로 물리는 정리량이다.
+  function computeStandaloneStand(bodiceResult, params, options) {
+    var b = readBodice(bodiceResult);
+    if (!b.ok) return b;
+    var P = params || {}, O = options || {}, fitNeckSeam = O.fitNeckSeam === true;
+    var extendToFrontEdge = O.extendToFrontEdge === true;
+    var baselineReduction = num(O.baselineReductionCm) ? O.baselineReductionCm : 0;
+    var guideRise = num(O.guideRiseCm) ? O.guideRiseCm : 0;
+    var W = P.collarWidthCm, rise = P.frontRiseCm, setback = P.topSetbackCm;
+    if (O.slashSpreadCm !== undefined || O.slashCount !== undefined) return computeSpreadStandalone(b, P, O);
+    if (!num(W) || W <= 0) return { ok: false, reason: "invalid-collar-width" };
+    if (!num(rise) || rise < 0) return { ok: false, reason: "invalid-front-rise" };
+    if (!num(setback) || setback < 0) return { ok: false, reason: "invalid-top-setback" };
+    if (baselineReduction < 0 || guideRise < 0) return { ok: false, reason: "invalid-construction-guide" };
+    if (extendToFrontEdge && !(b.overlapCm > 0)) return { ok: false, reason: "front-extension-missing" };
+    var N = b.backCm + b.frontCm;
+    var draftedN = N - baselineReduction;
+    if (!(draftedN > 0)) return { ok: false, reason: "invalid-construction-guide" };
+    var CB0 = { x: 0, y: 0 }, A = { x: draftedN * 2 / 3, y: -guideRise }, B = { x: draftedN, y: -rise };
+    var u = unit(sub(B, A)), n = { x: u.y, y: -u.x };
+    if (!(n.y < 0)) return { ok: false, reason: "invalid-guide-direction" };
+    var BtopGuide = add(B, n, W);
+    // B형은 달림선이 수평이라 윗선 안내 방향도 y=-W 와 평행하다. 이때 교점을 구하면 0/0이므로
+    // 목둘레 2/3 기준점 A를 같은 폭만큼 올린 점을 윗선의 제어 기준으로 쓴다.
+    var K;
+    if (Math.abs(u.y) < 1e-12) K = add(A, n, W);
+    else { var tK = (-W - BtopGuide.y) / u.y; K = add(BtopGuide, u, tK); }
+    if (!(K.x > 0) || !(A.x > 0)) return { ok: false, reason: "invalid-collar-width" };
+    var Btop = add(BtopGuide, u, -setback);                 // P.60/P.146 앞 윗끝 0.5cm 물림
+    var CBtop = { x: 0, y: -W };
+    var attachFull = smoothBandGuide(CB0, A, B, "neck-seam");
+    var outerFull = smoothBandGuide(CBtop, K, Btop, "outer");
+    var drawnAttachLen = sumMeasure(attachFull), attach = attachFull, outer = outerFull;
+    // C형(P.61): 앞 중심 3cm 올림으로 달림선이 목둘레보다 길어지므로 실측 후 뒤중심에서 수정한다.
+    if (fitNeckSeam) {
+      if (drawnAttachLen < N - 1e-9) return { ok: false, reason: "invalid-front-rise" };
+      attach = trimFromEnd(attachFull, N);
+      outer = trimAtX(outerFull, attach[0].from.x);
+    }
+    var cbSeam = cp(attach[0].from), cbOuter = cp(outer[0].from);
+    // E형(P.62): B형을 제도한 뒤, 완료된 몸판의 앞중심→앞끝(여밈) 길이만큼
+    // 달림선·윗선을 같은 방향으로 평행 연장한다. 연장분은 목둘레 봉제 길이에 포함하지 않는다.
+    var frontExtension = extendToFrontEdge ? b.overlapCm : 0;
+    var frontEdgeSeam = add(B, u, frontExtension), frontEdgeOuter = add(Btop, u, frontExtension);
+    var outline = attach.map(function (s) { return cloneSeg(s, "neck-seam"); });
+    if (frontExtension > 0) outline.push(L(B, frontEdgeSeam, "front-extension"));
+    outline.push(L(frontEdgeSeam, frontEdgeOuter, "front-edge"));
+    if (frontExtension > 0) outline.push(L(frontEdgeOuter, Btop, "outer-extension"));
+    outer.slice().reverse().forEach(function (s) { outline.push(reverseSeg2(s, "outer")); });
+    outline.push(L(cbOuter, cbSeam, "cb-fold"));
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+    var attachLen = sumMeasure(attach), outerLen = sumMeasure(outer) + frontExtension;
+    return { ok: true,
+      geometry: { outline: outline, construction: [] },
+      measure: {
+        collarWidthCm: W, frontRiseCm: rise, topSetbackCm: setback,
+        baselineReductionCm: baselineReduction, guideRiseCm: guideRise,
+        frontExtensionCm: frontExtension,
+        backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm, neckTargetCm: N,
+        attachLenCm: attachLen, attachDiffCm: attachLen - N,
+        drawnAttachLenCm: drawnAttachLen, cbTrimCm: fitNeckSeam ? drawnAttachLen - N : 0,
+        outerLenCm: outerLen, frontEdgeLenCm: lineLen(frontEdgeSeam, frontEdgeOuter)
+      },
+      anchors: { cbSeam: cbSeam, cbOuter: cbOuter, guideA: A, cfSeam: B,
+        cfOuterGuide: BtopGuide, cfOuter: Btop, frontEdgeSeam: frontEdgeSeam, frontEdgeOuter: frontEdgeOuter,
+        outerGuide: K, guideDir: { x: u.x, y: u.y } }
+    };
+  }
 
   // ══ 위 칼라(교재 P.148 step 2·3) ══ 밴드 결과 위에 제도한다. M·N·P 공용.
   //   ①②③ CB 에 직각인 안내선으로 **간격(gapCm)** 과 **뒤 위 칼라 폭(cbWidthCm)** 을 잡는다(밴드 윗선 CB Ⓓ 기준).
@@ -431,11 +574,14 @@
   //   ③ N0 = CB 에서 올림 치수 ★ 위 → (0, −rise)
   //   ④ A  = N0 에서 CB 에 직각(수평)으로 뒤목 길이 × → (back, −rise)
   //   ⑤ B  = A 에서 앞목 길이 ⊘ 를 기초선 ① 까지 → (A.x + √(⊘²−★²), 0)
-  //   ⑥ 달림선 = N0→A 직선 + A→B 곡선(현 중점에서 위쪽으로 attachCurve 만큼 볼록)
+  //   ⑥ 달림선 = N0→A 직선 + A→B 곡선. 기본은 현 중점에서 위쪽으로 attachCurve 만큼 볼록,
+  //        K형은 같은 치수를 유지한 채 attachCurveDirection="reversed"로 반대쪽에 곡률을 둔다.
   //   ⑦ C  = B 에서 수평으로 칼라 끝 치수 → (B.x + proj, 0)
   //   ⑧⑨ D(앞끝) = C 수직선 위에서 |B→D| = 앞 칼라 폭 → (C.x, −√(앞폭²−proj²))
   //   2-① 안내선 = A 에서 달림 기초선(N0→A, A→B)과 동일한 각도 = 두 수직선의 이등분 방향 u
-  //   2-② CB 에서 칼라 허리·뒤 칼라 폭을 잡고(뒤 중심선에 직각) 안내선 u 와 만난 점이 F_a·O_a
+  //   2-② CB 에서 칼라 허리(N0→F0)를 잡고, 그 위에 뒤 칼라 폭(F0→O0)을 이어 잡는다.
+  //        두 치수는 같은 기준점에서 포개 재는 값이 아니다(J: 허리4 > 뒤폭3.5도 유효).
+  //        각 수평선과 안내선 u 가 만난 점이 F_a·O_a.
   //   2-③④ 꺾임선 안내 = CB허리 → F_a → B / 외곽 안내 = CB폭 → O_a → D(칼라 끝)
   //   2-⑤⑥ "완만한 선으로 수정" = 이 파일의 기존 관례(접선 연속 cubic, 핸들 = 현 길이 × 1/3)로 고정한다.
   //        ★ 교재는 손으로 정리하라고만 하므로 **이 정리 규칙은 구현 관례**이고 교재 수치가 아니다.
@@ -450,8 +596,9 @@
     var c2 = { kind: "cubic", from: cp(Pm), c1: add(Pm, chord, h2), c2: add(P1, chord, -h2), to: cp(P1), part: part };
     return [c1, c2];
   }
-  // 달림선 A→B: 현 중점에서 위쪽으로 bow 만큼 볼록(교재 0.2). bow=0 이면 직선.
-  function attachBow(A, B, bow, part) {
+  // 달림선 A→B: signedBow 양수면 위쪽, 음수면 반대쪽(K형). 0이면 직선.
+  function attachBow(A, B, signedBow, part) {
+    var bow = signedBow;
     if (bow === 0) return [L(A, B, part)];
     var chord = unit(sub(B, A)), bowMid = add(mid(A, B), upNormal(A, B), bow);
     var h1 = lineLen(A, bowMid) * SEAM_HANDLE_FRACTION, h2 = lineLen(bowMid, B) * SEAM_HANDLE_FRACTION;
@@ -460,7 +607,8 @@
       { kind: "cubic", from: cp(bowMid), c1: add(bowMid, chord, h2), c2: add(B, chord, -h2), to: cp(B), part: part }
     ];
   }
-  // params = { riseCm(★), backCollarWidthCm, collarStandCm(칼라 허리), frontCollarWidthCm, tipProjectionCm, attachCurveCm }
+  // params = { riseCm(★), backCollarWidthCm, collarStandCm(칼라 허리), frontCollarWidthCm, tipProjectionCm,
+  //            attachCurveCm, attachCurveDirection?("as-drawn" 기본 | "reversed") }
   //   반환 { ok, geometry:{outline,construction}, measure, anchors } | { ok:false, reason }.
   function computeOnePiece(bodiceResult, params) {
     var b = readBodice(bodiceResult);
@@ -468,12 +616,14 @@
     var P = params || {};
     var rise = P.riseCm, backW = P.backCollarWidthCm, stand = P.collarStandCm;
     var frontW = P.frontCollarWidthCm, proj = P.tipProjectionCm, bow = P.attachCurveCm;
+    var curveDir = P.attachCurveDirection == null ? "as-drawn" : P.attachCurveDirection;
     if (!num(rise) || rise <= 0) return { ok: false, reason: "invalid-rise" };
     if (!num(backW) || backW <= 0) return { ok: false, reason: "invalid-back-collar-width" };
-    if (!num(stand) || stand <= 0 || stand >= backW) return { ok: false, reason: "invalid-collar-stand" };
+    if (!num(stand) || stand <= 0) return { ok: false, reason: "invalid-collar-stand" };
     if (!num(proj) || proj < 0) return { ok: false, reason: "invalid-tip-projection" };
     if (!num(frontW) || frontW <= proj) return { ok: false, reason: "invalid-front-collar-width" };
     if (!num(bow) || bow < 0) return { ok: false, reason: "invalid-attach-curve" };
+    if (curveDir !== "as-drawn" && curveDir !== "reversed") return { ok: false, reason: "invalid-attach-curve-direction" };
     if (!(b.frontCm > rise)) return { ok: false, reason: "invalid-rise" };   // ⑤ 가 기초선에 닿지 않음
 
     var N0 = { x: 0, y: -rise };
@@ -484,10 +634,12 @@
     // 2-①: A 에서 두 달림 기초선에 세운 수직선의 이등분 방향(각도기 없이 긋는 교재 방법과 동일).
     var u = unit({ x: upNormal(N0, A).x + upNormal(A, B).x, y: upNormal(N0, A).y + upNormal(A, B).y });
     if (!(u.y < 0)) return { ok: false, reason: "invalid-guide-direction" };
-    var F0 = { x: 0, y: N0.y - stand }, O0 = { x: 0, y: N0.y - backW };
-    var Fa = add(A, u, -stand / u.y), Oa = add(A, u, -backW / u.y);   // CB 에 직각인 수평선과 안내선의 교점
+    var outerDepth = stand + backW;
+    var F0 = { x: 0, y: N0.y - stand }, O0 = { x: 0, y: N0.y - outerDepth };
+    var Fa = add(A, u, -stand / u.y), Oa = add(A, u, -outerDepth / u.y);   // CB 에 직각인 수평선과 안내선의 교점
 
-    var attach = [L(N0, A, "attach")].concat(attachBow(A, B, bow, "attach"));
+    var signedBow = curveDir === "reversed" ? -bow : bow;
+    var attach = [L(N0, A, "attach")].concat(attachBow(A, B, signedBow, "attach"));
     var fold = smoothGuide(F0, Fa, B, "fold");
     var outerFwd = smoothGuide(O0, Oa, D, "outer");                    // CB → 칼라 끝
     var outline = attach.slice();
@@ -501,7 +653,7 @@
     return { ok: true,
       geometry: { outline: outline, construction: fold.map(function (sgm) { return cloneSeg(sgm, "fold"); }) },
       measure: {
-        riseCm: rise, backCollarWidthCm: backW, collarStandCm: stand, attachCurveCm: bow,
+        riseCm: rise, backCollarWidthCm: backW, collarStandCm: stand, attachCurveCm: bow, attachCurveDirection: curveDir,
         attachLenCm: attachLen, neckTargetCm: b.backCm + b.frontCm, attachDiffCm: attachLen - (b.backCm + b.frontCm),
         backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm,
         frontCollarWidthCm: lineLen(B, D), tipProjectionCm: D.x - B.x, tipRiseCm: -D.y,
@@ -509,6 +661,204 @@
       },
       anchors: { cbAttach: N0, a: A, b: B, tipBase: C, tip: D, cbFold: F0, cbOuter: O0, foldGuide: Fa, outerGuide: Oa,
         guideDir: { x: u.x, y: u.y } } };
+  }
+
+  // ══════════════════════════════════════════════
+  // 오픈 칼라(교재 L, P.65) — **몸판 연동(body-linked) 전용 생성 계약**.
+  //   family 2 의 G~K(한 장, P.147 computeOnePiece)와 데이터·의미를 섞지 않는다:
+  //   G~K 는 목둘레 길이(×·⊘)와 올림 ★ 만으로 독립 생성되지만, L 은 교재 본문대로
+  //   **"몸판의 목둘레와 앞 꺾임선을 그린 뒤 그 치수를 토대로" 제도**한다.
+  //
+  // ── 몸판 쪽(실제 앞판 외곽에서 읽는다) ──
+  //   · FNP = 앞판 center edge ∩ neckline edge 공유 끝점(앞 중심 목점).
+  //   · 꺾임선 윗 끝 = FNP 에서 **목둘레 곡선을 따라(호길이)** frontStraightCm(교재 4) 뒤 지점.
+  //   · 꺾임 끝 = 여밈 끝선(앞 중심 + 여밈분) 위에서 **FNP 와의 두 점 사이 직선거리**가
+  //     breakPointDistanceCm(교재 8)인 점. 여밈분 0 이면 앞 중심선 위(교재 수치 그대로 적용).
+  //   · "꺾임선을 앞 중심에서 떨어뜨린다" = 윗 끝을 앞 중심(FNP)이 아니라 목둘레선 위 4cm 뒤에 둔 것.
+  //
+  // ── 칼라 쪽(로컬 프레임: CB x=0, 기초선 y=0, 위 = −y) ──
+  //   ① 기초 수평선(CB 에 직각) ② CB 에서 칼라 허리 3 → 꺾임선 CB 끝, 이어서 뒤 폭 3.5 → 외곽 CB 끝
+  //   ③ 앞 끝 F = 기초선에서 수직으로 frontEndRiseCm(교재 1) 위
+  //   ④ 달림선 = CB 에서 F 로 가는 완만한 곡선이되 **앞 끝에서 frontStraightCm(4) 구간은 직선**
+  //   ⑤ **길이 책임**: 달림선 실측 = ×+⊘ 가 되도록 기초선 길이(=앞 끝의 위치)를 결정한다.
+  //      → 꺾임점 J 의 기초선 위 들림은 **파생값**이며 독립 목표 수치가 아니다.
+  //   ⑥ 외곽선 = 기초선과 나란한 **수평 직선**(교재: 외곽을 수평선으로 하면 골선 재단 가능)
+  //   ⑦ 앞 끝선 = 외곽 오른쪽 끝에서 F 까지 수직
+  //   ⑧ 칼라 꺾임선 = CB 허리점 → J(완만한 곡선)
+  //   ★ ④⑧ 의 "완만한 곡선"은 교재에 수치가 없다 → 이 파일의 관례(시작 접선은 기초선과 나란함,
+  //     핸들 = 현 길이 × 1/3)로 고정한다. **구현 관례이며 교재 수치가 아니다**(OPEN_COLLAR_METHOD).
+  //
+  // 실패(원자적, 이전 유지): invalid-back-collar-width / invalid-collar-stand / invalid-front-end-rise /
+  //   invalid-front-straight / invalid-break-point / no-body-neckline / no-body-center /
+  //   ambiguous-front-neck-point / break-start-out-of-neckline / attach-length-unreachable / self-intersection.
+  var OPEN_COLLAR_METHOD = { page: 65, methodPage: 147, smoothing: "tangent-continuous-cubic",
+    handleFraction: SEAM_HANDLE_FRACTION, lengthResponsibility: "attach-equals-neck", bodyLinked: true };
+  var JOIN_TOL = 0.02;   // cm — 몸판 외곽 primitive 끝점 연결 허용치(designBodice 와 같은 기준)
+
+  // 몸판 outline primitive(line/cubic/path) 의 양 끝 on-curve 점.
+  function primEnds(s) {
+    if (!s) return null;
+    if (s.kind === "path") {
+      var cs = s.commands || [], first = cs[0], last = cs[cs.length - 1];
+      if (!first || !last || !first.points || !last.points) return null;
+      return [cp(first.points[0]), cp(last.points[last.points.length - 1])];
+    }
+    if (!s.from || !s.to) return null;
+    return [cp(s.from), cp(s.to)];
+  }
+  // 몸판 outline primitive → line/cubic 세그먼트 목록(측정·분할 공용 형식).
+  function primToSegs(s) {
+    if (!s) return [];
+    if (s.kind === "line") return [{ kind: "line", from: cp(s.from), to: cp(s.to) }];
+    if (s.kind === "cubic") return [{ kind: "cubic", from: cp(s.from), c1: cp(s.c1), c2: cp(s.c2), to: cp(s.to) }];
+    if (s.kind === "path") {
+      var out = [], cur = null;
+      (s.commands || []).forEach(function (c) {
+        if (!c || !c.points || !c.points.length) return;
+        if (c.type === "M") { cur = cp(c.points[0]); return; }
+        if (c.type === "C" && cur) { out.push({ kind: "cubic", from: cp(cur), c1: cp(c.points[0]), c2: cp(c.points[1]), to: cp(c.points[2]) }); cur = cp(c.points[2]); }
+      });
+      return out;
+    }
+    return [];
+  }
+  // start 에서 출발해 끝점 연결로 이어붙인 체인(방향 정규화). 좌표 근접이 아니라 **연결만** 본다.
+  function chainFromPoint(prims, start) {
+    var pool = prims.slice(), out = [], cur = cp(start), guard = 0;
+    while (pool.length && guard++ < 200) {
+      var found = -1, rev = false;
+      for (var i = 0; i < pool.length; i++) {
+        var e = primEnds(pool[i]); if (!e) continue;
+        if (lineLen(e[0], cur) <= JOIN_TOL) { found = i; rev = false; break; }
+        if (lineLen(e[1], cur) <= JOIN_TOL) { found = i; rev = true; break; }
+      }
+      if (found < 0) break;
+      var ss = primToSegs(pool.splice(found, 1)[0]);
+      if (!ss.length) continue;
+      if (rev) ss = ss.slice().reverse().map(function (q) { return reverseSeg(q); });
+      out = out.concat(ss);
+      cur = cp(out[out.length - 1].to);
+    }
+    return out;
+  }
+  // 몸판 앞판에서 앞 중심 목점(FNP) + FNP 에서 출발하는 목둘레 체인을 **의미 모서리(SV3)** 로만 찾는다.
+  function frontNecklineFromBodice(bodiceResult) {
+    var fr = bodiceResult && bodiceResult.front;
+    if (!fr || !Array.isArray(fr.outline)) return { ok: false, reason: "no-body-neckline" };
+    var neck = [], center = [];
+    fr.outline.forEach(function (s) { if (s.edge === "neckline") neck.push(s); else if (s.edge === "center") center.push(s); });
+    if (!neck.length) return { ok: false, reason: "no-body-neckline" };
+    if (!center.length) return { ok: false, reason: "no-body-center" };
+    var hits = [];
+    neck.forEach(function (n) {
+      var ne = primEnds(n); if (!ne) return;
+      center.forEach(function (c) {
+        var ce = primEnds(c); if (!ce) return;
+        ne.forEach(function (p) { ce.forEach(function (q) { if (lineLen(p, q) <= JOIN_TOL && !hits.some(function (h) { return lineLen(h, p) <= JOIN_TOL; })) hits.push(cp(p)); }); });
+      });
+    });
+    if (hits.length !== 1) return { ok: false, reason: "ambiguous-front-neck-point" };
+    var chain = chainFromPoint(neck, hits[0]);
+    if (!chain.length) return { ok: false, reason: "no-body-neckline" };
+    return { ok: true, fnp: hits[0], chain: chain, chainLenCm: sumMeasure(chain) };
+  }
+  // 몸판 앞 꺾임선(교재 L): 목둘레선 위 4cm 지점 → 여밈 끝선 위 직선 8cm 지점.
+  function buildBreakLine(bodiceResult, b, startArc, pointDistance) {
+    var nk = frontNecklineFromBodice(bodiceResult);
+    if (!nk.ok) return nk;
+    if (!(nk.chainLenCm > startArc)) return { ok: false, reason: "break-start-out-of-neckline" };
+    var head = subpathByLength(nk.chain, startArc);
+    var top = cp(head[head.length - 1].to);
+    var overlap = b.overlapCm;                       // 여밈분(없으면 0 → 꺾임 끝은 앞 중심선 위)
+    if (!(pointDistance > overlap)) return { ok: false, reason: "invalid-break-point" };
+    var drop = Math.sqrt(pointDistance * pointDistance - overlap * overlap);
+    var end = { x: nk.fnp.x + overlap, y: nk.fnp.y + drop };   // 앞판 프레임: +x = 여밈 바깥, +y = 아래
+    return { ok: true, frontNeckPoint: nk.fnp, breakTop: top, breakEnd: end, overlapCm: overlap, breakDropCm: drop,
+      breakLine: [L(top, end, "break-line")], breakLineLenCm: lineLen(top, end), frontNeckChainLenCm: nk.chainLenCm };
+  }
+  // 기초선 길이 Lb 에서 달림선(완만한 곡선 + 앞쪽 직선) 한 벌. 실패 시 null.
+  //   J 는 안내 곡선 위에서 **앞 끝 F 와의 직선 거리가 정확히 straight(교재 4)** 인 점이다 —
+  //   교재의 4 는 그려진 직선 구간의 길이이므로 호길이가 아니라 그 현으로 잡는다.
+  function openAttachFor(Lb, rise, straight) {
+    var O = { x: 0, y: 0 }, F = { x: Lb, y: -rise };
+    var chord = lineLen(O, F); if (!(chord > straight)) return null;
+    var u = unit(sub(F, O)), h = chord * SEAM_HANDLE_FRACTION;
+    var guide = { kind: "cubic", from: cp(O), c1: { x: O.x + h, y: O.y }, c2: add(F, u, -h), to: cp(F) };
+    if (!(segMeasure(guide) > straight)) return null;
+    var lo = 0, hi = 1;                              // |guide(t)→F| 는 t 에 대해 단조 감소
+    for (var i = 0; i < 60; i++) { var m = (lo + hi) / 2; if (lineLen(cubicSplitLeft(guide, m).to, F) > straight) lo = m; else hi = m; }
+    var head = cubicSplitLeft(guide, (lo + hi) / 2);
+    var J = cp(head.to);
+    var attach = [cloneSeg(head, "attach"), L(J, F, "attach-front")];   // 완만한 곡선 + 앞 끝 직선(교재 4)
+    return { attach: attach, J: J, F: F, attachLenCm: sumMeasure(attach) };
+  }
+  // params = { backCollarWidthCm, collarStandCm, frontEndRiseCm, frontStraightCm, breakPointDistanceCm }
+  //   반환 { ok, geometry:{outline,construction}, measure, anchors, bodyLink } | { ok:false, reason }.
+  function computeOpenCollar(bodiceResult, params) {
+    var b = readBodice(bodiceResult);
+    if (!b.ok) return b;
+    var P = params || {};
+    var backW = P.backCollarWidthCm, stand = P.collarStandCm, rise = P.frontEndRiseCm;
+    var straight = P.frontStraightCm, breakDist = P.breakPointDistanceCm;
+    if (!num(backW) || backW <= 0) return { ok: false, reason: "invalid-back-collar-width" };
+    if (!num(stand) || stand <= 0) return { ok: false, reason: "invalid-collar-stand" };
+    if (!num(rise) || rise < 0) return { ok: false, reason: "invalid-front-end-rise" };
+    if (!num(straight) || straight <= 0) return { ok: false, reason: "invalid-front-straight" };
+    if (!num(breakDist) || breakDist <= 0) return { ok: false, reason: "invalid-break-point" };
+    var neck = b.backCm + b.frontCm;
+    if (!(straight < neck)) return { ok: false, reason: "invalid-front-straight" };
+    if (!(rise < stand + backW)) return { ok: false, reason: "invalid-front-end-rise" };   // 앞 끝선 길이 > 0
+
+    // ── 몸판 연동: 실제 목둘레선·여밈 끝선에서 앞 꺾임선을 먼저 그린다 ──
+    var link = buildBreakLine(bodiceResult, b, straight, breakDist);
+    if (!link.ok) return link;
+
+    // ── 길이 책임: 달림선 실측 = ×+⊘ 가 되도록 기초선 길이를 이분 탐색(달림선 길이는 Lb 에 단조 증가) ──
+    var hi = neck + rise + 1, lo = straight;
+    var probe = openAttachFor(hi, rise, straight);
+    if (!probe || probe.attachLenCm < neck) return { ok: false, reason: "attach-length-unreachable" };
+    for (var i = 0; i < 80; i++) {
+      var mid = (lo + hi) / 2, t = openAttachFor(mid, rise, straight);
+      if (t && t.attachLenCm < neck) lo = mid; else hi = mid;
+    }
+    var A = openAttachFor((lo + hi) / 2, rise, straight);
+    if (!A) return { ok: false, reason: "attach-length-unreachable" };
+    var Lb = A.F.x, F = A.F, J = A.J;
+    var O = { x: 0, y: 0 }, E = { x: Lb, y: 0 };
+    var cbFold = { x: 0, y: -stand }, cbOuter = { x: 0, y: -(stand + backW) };
+    var outerEnd = { x: Lb, y: -(stand + backW) };
+
+    var outline = [L(O, cbOuter, "cb")];                           // CB(접힘)
+    outline.push(L(cbOuter, outerEnd, "outer"));                   // ⑥ 외곽 수평 직선
+    outline.push(L(outerEnd, F, "front-end"));                     // ⑦ 앞 끝선(수직)
+    A.attach.slice().reverse().forEach(function (s) { outline.push(reverseSeg2(s, s.part)); });   // 달림선 F→J→CB
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    var foldSeg = smoothToPoint(cbFold, J, "fold");                // ⑧ 칼라 꺾임선
+    var construction = [L(O, E, "baseline"), foldSeg];             // ① 기초선 + 꺾임선
+    var attachLen = sumMeasure(A.attach);
+    return { ok: true,
+      geometry: { outline: outline, construction: construction },
+      measure: {
+        backCollarWidthCm: backW, collarStandCm: stand, frontEndRiseCm: rise, frontStraightCm: straight,
+        backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm, neckTargetCm: neck,
+        attachLenCm: attachLen, attachDiffCm: attachLen - neck,
+        baseLineLenCm: Lb, foldJunctionLiftCm: -J.y,                 // 들림 = 파생값(독립 목표 수치 아님)
+        cbHeightCm: stand + backW, outerLenCm: lineLen(cbOuter, outerEnd), frontEdgeLenCm: lineLen(outerEnd, F),
+        foldLenCm: segMeasure(foldSeg),
+        breakPointDistanceCm: breakDist, breakDropCm: link.breakDropCm, frontOverlapCm: link.overlapCm,
+        breakStartArcCm: straight, breakLineLenCm: link.breakLineLenCm
+      },
+      anchors: { cbAttach: O, cbFold: cbFold, cbOuter: cbOuter, baseEnd: E, outerEnd: outerEnd, frontEnd: F, foldJunction: J },
+      bodyLink: { frontNeckPoint: link.frontNeckPoint, breakTop: link.breakTop, breakEnd: link.breakEnd,
+        overlapCm: link.overlapCm, breakLine: link.breakLine }
+    };
+  }
+  // 완만한 곡선 한 구간: 시작 접선은 기초선과 나란함(CB 직각 표시), 끝은 현 방향, 핸들 1/3(구현 관례).
+  function smoothToPoint(P0, P1, part) {
+    var u = unit(sub(P1, P0)), h = lineLen(P0, P1) * SEAM_HANDLE_FRACTION;
+    return { kind: "cubic", from: cp(P0), c1: { x: P0.x + h, y: P0.y }, c2: add(P1, u, -h), to: cp(P1), part: part };
   }
 
   function validateClosedOutline(outline) {
@@ -525,9 +875,13 @@
     referenceBodyParams: referenceBodyParams,
     readBodice: readBodice,
     computeStand: computeStand,
+    computeStandaloneStand: computeStandaloneStand,   // family 1(스탠드 칼라 A, P.146)
     computeBody: computeBody,
     computeOnePiece: computeOnePiece,   // family 2(한 장 셔츠 칼라, P.147)
     ONE_PIECE_METHOD: ONE_PIECE_METHOD,
+    computeOpenCollar: computeOpenCollar,   // family 2(오픈 칼라 L, P.65 — 몸판 연동)
+    OPEN_COLLAR_METHOD: OPEN_COLLAR_METHOD,
+    frontNecklineFromBodice: frontNecklineFromBodice,   // 순수(하네스·검증용)
     collarBodyLineFromGeometry: collarBodyLineFromGeometry,
     computeFromBodyLine: computeFromBodyLine,
     validateClosedOutline: validateClosedOutline
