@@ -354,5 +354,63 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   ok(J(C.computeOpenCollar(B, L_PARAMS)) === J(r), "10: 같은 입력 → 같은 결과(결정론)");
 }
 
+// 12. 교재 Q(P.68) 윙 칼라 — 수평 꺾임선 밴드 + 앞 위 끝 칼라 끝. M·N·O·P 는 옵션 없이 동일.
+{
+  const B = bodice(8.6087, 12.3874, 1.75), NECK = 8.6087 + 12.3874;
+  const Q_STAND = { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 };
+  const Q_TIP = { tipBaseCm: 7, tipSetbackCm: 1.5, tipEdgeCm: 4.5 };
+
+  ok(typeof C.computeWingTip === "function" && J(C.WING_METHOD) === J({ page: 68, bandMethodPage: 148, foldLine: "horizontal",
+    smoothing: "tangent-continuous-cubic", handleFraction: 1 / 3, derivedTipHeight: true }), "12: 윙 칼라 API·제도법 메타(꺾임선 수평·세로 성분 파생)");
+
+  // ① 밴드: 꺾임선이 **수평 직선**, 옵션 없으면 기존 M 제도와 byte-identical
+  const plain = C.computeStand(B, BAND.M);
+  ok(J(C.computeStand(B, BAND.M, { horizontalTopLine: false })) === J(plain), "12: horizontalTopLine:false 는 기존 제도와 동일");
+  const st = C.computeStand(B, Q_STAND, { horizontalTopLine: true });
+  ok(st.ok && st.horizontalTopLine === true && C.validateClosedOutline(st.standGeometry.outline).ok, "12: Q 밴드 폐곡선");
+  const top = st.standGeometry.outline.filter(s => s.part === "top");
+  ok(top.length === 1 && top[0].kind === "line" && Math.abs(top[0].from.y - top[0].to.y) < 1e-12
+    && Math.abs(top[0].from.y + Q_STAND.bandWidthCm) < 1e-12, "12: 꺾임선 = y = −밴드 폭 수평 직선 1개");
+  // ★ 밴드 달림선 실측 = 목둘레(P.148 ⑭)
+  const attachDense = st.standGeometry.outline.filter(s => s.part === "neck-seam").reduce((t, s) => t + denseLen(s), 0);
+  ok(Math.abs(st.lowerNeckSeamLenCm - NECK) < 1e-6 && Math.abs(attachDense - NECK) < 1e-3, "12: 달림선 실측 = ×+⊘(독립 측정 재검산)");
+  ok(Math.abs(st.anchors.cfTop.y + Q_STAND.bandWidthCm) < 1e-12, "12: 앞 위 끝 Ⓒ = 앞 중심선 ∩ 수평 꺾임선");
+  ok(C.computeStand(B, { bandWidthCm: 1, frontRiseCm: 1, frontEndCm: 0.5 }, { horizontalTopLine: true }).reason === "invalid-band-width",
+    "12: 밴드 폭 ≤ 앞 중심 올림이면 수평 꺾임선 불가");
+
+  // ② 칼라 끝: 세 수치가 전부 꺾임선·Ⓒ 기준, 세로 성분은 파생
+  const tip = C.computeWingTip(st, Q_TIP);
+  ok(tip.ok && C.validateClosedOutline(tip.geometry.outline).ok, "12: 칼라 끝 폐곡선");
+  const C0 = st.anchors.cfTop;
+  ok(Math.abs(tip.anchors.foldFront.x - C0.x) < 1e-12 && Math.abs(tip.anchors.foldFront.y - C0.y) < 1e-12, "12: 앞변 발점 = 앞 위 끝 Ⓒ");
+  ok(Math.abs(tip.anchors.foldBack.x - (C0.x - 7)) < 1e-12 && Math.abs(tip.anchors.foldBack.y - C0.y) < 1e-12, "12: 뒤 제도점 = 꺾임선 위 Ⓒ에서 뒤로 7");
+  ok(Math.abs(C0.x - tip.anchors.tip.x - 1.5) < 1e-12, "12: 꼭짓점 수평 후퇴 1.5");
+  ok(Math.abs(Math.hypot(tip.anchors.tip.x - C0.x, tip.anchors.tip.y - C0.y) - 4.5) < 1e-9, "12: 앞변 직선 = 4.5");
+  ok(Math.abs(tip.measure.tipHeightCm - Math.sqrt(4.5 * 4.5 - 1.5 * 1.5)) < 1e-12
+    && Math.abs((C0.y - tip.anchors.tip.y) - tip.measure.tipHeightCm) < 1e-12, "12: 세로 성분은 √(앞변²−후퇴²) 파생값");
+  // 실측 재검산(독립 dense)
+  const parts3 = (p) => tip.geometry.outline.filter(s => s.part === p).reduce((t, s) => t + denseLen(s), 0);
+  ok(Math.abs(parts3("fold") - 7) < 1e-6 && Math.abs(parts3("tip-front") - 4.5) < 1e-6, "12: 밑변 7·앞변 4.5 실측 일치");
+  ok(parts3("outer") > 7 && Math.abs(parts3("outer") - tip.measure.outerEdgeLenCm) < 1e-3, "12: 외곽선은 완만한 곡선(밑변보다 김)·실측 보고");
+  const outerSeg = tip.geometry.outline.filter(s => s.part === "outer")[0];
+  ok(outerSeg.kind === "cubic" && Math.abs(outerSeg.c1.y - outerSeg.from.y) < 1e-12, "12: 외곽선 시작 접선은 꺾임선과 나란함(구현 관례)");
+
+  // 실패 계약(원자적)
+  ok(C.computeWingTip(st, { tipBaseCm: 0, tipSetbackCm: 1.5, tipEdgeCm: 4.5 }).reason === "invalid-tip-base"
+    && C.computeWingTip(st, { tipBaseCm: 7, tipSetbackCm: 0, tipEdgeCm: 4.5 }).reason === "invalid-tip-setback"
+    && C.computeWingTip(st, { tipBaseCm: 7, tipSetbackCm: 1.5, tipEdgeCm: 1.5 }).reason === "invalid-tip-edge"
+    && C.computeWingTip(st, { tipBaseCm: 1, tipSetbackCm: 1.5, tipEdgeCm: 4.5 }).reason === "invalid-tip-base"
+    && C.computeWingTip(st, { tipBaseCm: 99, tipSetbackCm: 1.5, tipEdgeCm: 4.5 }).reason === "tip-base-too-long", "12: 칼라 끝 범위 밖 거부");
+  ok(C.computeWingTip(C.computeStand(B, Q_STAND), Q_TIP).reason === "invalid-stand"
+    && C.computeWingTip(null, Q_TIP).reason === "invalid-stand", "12: 수평 꺾임선 밴드가 아니면 거부");
+  // 결정론·입력 불변
+  const snapQ = J(B);
+  ok(J(C.computeWingTip(st, Q_TIP)) === J(tip) && J(B) === snapQ, "12: 결정론·입력 비변형");
+  // M·N·P 는 옵션 도입과 무관
+  ["M", "N", "P"].forEach(k => {
+    ok(J(C.computeStand(B, BAND[k])) === J(C.computeStand(B, BAND[k], {})), "12: " + k + " 은 수평 꺾임선 옵션과 무관하게 동일");
+  });
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

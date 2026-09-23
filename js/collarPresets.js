@@ -48,6 +48,15 @@
     { key: "frontStraightCm", label: "앞 직선 구간", unit: "cm", min: 0, minExclusive: true },
     { key: "breakPointDistanceCm", label: "앞목점→꺾임 끝(직선)", unit: "cm", min: 0, minExclusive: true }
   ];
+  // 윙 칼라(교재 Q, P.68) 칼라 끝 파라미터. 키 순서 = designCollar.computeWingTip 계약.
+  //   세로 성분 √(앞변²−후퇴²)은 **파생값**이라 입력에 두지 않는다.
+  var WING_TIP_FIELDS = [
+    { key: "tipBaseCm", label: "꺾임선 위 밑변(앞끝→뒤)", unit: "cm", min: 0, minExclusive: true },
+    { key: "tipSetbackCm", label: "칼라 끝 수평 후퇴", unit: "cm", min: 0, minExclusive: true },
+    { key: "tipEdgeCm", label: "칼라 끝 앞변(직선)", unit: "cm", min: 0, minExclusive: true }
+  ];
+  // Q 는 교재 본문대로 밴드의 **꺾임선을 수평 직선**으로 긋는다(type 계약 — 레코드 수치가 아니다).
+  var WING_STAND_OPTIONS = { horizontalTopLine: true };
   var BODY_FIELDS = [
     { key: "gapCm", label: "위칼라 gap(CB)", unit: "cm", min: 0, minExclusive: true },
     { key: "cbWidthCm", label: "위칼라 CB 폭", unit: "cm", min: 0, minExclusive: true },
@@ -128,12 +137,8 @@
         //    (P.146 ⑥·P.148 ⑥ 의 유일한 명명 안내점이 Ⓐ 이고, 올려야 ⑭ 뒤 중심 수정이 성립한다.)
         { id: "bunka-band-collar-O", symbol: "O", label: "O · 올림 8.5 · 간격 14", page: 67, availability: "available", presetId: "bunka-band-collar-O", note: null },
         { id: "bunka-band-collar-P", symbol: "P", label: "P · 밴드 폭 5 · 올림 3", page: 67, availability: "available", presetId: "bunka-band-collar-P", note: null },
-        bandRefVariant("bunka-band-collar-Q", "Q", "Q · 윙 칼라", 68,
-          { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 },
-          "밴드 앞끝에 칼라 끝을 이어 그리는 윙 칼라(도면 표기 7·1.5·4.5·0.5) · P.68 이 유일 출처", null,
-          ["7 의 기준: 꺾임선(수평) 길이인지 밴드 윗선 위 거리인지",
-           "1.5 의 기준점: 밴드 윗선에서 내린 양인지 앞 중심선 기준인지",
-           "4.5 가 칼라 끝 사선 길이인지 수직 높이인지"]),
+        // Q: 수평 꺾임선 밴드 + 앞 위 끝 칼라 끝(7·1.5·4.5 는 전부 꺾임선·Ⓒ 기준).
+        { id: "bunka-band-collar-Q", symbol: "Q", label: "Q · 윙 칼라", page: 68, availability: "available", presetId: "bunka-band-collar-Q", note: null },
         bandRefVariant("bunka-band-collar-R", "R", "R · 밴드+위칼라 한 장", 68,
           { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 },
           "밴드와 위칼라를 한 장으로 연결(도면 표기 뒤 3.5·앞 6.5·0.5·×) · P.68 이 유일 출처", null,
@@ -259,6 +264,18 @@
       body: { gapCm: 7, cbWidthCm: 4, frontProjectionCm: 2, pointDiagonalCm: 6, outerBowCm: 0 }
     },
     {
+      // 교재 Q(P.68) 윙 칼라 — 본문 "몸판의 목둘레 치수를 토대로 칼라 밴드를 그리는데, 칼라 외곽의
+      //   꺾임선은 수평으로 그린다. 이어서 앞 위 끝에, 칼라 끝부분만 제도한다."
+      //   밴드는 P.148 골격(달림선 = ×+⊘ · 앞 끝선 0.5 는 M~P와 같은 연장량)이고 위 칼라는 없다.
+      //   칼라 끝 세 수치는 전부 수평 꺾임선과 앞 위 끝 Ⓒ 기준: 밑변 7(뒤로) · 수평 후퇴 1.5 · 앞변 4.5.
+      id: "bunka-band-collar-Q", label: "교재 Q", description: "윙 칼라 Q형(수평 꺾임선 · 앞 위 끝에 칼라 끝만 제도)",
+      source: "『パターン製作の基礎』 윙 칼라 Q형(P.68) · 밴드 제도 방법 P.148",
+      type: "shirt-wing-collar", baseMethod: "bunka-wing-collar-Q-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "shirt-collar-with-band",
+      stand: { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 },
+      tip: { tipBaseCm: 7, tipSetbackCm: 1.5, tipEdgeCm: 4.5 }
+    },
+    {
       // 한 장 셔츠 칼라(family 2) 교재 G형. 아래 수치가 **유일한 출처**다(catalog 의 참고값과 중복 금지).
       //   제도 절차는 교재 P.147, 예시 도면은 P.63. 곡선 정리 규칙은 designCollar.ONE_PIECE_METHOD.
       id: "bunka-shirt-collar-G",
@@ -375,7 +392,7 @@
     if (hasDir && !CURVE_DIR[sec.attachCurveDirection]) fail("invalid-curve-direction", id + ".onePiece.attachCurveDirection");
   }
   // 한 레코드 검증(순수). 실패 시 throw(reason 포함).
-  var RECORD_TYPES = { "shirt-two-piece": 1, "shirt-one-piece": 1, "shirt-open-collar": 1, "stand-collar": 1 };
+  var RECORD_TYPES = { "shirt-two-piece": 1, "shirt-one-piece": 1, "shirt-open-collar": 1, "shirt-wing-collar": 1, "stand-collar": 1 };
   function validateRecord(r) {
     if (!r || typeof r !== "object") fail("invalid-record");
     ["id", "label", "description", "source", "type", "baseMethod", "familyId"].forEach(function (k) { if (!isStr(r[k])) fail("missing-field", (r.id || "?") + "." + k); });
@@ -383,20 +400,30 @@
     if (!r.neckline || !isStr(r.neckline.requiredType) || r.neckline.enforcement !== "metadata-only") fail("invalid-neckline", r.id);
     if (r.type === "shirt-one-piece") {
       // 한 장 칼라: 밴드/본체 섹션을 쓰지 않는다(M 전용 의미를 빌려오지 않음).
-      ["stand", "body", "openCollar"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "openCollar", "tip"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateOnePiece(r.onePiece, r.id);
       if (!(r.onePiece.frontCollarWidthCm > r.onePiece.tipProjectionCm)) fail("out-of-range", r.id + ".onePiece.frontCollarWidthCm");   // 엔진 계약: 앞 폭 > 칼라 끝(수평)
       return true;
     }
+    if (r.type === "shirt-wing-collar") {
+      // 윙 칼라: 밴드(stand) + 칼라 끝(tip). 위 칼라(body)·한 장·오픈 섹션을 빌려오지 않는다.
+      ["body", "onePiece", "openCollar", "standalone", "construction"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      validateSection(r.stand, STAND_FIELDS, "stand", r.id);
+      validateSection(r.tip, WING_TIP_FIELDS, "tip", r.id);
+      if (!(r.tip.tipEdgeCm > r.tip.tipSetbackCm)) fail("out-of-range", r.id + ".tip.tipEdgeCm");     // 파생 세로 성분 > 0
+      if (!(r.tip.tipBaseCm > r.tip.tipSetbackCm)) fail("out-of-range", r.id + ".tip.tipBaseCm");     // 뒤 제도점이 꼭짓점보다 뒤
+      if (!(r.stand.bandWidthCm > r.stand.frontRiseCm)) fail("out-of-range", r.id + ".stand.bandWidthCm");   // 수평 꺾임선 계약
+      return true;
+    }
     if (r.type === "shirt-open-collar") {
       // 오픈 칼라: 밴드/본체/한 장 섹션을 쓰지 않는다(각 제도의 의미를 빌려오지 않음).
-      ["stand", "body", "onePiece", "standalone"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "standalone", "tip"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.openCollar, OPEN_COLLAR_FIELDS, "openCollar", r.id);
       if (!(r.openCollar.frontEndRiseCm < r.openCollar.collarStandCm + r.openCollar.backCollarWidthCm)) fail("out-of-range", r.id + ".openCollar.frontEndRiseCm");   // 엔진 계약: 앞 끝선 길이 > 0
       return true;
     }
     if (r.type === "stand-collar") {
-      ["stand", "body", "onePiece", "openCollar"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "openCollar", "tip"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       var c = r.construction;
       if (!c || typeof c.fitNeckSeam !== "boolean" || typeof c.baselineReductionCm !== "number" || !isFinite(c.baselineReductionCm) || c.baselineReductionCm < 0 ||
         typeof c.guideRiseCm !== "number" || !isFinite(c.guideRiseCm) || c.guideRiseCm < 0 ||
@@ -407,7 +434,7 @@
       validateSection(r.standalone, STANDALONE_FIELDS, "standalone", r.id);
       return true;
     }
-    ["onePiece", "openCollar", "standalone"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+    ["onePiece", "openCollar", "standalone", "tip"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
     // 선택적 형상 옵션(교재 O = D 방식 기초선 감산·안내점 올림). 없으면 기존 M·N·P 와 완전히 동일한 제도다.
     if ("construction" in r) {
       var bc = r.construction;
@@ -519,6 +546,7 @@
     var r = get(id); if (!r) return { ok: false, reason: "unknown-collar-preset" };
     if (r.type === "shirt-one-piece") return { ok: true, id: r.id, type: r.type, onePiece: clone(r.onePiece) };
     if (r.type === "shirt-open-collar") return { ok: true, id: r.id, type: r.type, openCollar: clone(r.openCollar) };
+    if (r.type === "shirt-wing-collar") return { ok: true, id: r.id, type: r.type, stand: clone(r.stand), tip: clone(r.tip) };
     if (r.type === "stand-collar") return { ok: true, id: r.id, type: r.type, standalone: clone(r.standalone), construction: clone(r.construction) };
     var d2 = { ok: true, id: r.id, type: r.type, stand: clone(r.stand), body: clone(r.body) };
     if (r.construction) d2.construction = clone(r.construction);
@@ -527,7 +555,7 @@
   // 선택 UI 옵션 모델(registry 에서 생성).
   function options() { return REG.list.map(function (r) { return { value: r.id, label: r.label }; }); }
   // 섹션 필드 의미·단위(표시용).
-  function fields(section) { return clone(section === "stand" ? STAND_FIELDS : section === "body" ? BODY_FIELDS : section === "onePiece" ? ONE_PIECE_FIELDS : section === "openCollar" ? OPEN_COLLAR_FIELDS : section === "standalone" ? STANDALONE_FIELDS : []); }
+  function fields(section) { return clone(section === "stand" ? STAND_FIELDS : section === "body" ? BODY_FIELDS : section === "onePiece" ? ONE_PIECE_FIELDS : section === "openCollar" ? OPEN_COLLAR_FIELDS : section === "tip" ? WING_TIP_FIELDS : section === "standalone" ? STANDALONE_FIELDS : []); }
   // 편집값이 프리셋 기본값과 같은지(표시 판단용, 저장 없음).
   function matches(id, stand, body) {
     var r = get(id); if (!r) return false;
@@ -535,6 +563,7 @@
     if (r.type === "shirt-one-piece") return eq(stand, r.onePiece, ONE_PIECE_FIELDS)
       && ((stand.attachCurveDirection || "as-drawn") === (r.onePiece.attachCurveDirection || "as-drawn"));   // 한 장: 방향은 선택적 안정 필드
     if (r.type === "shirt-open-collar") return eq(stand, r.openCollar, OPEN_COLLAR_FIELDS);
+    if (r.type === "shirt-wing-collar") return eq(stand, r.stand, STAND_FIELDS) && eq(body, r.tip, WING_TIP_FIELDS);
     if (r.type === "stand-collar") return eq(stand, r.standalone, STANDALONE_FIELDS);
     return eq(stand, r.stand, STAND_FIELDS) && eq(body, r.body, BODY_FIELDS);
   }
@@ -562,6 +591,26 @@
         parameters: { openCollar: d.openCollar },
         // bodyLink = 몸판 프레임의 꺾임선 출처(제도 근거). 몸판 geometry 는 변경하지 않는다.
         openCollar: { geometry: openRe.geometry, measure: openRe.measure, anchors: openRe.anchors, bodyLink: openRe.bodyLink }
+      } };
+    }
+    if (r.type === "shirt-wing-collar") {
+      // 밴드는 수평 꺾임선(type 계약), 위 칼라 대신 앞 위 끝의 칼라 끝만 그린다.
+      var wingStand = DC.computeStand(bodice, d.stand, WING_STAND_OPTIONS);
+      if (!wingStand.ok) return { ok: false, stage: "stand", reason: wingStand.reason };
+      var wingTip = DC.computeWingTip(wingStand, d.tip);
+      if (!wingTip.ok) return { ok: false, stage: "tip", reason: wingTip.reason };
+      return { ok: true, draft: {
+        sourceBodiceHash: bodice.hash, type: r.type, baseMethod: r.baseMethod, presetId: r.id,
+        parameters: { stand: d.stand, tip: d.tip },
+        standGeometry: wingStand.standGeometry, standAnchors: wingStand.anchors,
+        tip: { geometry: wingTip.geometry, measure: wingTip.measure, anchors: wingTip.anchors },
+        measure: {
+          lowerNeckSeamLenCm: wingStand.lowerNeckSeamLenCm, lowerExtensionLenCm: wingStand.lowerExtensionLenCm,
+          upperNeckSegmentLenCm: wingStand.upperNeckSegmentLenCm, upperExtensionLenCm: wingStand.upperExtensionLenCm,
+          upperTotalLenCm: wingStand.upperTotalLenCm, backNeckLenCm: wingStand.backNeckLenCm, frontNeckLenCm: wingStand.frontNeckLenCm,
+          neckTargetCm: wingStand.neckTargetCm, cbTrimCm: wingStand.cbTrimCm,
+          baseLineLenCm: wingStand.baseLineLenCm, baselineReductionCm: wingStand.baselineReductionCm, guideRiseCm: wingStand.guideRiseCm
+        }
       } };
     }
     if (r.type === "stand-collar") {
@@ -646,6 +695,7 @@
   window.collarPresets = Object.freeze({
     DEFAULT_ID: DEFAULT_ID, DEFAULT_FAMILY_ID: DEFAULT_FAMILY_ID, PENDING_NOTE: PENDING_NOTE, PENDING_SHORT: PENDING_SHORT,
     list: list, get: get, defaults: defaults, options: options, fields: fields, matches: matches, composeDraft: composeDraft,
+    WING_STAND_OPTIONS: Object.freeze(clone(WING_STAND_OPTIONS)),   // Q 밴드 계약(수평 꺾임선) — checkpoint 재계산 공용
     families: families, family: family, variants: variants, variant: variant,
     familyOptions: familyOptions, variantOptions: variantOptions, resolve: resolve, referenceRows: referenceRows, displayTitle: displayTitle, referenceFields: function () { return clone(REFERENCE_FIELDS); },
     validateRecord: validateRecord, buildRegistry: buildRegistry,   // 순수(하네스·향후 레코드 추가 검증)

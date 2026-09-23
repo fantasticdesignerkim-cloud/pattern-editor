@@ -277,5 +277,38 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
     && !mModel.dims.some(d => d.id === "guide-rise") && !mModel.labels.some(l => l.id === "guide-a"), "12: M 표시 모델에는 D 방식 행·치수선 없음");
 }
 
+// 13. 교재 Q(윙 칼라) 표시 모델 — 수평 꺾임선·칼라 끝 세 치수, 세로 성분은 파생(치수선 아님)
+{
+  const SP = { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 };
+  const TP = { tipBaseCm: 7, tipSetbackCm: 1.5, tipEdgeCm: 4.5 };
+  const st = DC.computeStand(BODICE, SP, { horizontalTopLine: true }), tp = DC.computeWingTip(st, TP);
+  const cd = { sourceBodiceHash: "BH1", type: "shirt-wing-collar", baseMethod: "bunka-wing-collar-Q-v1",
+    parameters: { stand: SP, tip: TP }, standGeometry: st.standGeometry, standAnchors: st.anchors,
+    tip: { geometry: tp.geometry, measure: tp.measure, anchors: tp.anchors },
+    measure: { lowerNeckSeamLenCm: st.lowerNeckSeamLenCm, lowerExtensionLenCm: st.lowerExtensionLenCm,
+      upperNeckSegmentLenCm: st.upperNeckSegmentLenCm, upperExtensionLenCm: st.upperExtensionLenCm,
+      upperTotalLenCm: st.upperTotalLenCm, backNeckLenCm: st.backNeckLenCm, frontNeckLenCm: st.frontNeckLenCm,
+      neckTargetCm: st.neckTargetCm, cbTrimCm: st.cbTrimCm } };
+  const model = CA.buildModel(cd, BODICE), inputs = {}, results = {}, dims = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  model.results.forEach(r => { results[r.key] = r; });
+  model.dims.forEach(d => { dims[d.id] = d; });
+  ok(model && model.recipe === "bunka-wing-collar-Q-v1" && CA.recipes().indexOf("bunka-wing-collar-Q-v1") >= 0, "13: Q 전용 recipe 등록");
+  ok(inputs.bandWidthCm === 3 && inputs.frontRiseCm === 1 && inputs.frontEndCm === 0.5
+    && inputs.tipBaseCm === 7 && inputs.tipSetbackCm === 1.5 && inputs.tipEdgeCm === 4.5, "13: 제도 입력값 6개(밴드 3 + 칼라 끝 3)");
+  ok(dims["tip-base"].text === 7 && dims["tip-edge"].text === 4.5 && dims["tip-setback"].text === 1.5, "13: 칼라 끝 치수선 3개");
+  ok(dims["tip-height"] && dims["tip-height"].kind === "ref" && dims["tip-height"].text === null, "13: 세로 성분은 참조선(치수 아님 = 파생값)");
+  ok(dims["fold-line"] && dims["fold-line"].kind === "ref" && Math.abs(dims["fold-line"].from.y - dims["fold-line"].to.y) < 1e-12, "13: 꺾임선 참조선은 수평");
+  ok(Math.abs(dims["tip-base"].from.x - dims["tip-base"].to.x - 7) < 1e-9 && Math.abs(dims["tip-base"].from.y - dims["tip-base"].to.y) < 1e-12,
+    "13: 밑변 치수선은 꺾임선 위 Ⓒ→뒤 7");
+  ok(results.neckDiff.status === "match" && Math.abs(results.lowerNeckSeam.value - results.neckHalf.value) <= CA.SEAM_MATCH_TOL, "13: 달림선 = 목둘레 정합");
+  ok(results.tipBase.value === tp.measure.foldBaseLenCm && results.tipEdge.value === tp.measure.tipEdgeLenCm
+    && results.tipHeight.value === tp.measure.tipHeightCm && /파생/.test(results.tipHeight.label), "13: 칼라 끝 실측·파생 결과 행");
+  ok(/수평/.test(model.note) && /위 칼라 없음/.test(model.note), "13: 수평 꺾임선·위 칼라 없음 안내");
+  ok(model.labels.some(l => l.id === "tip") && model.labels.some(l => l.id === "fold-front"), "13: 칼라 끝·Ⓒ 라벨");
+  ok(CA.buildModel({ type: "shirt-wing-collar", baseMethod: "bunka-wing-collar-Q-v1", standGeometry: st.standGeometry }, BODICE) === null,
+    "13: 칼라 끝 형상 없으면 표시 모델 없음");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

@@ -263,6 +263,7 @@
     var W = P.bandWidthCm, rise = P.frontRiseCm, endCm = P.frontEndCm;
     var reduction = num(O.baselineReductionCm) ? O.baselineReductionCm : 0;
     var guideRise = num(O.guideRiseCm) ? O.guideRiseCm : 0;
+    var horizontalTop = O.horizontalTopLine === true;   // 교재 Q(P.68): 칼라 외곽의 꺾임선을 수평으로 긋는다
     if (!num(W) || W <= 0) return { ok: false, reason: "invalid-band-width" };
     if (!num(rise) || rise < 0) return { ok: false, reason: "invalid-front-rise" };
     if (!num(endCm) || endCm < 0) return { ok: false, reason: "invalid-front-end" };
@@ -274,13 +275,21 @@
     var u = unit(sub(B, A));                            // ⑦ 안내선 방향
     var n = { x: u.y, y: -u.x };                        // 위쪽 법선
     if (!(n.y < 0)) return { ok: false, reason: "invalid-guide-direction" };
-    var Btop = add(B, n, W);                            // ⑧ Ⓑ에서 ⑦에 직각으로 밴드 폭
-    var tK = (-W - Btop.y) / u.y;                       // ⑨ ⑦과 평행한 안내선 ∩ 수평선 y=−W
-    var K = add(Btop, u, tK);
-    if (!(K.x > 0) || !(A.x > 0)) return { ok: false, reason: "invalid-band-width" };
+    // ⑧ Ⓑ에서 ⑦에 직각으로 밴드 폭. Q(수평 꺾임선)는 그 직각선 ⑩ 이 수평 꺾임선과 만나는 점이 앞 위 끝 Ⓒ 다.
+    var Btop = horizontalTop ? add(B, n, (-W - B.y) / n.y) : add(B, n, W);
+    var K = null;
+    if (horizontalTop) {
+      if (!(W > rise)) return { ok: false, reason: "invalid-band-width" };   // 꺾임선이 앞 달림선보다 위여야 한다
+      if (!(A.x > 0) || !(Btop.x > 0)) return { ok: false, reason: "invalid-band-width" };
+    } else {
+      var tK = (-W - Btop.y) / u.y;                     // ⑨ ⑦과 평행한 안내선 ∩ 수평선 y=−W
+      K = add(Btop, u, tK);
+      if (!(K.x > 0) || !(A.x > 0)) return { ok: false, reason: "invalid-band-width" };
+    }
 
     var attachFull = smoothBandGuide(CB0, A, B, "neck-seam");         // ⑬ 달림선
-    var topFull = smoothBandGuide({ x: 0, y: -W }, K, Btop, "top");   // ⑫ 이음선(밴드 윗선)
+    // ⑫ 이음선(밴드 윗선). Q 는 교재 본문대로 **수평 직선**(꺾임선), 그 외는 ⑨ 안내선을 완만하게 정리한다.
+    var topFull = horizontalTop ? [L({ x: 0, y: -W }, Btop, "top")] : smoothBandGuide({ x: 0, y: -W }, K, Btop, "top");
     var drawnLen = sumMeasure(attachFull);
     if (!(drawnLen >= N - 1e-9)) return { ok: false, reason: "invalid-front-rise" };   // 보정으로 줄일 수 없음
     var attach = trimFromEnd(attachFull, N);                          // ⑭ 달림선 실측 = ×+⊘ → 뒤 중심 수정
@@ -307,6 +316,7 @@
       upperNeckSegmentLenCm: topLen, upperExtensionLenCm: endCm, upperTotalLenCm: topLen + endCm,
       bandWidthCm: W, frontRiseCm: rise, frontEndCm: endCm,
       baseLineLenCm: baseLen, baselineReductionCm: reduction, guideRiseCm: guideRise,   // D 방식 기초선(감산·Ⓐ 올림)
+      horizontalTopLine: horizontalTop,   // Q: 꺾임선을 수평 직선으로 그렸는지
       backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm, neckTargetCm: N,
       drawnAttachLenCm: drawnLen, cbTrimCm: drawnLen - N,   // ⑭ 뒤 중심 수정량(그린 길이 − 목둘레)
       anchors: { cbSeam: cbSeam, cbTop: cbTop, guideA: A, cfSeam: B, cfTop: Btop,
@@ -875,6 +885,64 @@
     return { kind: "cubic", from: cp(P0), c1: { x: P0.x + h, y: P0.y }, c2: add(P1, u, -h), to: cp(P1), part: part };
   }
 
+  // ══════════════════════════════════════════════
+  // 윙 칼라(교재 Q, P.68) — 밴드(P.148) + **수평 꺾임선** + 앞 위 끝의 칼라 끝부분.
+  //   교재 본문: "몸판의 목둘레 치수를 토대로 칼라 밴드를 그리는데, **칼라 외곽의 꺾임선은 수평으로
+  //   그린다**. 이어서 **앞 위 끝**에, 칼라 끝부분만 제도한다." → 위 칼라(M~P의 본체)는 없다.
+  //
+  // 밴드는 computeStand(…, { horizontalTopLine: true }) 가 그린다(달림선 실측 = ×+⊘, ⑭ 뒤 중심 수정,
+  //   앞 끝선 0.5 는 M~P와 같은 연장량). 앞 위 끝 Ⓒ = 앞 중심선 ⑩ ∩ 수평 꺾임선.
+  //
+  // 칼라 끝(윙) — 전부 꺾임선(수평)과 Ⓒ 기준(사용자 확정 도메인 결정):
+  //   ① 뒤 제도점 P = 꺾임선 위에서 Ⓒ 에서 뒤로 tipBaseCm(교재 7)
+  //   ② 꼭짓점 T = Ⓒ 에서 뒤로 tipSetbackCm(교재 1.5) 수평 후퇴한 수직선 위,
+  //      앞변 |T→Ⓒ| = tipEdgeCm(교재 4.5) → **세로 성분 √(4.5²−1.5²) 은 파생값**(독립 입력 아님)
+  //   ③ 외곽선 P→T 는 교재 도해처럼 완만하게 연결 — 이 파일 관례(시작 접선은 꺾임선과 나란함,
+  //      핸들 = 현 길이 × 1/3). ★ **구현 관례이며 교재 수치가 아니다**(WING_METHOD).
+  //
+  // 실패(원자적): invalid-stand / invalid-tip-base / invalid-tip-setback / invalid-tip-edge /
+  //   tip-base-too-long / self-intersection.
+  var WING_METHOD = { page: 68, bandMethodPage: 148, foldLine: "horizontal",
+    smoothing: "tangent-continuous-cubic", handleFraction: SEAM_HANDLE_FRACTION, derivedTipHeight: true };
+
+  // params = { tipBaseCm, tipSetbackCm, tipEdgeCm }
+  function computeWingTip(standResult, params) {
+    var st = standResult;
+    if (!st || st.ok !== true || !st.anchors || !num(st.bandWidthCm)) return { ok: false, reason: "invalid-stand" };
+    if (st.horizontalTopLine !== true) return { ok: false, reason: "invalid-stand" };   // 수평 꺾임선 밴드에서만
+    var P = params || {};
+    var base = P.tipBaseCm, setback = P.tipSetbackCm, edge = P.tipEdgeCm;
+    if (!num(base) || base <= 0) return { ok: false, reason: "invalid-tip-base" };
+    if (!num(setback) || setback <= 0) return { ok: false, reason: "invalid-tip-setback" };
+    if (!num(edge) || !(edge > setback)) return { ok: false, reason: "invalid-tip-edge" };       // 세로 성분 > 0
+    if (!(base > setback)) return { ok: false, reason: "invalid-tip-base" };                     // 뒤 제도점이 꼭짓점보다 뒤
+    var foldLen = st.upperNeckSegmentLenCm;
+    if (!num(foldLen) || !(base < foldLen)) return { ok: false, reason: "tip-base-too-long" };   // 꺾임선 안에 들어가야 한다
+
+    var C = cp(st.anchors.cfTop);                       // Ⓒ = 앞 위 끝(앞변 발점)
+    var height = Math.sqrt(edge * edge - setback * setback);   // 파생 세로 성분
+    var back = { x: C.x - base, y: C.y };               // ① 꺾임선 위 뒤 제도점
+    var tip = { x: C.x - setback, y: C.y - height };    // ② 칼라 끝 꼭짓점(위 = −y)
+    var outer = smoothToPoint(back, tip, "outer");      // ③ 완만한 외곽선
+
+    var outline = [outer, L(tip, C, "tip-front"), L(C, back, "fold")];
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    return { ok: true,
+      geometry: { outline: outline, construction: [] },
+      measure: {
+        tipBaseCm: base, tipSetbackCm: setback, tipEdgeCm: edge,
+        tipHeightCm: height,                               // 파생(√(앞변²−후퇴²))
+        foldBaseLenCm: lineLen(C, back),                   // 실측 = 7
+        tipEdgeLenCm: lineLen(tip, C),                     // 실측 = 4.5
+        tipSetbackLenCm: C.x - tip.x,                      // 실측 = 1.5
+        outerEdgeLenCm: segMeasure(outer),                 // 완만한 곡선 실측(밑변 7 보다 길다)
+        foldLineLenCm: foldLen, bandWidthCm: st.bandWidthCm
+      },
+      anchors: { foldFront: C, foldBack: back, tip: tip } };
+  }
+
   function validateClosedOutline(outline) {
     if (!Array.isArray(outline) || outline.length < 3) return { ok: false, reason: "empty" };
     for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (!nx.from || !outline[i].to || lineLen(outline[i].to, nx.from) > 1e-4) return { ok: false, reason: "not-closed" }; }
@@ -893,6 +961,8 @@
     computeBody: computeBody,
     computeOnePiece: computeOnePiece,   // family 2(한 장 셔츠 칼라, P.147)
     ONE_PIECE_METHOD: ONE_PIECE_METHOD,
+    computeWingTip: computeWingTip,   // family 3(윙 칼라 Q, P.68 — 수평 꺾임선 + 칼라 끝)
+    WING_METHOD: WING_METHOD,
     computeOpenCollar: computeOpenCollar,   // family 2(오픈 칼라 L, P.65 — 몸판 연동)
     OPEN_COLLAR_METHOD: OPEN_COLLAR_METHOD,
     frontNecklineFromBodice: frontNecklineFromBodice,   // 순수(하네스·검증용)

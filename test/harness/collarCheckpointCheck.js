@@ -227,5 +227,56 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
     "9: 재계산 불가한 construction → 완료 차단");
 }
 
+// 10. 윙 칼라(교재 Q): 밴드 달림선 = 목둘레 + 칼라 끝 7·1.5·4.5 를 실제 형상에서 검증
+{
+  BODICE = bodice("BH1"); BODICE_STALE = false; SLEEVE = { id: "s" }; SLEEVE_CHANGED = false; SLEEVE_INVAL = false;
+  const Q_STAND = { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 };
+  const Q_TIP = { tipBaseCm: 7, tipSetbackCm: 1.5, tipEdgeCm: 4.5 };
+  const WING = { horizontalTopLine: true };
+  const mk = () => {
+    const b = bodice("BH1"), st = DC.computeStand(b, Q_STAND, WING), tp = DC.computeWingTip(st, Q_TIP);
+    return { sourceBodiceHash: "BH1", type: "shirt-wing-collar", baseMethod: "bunka-wing-collar-Q-v1", presetId: "bunka-band-collar-Q",
+      parameters: { stand: Object.assign({}, Q_STAND), tip: Object.assign({}, Q_TIP) },
+      standGeometry: st.standGeometry, standAnchors: st.anchors,
+      tip: { geometry: tp.geometry, measure: tp.measure, anchors: tp.anchors },
+      measure: { lowerNeckSeamLenCm: st.lowerNeckSeamLenCm, lowerExtensionLenCm: st.lowerExtensionLenCm,
+        upperNeckSegmentLenCm: st.upperNeckSegmentLenCm, upperExtensionLenCm: st.upperExtensionLenCm,
+        upperTotalLenCm: st.upperTotalLenCm, backNeckLenCm: st.backNeckLenCm, frontNeckLenCm: st.frontNeckLenCm,
+        neckTargetCm: st.neckTargetCm, cbTrimCm: st.cbTrimCm,
+        baseLineLenCm: st.baseLineLenCm, baselineReductionCm: st.baselineReductionCm, guideRiseCm: st.guideRiseCm } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  PROJECT = proj(mk());
+  ok(CC.check(PROJECT).ok, "10: Q 초안이 완료 게이트 통과");
+  const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.type === "shirt-wing-collar" && Object.isFrozen(r.result.tip)
+    && near(r.result.stand.lengths.foldLine, r.result.stand.lengths.foldLine), "10: Q 완료 스냅샷(밴드 lengths + 칼라 끝)");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "10: 완료 직후 미변경");
+
+  // 길이 책임 게이트: 달림선 ≠ 목둘레 → 차단
+  const badAttach = mk(); badAttach.measure.lowerNeckSeamLenCm += 0.5;
+  ok(CC.check(proj(badAttach)).fails.indexOf("attach-length-mismatch") >= 0, "10: 달림선 실측 ≠ 목둘레 → 완료 차단");
+  // 칼라 끝 수치 게이트: measure 가 파라미터와 다르면 차단
+  const badTip = mk(); badTip.tip.measure.foldBaseLenCm = 9;
+  ok(CC.check(proj(badTip)).fails.indexOf("tip-length-mismatch") >= 0, "10: 칼라 끝 밑변이 파라미터와 다르면 차단");
+  const badEdge = mk(); badEdge.tip.measure.tipEdgeLenCm = 5;
+  ok(CC.check(proj(badEdge)).fails.indexOf("tip-length-mismatch") >= 0, "10: 칼라 끝 앞변 불일치 차단");
+  const noTip = mk(); delete noTip.tip;
+  ok(CC.check(proj(noTip)).fails.indexOf("no-tip") >= 0, "10: 칼라 끝 없음 → 차단");
+  const badParams = mk(); badParams.parameters.tip.tipBaseCm = 99;
+  ok(CC.check(proj(badParams)).fails.indexOf("tip-recompute") >= 0, "10: 재계산 불가한 칼라 끝 → 차단");
+
+  // 종류 분리: 2피스 완료본 + Q 초안 → 변경됨
+  PROJECT.working.collarDraft = makeDraft("BH1");
+  const twoPiece = CC.complete(PROJECT);
+  PROJECT.working.collarDraft = mk();
+  ok(twoPiece.ok && CC.isCurrentCollarChanged(PROJECT) === true, "10: 2피스 완료본 + Q 초안 → 변경됨(종류 혼동 없음)");
+  // 몸판 hash 변경 → 무효
+  PROJECT.working.collarDraft = mk(); CC.complete(PROJECT);
+  BODICE = bodice("BH2");
+  ok(CC.invalidatedByBodice(PROJECT) === true, "10: 몸판 hash 변경 → Q 무효");
+  BODICE = bodice("BH1");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

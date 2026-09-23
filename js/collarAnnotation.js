@@ -220,6 +220,67 @@
     return { recipe: cd.baseMethod, mode: "parametric", note: note, dims: dims, labels: labels, inputs: inputs, results: results };
   }
 
+  // 윙 칼라(교재 Q, P.68) 표시 모델. 밴드는 수평 꺾임선, 위 칼라 대신 앞 위 끝의 칼라 끝만 있다.
+  //   designCollar 의 named anchors(standAnchors / tip.anchors)·parameters·measure 만 쓴다.
+  function qRecipe(cd, bodice) {
+    var sp = (cd.parameters && cd.parameters.stand) || {}, tp = (cd.parameters && cd.parameters.tip) || {};
+    var sa = cd.standAnchors || null, sm = cd.measure || {};
+    var tipObj = cd.tip || null, ta = (tipObj && tipObj.anchors) || null, tm = (tipObj && tipObj.measure) || {};
+    var dims = [], labels = [];
+    if (sa) {
+      var cbSeam = pt(sa.cbSeam), cbTop = pt(sa.cbTop), cfSeam = pt(sa.cfSeam), cfTop = pt(sa.cfTop);
+      dim(dims, "band-width", "dim", cbSeam, cbTop, sp.bandWidthCm);
+      if (cbSeam && cfSeam) {
+        var riseBase = { x: cfSeam.x, y: cbSeam.y };
+        dim(dims, "cb-baseline", "ref", cbSeam, riseBase, null);
+        dim(dims, "cf-rise", "dim", riseBase, cfSeam, sp.frontRiseCm);
+      }
+      dim(dims, "fold-line", "ref", cbTop, cfTop, null);   // 교재 Q: 칼라 외곽의 꺾임선은 수평 직선
+      if (cbSeam) labels.push({ id: "cb", at: cbSeam, text: "CB" });
+      if (cfTop) labels.push({ id: "fold-front", at: cfTop, text: "Ⓒ" });
+    }
+    if (ta) {
+      var F = pt(ta.foldFront), Bk = pt(ta.foldBack), T = pt(ta.tip);
+      dim(dims, "tip-base", "dim", F, Bk, tp.tipBaseCm);          // ① 꺾임선 위 밑변(앞끝→뒤)
+      dim(dims, "tip-edge", "dim", T, F, tp.tipEdgeCm);           // ② 칼라 끝 앞변(직선)
+      if (T && F) {
+        var foot = { x: T.x, y: F.y };                            // 꼭짓점의 수직 발
+        dim(dims, "tip-setback", "dim", foot, F, tp.tipSetbackCm);   // ③ 수평 후퇴
+        dim(dims, "tip-height", "ref", foot, T, null);               // 세로 성분은 파생값(치수 아님)
+      }
+      if (T) labels.push({ id: "tip", at: T, text: "칼라 끝" });
+    }
+    var inputs = [
+      { key: "bandWidthCm", label: "밴드 폭", value: val(sp.bandWidthCm) },
+      { key: "frontRiseCm", label: "앞 중심 올림", value: val(sp.frontRiseCm) },
+      { key: "frontEndCm", label: "앞 끝선(앞 중심선 앞)", value: val(sp.frontEndCm) },
+      { key: "tipBaseCm", label: "꺾임선 위 밑변(앞끝→뒤)", value: val(tp.tipBaseCm) },
+      { key: "tipSetbackCm", label: "칼라 끝 수평 후퇴", value: val(tp.tipSetbackCm) },
+      { key: "tipEdgeCm", label: "칼라 끝 앞변(직선)", value: val(tp.tipEdgeCm) }
+    ];
+    var nl = (bodice && bodice.necklineLengths) || {};
+    var neckDiff = (num(nl.half) && num(sm.lowerNeckSeamLenCm)) ? sm.lowerNeckSeamLenCm - nl.half : null;
+    var results = [
+      { key: "neckBack", label: "몸판 뒤목(반쪽)", value: val(nl.back) },
+      { key: "neckFront", label: "몸판 앞목(반쪽)", value: val(nl.front) },
+      { key: "neckHalf", label: "반패턴 목둘레 합계(앞반+뒤반)", value: val(nl.half) },
+      { key: "neckFinished", label: "완성 목둘레(반패턴×2)", value: val(nl.finished) },
+      { key: "lowerNeckSeam", label: "밴드 달림선 실측", value: val(sm.lowerNeckSeamLenCm) },
+      { key: "neckDiff", label: "달림선 − 목둘레 합계", value: neckDiff, status: neckDiff == null ? null : (Math.abs(neckDiff) <= SEAM_MATCH_TOL ? "match" : "mismatch") },
+      { key: "cbTrim", label: "밴드 뒤중심 보정(그린 길이 − 목둘레)", value: val(sm.cbTrimCm) },
+      { key: "lowerExtension", label: "밴드 앞 끝선 연장", value: val(sm.lowerExtensionLenCm) },
+      { key: "foldLine", label: "꺾임선(수평) 길이", value: val(sm.upperNeckSegmentLenCm) },
+      { key: "tipBase", label: "칼라 끝 밑변 실측", value: val(tm.foldBaseLenCm) },
+      { key: "tipEdge", label: "칼라 끝 앞변 실측", value: val(tm.tipEdgeLenCm) },
+      { key: "tipSetback", label: "칼라 끝 수평 후퇴 실측", value: val(tm.tipSetbackLenCm) },
+      { key: "tipHeight", label: "칼라 끝 세로 성분(파생)", value: val(tm.tipHeightCm) },
+      { key: "tipOuter", label: "칼라 끝 외곽선 실측", value: val(tm.outerEdgeLenCm) }
+    ];
+    return { recipe: cd.baseMethod, mode: "parametric",
+      note: "칼라 외곽의 꺾임선을 수평으로 긋고, 앞 위 끝 Ⓒ 기준으로 칼라 끝만 제도(위 칼라 없음)",
+      dims: dims, labels: labels, inputs: inputs, results: results };
+  }
+
   function standaloneRecipe(cd) {
     var sa = cd.standalone || null, P = (cd.parameters && cd.parameters.standalone) || {}, m = (sa && sa.measure) || {};
     var C = cd.construction || {};
@@ -279,6 +340,7 @@
     "bunka-shirt-collar-J-v1": gRecipe,
     "bunka-shirt-collar-K-v1": gRecipe,
     "bunka-open-collar-L-v1": lRecipe,
+    "bunka-wing-collar-Q-v1": qRecipe,
     "bunka-stand-collar-A-P146-v1": standaloneRecipe,
     "bunka-stand-collar-B-P146-v1": standaloneRecipe,
     "bunka-stand-collar-C-P146-v1": standaloneRecipe,
@@ -290,10 +352,11 @@
   function buildModel(collarDraft, bodiceResult) {
     if (!collarDraft) return null;
     var onePiece = collarDraft.type === "shirt-one-piece", standalone = collarDraft.type === "stand-collar";
-    var openCollar = collarDraft.type === "shirt-open-collar";
+    var openCollar = collarDraft.type === "shirt-open-collar", wing = collarDraft.type === "shirt-wing-collar";
     if (onePiece ? !(collarDraft.onePiece && collarDraft.onePiece.geometry)
       : openCollar ? !(collarDraft.openCollar && collarDraft.openCollar.geometry)
-        : standalone ? !(collarDraft.standalone && collarDraft.standalone.geometry) : !collarDraft.standGeometry) return null;
+        : wing ? !(collarDraft.standGeometry && collarDraft.tip && collarDraft.tip.geometry)
+          : standalone ? !(collarDraft.standalone && collarDraft.standalone.geometry) : !collarDraft.standGeometry) return null;
     var fn = RECIPES[collarDraft.baseMethod];
     return fn ? fn(collarDraft, bodiceResult || null) : null;
   }
