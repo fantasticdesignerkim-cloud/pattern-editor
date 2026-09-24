@@ -609,5 +609,66 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   BODICE = bodice("BH1");
 }
 
+// 15. 보 칼라(교재 X·Y·Z, P.71) — 달림선 = ×+⊠ · 리본 길이 · 칼라 폭 · 칼라 달림 끝 표시
+{
+  const bowBodice = (hash) => ({ hash: hash, sourceVersion: 1, necklineLengths: { back: 10, front: 8, half: 18, finished: 36 } });
+  BODICE = bowBodice("BX1");
+  const XP = { collarWidthCm: 3, ribbonLengthCm: 45, attachEndFromCfCm: 3 };
+  const ZP = { collarWidthCm: 15, ribbonLengthCm: 75, attachEndFromCfCm: 3 };
+  const mkBow = (P, k) => {
+    const bw = DC.computeBowCollar(bowBodice("BX1"), P);
+    return { sourceBodiceHash: "BX1", type: "bow-collar", baseMethod: "bunka-bow-collar-" + k + "-v1", presetId: "bunka-bow-collar-" + k,
+      parameters: { bow: Object.assign({}, P) },
+      bow: { geometry: bw.geometry, measure: bw.measure, anchors: bw.anchors } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  PROJECT = proj(mkBow(XP, "X"));
+  ok(CC.check(PROJECT).ok, "15: X 초안이 완료 게이트 통과(" + CC.check(PROJECT).fails.join(",") + ")");
+  const rX = CC.complete(PROJECT);
+  ok(rX.ok && rX.result.type === "bow-collar" && Object.isFrozen(rX.result.bow)
+    && JSON.stringify(rX.result.bow.parameters) === JSON.stringify(XP) && rX.result.symmetry === "half-cb-fold", "15: X 완료 스냅샷");
+  ok(!("stand" in rX.result) && !("body" in rX.result) && !("sailor" in rX.result) && !("flat" in rX.result),
+    "15: 다른 family 섹션을 만들지 않는다");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "15: 완료 직후 미변경");
+  const againX = CC.complete(PROJECT);
+  ok(againX.ok && againX.idempotent === true && againX.result === rX.result, "15: 재완료 idempotent(같은 참조)");
+
+  // 게이트
+  const shortSeam = mkBow(XP, "X"); shortSeam.bow.measure.attachLenCm = shortSeam.bow.measure.neckTargetCm - 0.2;
+  ok(CC.check(proj(shortSeam)).fails.indexOf("attach-length-mismatch") >= 0, "15: 달림선 ≠ ×+⊠ 차단(길이 책임)");
+  const badEnd = mkBow(XP, "X"); badEnd.bow.measure.frontAttachLenCm += 0.5;
+  ok(CC.check(proj(badEnd)).fails.indexOf("attach-end-mismatch") >= 0, "15: ⊠ 가 앞목−칼라 달림 끝과 다르면 차단");
+  const badRibbon = mkBow(XP, "X"); badRibbon.bow.measure.ribbonLenCm += 1;
+  ok(CC.check(proj(badRibbon)).fails.indexOf("ribbon-length-mismatch") >= 0, "15: 리본 길이 불일치 차단");
+  const badW = mkBow(XP, "X"); badW.bow.measure.collarWidthLenCm += 0.5;
+  ok(CC.check(proj(badW)).fails.indexOf("collar-width-mismatch") >= 0, "15: 칼라 폭 불일치 차단");
+  const badTotal = mkBow(XP, "X"); badTotal.bow.measure.totalLenCm += 1;
+  ok(CC.check(proj(badTotal)).fails.indexOf("total-length-mismatch") >= 0, "15: 전체 길이 ≠ 달림선+리본 차단");
+  const noBw = mkBow(XP, "X"); delete noBw.bow;
+  ok(CC.check(proj(noBw)).fails.indexOf("no-bow-collar") >= 0, "15: 형상 없음 차단");
+  const noMark = mkBow(XP, "X"); noMark.bow.geometry = Object.assign({}, noMark.bow.geometry, { construction: [] });
+  ok(CC.check(proj(noMark)).fails.indexOf("attach-end-mark-missing") >= 0, "15: 칼라 달림 끝 표시 없음 차단");
+  const badParams = mkBow(XP, "X"); badParams.parameters.bow.ribbonLengthCm = 0;
+  ok(CC.check(proj(badParams)).fails.indexOf("bow-recompute") >= 0, "15: 재계산 불가 파라미터 차단");
+
+  // X·Z hash 분리 · 종류 분리 · 스테일
+  const pZ = proj(mkBow(ZP, "Z")); const rZ = CC.complete(pZ);
+  ok(rZ.ok && rZ.result.hash !== rX.result.hash && rZ.result.presetId === "bunka-bow-collar-Z", "15: Z 는 X 와 hash 분리·출처 메타");
+  {
+    const pj = proj(mkBow(XP, "X")); const done = CC.complete(pj);
+    pj.working.collarDraft = mkBow(ZP, "Z");
+    ok(done.ok && CC.isCurrentCollarChanged(pj) === true, "15: X 완료본 + Z 초안 → 변경됨");
+    pj.working.collarDraft = mkBow(XP, "X");
+    ok(CC.isCurrentCollarChanged(pj) === false, "15: X 로 되돌리면 미변경");
+  }
+  {
+    const sc = DC.computeSailorCollarU;   // 다른 family 완료본 + 보 초안 → 변경됨(종류 분리)
+    const pj = proj(mkBow(XP, "X")); CC.complete(pj);
+    pj.working.collarResult = Object.assign({}, pj.working.collarResult, { type: "flat-collar" });
+    ok(typeof sc === "function" && CC.isCurrentCollarChanged(pj) === true, "15: 완료본 종류가 다르면 변경됨");
+  }
+  BODICE = bodice("BH1");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

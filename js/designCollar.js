@@ -1552,6 +1552,79 @@
         shoulder: p10C, snp: snpC, fnpV: fnpC } };
   }
 
+  // ── 보 칼라(교재 X·Y·Z, P.71) ──
+  // 교재 본문(P.71 직접 판독):
+  //   머리말 "칼라에 넥타이처럼 직사각형의 천을 붙이고 나비매듭을 한 칼라. 타이 칼라라고도 한다.
+  //     칼라 폭을 달리한 디자인을 3가지 소개한다. 길이는 리본의 칼라 폭이 넓을수록 길게 해야 균형이
+  //     맞지만 원하는 대로 조정할 수 있다."
+  //   Ⓧ "앞 몸판의 칼라 달림 끝은 리본 매듭이 예쁘게 자리 잡도록 앞 중심에서 떨어진 위치에 정한다.
+  //     목둘레 치수를 수평선상에 두고 제도한다. 칼라 달림 끝부터 리본의 길이는 45cm." · 칼라 폭 3
+  //   Ⓨ "칼라 폭 7cm. Ⓧ와 같이 제도한다. 칼라 달림 끝부터 리본의 길이는 60cm."
+  //   Ⓩ "칼라 폭 15cm. Ⓧ와 같이 제도한다. 칼라 달림 끝부터 리본의 길이는 75cm."
+  // 도해 판독(세 도해가 완전히 같은 구성):
+  //   · 칼라 = 직사각형 한 장. 왼쪽 변 = 뒤 중심(접어 재단), 아래 변 = 목둘레를 올려놓은 수평 기준선.
+  //   · 아래 변 = (×+⊠) + 리본 길이. 리본 구간의 물결선은 **그림 생략 기호**이고 치수가 아니다.
+  //   · 앞 몸판 도해: 목둘레 곡선 바깥의 가는 호 하나를 두 지시선이 나눠 ⊠ 와 3 으로 표기한다 —
+  //     ⊠ = SNP→칼라 달림 끝, 3 = 칼라 달림 끝→앞 중심. 즉 **둘 다 목둘레선을 따라 잰 값**이고
+  //     ⊠ + 3 = 몸판 앞 목둘레(반쪽)다. 화살표 "칼라 달림 끝"이 그 분할점을 가리킨다.
+  //   · × = 뒤 목둘레(SNP→CB) 전체. ⇒ 달림선 = × + (앞 목둘레 − 3).
+  //   · 도해의 1(SNP 올림)·1(앞 목점 내림)·1.5(여밈)는 **몸판 셔츠 목선·앞여밈 수치**이고 칼라 수치가 아니다.
+  // ★ X·Y·Z 의 차이는 **칼라 폭과 리본 길이 두 값뿐**이다(교재가 Y·Z 에 "Ⓧ와 같이 제도한다"고 못박는다).
+  //   칼라 달림 끝 3 은 세 도해 모두 같은 표기라 같은 값으로 둔다(레코드 수치, 엔진 상수가 아니다).
+  // ★ 몸판은 바꾸지 않는다 — 칼라 달림 끝은 몸판 쪽 표시점이고, 여기서는 완료된 몸판 목둘레 치수
+  //   (necklineLengths, 최종 bodice geometry 파생)만 읽어 달림선 길이를 만든다.
+  var BOW_COLLAR_METHOD = { page: 71, piece: "rectangle", baseline: "horizontal-neck-measure",
+    attachEndFrom: "front-center-along-neckline", ribbonFrom: "attach-end", symmetry: "half-cb-fold" };
+
+  // params: { collarWidthCm(3), ribbonLengthCm(45), attachEndFromCfCm(3) }
+  //   로컬 프레임: 뒤 중심 = x 0, 목둘레 기준 수평선 = y 0, 위 = −y(밴드 P.148 프레임과 같은 관례).
+  //   실패: no-bodice / no-neckline / invalid-collar-width / invalid-ribbon-length /
+  //     invalid-attach-end / attach-end-unreachable / self-intersection.
+  function computeBowCollar(bodiceResult, params) {
+    var b = readBodice(bodiceResult);
+    if (!b.ok) return b;
+    var P = params || {};
+    var W = P.collarWidthCm, RB = P.ribbonLengthCm, AE = P.attachEndFromCfCm;
+    if (!num(W) || W <= 0) return { ok: false, reason: "invalid-collar-width" };
+    if (!num(RB) || RB <= 0) return { ok: false, reason: "invalid-ribbon-length" };
+    if (!num(AE) || AE < 0) return { ok: false, reason: "invalid-attach-end" };
+    if (!(AE < b.frontCm)) return { ok: false, reason: "attach-end-unreachable" };   // ⊠ ≤ 0 이면 달림선이 성립하지 않는다
+
+    var frontAttach = b.frontCm - AE;                  // ⊠ = 앞 목둘레 − 3(칼라 달림 끝까지)
+    var seam = b.backCm + frontAttach;                 // 달림선 = ×+⊠
+    var cbSeam = { x: 0, y: 0 }, attachEnd = { x: seam, y: 0 }, ribbonEnd = { x: seam + RB, y: 0 };
+    var cbTop = { x: 0, y: -W }, attachEndTop = { x: seam, y: -W }, ribbonEndTop = { x: seam + RB, y: -W };
+
+    var outline = [
+      L(cbSeam, attachEnd, "neck-seam"),          // ×+⊠ — 몸판 목둘레에 달리는 구간
+      L(attachEnd, ribbonEnd, "ribbon-edge"),     // 칼라 달림 끝부터 리본(45/60/75)
+      L(ribbonEnd, ribbonEndTop, "ribbon-end"),   // 리본 끝
+      L(ribbonEndTop, cbTop, "outer"),            // 칼라 폭 위쪽 변
+      L(cbTop, cbSeam, "cb-fold")                 // 뒤 중심(접어 재단)
+    ];
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    var by = function (p) { return outline.filter(function (s) { return s.part === p; }); };
+    var attachLen = sumMeasure(by("neck-seam")), ribbonLen = sumMeasure(by("ribbon-edge"));
+    return { ok: true,
+      geometry: { outline: outline, construction: [L(attachEnd, attachEndTop, "attach-end-mark")] },
+      measure: {
+        collarWidthCm: W, ribbonLengthCm: RB, attachEndFromCfCm: AE,
+        backNeckLenCm: b.backCm, bodyFrontNeckLenCm: b.frontCm,
+        frontAttachLenCm: frontAttach,                 // ⊠(실측 아님 — 목둘레 치수 산술)
+        neckTargetCm: seam,                            // ×+⊠
+        attachLenCm: attachLen,                        // 달림선 실측(= ×+⊠)
+        ribbonLenCm: ribbonLen,                        // 칼라 달림 끝→리본 끝 실측
+        totalLenCm: attachLen + ribbonLen,             // 아래 변 전체
+        outerLenCm: sumMeasure(by("outer")),
+        collarWidthLenCm: sumMeasure(by("cb-fold")),
+        ribbonEndLenCm: sumMeasure(by("ribbon-end"))
+      },
+      anchors: { cbSeam: cp(cbSeam), cbTop: cp(cbTop), attachEnd: cp(attachEnd), attachEndTop: cp(attachEndTop),
+        ribbonEnd: cp(ribbonEnd), ribbonEndTop: cp(ribbonEndTop) } };
+  }
+
   function validateClosedOutline(outline) {
     if (!Array.isArray(outline) || outline.length < 3) return { ok: false, reason: "empty" };
     for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (!nx.from || !outline[i].to || lineLen(outline[i].to, nx.from) > 1e-4) return { ok: false, reason: "not-closed" }; }
@@ -1575,6 +1648,8 @@
     computeFlatCollarT: computeFlatCollarT,     // family 4(플랫 칼라 T, P.69 하단 · 제도 방법 P.149)
     computeSailorCollarU: computeSailorCollarU,   // family 5(세일러 칼라 U, P.70 · 제도 방법 P.150)
     SAILOR_COLLAR_U_METHOD: SAILOR_COLLAR_U_METHOD,
+    computeBowCollar: computeBowCollar,           // family 6(보 칼라 X·Y·Z, P.71 — 직사각형 한 장)
+    BOW_COLLAR_METHOD: BOW_COLLAR_METHOD,
     FLAT_COLLAR_T_METHOD: FLAT_COLLAR_T_METHOD,
     FLAT_COLLAR_S_METHOD: FLAT_COLLAR_S_METHOD,
     BAND_ONE_PIECE_METHOD: BAND_ONE_PIECE_METHOD,

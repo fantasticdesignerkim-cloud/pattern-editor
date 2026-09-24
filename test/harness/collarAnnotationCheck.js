@@ -522,5 +522,65 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
     parameters: { sailor: VP }, sailor: { geometry: {}, measure: {}, anchors: {} } }, B) === null, "17-VW: 등록 안 된 recipe 는 표시 없음");
 }
 
+// 18. 보 칼라 X·Y·Z(P.71) — 하나의 recipe 가 세 도해를 표시하고, 수치는 parameters 에서만 읽는다
+{
+  const BB = { hash: "BX1", sourceVersion: 1, placket: { parameters: { overlapCm: 1.75 } },
+    necklineLengths: { back: 7.6926, front: 11.129, half: 18.8216, finished: 37.6432 } };
+  const P = { X: { collarWidthCm: 3, ribbonLengthCm: 45, attachEndFromCfCm: 3 },
+    Y: { collarWidthCm: 7, ribbonLengthCm: 60, attachEndFromCfCm: 3 },
+    Z: { collarWidthCm: 15, ribbonLengthCm: 75, attachEndFromCfCm: 3 } };
+  const mk = (k) => {
+    const r = DC.computeBowCollar(BB, P[k]);
+    return { model: CA.buildModel({ sourceBodiceHash: "BX1", type: "bow-collar", baseMethod: "bunka-bow-collar-" + k + "-v1",
+      parameters: { bow: P[k] }, bow: { geometry: r.geometry, measure: r.measure, anchors: r.anchors } }, BB), calc: r };
+  };
+  const idx = (m) => { const o = { inputs: {}, results: {}, dims: {}, labels: {} };
+    m.inputs.forEach(r => { o.inputs[r.key] = r.value; });
+    m.results.forEach(r => { o.results[r.key] = r; });
+    m.dims.forEach(d => { o.dims[d.id] = d; });
+    m.labels.forEach(l => { o.labels[l.id] = l; });
+    return o; };
+  const X = mk("X"), Y = mk("Y"), Z = mk("Z");
+  const ix = idx(X.model), iy = idx(Y.model), iz = idx(Z.model);
+
+  ok(["X", "Y", "Z"].every(k => CA.recipes().indexOf("bunka-bow-collar-" + k + "-v1") >= 0)
+    && X.model.recipe === "bunka-bow-collar-X-v1" && Z.model.recipe === "bunka-bow-collar-Z-v1", "18: X·Y·Z recipe 등록·출처 표기");
+  ok(ix.inputs.collarWidthCm === 3 && ix.inputs.ribbonLengthCm === 45 && ix.inputs.attachEndFromCfCm === 3
+    && iz.inputs.collarWidthCm === 15 && iz.inputs.ribbonLengthCm === 75, "18: 제도 입력값 3개(도해별 수치 그대로)");
+  ok(ix.dims["collar-width"].text === 3 && iy.dims["collar-width"].text === 7 && iz.dims["collar-width"].text === 15
+    && ix.dims["ribbon-length"].text === 45 && iz.dims["ribbon-length"].text === 75, "18: 칼라 폭·리본 치수선은 parameters 값");
+  ok(Math.abs(ix.dims["collar-width"].from.x - ix.dims["collar-width"].to.x) < 1e-9
+    && Math.abs(ix.dims["ribbon-length"].from.y - ix.dims["ribbon-length"].to.y) < 1e-9,
+    "18: 칼라 폭은 수직 · 리본은 기준 수평선 위");
+  ok(ix.dims["neck-seam"].kind === "dim" && ix.dims["attach-end-mark"].kind === "ref",
+    "18: 달림선은 치수선 · 칼라 달림 끝 표시는 참조선");
+  ok(ix.labels["cb"] && ix.labels["attach-end"] && ix.labels["ribbon-end"], "18: CB·칼라 달림 끝·리본 끝 라벨");
+
+  ok(ix.results.neckBack.value === BB.necklineLengths.back && ix.results.neckFront.value === BB.necklineLengths.front,
+    "18: 몸판 목둘레를 그대로 보고");
+  ok(ix.results.frontAttach.value === X.calc.measure.frontAttachLenCm
+    && Math.abs(ix.results.frontAttach.value - (BB.necklineLengths.front - 3)) < 1e-9,
+    "18: ⊠ = 앞목 − 칼라 달림 끝(앞목 전체가 아니다)");
+  ok(ix.results.neckTarget.value === X.calc.measure.neckTargetCm && ix.results.attachLen.value === X.calc.measure.attachLenCm
+    && ix.results.seamDiff.status === "match", "18: 달림선 = ×+⊠ 정합 보고");
+  ok(ix.results.ribbonLen.value === 45 && iz.results.ribbonLen.value === 75
+    && ix.results.totalLen.value === X.calc.measure.totalLenCm, "18: 리본·전체 길이 실측 보고");
+  ok(ix.results.collarWidth.value === 3 && iz.results.collarWidth.value === 15, "18: 칼라 폭 실측 보고");
+
+  // 세 도해가 같은 제도 → 달림선 치수·안내 문구는 공유하고 폭·리본만 다르다
+  ok(X.model.note === Y.model.note && Y.model.note === Z.model.note && /수평선/.test(X.model.note), "18: 같은 제도 안내를 공유");
+  ok(ix.results.neckTarget.value === iz.results.neckTarget.value && ix.results.attachLen.value === iz.results.attachLen.value,
+    "18: 달림선은 X·Z 가 같다(칼라 달림 끝 공통)");
+  ok(iz.results.collarWidth.value > iy.results.collarWidth.value && iy.results.collarWidth.value > ix.results.collarWidth.value
+    && iz.results.ribbonLen.value > ix.results.ribbonLen.value, "18: 폭·리본만 도해별로 커진다");
+
+  ok(CA.buildModel({ type: "bow-collar", baseMethod: "bunka-bow-collar-X-v1" }, BB) === null, "18: 형상 없으면 표시 모델 없음");
+  ok(CA.buildModel({ type: "bow-collar", baseMethod: "bunka-bow-collar-Q-v1",
+    parameters: { bow: P.X }, bow: { geometry: {}, measure: {}, anchors: {} } }, BB) === null, "18: 등록 안 된 recipe 는 표시 없음");
+  // 다른 family recipe 는 그대로
+  ok(CA.buildModel({ type: "flat-collar", baseMethod: "bunka-flat-collar-S-v1" }, BB) === null
+    && CA.recipes().indexOf("bunka-band-collar-P148-v1") >= 0, "18: 기존 recipe 등록 유지");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

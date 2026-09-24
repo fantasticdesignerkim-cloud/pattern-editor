@@ -435,6 +435,48 @@
       dims: dims, labels: labels, inputs: inputs, results: results };
   }
 
+  // ── 교재 X·Y·Z(P.71): 보 칼라 — 목둘레 치수를 수평선에 올린 직사각형 한 장 + 리본 ──
+  //   셋은 같은 제도라 표시 규칙도 하나다. 수치는 전부 parameters 에서 읽고 상수를 적지 않는다.
+  function xRecipe(cd, bodice) {
+    var wp = (cd.parameters && cd.parameters.bow) || {};
+    var bw = cd.bow || null, wa = (bw && bw.anchors) || null, wm = (bw && bw.measure) || {};
+    var dims = [], labels = [];
+    if (wa) {
+      var cbSeam = pt(wa.cbSeam), cbTop = pt(wa.cbTop), aEnd = pt(wa.attachEnd), aTop = pt(wa.attachEndTop);
+      var rEnd = pt(wa.ribbonEnd), rTop = pt(wa.ribbonEndTop);
+      dim(dims, "collar-width", "dim", cbSeam, cbTop, wp.collarWidthCm);         // 칼라 폭(3/7/15)
+      dim(dims, "neck-seam", "dim", cbSeam, aEnd, null);                          // ×+⊠(달림선)
+      dim(dims, "ribbon-length", "dim", aEnd, rEnd, wp.ribbonLengthCm);           // 칼라 달림 끝→리본 끝(45/60/75)
+      dim(dims, "attach-end-mark", "ref", aEnd, aTop, null);                      // 달림 구간과 리본 구간의 경계
+      if (cbSeam) labels.push({ id: "cb", at: cbSeam, text: "CB" });
+      if (aTop) labels.push({ id: "attach-end", at: aTop, text: "칼라 달림 끝" });
+      if (rTop) labels.push({ id: "ribbon-end", at: rTop, text: "리본 끝" });
+    }
+    var inputs = [
+      { key: "collarWidthCm", label: "칼라 폭", value: val(wp.collarWidthCm) },
+      { key: "ribbonLengthCm", label: "리본 길이(칼라 달림 끝부터)", value: val(wp.ribbonLengthCm) },
+      { key: "attachEndFromCfCm", label: "칼라 달림 끝(앞 중심에서 목둘레선 따라)", value: val(wp.attachEndFromCfCm) }
+    ];
+    var nl = (bodice && bodice.necklineLengths) || {};
+    var seamDiff = (num(wm.attachLenCm) && num(wm.neckTargetCm)) ? wm.attachLenCm - wm.neckTargetCm : null;
+    var results = [
+      { key: "neckBack", label: "몸판 뒤목 ×(반쪽)", value: val(nl.back) },
+      { key: "neckFront", label: "몸판 앞목(반쪽)", value: val(nl.front) },
+      // ★ 보 칼라는 앞 목둘레 전체가 아니라 칼라 달림 끝까지만 달린다 — ⊠ = 앞목 − 칼라 달림 끝.
+      { key: "frontAttach", label: "⊠ 앞 달림 구간(SNP→칼라 달림 끝)", value: val(wm.frontAttachLenCm) },
+      { key: "neckTarget", label: "달림선 목표 ×+⊠", value: val(wm.neckTargetCm) },
+      { key: "attachLen", label: "달림선 실측", value: val(wm.attachLenCm) },
+      { key: "seamDiff", label: "달림선 − ×+⊠", value: seamDiff, status: seamDiff == null ? null : (Math.abs(seamDiff) <= SEAM_MATCH_TOL ? "match" : "mismatch") },
+      { key: "ribbonLen", label: "리본 길이 실측", value: val(wm.ribbonLenCm) },
+      { key: "totalLen", label: "칼라 전체 길이 실측(달림선 + 리본)", value: val(wm.totalLenCm) },
+      { key: "collarWidth", label: "칼라 폭 실측", value: val(wm.collarWidthLenCm) },
+      { key: "outerLen", label: "칼라 윗변 실측", value: val(wm.outerLenCm) }
+    ];
+    return { recipe: cd.baseMethod, mode: "parametric",
+      note: "목둘레 치수(×+⊠)를 수평선에 올려 직사각형 한 장으로 — 칼라 달림 끝은 앞 중심에서 떨어뜨려 리본 매듭 자리를 만든다",
+      dims: dims, labels: labels, inputs: inputs, results: results };
+  }
+
   // ── 교재 T(P.69 하단): 플랫 칼라 — 어깨선을 3.5 겹쳐 한 장으로, 달림선은 0.5 올려 재작도 ──
   function tRecipe(cd, bodice) {
     var tp = (cd.parameters && cd.parameters.flatOverlap) || {};
@@ -561,6 +603,9 @@
     "bunka-sailor-collar-U-v1": uRecipe,
     "bunka-sailor-collar-V-v1": uRecipe,
     "bunka-sailor-collar-W-v1": uRecipe,
+    "bunka-bow-collar-X-v1": xRecipe,
+    "bunka-bow-collar-Y-v1": xRecipe,
+    "bunka-bow-collar-Z-v1": xRecipe,
     "bunka-stand-collar-A-P146-v1": standaloneRecipe,
     "bunka-stand-collar-B-P146-v1": standaloneRecipe,
     "bunka-stand-collar-C-P146-v1": standaloneRecipe,
@@ -576,12 +621,14 @@
     var joined = collarDraft.type === "shirt-band-one-piece";
     var flat = collarDraft.type === "flat-collar" || collarDraft.type === "flat-collar-overlap";
     var sailor = collarDraft.type === "sailor-collar";
+    var bow = collarDraft.type === "bow-collar";
     if (onePiece ? !(collarDraft.onePiece && collarDraft.onePiece.geometry)
       : openCollar ? !(collarDraft.openCollar && collarDraft.openCollar.geometry)
         : wing ? !(collarDraft.standGeometry && collarDraft.tip && collarDraft.tip.geometry)
           : joined ? !(collarDraft.joined && collarDraft.joined.geometry)
             : flat ? !(collarDraft.flat && collarDraft.flat.geometry)
               : sailor ? !(collarDraft.sailor && collarDraft.sailor.geometry)
+                : bow ? !(collarDraft.bow && collarDraft.bow.geometry)
             : standalone ? !(collarDraft.standalone && collarDraft.standalone.geometry) : !collarDraft.standGeometry) return null;
     var fn = RECIPES[collarDraft.baseMethod];
     return fn ? fn(collarDraft, bodiceResult || null) : null;

@@ -862,5 +862,99 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
     && !("geometry" in C.computeSailorCollarU(B, Object.assign({}, VP, { vDropCm: -1 }))), "16-VW: 범위 밖 거부(형상 없음)");
 }
 
+// 17. 교재 X·Y·Z(P.71) 보 칼라 — 목둘레 치수(×+⊠)를 수평선에 올린 직사각형 한 장 + 리본.
+//   판독 근거(P.71 직접 판독): Ⓧ "…목둘레 치수를 수평선상에 두고 제도한다. 칼라 달림 끝부터 리본의
+//   길이는 45cm"(칼라 폭 3) / Ⓨ "칼라 폭 7cm. Ⓧ와 같이 제도한다 … 60cm" / Ⓩ "칼라 폭 15cm … 75cm".
+//   앞 몸판 도해의 가는 호 하나를 ⊠(SNP→칼라 달림 끝)와 3(칼라 달림 끝→앞 중심)이 나눠 표기한다.
+{
+  const back = 7.6926, front = 11.129;
+  const B = () => bodice(back, front, 1.75);
+  const XP = { collarWidthCm: 3, ribbonLengthCm: 45, attachEndFromCfCm: 3 };
+  const YP = { collarWidthCm: 7, ribbonLengthCm: 60, attachEndFromCfCm: 3 };
+  const ZP = { collarWidthCm: 15, ribbonLengthCm: 75, attachEndFromCfCm: 3 };
+  const x = C.computeBowCollar(B(), XP), y = C.computeBowCollar(B(), YP), z = C.computeBowCollar(B(), ZP);
+
+  ok(typeof C.computeBowCollar === "function"
+    && J(C.BOW_COLLAR_METHOD) === J({ page: 71, piece: "rectangle", baseline: "horizontal-neck-measure",
+      attachEndFrom: "front-center-along-neckline", ribbonFrom: "attach-end", symmetry: "half-cb-fold" }),
+    "17: API·제도법 메타(P.71 · 직사각형 · 칼라 달림 끝은 앞 중심에서 목둘레선 따라)");
+  ok(x.ok && y.ok && z.ok && [x, y, z].every(r => C.validateClosedOutline(r.geometry.outline).ok),
+    "17: X·Y·Z 폐곡선 한 조각(" + [x.reason, y.reason, z.reason].filter(Boolean).join() + ")");
+  ok(J(x.geometry.outline.map(s => s.part)) === J(["neck-seam", "ribbon-edge", "ribbon-end", "outer", "cb-fold"])
+    && x.geometry.outline.every(s => s.kind === "line"), "17: 구성 = 달림선·리본·리본 끝·윗변·뒤 중심(전부 직선)");
+  ok(J(y.geometry.outline.map(s => s.part)) === J(x.geometry.outline.map(s => s.part))
+    && J(z.geometry.outline.map(s => s.part)) === J(x.geometry.outline.map(s => s.part)),
+    "17: Y·Z 의 구성·primitive 순서는 X 와 동일(교재: Ⓧ와 같이 제도한다)");
+
+  // ① 달림선 = × + ⊠ (⊠ = 앞 목둘레 − 칼라 달림 끝). 늘려 박는 분 없이 목둘레 치수 그대로.
+  [[x, XP, "X"], [y, YP, "Y"], [z, ZP, "Z"]].forEach(([r, P, tag]) => {
+    const m = r.measure, A = r.anchors;
+    ok(near(m.frontAttachLenCm, front - P.attachEndFromCfCm, 1e-12) && near(m.neckTargetCm, back + front - P.attachEndFromCfCm, 1e-12),
+      "17: " + tag + " ⊠ = 앞 목둘레 − 칼라 달림 끝 · 달림선 목표 = ×+⊠");
+    ok(near(m.attachLenCm, m.neckTargetCm, 1e-12) && near(partLen(r.geometry, "neck-seam"), m.neckTargetCm, 1e-9),
+      "17: " + tag + " 달림선 실측(독립 측정 포함) = ×+⊠");
+    ok(near(partLen(r.geometry, "ribbon-edge"), P.ribbonLengthCm, 1e-9) && near(m.ribbonLenCm, P.ribbonLengthCm, 1e-12),
+      "17: " + tag + " 칼라 달림 끝→리본 끝 = " + P.ribbonLengthCm);
+    ok(near(partLen(r.geometry, "cb-fold"), P.collarWidthCm, 1e-9) && near(partLen(r.geometry, "ribbon-end"), P.collarWidthCm, 1e-9)
+      && near(m.collarWidthLenCm, P.collarWidthCm, 1e-12), "17: " + tag + " 칼라 폭 = " + P.collarWidthCm + "(뒤 중심·리본 끝 양쪽)");
+    ok(near(m.totalLenCm, m.attachLenCm + m.ribbonLenCm, 1e-12) && near(m.outerLenCm, m.totalLenCm, 1e-9),
+      "17: " + tag + " 아래 변 = 달림선 + 리본 · 윗변도 같다(직사각형)");
+    // ② 로컬 프레임: 뒤 중심 = x 0 · 기준 수평선 = y 0 · 위 = −칼라 폭
+    ok(near(A.cbSeam.x, 0, 1e-12) && near(A.cbSeam.y, 0, 1e-12) && near(A.cbTop.x, 0, 1e-12)
+      && near(A.cbTop.y, -P.collarWidthCm, 1e-12) && near(A.attachEnd.y, 0, 1e-12) && near(A.ribbonEnd.y, 0, 1e-12),
+      "17: " + tag + " 뒤 중심 x0 · 목둘레 기준선 y0 · 칼라는 위(−y)");
+    ok(near(A.attachEnd.x, m.neckTargetCm, 1e-12) && near(A.ribbonEnd.x, m.neckTargetCm + P.ribbonLengthCm, 1e-12)
+      && near(A.attachEndTop.x, A.attachEnd.x, 1e-12) && near(A.ribbonEndTop.y, -P.collarWidthCm, 1e-12),
+      "17: " + tag + " 칼라 달림 끝·리본 끝 x 좌표 = 누적 치수");
+    // ③ 칼라 달림 끝 표시(달림 구간·리본 구간 경계) — 기준선에 수직·칼라 폭
+    const cons = r.geometry.construction;
+    ok(cons.length === 1 && cons[0].part === "attach-end-mark" && near(cons[0].from.x, A.attachEnd.x, 1e-12)
+      && near(cons[0].to.x, A.attachEnd.x, 1e-12) && near(denseLen(cons[0]), P.collarWidthCm, 1e-9),
+      "17: " + tag + " 칼라 달림 끝 표시(수직·칼라 폭)");
+  });
+
+  // ④ X·Y·Z 의 차이는 칼라 폭·리본 길이 두 값뿐 — 달림 구간은 세 도해가 완전히 같다
+  ok(J(x.geometry.outline.filter(s => s.part === "neck-seam")) === J(y.geometry.outline.filter(s => s.part === "neck-seam"))
+    && J(y.geometry.outline.filter(s => s.part === "neck-seam")) === J(z.geometry.outline.filter(s => s.part === "neck-seam")),
+    "17: 달림선(×+⊠)은 X·Y·Z 가 같은 선(칼라 달림 끝 3 공통)");
+  ok(x.measure.collarWidthLenCm < y.measure.collarWidthLenCm && y.measure.collarWidthLenCm < z.measure.collarWidthLenCm
+    && x.measure.ribbonLenCm < y.measure.ribbonLenCm && y.measure.ribbonLenCm < z.measure.ribbonLenCm,
+    "17: 칼라 폭이 넓을수록 리본도 길다(3/45 → 7/60 → 15/75)");
+
+  // ⑤ 칼라 달림 끝 0 이면 앞 목둘레 전체에 달린다(앞 중심까지) — 파라미터가 그대로 반영된다
+  {
+    const full = C.computeBowCollar(B(), Object.assign({}, XP, { attachEndFromCfCm: 0 }));
+    ok(full.ok && near(full.measure.frontAttachLenCm, front, 1e-12) && near(full.measure.neckTargetCm, back + front, 1e-12),
+      "17: 칼라 달림 끝 0 = 앞 중심까지 달린다");
+    ok(full.measure.neckTargetCm > x.measure.neckTargetCm, "17: 칼라 달림 끝을 앞 중심에서 떨어뜨릴수록 달림선이 짧다");
+  }
+
+  // ⑥ 목둘레가 달라지면 달림선만 따라 변하고 칼라 폭·리본은 그대로(몸판을 바꾸지 않는 파생)
+  {
+    const big = C.computeBowCollar(bodice(9, 13, 1.75), XP);
+    ok(big.ok && near(big.measure.neckTargetCm, 9 + 13 - 3, 1e-12) && near(big.measure.ribbonLenCm, 45, 1e-12)
+      && near(big.measure.collarWidthLenCm, 3, 1e-12), "17: 목둘레가 바뀌면 달림선만 바뀐다");
+  }
+
+  // ⑦ 결정론·입력 비변형
+  {
+    const b0 = B(), snapB = J(b0), snapP = J(XP);
+    ok(J(C.computeBowCollar(b0, XP)) === J(x) && J(b0) === snapB && J(XP) === snapP, "17: 결정론·몸판/파라미터 비변형");
+  }
+
+  // ⑧ 실패 계약(형상 없음)
+  {
+    const bad = (P) => C.computeBowCollar(B(), Object.assign({}, XP, P));
+    ok(bad({ collarWidthCm: 0 }).reason === "invalid-collar-width" && bad({ ribbonLengthCm: 0 }).reason === "invalid-ribbon-length"
+      && bad({ attachEndFromCfCm: -1 }).reason === "invalid-attach-end", "17: 범위 밖 거부");
+    ok(bad({ attachEndFromCfCm: front }).reason === "attach-end-unreachable"
+      && bad({ attachEndFromCfCm: front + 1 }).reason === "attach-end-unreachable", "17: 칼라 달림 끝 ≥ 앞 목둘레면 달림선 없음");
+    ok([bad({ collarWidthCm: 0 }), bad({ ribbonLengthCm: -5 }), bad({ attachEndFromCfCm: front })].every(r => !("geometry" in r)),
+      "17: 실패 시 형상 없음");
+    ok(C.computeBowCollar(null, XP).reason === "no-bodice" && C.computeBowCollar({}, XP).reason === "no-neckline",
+      "17: 몸판·목둘레 없음");
+  }
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }
