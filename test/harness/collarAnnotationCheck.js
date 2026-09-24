@@ -310,5 +310,34 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
     "13: 칼라 끝 형상 없으면 표시 모델 없음");
 }
 
+// 14. 교재 R(밴드+위 칼라 한 장) 표시 모델 — 밴드 3 치수 + 위 칼라 3 치수, 외곽 뒤 = 뒤 목둘레 ×
+{
+  const SP = { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 };
+  const UP = { upperWidthCm: 3.5, frontWidthCm: 6.5, outerBowCm: 0.5 };
+  const jn = DC.computeBandOnePiece(BODICE, SP, UP);
+  const cd = { sourceBodiceHash: "BH1", type: "shirt-band-one-piece", baseMethod: "bunka-band-collar-R-v1",
+    parameters: { stand: SP, upper: UP }, joined: { geometry: jn.geometry, measure: jn.measure, anchors: jn.anchors } };
+  const model = CA.buildModel(cd, BODICE), inputs = {}, results = {}, dims = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  model.results.forEach(r => { results[r.key] = r; });
+  model.dims.forEach(d => { dims[d.id] = d; });
+  ok(model.recipe === "bunka-band-collar-R-v1" && CA.recipes().indexOf("bunka-band-collar-R-v1") >= 0, "14: R 전용 recipe 등록");
+  ok(inputs.bandWidthCm === 3 && inputs.frontRiseCm === 1 && inputs.frontEndCm === 0.5
+    && inputs.upperWidthCm === 3.5 && inputs.frontWidthCm === 6.5 && inputs.outerBowCm === 0.5, "14: 제도 입력값 6개(밴드 3 + 위 칼라 3)");
+  ok(dims["band-width"].text === 3 && dims["upper-width"].text === 3.5 && dims["front-width"].text === 6.5 && dims["outer-bow"].text === 0.5,
+    "14: 밴드 폭·위 칼라 폭·앞 칼라 폭·처짐 치수선");
+  ok(Math.abs(dims["upper-width"].from.x - dims["upper-width"].to.x) < 1e-12
+    && Math.abs(dims["front-width"].from.x - dims["front-width"].to.x) < 1e-12, "14: 위 칼라 CB·앞 칼라 폭 치수선은 수직");
+  ok(Math.abs(dims["outer-back"].from.y - dims["outer-back"].to.y) < 1e-12 && dims["outer-back"].text === jn.measure.backNeckLenCm,
+    "14: 외곽 뒤 치수선은 수평이고 값 = 뒤 목둘레 ×");
+  ok(dims["band-top"].kind === "ref" && dims["outer-chord"].kind === "ref", "14: 이음선 자리·현은 참조선(치수 아님)");
+  ok(results.neckDiff.status === "match" && results.outerBackDiff.status === "match", "14: 달림선 = 목둘레 · 외곽 뒤 = 뒤 목둘레 정합");
+  ok(results.outerTotal.value === jn.measure.outerLenCm && results.cbHeight.value === jn.measure.cbHeightCm
+    && results.bandTop.value === jn.measure.bandTopLenCm, "14: 외곽 전체·CB 전체·이음선 자리 실측 결과 행");
+  ok(/한 장/.test(model.note) && /외곽/.test(model.note), "14: 한 장·외곽 치수 확보 안내");
+  ok(model.labels.some(l => l.id === "shoulder") && model.labels.some(l => l.id === "band-top-front"), "14: 어깨·Ⓒ 라벨");
+  ok(CA.buildModel({ type: "shirt-band-one-piece", baseMethod: "bunka-band-collar-R-v1" }, BODICE) === null, "14: 한 조각 형상 없으면 표시 모델 없음");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

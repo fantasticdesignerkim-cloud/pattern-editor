@@ -943,6 +943,87 @@
       anchors: { foldFront: C, foldBack: back, tip: tip } };
   }
 
+  // ══════════════════════════════════════════════
+  // 밴드+위 칼라 한 장(교재 R, P.68) — "칼라 밴드에 이어서 위 칼라를 그린다".
+  //   본문: "칼라 밴드와 위 칼라를 1장으로 이어서 제도한다. 어깨부터 앞까지 칼라 외곽 치수가
+  //   부족해지기 쉬워, 칼라 밴드 단추를 채우지 않고 입는 경우에 적합하다."
+  //   → 밴드는 M·N·P 와 같은 P.148 골격(달림선 실측 = ×+⊘, ⑭ 뒤 중심 수정, 앞 끝선 0.5)이고,
+  //     그 **밴드 윗선(이음선)을 경계로 위 칼라가 한 장으로 이어진다**(별도 조각·간격 없음).
+  //
+  // 위 칼라(도해 실측으로 확정한 점·선·방향):
+  //   ① CB: 밴드 윗선 CB 점에서 **CB(수직)로 위 칼라 폭 3.5** → 외곽 CB 점 Ⓞ
+  //   ② 외곽 뒤 구간: Ⓞ 에서 **CB 에 직각(수평)으로 뒤 목둘레 ×** → 어깨점 Ⓢ
+  //      (본문 "어깨부터 앞까지"의 어깨. 도해 실측 8.41cm, ×/(×+⊘)=0.416)
+  //   ③ 앞 위 끝 Ⓕ: 밴드 윗선 앞 끝 Ⓒ 에서 **CB 와 나란히(수직) 앞 칼라 폭 6.5** 위
+  //      (도해 실측 6.63cm, Ⓒ·Ⓕ 의 x 차이 0.00)
+  //   ④ 외곽 앞 구간: Ⓢ→Ⓕ 를 현(弦) 기준 **0.5 처진 완만한 곡선**(도해 실측 0.52)
+  //      곡선 정리는 이 파일 관례(시작 접선은 ② 수평 구간과 나란함, 핸들 = 현 길이 × 1/3) —
+  //      ★ **구현 관례이며 교재 수치가 아니다**(BAND_ONE_PIECE_METHOD). 0.5 처짐만 교재 수치다.
+  //   밴드 윗선은 조각 경계가 아니라 **이음선 자리(construction)** 로 남는다.
+  //
+  // 실패(원자적): invalid-stand / invalid-upper-width / invalid-front-width / invalid-outer-bow /
+  //   invalid-outer-back / self-intersection.
+  var BAND_ONE_PIECE_METHOD = { page: 68, bandMethodPage: 148, joined: true,
+    outerBackFrom: "back-neck", smoothing: "tangent-continuous-cubic", handleFraction: SEAM_HANDLE_FRACTION };
+
+  // params = { upperWidthCm, frontWidthCm, outerBowCm }
+  function computeBandOnePiece(bodiceResult, standParams, params) {
+    var st = computeStand(bodiceResult, standParams);
+    if (!st.ok) return st;
+    var b = readBodice(bodiceResult);
+    if (!b.ok) return b;
+    var P = params || {};
+    var upW = P.upperWidthCm, frW = P.frontWidthCm, bow = P.outerBowCm;
+    if (!num(upW) || upW <= 0) return { ok: false, reason: "invalid-upper-width" };
+    if (!num(frW) || frW <= 0) return { ok: false, reason: "invalid-front-width" };
+    if (!num(bow) || bow < 0) return { ok: false, reason: "invalid-outer-bow" };
+
+    var cbSeam = cp(st.anchors.cbSeam), cbTop = cp(st.anchors.cbTop), C = cp(st.anchors.cfTop);
+    var Ocb = { x: cbTop.x, y: cbTop.y - upW };          // ① 위 칼라 CB(수직)
+    var S = { x: Ocb.x + b.backCm, y: Ocb.y };           // ② 외곽 뒤 구간 = 뒤 목둘레 ×(수평)
+    var F = { x: C.x, y: C.y - frW };                    // ③ 앞 위 끝(Ⓒ 에서 수직)
+    if (!(S.x < F.x)) return { ok: false, reason: "invalid-outer-back" };   // 어깨점이 앞 위 끝보다 뒤여야 한다
+    var chord = unit(sub(F, S)), down = { x: -chord.y, y: chord.x };        // 현의 아래쪽(밴드 쪽) 법선
+    if (!(down.y > 0)) down = { x: chord.y, y: -chord.x };
+    var M = add(mid(S, F), down, bow);                   // ④ 현에서 0.5 처진 통과점
+    var outerFront = smoothBandGuide(S, M, F, "outer");  // 시작 접선 = ② 수평 구간과 나란함
+
+    var pick = function (p) { return st.standGeometry.outline.filter(function (s) { return s.part === p; }); };
+    var attach = pick("neck-seam").map(function (s) { return cloneSeg(s, "neck-seam"); });
+    var frontBlock = st.standGeometry.outline.filter(function (s) {
+      return s.part === "extension" || s.part === "cf" || s.part === "top-extension";
+    }).map(function (s) { return cloneSeg(s, s.part); });
+    var bandTop = pick("top").map(function (s) { return cloneSeg(s, "band-top"); });   // 이음선 자리(구성선)
+
+    var outline = attach.slice();
+    frontBlock.forEach(function (s) { outline.push(s); });
+    outline.push(L(C, F, "front-edge"));                                   // ③ 앞 칼라 폭
+    outerFront.slice().reverse().forEach(function (s) { outline.push(reverseCubic(s, "outer")); });   // Ⓕ→Ⓢ
+    outline.push(L(S, Ocb, "outer-back"));                                 // ② Ⓢ→Ⓞ(수평)
+    outline.push(L(Ocb, cbSeam, "cb-fold"));                               // CB 전체(위 칼라 + 밴드)
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    var outerFrontLen = sumMeasure(outerFront), outerBackLen = lineLen(Ocb, S);
+    return { ok: true,
+      geometry: { outline: outline, construction: bandTop },
+      measure: {
+        bandWidthCm: st.bandWidthCm, frontRiseCm: st.frontRiseCm, frontEndCm: st.frontEndCm,
+        upperWidthCm: upW, frontWidthCm: frW, outerBowCm: bow,
+        backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm, neckTargetCm: st.neckTargetCm,
+        lowerNeckSeamLenCm: st.lowerNeckSeamLenCm, lowerExtensionLenCm: st.lowerExtensionLenCm,
+        cbTrimCm: st.cbTrimCm, bandTopLenCm: st.upperNeckSegmentLenCm,   // 이음선 자리 실측
+        outerBackLenCm: outerBackLen,          // 실측 = ×
+        outerFrontLenCm: outerFrontLen,        // 완만한 곡선 실측(현보다 김)
+        outerLenCm: outerBackLen + outerFrontLen,
+        frontEdgeLenCm: lineLen(C, F),         // 실측 = 앞 칼라 폭
+        cbHeightCm: lineLen(Ocb, cbSeam)       // 실측 = 밴드 폭 + 위 칼라 폭
+      },
+      anchors: { cbSeam: cbSeam, bandTopCb: cbTop, outerCb: Ocb, shoulder: S, bandTopCf: C, frontTop: F,
+        cfSeam: cp(st.anchors.cfSeam), cfExtSeam: cp(st.anchors.cfExtSeam), cfExtTop: cp(st.anchors.cfExtTop) },
+      stand: st };
+  }
+
   function validateClosedOutline(outline) {
     if (!Array.isArray(outline) || outline.length < 3) return { ok: false, reason: "empty" };
     for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (!nx.from || !outline[i].to || lineLen(outline[i].to, nx.from) > 1e-4) return { ok: false, reason: "not-closed" }; }
@@ -961,6 +1042,8 @@
     computeBody: computeBody,
     computeOnePiece: computeOnePiece,   // family 2(한 장 셔츠 칼라, P.147)
     ONE_PIECE_METHOD: ONE_PIECE_METHOD,
+    computeBandOnePiece: computeBandOnePiece,   // family 3(밴드+위 칼라 한 장 R, P.68)
+    BAND_ONE_PIECE_METHOD: BAND_ONE_PIECE_METHOD,
     computeWingTip: computeWingTip,   // family 3(윙 칼라 Q, P.68 — 수평 꺾임선 + 칼라 끝)
     WING_METHOD: WING_METHOD,
     computeOpenCollar: computeOpenCollar,   // family 2(오픈 칼라 L, P.65 — 몸판 연동)

@@ -982,7 +982,7 @@
   }
   // ── 카라 종류(생성 구조) ── family 3 M = 밴드+위칼라 2피스 / family 2 G = 한 장.
   //   M 전용 '밴드·본체' 입력·버튼·문구를 한 장 칼라에 재사용하지 않는다(행은 data-collar-kind 로 분리).
-  const COLLAR_KIND_BY_TYPE = { "shirt-one-piece": "one-piece", "shirt-open-collar": "open", "shirt-wing-collar": "wing", "stand-collar": "standalone", "shirt-two-piece": "two-piece" };
+  const COLLAR_KIND_BY_TYPE = { "shirt-one-piece": "one-piece", "shirt-open-collar": "open", "shirt-wing-collar": "wing", "shirt-band-one-piece": "band-one-piece", "stand-collar": "standalone", "shirt-two-piece": "two-piece" };
   function draftCollarKind(project) {
     const cd = project && project.working && project.working.collarDraft;
     return cd ? (COLLAR_KIND_BY_TYPE[cd.type] || "two-piece") : null;
@@ -1000,6 +1000,7 @@
   function isStandaloneCollar(project) { return activeCollarKind(project) === "standalone"; }
   function isOpenCollar(project) { return activeCollarKind(project) === "open"; }
   function isWingCollar(project) { return activeCollarKind(project) === "wing"; }
+  function isBandOnePieceCollar(project) { return activeCollarKind(project) === "band-one-piece"; }
   function isTwoPieceCollar(project) { return activeCollarKind(project) === "two-piece"; }
   function syncCollarKindRows(project) {
     const kind = activeCollarKind(project);
@@ -1023,7 +1024,7 @@
     if (cd && collarStale(project)) {
       // 몸판 hash 변경 → 관리형 선 제거·manual 폐기·스탠드/본체 숨김(소매 stale 과 분리 — 소매는 탭 게이트만).
       if (cd.body && cd.body.lineId) project.working.patternLines = (project.working.patternLines || []).filter(l => l.id !== cd.body.lineId);
-      cd.standGeometry = null; cd.body = null; cd.standalone = null; cd.tip = null;   // 윙 칼라도 밴드+칼라 끝이 한 벌
+      cd.standGeometry = null; cd.body = null; cd.standalone = null; cd.tip = null; cd.joined = null;   // 윙 칼라·밴드+위 칼라 한 장도 한 벌로 숨김
     }
   }
   // ── 카라 종류·세부 제도 선택(collarPresets catalog + registry) ──
@@ -1132,6 +1133,7 @@
       "invalid-back-collar-width": "뒤 칼라 폭 값 확인", "invalid-collar-stand": "칼라 허리 값 확인",
       "invalid-tip-base": "칼라 끝 밑변 값 확인", "invalid-tip-setback": "칼라 끝 수평 후퇴 값 확인", "invalid-tip-edge": "칼라 끝 앞변이 수평 후퇴보다 커야 합니다", "tip-base-too-long": "칼라 끝 밑변이 꺾임선보다 깁니다", "invalid-stand": "밴드를 먼저 적용하세요",
       "invalid-front-end-rise": "앞 끝 올림이 칼라 높이(허리+뒤 폭) 이상입니다", "invalid-front-straight": "앞 직선 구간 값 확인",
+      "invalid-upper-width": "위 칼라 폭 값 확인", "invalid-front-width": "앞 칼라 폭 값 확인", "invalid-outer-bow": "외곽 처짐 값 확인(0 이상)", "invalid-outer-back": "외곽 뒤 구간(뒤 목둘레)이 앞 위 끝을 지납니다 · 폭 값을 조정하세요",
       "invalid-break-point": "앞목점→꺾임 끝 값이 여밈분보다 커야 합니다",
       "no-body-neckline": "몸판 앞 목둘레선을 찾을 수 없습니다", "no-body-center": "몸판 앞 중심선을 찾을 수 없습니다",
       "ambiguous-front-neck-point": "몸판 앞 중심 목점을 하나로 특정할 수 없습니다",
@@ -1253,6 +1255,32 @@
       "cm · 칼라 끝 밑변 " + fmtL(t.foldBaseLenCm) + "·앞변 " + fmtL(t.tipEdgeLenCm) + "·후퇴 " + fmtL(t.tipSetbackLenCm) +
       "cm(세로 " + fmtL(t.tipHeightCm) + " 파생) · 세션 전용";
   }
+  // 밴드+위 칼라 한 장(R): 수치 입력 없이 교재 기본값으로 적용한다(two-piece 행 숨김).
+  function bandOnePieceMeasure(project) {
+    const cd = project && project.working && project.working.collarDraft;
+    return (cd && cd.type === "shirt-band-one-piece" && cd.joined) ? (cd.joined.measure || null) : null;
+  }
+  function bandOnePieceSummary(m) {
+    return "달림선 " + fmtL(m.lowerNeckSeamLenCm) + "cm = 목둘레 " + fmtL(m.neckTargetCm) + "cm(뒤중심 보정 " + fmtL(m.cbTrimCm) +
+      "cm) · 이음선 자리 " + fmtL(m.bandTopLenCm) + "cm · 외곽 뒤 " + fmtL(m.outerBackLenCm) + "cm = 뒤 목둘레 " + fmtL(m.backNeckLenCm) +
+      "cm · 외곽 앞 " + fmtL(m.outerFrontLenCm) + "cm(전체 " + fmtL(m.outerLenCm) + ") · 앞 칼라 폭 " + fmtL(m.frontEdgeLenCm) +
+      "cm · CB 전체 " + fmtL(m.cbHeightCm) + "cm · 세션 전용";
+  }
+  function updateBandOnePieceCollarPanel(project, gate, pd) {
+    const applyBtn = document.getElementById("btnApplyCollar"), resetBtn = document.getElementById("btnResetCollar");
+    const m = bandOnePieceMeasure(project), stale = collarStale(project);
+    syncCollarPresetLabel();
+    if (applyBtn) applyBtn.disabled = !gate || !pd.ok;
+    if (resetBtn) resetBtn.disabled = !(project.working.collarDraft);
+    if (!gate) setCollarNote("소매 완료 후 카라를 편집할 수 있습니다");
+    else if (!pd.ok) setCollarNote(collarSelectionStr(pd.reason) + (m ? " · 현재 카라 형상은 그대로 유지" : ""));
+    else if (m && stale) setCollarNote("몸판 변경됨 · 밴드+위 칼라 다시 적용 필요 · 세션 전용");
+    else if (m) setCollarNote(bandOnePieceSummary(m));
+    else setCollarNote("밴드 윗선을 경계로 위 칼라를 한 장으로 이어 제도합니다 · 세션 전용");
+    syncCollarBodyModeUI(project);
+    updateCollarCheckpointUI(project);
+    updateCollarDraftSummary(project);
+  }
   function updateWingCollarPanel(project, gate, pd) {
     const applyBtn = document.getElementById("btnApplyCollar"), resetBtn = document.getElementById("btnResetCollar");
     const m = wingMeasure(project), stale = collarStale(project);
@@ -1296,6 +1324,7 @@
     if (isOnePieceCollar(project)) { updateOnePieceCollarPanel(project, gate, pd); return; }
     if (isOpenCollar(project)) { updateOpenCollarPanel(project, gate, pd); return; }
     if (isWingCollar(project)) { updateWingCollarPanel(project, gate, pd); return; }
+    if (isBandOnePieceCollar(project)) { updateBandOnePieceCollarPanel(project, gate, pd); return; }
     if (isStandaloneCollar(project)) { updateStandaloneCollarPanel(project, gate, pd); return; }
     if (c.has && c.bandWidthCm != null) setIf("inpCollarStandHeight", c.bandWidthCm);
     else if (pd.ok) setIf("inpCollarStandHeight", pd.stand.bandWidthCm);
@@ -1504,8 +1533,10 @@
       "no-stand": "스탠드 적용 필요", "no-standalone": "스탠드 칼라 적용 필요", "no-body": "본체 적용 필요", "body-invalid": "본체 편집 무효 · 복구 필요", "manual-line-missing": "관리형 본체 선 없음",
       "attach-length-mismatch": "달림선 실측이 목둘레와 다름(길이 책임)", "break-line-missing": "몸판 앞 꺾임선 출처 없음",
       "no-tip": "칼라 끝 적용 필요", "tip-unmeasured": "칼라 끝 측정 불가", "tip-length-mismatch": "칼라 끝 수치가 형상과 다름", "tip-recompute": "칼라 끝 재계산 실패",
+      "no-joined": "밴드+위 칼라 적용 필요", "joined-recompute": "밴드+위 칼라 재계산 실패", "outer-back-mismatch": "외곽 뒤 구간이 뒤 목둘레와 다름", "front-width-mismatch": "앞 칼라 폭이 형상과 다름", "cb-height-mismatch": "CB 전체 높이가 밴드+위 칼라 폭과 다름",
       "seam-length-mismatch": "위칼라 이음선·밴드 길이 불일치", "gap-missing": "CB 제도 간격 없음", "extension-included": "앞 끝선 연장이 이음선에 포함됨", "unmeasured": "측정 불가", "no-project": "프로젝트 없음", "no-module": "" };
     if (m[reason] != null) return m[reason];
+    if (reason && reason.indexOf("joined-") === 0) return "밴드+위 칼라 형상 오류(" + reason.slice(7) + ")";
     if (reason && reason.indexOf("standalone-") === 0) return "스탠드 칼라 형상 오류(" + reason.slice(11) + ")";
     if (reason && reason.indexOf("stand-") === 0) return "스탠드 형상 오류(" + reason.slice(6) + ")";
     if (reason && reason.indexOf("body-") === 0) return "본체 형상 오류(" + reason.slice(5) + ")";
@@ -1524,6 +1555,10 @@
     else if (checkNote && cd && cd.type === "shirt-wing-collar") {
       const b = cd.measure || null, t = (cd.tip && cd.tip.measure) || null;
       checkNote.textContent = (b && t) ? "윙 칼라: 달림선 " + fmtL(b.lowerNeckSeamLenCm) + "·목둘레 " + fmtL(b.neckTargetCm) + "·꺾임선 " + fmtL(b.upperNeckSegmentLenCm) + "cm · 칼라 끝 밑변 " + fmtL(t.foldBaseLenCm) + "·앞변 " + fmtL(t.tipEdgeLenCm) + "·후퇴 " + fmtL(t.tipSetbackLenCm) + "cm" : "";
+    }
+    else if (checkNote && cd && cd.type === "shirt-band-one-piece") {
+      const m = (cd.joined && cd.joined.measure) || null;
+      checkNote.textContent = m ? "밴드+위 칼라 한 장: 달림선 " + fmtL(m.lowerNeckSeamLenCm) + "·목둘레 " + fmtL(m.neckTargetCm) + "·이음선 자리 " + fmtL(m.bandTopLenCm) + "cm · 외곽 뒤 " + fmtL(m.outerBackLenCm) + "(뒤 목둘레 " + fmtL(m.backNeckLenCm) + ")·앞 " + fmtL(m.outerFrontLenCm) + "·전체 " + fmtL(m.outerLenCm) + "cm · 앞 칼라 폭 " + fmtL(m.frontEdgeLenCm) + "·CB " + fmtL(m.cbHeightCm) + "cm" : "";
     }
     else if (checkNote && cd && cd.type === "shirt-open-collar") {
       const m = (cd.openCollar && cd.openCollar.measure) || null;

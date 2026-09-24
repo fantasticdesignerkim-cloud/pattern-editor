@@ -294,6 +294,19 @@ function _appendCollarWingTip(root, collarDraft, off, scale){
   root.appendChild(g);
 }
 
+// 밴드+위 칼라 한 장(교재 R, collarDraft.joined.geometry): 밴드 달림선·앞 끝선·위 칼라 외곽이 한 조각.
+//   outline = 실선, construction = 이음선 자리(밴드 윗선) 점선. 밴드/위 칼라 개별 조각을 따로 그리지 않는다.
+function _appendCollarBandOnePiece(root, collarDraft, off, scale){
+  const jn=collarDraft && collarDraft.joined;
+  if(!jn || !jn.geometry || !Array.isArray(jn.geometry.outline)) return;
+  const d=_partPathD(jn.geometry.outline); if(!d) return;
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-collar":"band-one-piece" });
+  g.appendChild(E("path",{ d, class:"design-collar-onepiece", fill:"none" }));
+  const jd=_partPathD(jn.geometry.construction||[]);
+  if(jd) g.appendChild(E("path",{ d:jd, class:"design-collar-fold", fill:"none" }));
+  root.appendChild(g);
+}
+
 // 카라 제도 보조수치 오버레이(표시 전용): collarAnnotation 표시 모델(카라 로컬 cm)을 카라 offset 동승으로 그린다.
 //   보조선=가는 점선, 치수선=양끝 tick + 라벨. 선 굵기는 px 고정(줌 무관). 형상·hash 무관.
 function _appendCollarAnnotation(root, model, off, scale){
@@ -434,7 +447,7 @@ function render(){
       svg.appendChild(pRoot);
     }
     // 카라 스탠드 파생(있을 때만): 별도 조각(L.collar offset). 몸판 hash 변경 시 standGeometry=null 로 숨김.
-    if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body || dp.working.collarDraft.onePiece || dp.working.collarDraft.openCollar || dp.working.collarDraft.tip || dp.working.collarDraft.standalone)) {
+    if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body || dp.working.collarDraft.onePiece || dp.working.collarDraft.openCollar || dp.working.collarDraft.tip || dp.working.collarDraft.joined || dp.working.collarDraft.standalone)) {
       const cOff = L.collar || { dx: 0, dy: 0 };
       const cRoot = E("g"); cRoot.setAttribute("data-design-root", "collar");
       _appendCollarStand(cRoot, dp.working.collarDraft, cOff, scale);
@@ -443,6 +456,7 @@ function render(){
       _appendCollarOnePiece(cRoot, dp.working.collarDraft, cOff, scale);
       _appendCollarOpen(cRoot, dp.working.collarDraft, cOff, scale);
       _appendCollarWingTip(cRoot, dp.working.collarDraft, cOff, scale);
+      _appendCollarBandOnePiece(cRoot, dp.working.collarDraft, cOff, scale);
       // 제도 보조수치(카라 탭·토글 ON·유효 모델일 때만, 매 렌더 새 그룹 — 중복 누적 없음).
       if (typeof window.collarAnnotationForRender === "function") _appendCollarAnnotation(cRoot, window.collarAnnotationForRender(), cOff, scale);
       // 관리형 collar-body 선(무효 시 빨강 점선) + 편집 overlay(카라 offset transform 동승).

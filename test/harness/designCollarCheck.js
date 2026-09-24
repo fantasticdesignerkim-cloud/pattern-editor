@@ -412,5 +412,80 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   });
 }
 
+// 13. 교재 R(P.68 하단) 밴드+위 칼라 **한 장** — 밴드 윗선을 경계로 위 칼라가 이어진다.
+//     M·N·O·P·Q 는 이 생성기와 무관하게 동일해야 한다.
+{
+  const B = bodice(8.6087, 12.3874, 1.75), BACK = 8.6087, NECK = 8.6087 + 12.3874;
+  const R_STAND = { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 };
+  const R_UPPER = { upperWidthCm: 3.5, frontWidthCm: 6.5, outerBowCm: 0.5 };
+
+  ok(typeof C.computeBandOnePiece === "function" && J(C.BAND_ONE_PIECE_METHOD) === J({ page: 68, bandMethodPage: 148, joined: true,
+    outerBackFrom: "back-neck", smoothing: "tangent-continuous-cubic", handleFraction: 1 / 3 }), "13: R API·제도법 메타(한 장·외곽 뒤 = 뒤 목둘레)");
+
+  const r = C.computeBandOnePiece(B, R_STAND, R_UPPER);
+  ok(r.ok && C.validateClosedOutline(r.geometry.outline).ok, "13: R 폐곡선 한 조각");
+  const st = C.computeStand(B, R_STAND);
+  // ① 밴드 골격은 M 과 같은 P.148 제도 — 달림선·앞 끝선이 그대로 온다
+  const attachR = r.geometry.outline.filter(s => s.part === "neck-seam");
+  const attachDenseR = attachR.reduce((t, s) => t + denseLen(s), 0);
+  ok(Math.abs(r.measure.lowerNeckSeamLenCm - NECK) < 1e-6 && Math.abs(attachDenseR - NECK) < 1e-3, "13: 달림선 실측 = ×+⊘(독립 측정 재검산)");
+  ok(J(attachR.map(s => [s.kind, s.from, s.to])) === J(st.standGeometry.outline.filter(s => s.part === "neck-seam").map(s => [s.kind, s.from, s.to])),
+    "13: 달림선은 P.148 밴드(M 골격)와 동일 — 한 장이라고 다시 긋지 않는다");
+  // ② 이음선 자리(밴드 윗선)는 **구성선**으로만 남는다(외곽선이 아니다)
+  ok(r.geometry.outline.every(s => s.part !== "top" && s.part !== "band-top"), "13: 밴드 윗선은 outline 에 없다(한 장이므로 잘리지 않음)");
+  ok(r.geometry.construction.length > 0 && r.geometry.construction.every(s => s.part === "band-top")
+    && Math.abs(r.measure.bandTopLenCm - st.upperNeckSegmentLenCm) < 1e-12, "13: 이음선 자리 = 밴드 윗선 구성선·길이 보고");
+  // ③ 위 칼라: CB 수직 3.5 / 외곽 뒤 수평 = 뒤 목둘레 × / 앞 칼라 폭 = Ⓒ 에서 수직 6.5
+  const A = r.anchors;
+  ok(Math.abs(A.outerCb.x - A.bandTopCb.x) < 1e-12 && Math.abs((A.bandTopCb.y - A.outerCb.y) - R_UPPER.upperWidthCm) < 1e-12, "13: 위 칼라 CB 는 수직 3.5");
+  ok(Math.abs(A.shoulder.y - A.outerCb.y) < 1e-12 && Math.abs((A.shoulder.x - A.outerCb.x) - BACK) < 1e-12
+    && Math.abs(r.measure.outerBackLenCm - BACK) < 1e-6, "13: 외곽 뒤 구간은 수평이고 길이 = 뒤 목둘레 ×");
+  ok(Math.abs(A.frontTop.x - A.bandTopCf.x) < 1e-12 && Math.abs((A.bandTopCf.y - A.frontTop.y) - R_UPPER.frontWidthCm) < 1e-12
+    && Math.abs(r.measure.frontEdgeLenCm - R_UPPER.frontWidthCm) < 1e-9, "13: 앞 칼라 폭은 Ⓒ 에서 수직 6.5");
+  // CB 전체 높이는 ⑭ 로 보정된 밴드 CB 점에서 재므로 보정 허용오차(1e-4)까지 일치한다.
+  ok(Math.abs(r.measure.cbHeightCm - (R_STAND.bandWidthCm + R_UPPER.upperWidthCm)) < 1e-4, "13: CB 전체 = 밴드 3 + 위 칼라 3.5");
+  // ④ 외곽 앞 구간: 현에서 0.5 처진 완만한 곡선(시작 접선 = 뒤 수평 구간과 나란함)
+  const outer = r.geometry.outline.filter(s => s.part === "outer");
+  ok(outer.length === 2 && outer.every(s => s.kind === "cubic"), "13: 외곽 앞 구간 = 접선 연속 cubic 2개");
+  const outerDense = outer.reduce((t, s) => t + denseLen(s), 0);
+  ok(Math.abs(outerDense - r.measure.outerFrontLenCm) < 1e-3 && outerDense > Math.hypot(A.frontTop.x - A.shoulder.x, A.frontTop.y - A.shoulder.y),
+    "13: 외곽 앞 실측 = 보고값이고 현보다 길다");
+  ok(Math.abs(r.measure.outerLenCm - (r.measure.outerBackLenCm + r.measure.outerFrontLenCm)) < 1e-9, "13: 칼라 외곽 전체 = 뒤 + 앞");
+  // 현 중점에서 밴드 쪽 법선으로 0.5 처진 점을 실제로 지난다
+  {
+    const S = A.shoulder, F = A.frontTop;
+    const vx = F.x - S.x, vy = F.y - S.y, vl = Math.hypot(vx, vy);
+    let dn = { x: -vy / vl, y: vx / vl }; if (!(dn.y > 0)) dn = { x: vy / vl, y: -vx / vl };
+    const M = { x: (S.x + F.x) / 2 + dn.x * R_UPPER.outerBowCm, y: (S.y + F.y) / 2 + dn.y * R_UPPER.outerBowCm };
+    const join = outer[0].to;   // outline 은 앞 위 끝 → 어깨 방향이라 이음점이 첫 cubic 의 끝이다
+    ok(Math.abs(join.x - M.x) < 1e-9 && Math.abs(join.y - M.y) < 1e-9, "13: 두 cubic 의 이음점 = 현에서 0.5 처진 통과점");
+    ok(Math.abs(outer[1].to.x - S.x) < 1e-12 && Math.abs(outer[1].to.y - S.y) < 1e-12
+      && Math.abs(outer[1].c2.y - outer[1].to.y) < 1e-12, "13: 어깨 쪽 끝 접선은 뒤 수평 구간과 나란함(구현 관례)");
+  }
+  // ★ 처짐 0 이어도 직선이 되지 않는다 — 어깨에서 수평 접선으로 출발하는 구현 관례 때문(M 의 안내선과 동일).
+  //   처짐은 그 곡선을 더 처지게 하는 값이므로 길이는 단조 증가한다.
+  {
+    const chord = Math.hypot(A.frontTop.x - A.shoulder.x, A.frontTop.y - A.shoulder.y);
+    const lenAt = (bow) => C.computeBandOnePiece(B, R_STAND, Object.assign({}, R_UPPER, { outerBowCm: bow })).measure.outerFrontLenCm;
+    const l0 = lenAt(0), l5 = lenAt(0.5), l10 = lenAt(1);
+    ok(l0 > chord && l5 > l0 && l10 > l5, "13: 처짐 0 도 접선 연속 곡선(현보다 김)·처짐 증가 시 단조 증가");
+    const flatJoin = C.computeBandOnePiece(B, R_STAND, Object.assign({}, R_UPPER, { outerBowCm: 0 })).geometry.outline.filter(s => s.part === "outer")[0].to;
+    ok(Math.abs(flatJoin.x - (A.shoulder.x + A.frontTop.x) / 2) < 1e-9 && Math.abs(flatJoin.y - (A.shoulder.y + A.frontTop.y) / 2) < 1e-9,
+      "13: 처짐 0 → 통과점이 정확히 현의 중점");
+  }
+  // 실패 계약(원자적 — geometry 없음)
+  ok(C.computeBandOnePiece(B, R_STAND, Object.assign({}, R_UPPER, { upperWidthCm: 0 })).reason === "invalid-upper-width"
+    && C.computeBandOnePiece(B, R_STAND, Object.assign({}, R_UPPER, { frontWidthCm: -1 })).reason === "invalid-front-width"
+    && C.computeBandOnePiece(B, R_STAND, Object.assign({}, R_UPPER, { outerBowCm: -0.1 })).reason === "invalid-outer-bow"
+    && !("geometry" in C.computeBandOnePiece(B, R_STAND, Object.assign({}, R_UPPER, { upperWidthCm: 0 }))), "13: 위 칼라 값 범위 밖 거부(형상 없음)");
+  ok(C.computeBandOnePiece(B, { bandWidthCm: 3, frontRiseCm: 99, frontEndCm: 0.5 }, R_UPPER).ok === false, "13: 밴드 실패는 그대로 전파");
+  // 결정론·입력 불변
+  const snapR = J(B), snapU = J(R_UPPER);
+  ok(J(C.computeBandOnePiece(B, R_STAND, R_UPPER)) === J(r) && J(B) === snapR && J(R_UPPER) === snapU, "13: 결정론·입력 비변형");
+  // M·N·P·Q 불변(같은 밴드 제도를 공유하지만 결과를 바꾸지 않는다)
+  ["M", "N", "P"].forEach(k => ok(J(C.computeStand(B, BAND[k])) === J(C.computeStand(B, BAND[k], {})), "13: " + k + " 밴드 불변"));
+  ok(C.computeStand(B, { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 }, { horizontalTopLine: true }).horizontalTopLine === true, "13: Q 수평 꺾임선 경로 불변");
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

@@ -278,5 +278,60 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   BODICE = bodice("BH1");
 }
 
+// 11. 밴드+위 칼라 한 장(교재 R): 달림선 = 목둘레 · 외곽 뒤 = 뒤 목둘레 × · 앞 칼라 폭 · CB 전체 높이
+{
+  BODICE = bodice("BH1"); BODICE_STALE = false; SLEEVE = { id: "s" }; SLEEVE_CHANGED = false; SLEEVE_INVAL = false;
+  const R_STAND = { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 };
+  const R_UPPER = { upperWidthCm: 3.5, frontWidthCm: 6.5, outerBowCm: 0.5 };
+  const mk = () => {
+    const b = bodice("BH1"), jn = DC.computeBandOnePiece(b, R_STAND, R_UPPER);
+    return { sourceBodiceHash: "BH1", type: "shirt-band-one-piece", baseMethod: "bunka-band-collar-R-v1", presetId: "bunka-band-collar-R",
+      parameters: { stand: Object.assign({}, R_STAND), upper: Object.assign({}, R_UPPER) },
+      joined: { geometry: jn.geometry, measure: jn.measure, anchors: jn.anchors } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  PROJECT = proj(mk());
+  ok(CC.check(PROJECT).ok, "11: R 초안이 완료 게이트 통과");
+  const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.type === "shirt-band-one-piece" && Object.isFrozen(r.result.joined)
+    && JSON.stringify(r.result.joined.parameters) === JSON.stringify({ stand: R_STAND, upper: R_UPPER }), "11: R 완료 스냅샷(한 조각·밴드+위 칼라 파라미터)");
+  ok(!("stand" in r.result) && !("body" in r.result) && !("tip" in r.result), "11: 2피스·윙 섹션을 만들지 않는다");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "11: 완료 직후 미변경");
+  const again = CC.complete(PROJECT);
+  ok(again.ok && again.idempotent === true && again.result === r.result, "11: 재완료 idempotent(같은 참조)");
+
+  // 길이 책임 게이트
+  const badAttach = mk(); badAttach.joined.measure.lowerNeckSeamLenCm += 0.5;
+  ok(CC.check(proj(badAttach)).fails.indexOf("attach-length-mismatch") >= 0, "11: 달림선 실측 ≠ 목둘레 → 완료 차단");
+  const badBack = mk(); badBack.joined.measure.outerBackLenCm += 0.5;
+  ok(CC.check(proj(badBack)).fails.indexOf("outer-back-mismatch") >= 0, "11: 외곽 뒤 구간 ≠ 뒤 목둘레 × → 차단");
+  const badFront = mk(); badFront.joined.measure.frontEdgeLenCm += 0.5;
+  ok(CC.check(proj(badFront)).fails.indexOf("front-width-mismatch") >= 0, "11: 앞 칼라 폭 불일치 차단");
+  const badCb = mk(); badCb.joined.measure.cbHeightCm += 0.5;
+  ok(CC.check(proj(badCb)).fails.indexOf("cb-height-mismatch") >= 0, "11: CB 전체 높이 ≠ 밴드+위 칼라 폭 → 차단");
+  const noJoined = mk(); delete noJoined.joined;
+  ok(CC.check(proj(noJoined)).fails.indexOf("no-joined") >= 0, "11: 한 조각 없음 → 차단");
+  const badParams = mk(); badParams.parameters.upper.upperWidthCm = 0;
+  ok(CC.check(proj(badParams)).fails.indexOf("joined-recompute") >= 0, "11: 재계산 불가한 위 칼라 → 차단");
+
+  // 형상 identity: 위 칼라 폭만 달라도 hash 분리
+  const alt = mk(); alt.parameters.upper.upperWidthCm = 4;
+  const altGeom = DC.computeBandOnePiece(bodice("BH1"), R_STAND, alt.parameters.upper);
+  alt.joined.geometry = altGeom.geometry; alt.joined.measure = altGeom.measure;
+  const rAlt = CC.complete(proj(alt));
+  ok(rAlt.ok && rAlt.result.hash !== r.result.hash, "11: 위 칼라 폭이 다르면 hash 분리");
+
+  // 종류 분리: 2피스 완료본 + R 초안 → 변경됨
+  PROJECT.working.collarDraft = makeDraft("BH1");
+  const twoPiece = CC.complete(PROJECT);
+  PROJECT.working.collarDraft = mk();
+  ok(twoPiece.ok && CC.isCurrentCollarChanged(PROJECT) === true, "11: 2피스 완료본 + R 초안 → 변경됨(종류 혼동 없음)");
+  // 몸판 hash 변경 → 무효
+  PROJECT.working.collarDraft = mk(); CC.complete(PROJECT);
+  BODICE = bodice("BH2");
+  ok(CC.invalidatedByBodice(PROJECT) === true, "11: 몸판 hash 변경 → R 무효");
+  BODICE = bodice("BH1");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

@@ -45,6 +45,9 @@
   // family 3 안의 윙 칼라(Q, P.68): 밴드(수평 꺾임선) + 앞 위 끝 칼라 끝. 위 칼라(본체)가 없다.
   function isWing(cd) { return !!(cd && cd.type === "shirt-wing-collar"); }
   var WING_STAND_OPTIONS = { horizontalTopLine: true };   // type 계약 — collarPresets.WING_STAND_OPTIONS 와 같은 값
+  // family 3 안의 밴드+위 칼라 한 장(R, P.68): 밴드 윗선을 경계로 위 칼라가 한 조각으로 이어진다.
+  //   2피스(stand+body)와 달리 조각이 하나뿐이라 joined 한 섹션만 갖는다.
+  function isBandOnePiece(cd) { return !!(cd && cd.type === "shirt-band-one-piece"); }
   function isStandalone(cd) { return !!(cd && cd.type === "stand-collar"); }
 
   // ── 검사 ──
@@ -124,6 +127,29 @@
         || Math.abs(tm.tipSetbackLenCm - cd.parameters.tip.tipSetbackCm) > 0.01) fails.push("tip-length-mismatch");
       return { ok: fails.length === 0, fails: fails, _bodice: bodice, _wingStand: wStand, _wingTip: wTip, _lengths: null, _stand: null };
     }
+    // ── 밴드+위 칼라 한 장(family 3, R): 한 조각의 달림선·외곽·CB 를 실제 형상에서 검증 ──
+    if (isBandOnePiece(cd)) {
+      var jn = cd.joined;
+      if (!(jn && jn.geometry)) fails.push("no-joined");
+      else { var vj = DC.validateClosedOutline(jn.geometry.outline); if (!vj.ok) fails.push("joined-" + vj.reason); }
+      var jRe = null;
+      if (bodice && cd.parameters && cd.parameters.stand && cd.parameters.upper) {
+        jRe = DC.computeBandOnePiece(bodice, cd.parameters.stand, cd.parameters.upper);
+        if (!jRe.ok) fails.push("joined-recompute");
+      } else fails.push("no-collar-params");
+      var jm = jn && jn.measure;
+      if (!(jm && num(jm.lowerNeckSeamLenCm) && num(jm.neckTargetCm) && num(jm.outerBackLenCm)
+        && num(jm.backNeckLenCm) && num(jm.frontEdgeLenCm) && num(jm.cbHeightCm))) fails.push("unmeasured");
+      else {
+        // ★ 밴드 달림선 실측 = 목둘레(×+⊘) — P.148 ⑭ 의 길이 책임(M~Q 와 동일)
+        if (Math.abs(jm.lowerNeckSeamLenCm - jm.neckTargetCm) > 0.01) fails.push("attach-length-mismatch");
+        // ★ 외곽 뒤 구간 = 뒤 목둘레 ×(도면 표기), 앞 칼라 폭·CB 전체 높이도 실제 형상에서 일치해야 한다
+        if (Math.abs(jm.outerBackLenCm - jm.backNeckLenCm) > 0.01) fails.push("outer-back-mismatch");
+        if (Math.abs(jm.frontEdgeLenCm - cd.parameters.upper.frontWidthCm) > 0.01) fails.push("front-width-mismatch");
+        if (Math.abs(jm.cbHeightCm - (cd.parameters.stand.bandWidthCm + cd.parameters.upper.upperWidthCm)) > 0.01) fails.push("cb-height-mismatch");
+      }
+      return { ok: fails.length === 0, fails: fails, _bodice: bodice, _joined: jRe, _lengths: null, _stand: null };
+    }
     // ── 단독 스탠드 칼라 A~F(family 1): 밴드+본체 게이트와 분리한다. ──
     if (isStandalone(cd)) {
       var sa = cd.standalone;
@@ -192,6 +218,14 @@
         sbh: res.sourceBodiceHash, nk: res.necklineLengths,
         sp: res.stand.parameters, sg: canonGeom(res.stand.geometry), sl: res.stand.lengths,
         tp: res.tip.parameters, tg: canonGeom(res.tip.geometry), tm: res.tip.measures,
+        sym: res.symmetry
+      });
+    }
+    if (res.type === "shirt-band-one-piece") {
+      return JSON.stringify({
+        sbh: res.sourceBodiceHash, nk: res.necklineLengths,
+        jp: res.joined.parameters, jg: canonGeom(res.joined.geometry), jc: canonSegs((res.joined.geometry || {}).construction),
+        jm: res.joined.measures,
         sym: res.symmetry
       });
     }
@@ -276,6 +310,24 @@
       proj.working.collarResult = wingRes;
       return { ok: true, result: wingRes, check: c };
     }
+    if (isBandOnePiece(cd)) {
+      var joinedRes = {
+        schemaVersion: 1, type: "shirt-band-one-piece",
+        baseMethod: cd.baseMethod || null, presetId: cd.presetId || null,   // 출처 메타 — signatureOf 미포함
+        sourceBodiceHash: cd.sourceBodiceHash,
+        sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+        necklineLengths: clone(bodice.necklineLengths),
+        joined: { parameters: { stand: clone(cd.parameters.stand), upper: clone(cd.parameters.upper) },
+          geometry: clone(cd.joined.geometry), measures: clone(cd.joined.measure || {}) },
+        symmetry: "half-cb-fold"
+      };
+      joinedRes.hash = hashStr(signatureOf(joinedRes));
+      var prevJoined = proj.working.collarResult;
+      if (prevJoined && prevJoined.hash === joinedRes.hash) return { ok: true, result: prevJoined, idempotent: true, check: c };
+      joinedRes.completedAt = Date.now(); deepFreeze(joinedRes);
+      proj.working.collarResult = joinedRes;
+      return { ok: true, result: joinedRes, check: c };
+    }
     if (isStandalone(cd)) {
       var standAloneRes = {
         schemaVersion: 1, type: "stand-collar",
@@ -358,6 +410,16 @@
         symmetry: "half-cb-fold" };
       return hashStr(signatureOf(curWing)) !== res.hash;
     }
+    if (isBandOnePiece(cd)) {
+      if (!cd.joined || !cd.joined.geometry || !cd.parameters || !cd.parameters.stand || !cd.parameters.upper) return true;
+      if (res.type !== "shirt-band-one-piece") return true;
+      var jRecalc = DC.computeBandOnePiece(bodice, cd.parameters.stand, cd.parameters.upper); if (!jRecalc.ok) return true;
+      var curJoined = { type: "shirt-band-one-piece", sourceBodiceHash: cd.sourceBodiceHash, necklineLengths: bodice.necklineLengths,
+        joined: { parameters: { stand: cd.parameters.stand, upper: cd.parameters.upper },
+          geometry: cd.joined.geometry, measures: cd.joined.measure || {} },
+        symmetry: "half-cb-fold" };
+      return hashStr(signatureOf(curJoined)) !== res.hash;
+    }
     if (isStandalone(cd)) {
       if (!cd.standalone || !cd.standalone.geometry || !cd.parameters || !cd.parameters.standalone) return true;
       if (res.type !== "stand-collar") return true;
@@ -367,7 +429,7 @@
         symmetry: "half-cb-fold" };
       return hashStr(signatureOf(curStandalone)) !== res.hash;
     }
-    if (res.type === "shirt-one-piece" || res.type === "shirt-open-collar" || res.type === "shirt-wing-collar" || res.type === "stand-collar") return true;   // 2피스 draft vs 다른 종류 완료본
+    if (res.type === "shirt-one-piece" || res.type === "shirt-open-collar" || res.type === "shirt-wing-collar" || res.type === "shirt-band-one-piece" || res.type === "stand-collar") return true;   // 2피스 draft vs 다른 종류 완료본
     if (!cd.standGeometry || !cd.body || !cd.body.geometry) return true;               // 카라 형상 없음/숨김
     if (cd.body.mode === "manual" && cd.body.invalid) return true;                     // 무효 편집
     if (!cd.parameters || !cd.parameters.stand) return true;
