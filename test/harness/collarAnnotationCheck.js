@@ -582,5 +582,39 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
     && CA.recipes().indexOf("bunka-band-collar-P148-v1") >= 0, "18: 기존 recipe 등록 유지");
 }
 
+// 19. 프릴 칼라 a·b·c(P.72–73): 개더 준비 길이와 절개·전개 보조수치를 구분한다
+{
+  const ln = (a, b, edge) => Object.assign({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }, edge ? { edge } : {});
+  const cub = (a, b, c, d, edge) => Object.assign({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } }, edge ? { edge } : {});
+  const FB = { hash: "BFR", sourceVersion: 1, necklineLengths: { back: 8, front: 11, half: 19, finished: 38 },
+    front: { outline: [ln([40, 2], [40, 40], "center"), cub([40, 2], [36, 2], [33, -1], [30, -3], "neckline"), ln([30, -3], [20, 1], "shoulder")], construction: [] } };
+  const P = {
+    a: { styleCode: 0, collarWidthCm: 8, gatherRatio: 2, vDropCm: 0, vHollowCm: 0, spreadCount: 0, spreadEachCm: 0 },
+    b: { styleCode: 1, collarWidthCm: 8, gatherRatio: 1, vDropCm: 0, vHollowCm: 0, spreadCount: 6, spreadEachCm: 3 },
+    c: { styleCode: 2, collarWidthCm: 8, gatherRatio: 1, vDropCm: 22, vHollowCm: 1, spreadCount: 10, spreadEachCm: 3 }
+  };
+  const make = (k) => { const r = DC.computeFrillCollar(FB, P[k]); return CA.buildModel({ sourceBodiceHash: "BFR", type: "frill-collar",
+    baseMethod: "bunka-frill-collar-" + k + "-v1", parameters: { frill: P[k] },
+    frill: { geometry: r.geometry, measure: r.measure, anchors: r.anchors } }, FB); };
+  const a = make("a"), b = make("b"), c = make("c");
+  const idx = (m) => { const o = { inputs: {}, results: {}, dims: {} }; m.inputs.forEach(x => o.inputs[x.key] = x.value);
+    m.results.forEach(x => o.results[x.key] = x); m.dims.forEach(x => o.dims[x.id] = x); return o; };
+  const ia = idx(a), ib = idx(b), ic = idx(c);
+  ok(["a", "b", "c"].every(k => CA.recipes().indexOf("bunka-frill-collar-" + k + "-v1") >= 0), "19: a·b·c recipe 등록");
+  ok(ia.inputs.collarWidthCm === 8 && ia.inputs.gatherRatio === 2 && ib.inputs.spreadCount === 6 && ic.inputs.vDropCm === 22,
+    "19: 제도 입력값은 variant 파라미터에서 표시");
+  ok(a.inputs.find(x => x.key === "gatherRatio").unit === "배"
+    && b.inputs.find(x => x.key === "spreadCount").unit === "개"
+    && b.results.find(x => x.key === "flareAngle").unit === "°",
+    "19: 개더 배율·절개 수·전개각은 cm가 아닌 고유 단위");
+  ok(ia.results.cutAttach.value === 38 && ia.results.finishedAttach.value === 19 && ia.results.gatherAmount.value === 19,
+    "19: a 재단 길이·완성 달림선·개더 분량 분리");
+  ok(ib.results.spreadTotal.value === 18 && ic.results.spreadTotal.value === 30 && ic.results.neckTarget.value > ib.results.neckTarget.value,
+    "19: b·c 전개량과 V 목둘레 결과 분리");
+  ok(ia.dims["collar-width"].text === 8 && ib.dims["prepared-attach"] && /절개·전개/.test(b.note) && /V 목둘레/.test(c.note),
+    "19: 폭·달림변 치수선과 방식별 안내");
+  ok(CA.buildModel({ type: "frill-collar", baseMethod: "bunka-frill-collar-a-v1" }, FB) === null, "19: 형상 없으면 표시 모델 없음");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

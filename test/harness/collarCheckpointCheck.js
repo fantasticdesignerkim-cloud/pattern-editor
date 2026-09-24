@@ -670,5 +670,35 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   BODICE = bodice("BH1");
 }
 
+// 16. 프릴 칼라 a·b·c: 준비 길이와 완성 달림선, 전개량을 별도 게이트로 잠근다
+{
+  const ln = (a, b, edge) => Object.assign({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }, edge ? { edge } : {});
+  const cub = (a, b, c, d, edge) => Object.assign({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } }, edge ? { edge } : {});
+  const frBodice = (hash) => ({ hash, sourceVersion: 1, necklineLengths: { back: 8, front: 11, half: 19, finished: 38 },
+    front: { outline: [ln([40, 2], [40, 40], "center"), cub([40, 2], [36, 2], [33, -1], [30, -3], "neckline"), ln([30, -3], [20, 1], "shoulder")], construction: [] } });
+  BODICE = frBodice("BFR");
+  const P = {
+    a: { styleCode: 0, collarWidthCm: 8, gatherRatio: 2, vDropCm: 0, vHollowCm: 0, spreadCount: 0, spreadEachCm: 0 },
+    b: { styleCode: 1, collarWidthCm: 8, gatherRatio: 1, vDropCm: 0, vHollowCm: 0, spreadCount: 6, spreadEachCm: 3 },
+    c: { styleCode: 2, collarWidthCm: 8, gatherRatio: 1, vDropCm: 22, vHollowCm: 1, spreadCount: 10, spreadEachCm: 3 }
+  };
+  const mk = (k) => { const r = DC.computeFrillCollar(BODICE, P[k]); return { sourceBodiceHash: "BFR", type: "frill-collar",
+    baseMethod: "bunka-frill-collar-" + k + "-v1", presetId: "bunka-frill-collar-" + k,
+    parameters: { frill: Object.assign({}, P[k]) }, frill: { geometry: r.geometry, measure: r.measure, anchors: r.anchors } }; };
+  const pj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  const pa = pj(mk("a")), pb = pj(mk("b")), pc = pj(mk("c"));
+  ok(CC.check(pa).ok && CC.check(pb).ok && CC.check(pc).ok, "16: a·b·c 완료 게이트 통과");
+  const ra = CC.complete(pa), rb = CC.complete(pb), rc = CC.complete(pc);
+  ok(ra.ok && rb.ok && rc.ok && ra.result.hash !== rb.result.hash && rb.result.hash !== rc.result.hash && Object.isFrozen(rc.result.frill),
+    "16: a·b·c 완료본 분리·동결");
+  const badGather = mk("a"); badGather.frill.measure.cutAttachLenCm -= 1;
+  ok(CC.check(pj(badGather)).fails.indexOf("gather-length-mismatch") >= 0, "16: a 개더 준비 길이 불일치 차단");
+  const badSpread = mk("b"); badSpread.frill.measure.spreadTotalCm -= 1;
+  ok(CC.check(pj(badSpread)).fails.indexOf("spread-mismatch") >= 0, "16: b 전개량 불일치 차단");
+  const noSlash = mk("c"); noSlash.frill.geometry = Object.assign({}, noSlash.frill.geometry, { construction: [] });
+  ok(CC.check(pj(noSlash)).fails.indexOf("slash-lines-missing") >= 0, "16: c 절개선 누락 차단");
+  BODICE = bodice("BH1");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

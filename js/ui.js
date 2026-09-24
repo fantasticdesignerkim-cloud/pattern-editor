@@ -982,7 +982,7 @@
   }
   // ── 카라 종류(생성 구조) ── family 3 M = 밴드+위칼라 2피스 / family 2 G = 한 장.
   //   M 전용 '밴드·본체' 입력·버튼·문구를 한 장 칼라에 재사용하지 않는다(행은 data-collar-kind 로 분리).
-  const COLLAR_KIND_BY_TYPE = { "shirt-one-piece": "one-piece", "shirt-open-collar": "open", "shirt-wing-collar": "wing", "shirt-band-one-piece": "band-one-piece", "flat-collar": "flat", "flat-collar-overlap": "flat", "sailor-collar": "sailor", "bow-collar": "bow", "stand-collar": "standalone", "shirt-two-piece": "two-piece" };
+  const COLLAR_KIND_BY_TYPE = { "shirt-one-piece": "one-piece", "shirt-open-collar": "open", "shirt-wing-collar": "wing", "shirt-band-one-piece": "band-one-piece", "flat-collar": "flat", "flat-collar-overlap": "flat", "sailor-collar": "sailor", "bow-collar": "bow", "frill-collar": "frill", "stand-collar": "standalone", "shirt-two-piece": "two-piece" };
   function draftCollarKind(project) {
     const cd = project && project.working && project.working.collarDraft;
     return cd ? (COLLAR_KIND_BY_TYPE[cd.type] || "two-piece") : null;
@@ -1004,6 +1004,7 @@
   function isFlatCollar(project) { return activeCollarKind(project) === "flat"; }
   function isSailorCollar(project) { return activeCollarKind(project) === "sailor"; }
   function isBowCollar(project) { return activeCollarKind(project) === "bow"; }
+  function isFrillCollar(project) { return activeCollarKind(project) === "frill"; }
   function isTwoPieceCollar(project) { return activeCollarKind(project) === "two-piece"; }
   function syncCollarKindRows(project) {
     const kind = activeCollarKind(project);
@@ -1027,7 +1028,7 @@
     if (cd && collarStale(project)) {
       // 몸판 hash 변경 → 관리형 선 제거·manual 폐기·스탠드/본체 숨김(소매 stale 과 분리 — 소매는 탭 게이트만).
       if (cd.body && cd.body.lineId) project.working.patternLines = (project.working.patternLines || []).filter(l => l.id !== cd.body.lineId);
-      cd.standGeometry = null; cd.body = null; cd.standalone = null; cd.tip = null; cd.joined = null; cd.flat = null; cd.sailor = null; cd.bow = null;   // 윙·밴드+위 칼라 한 장·플랫·세일러·보도 한 벌로 숨김
+      cd.standGeometry = null; cd.body = null; cd.standalone = null; cd.tip = null; cd.joined = null; cd.flat = null; cd.sailor = null; cd.bow = null; cd.frill = null;   // 파생 카라 형상을 한 벌로 숨김
     }
   }
   // ── 카라 종류·세부 제도 선택(collarPresets catalog + registry) ──
@@ -1327,6 +1328,32 @@
     updateCollarCheckpointUI(project);
     updateCollarDraftSummary(project);
   }
+  // 프릴 칼라(a·b·c): 교재 기본값 선택형. a는 개더 준비 길이, b·c는 절개·전개량을 별도로 표시한다.
+  function frillCollarMeasure(project) {
+    const cd = project && project.working && project.working.collarDraft;
+    return (cd && cd.type === "frill-collar" && cd.frill) ? (cd.frill.measure || null) : null;
+  }
+  function frillCollarSummary(m) {
+    if (m.styleCode === 0) return "완성 달림선 " + fmtL(m.finishedAttachLenCm) + "cm · 재단 달림변 " + fmtL(m.cutAttachLenCm) +
+      "cm(목둘레 ×" + fmtL(m.gatherRatio) + ") · 개더분 " + fmtL(m.cutAttachLenCm - m.finishedAttachLenCm) +
+      "cm · 폭 " + fmtL(m.collarWidthCm) + "cm · 세션 전용";
+    return (m.styleCode === 2 ? "V 목둘레 " : "몸판 목둘레 ") + fmtL(m.neckTargetCm) + "cm · 달림선 " + fmtL(m.cutAttachLenCm) +
+      "cm · 폭 " + fmtL(m.collarWidthCm) + "cm · 절개 " + m.spreadCount + "곳×" + fmtL(m.spreadEachCm) +
+      "cm(총 전개 " + fmtL(m.spreadTotalCm) + ") · 외곽 " + fmtL(m.outerLenCm) + "cm · 세션 전용";
+  }
+  function updateFrillCollarPanel(project, gate, pd) {
+    const applyBtn = document.getElementById("btnApplyCollar"), resetBtn = document.getElementById("btnResetCollar");
+    const m = frillCollarMeasure(project), stale = collarStale(project);
+    syncCollarPresetLabel();
+    if (applyBtn) applyBtn.disabled = !gate || !pd.ok;
+    if (resetBtn) resetBtn.disabled = !(project.working.collarDraft);
+    if (!gate) setCollarNote("소매 완료 후 카라를 편집할 수 있습니다");
+    else if (!pd.ok) setCollarNote(collarSelectionStr(pd.reason) + (m ? " · 현재 카라 형상은 그대로 유지" : ""));
+    else if (m && stale) setCollarNote("몸판 변경됨 · 프릴 칼라 다시 적용 필요 · 세션 전용");
+    else if (m) setCollarNote(frillCollarSummary(m));
+    else setCollarNote("개더형(a) 또는 목둘레 기준 절개·전개형(b·c)으로 제도합니다 · 세션 전용");
+    syncCollarBodyModeUI(project); updateCollarCheckpointUI(project); updateCollarDraftSummary(project);
+  }
   // 플랫 칼라(S): 수치 입력 없이 교재 기본값으로 적용한다(two-piece 행 숨김).
   function flatCollarMeasure(project) {
     const cd = project && project.working && project.working.collarDraft;
@@ -1434,6 +1461,7 @@
     if (isFlatCollar(project)) { updateFlatCollarPanel(project, gate, pd); return; }
     if (isSailorCollar(project)) { updateSailorCollarPanel(project, gate, pd); return; }
     if (isBowCollar(project)) { updateBowCollarPanel(project, gate, pd); return; }
+    if (isFrillCollar(project)) { updateFrillCollarPanel(project, gate, pd); return; }
     if (isStandaloneCollar(project)) { updateStandaloneCollarPanel(project, gate, pd); return; }
     if (c.has && c.bandWidthCm != null) setIf("inpCollarStandHeight", c.bandWidthCm);
     else if (pd.ok) setIf("inpCollarStandHeight", pd.stand.bandWidthCm);
@@ -1646,6 +1674,8 @@
       "attach-not-shorter": "달림선이 몸판 목둘레보다 짧지 않음", "shoulder-overlap-mismatch": "어깨 겹침이 형상과 다름",
       "no-sailor-collar": "세일러 칼라 적용 필요", "sailor-recompute": "세일러 칼라 재계산 실패",
       "no-bow-collar": "보 칼라 적용 필요", "bow-recompute": "보 칼라 재계산 실패",
+      "no-frill-collar": "프릴 칼라 적용 필요", "frill-recompute": "프릴 칼라 재계산 실패",
+      "gather-length-mismatch": "개더용 재단 길이가 목둘레 배율과 다름", "spread-mismatch": "플레어 전개량이 설정과 다름", "slash-lines-missing": "절개·전개 보조선 없음",
       "attach-end-mismatch": "칼라 달림 끝 위치가 형상과 다름", "ribbon-length-mismatch": "리본 길이가 형상과 다름",
       "total-length-mismatch": "칼라 전체 길이가 달림선+리본과 다름", "attach-end-mark-missing": "칼라 달림 끝 표시 없음",
       "back-outer-mismatch": "뒤 칼라 외곽이 형상과 다름", "shoulder-width-mismatch": "어깨 칼라 폭이 형상과 다름",
@@ -1658,6 +1688,7 @@
     if (m[reason] != null) return m[reason];
     if (reason && reason.indexOf("sailor-") === 0) return "세일러 칼라 형상 오류(" + reason.slice(7) + ")";
     if (reason && reason.indexOf("bow-") === 0) return "보 칼라 형상 오류(" + reason.slice(4) + ")";
+    if (reason && reason.indexOf("frill-") === 0) return "프릴 칼라 형상 오류(" + reason.slice(6) + ")";
     if (reason && reason.indexOf("flat-") === 0) return "플랫 칼라 형상 오류(" + reason.slice(5) + ")";
     if (reason && reason.indexOf("joined-") === 0) return "밴드+위 칼라 형상 오류(" + reason.slice(7) + ")";
     if (reason && reason.indexOf("standalone-") === 0) return "스탠드 칼라 형상 오류(" + reason.slice(11) + ")";
@@ -1688,6 +1719,11 @@
       const m = (cd.bow && cd.bow.measure) || null;
       const sym = collarDraftSymbol(cd);
       checkNote.textContent = m ? "보 칼라" + (sym ? " " + sym : "") + ": 달림선 " + fmtL(m.attachLenCm) + "·×+⊠ " + fmtL(m.neckTargetCm) + "cm(뒤목 " + fmtL(m.backNeckLenCm) + "+앞 달림 " + fmtL(m.frontAttachLenCm) + ") · 칼라 달림 끝 " + fmtL(m.attachEndFromCfCm) + "cm · 리본 " + fmtL(m.ribbonLenCm) + "·칼라 폭 " + fmtL(m.collarWidthLenCm) + "·전체 " + fmtL(m.totalLenCm) + "cm" : "";
+    }
+    else if (checkNote && cd && cd.type === "frill-collar") {
+      const m = (cd.frill && cd.frill.measure) || null;
+      const sym = collarDraftSymbol(cd);
+      checkNote.textContent = m ? "프릴 칼라" + (sym ? " " + sym : "") + ": " + frillCollarSummary(m).replace(" · 세션 전용", "") : "";
     }
     else if (checkNote && cd && cd.type === "flat-collar-overlap") {
       const m = (cd.flat && cd.flat.measure) || null;

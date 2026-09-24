@@ -477,6 +477,44 @@
       dims: dims, labels: labels, inputs: inputs, results: results };
   }
 
+  // ── 교재 a·b·c(P.72–73): 프릴 칼라 ──
+  // a는 개더 전 재단 길이와 완성 달림선을 구분하고, b·c는 절개 수·각 벌림·외곽 증가를 표시한다.
+  function frillRecipe(cd, bodice) {
+    var fp = (cd.parameters && cd.parameters.frill) || {};
+    var fr = cd.frill || null, fa = (fr && fr.anchors) || null, fm = (fr && fr.measure) || {};
+    var dims = [], labels = [];
+    if (fa) {
+      var cbA = pt(fa.cbAttach), cbO = pt(fa.cbOuter), frA = pt(fa.frontAttach), frO = pt(fa.frontOuter);
+      dim(dims, "collar-width", "dim", cbA, cbO, fp.collarWidthCm);
+      dim(dims, "prepared-attach", "dim", cbA, frA, null);
+      if (cbA) labels.push({ id: "cb", at: cbA, text: "CB" });
+      if (frA) labels.push({ id: "front", at: frA, text: fp.styleCode === 2 ? "V 앞끝" : "앞끝" });
+      if (frO && fp.styleCode !== 0) labels.push({ id: "flare", at: frO, text: "전개 외곽" });
+    }
+    var inputs = [
+      { key: "collarWidthCm", label: "칼라 폭", value: val(fp.collarWidthCm) },
+      { key: "gatherRatio", label: "개더 배율", value: val(fp.gatherRatio), unit: "배" },
+      { key: "vDropCm", label: "V 목둘레(FNP에서 내림)", value: val(fp.vDropCm) },
+      { key: "vHollowCm", label: "V선 휨(현에서)", value: val(fp.vHollowCm) },
+      { key: "spreadCount", label: "절개·전개 수", value: val(fp.spreadCount), unit: "개" },
+      { key: "spreadEachCm", label: "각 절개 외곽 벌림", value: val(fp.spreadEachCm) }
+    ];
+    var results = [
+      { key: "neckTarget", label: fp.styleCode === 2 ? "파생 V 목둘레(반쪽)" : "몸판 목둘레(반쪽)", value: val(fm.neckTargetCm) },
+      { key: "cutAttach", label: "재단 상태 달림변", value: val(fm.cutAttachLenCm) },
+      { key: "finishedAttach", label: "개더/봉제 후 달림선", value: val(fm.finishedAttachLenCm) },
+      { key: "gatherAmount", label: "개더 분량", value: num(fm.cutAttachLenCm) && num(fm.finishedAttachLenCm) ? fm.cutAttachLenCm - fm.finishedAttachLenCm : null },
+      { key: "spreadTotal", label: "외곽 총 전개량", value: val(fm.spreadTotalCm) },
+      { key: "flareAngle", label: "전개 중심각(도)", value: val(fm.flareAngleDeg), unit: "°" },
+      { key: "outerLen", label: "칼라 외곽 실측", value: val(fm.outerLenCm) },
+      { key: "collarWidth", label: "칼라 폭 실측", value: val(fm.cbWidthLenCm) }
+    ];
+    return { recipe: cd.baseMethod, mode: "parametric",
+      note: fp.styleCode === 0 ? "목둘레 치수의 1배를 개더분으로 더한 직사각형 프릴"
+        : (fp.styleCode === 2 ? "V 목둘레를 기준으로 절개·전개한 플레어 프릴" : "몸판 목둘레를 기준으로 6분할 절개·전개한 플레어 프릴"),
+      dims: dims, labels: labels, inputs: inputs, results: results };
+  }
+
   // ── 교재 T(P.69 하단): 플랫 칼라 — 어깨선을 3.5 겹쳐 한 장으로, 달림선은 0.5 올려 재작도 ──
   function tRecipe(cd, bodice) {
     var tp = (cd.parameters && cd.parameters.flatOverlap) || {};
@@ -606,6 +644,9 @@
     "bunka-bow-collar-X-v1": xRecipe,
     "bunka-bow-collar-Y-v1": xRecipe,
     "bunka-bow-collar-Z-v1": xRecipe,
+    "bunka-frill-collar-a-v1": frillRecipe,
+    "bunka-frill-collar-b-v1": frillRecipe,
+    "bunka-frill-collar-c-v1": frillRecipe,
     "bunka-stand-collar-A-P146-v1": standaloneRecipe,
     "bunka-stand-collar-B-P146-v1": standaloneRecipe,
     "bunka-stand-collar-C-P146-v1": standaloneRecipe,
@@ -622,6 +663,7 @@
     var flat = collarDraft.type === "flat-collar" || collarDraft.type === "flat-collar-overlap";
     var sailor = collarDraft.type === "sailor-collar";
     var bow = collarDraft.type === "bow-collar";
+    var frill = collarDraft.type === "frill-collar";
     if (onePiece ? !(collarDraft.onePiece && collarDraft.onePiece.geometry)
       : openCollar ? !(collarDraft.openCollar && collarDraft.openCollar.geometry)
         : wing ? !(collarDraft.standGeometry && collarDraft.tip && collarDraft.tip.geometry)
@@ -629,6 +671,7 @@
             : flat ? !(collarDraft.flat && collarDraft.flat.geometry)
               : sailor ? !(collarDraft.sailor && collarDraft.sailor.geometry)
                 : bow ? !(collarDraft.bow && collarDraft.bow.geometry)
+                  : frill ? !(collarDraft.frill && collarDraft.frill.geometry)
             : standalone ? !(collarDraft.standalone && collarDraft.standalone.geometry) : !collarDraft.standGeometry) return null;
     var fn = RECIPES[collarDraft.baseMethod];
     return fn ? fn(collarDraft, bodiceResult || null) : null;

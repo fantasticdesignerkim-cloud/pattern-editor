@@ -94,6 +94,7 @@
     merge(cd.flat && cd.flat.geometry);             // 플랫 칼라(family 4, S)
     merge(cd.sailor && cd.sailor.geometry);         // 세일러 칼라(family 5, U)
     merge(cd.bow && cd.bow.geometry);               // 보 칼라(family 6, X·Y·Z)
+    merge(cd.frill && cd.frill.geometry);           // 프릴 칼라(family 7, a·b·c)
     merge(cd.standalone && cd.standalone.geometry); // 단독 스탠드 칼라(family 1)
     return u;
   }

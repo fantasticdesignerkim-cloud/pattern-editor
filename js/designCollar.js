@@ -1625,6 +1625,93 @@
         ribbonEnd: cp(ribbonEnd), ribbonEndTop: cp(ribbonEndTop) } };
   }
 
+  // ── 프릴 칼라(교재 a·b·c, P.72–73) ──
+  // a: 목둘레의 1배를 개더분으로 더한 8cm 직사각형(재단 달림변 = 목둘레×2).
+  // b: 몸판 목둘레를 기준으로 8cm 칼라를 그리고 6등분 절개, 외곽에서 각 3cm 벌림.
+  // c: FNP 에서 22cm 내린 V 목둘레를 칼라 안에서 파생하고 b와 같은 원리로 더 많이 벌린다.
+  // ★ 몸판 geometry 는 절대 바꾸지 않는다. 원호는 절개·전개 뒤의 한 조각을 결정론적으로 표현한다.
+  var FRILL_COLLAR_METHOD = { pages: [72, 73], piece: "one-piece", bodyLinked: true,
+    gathered: "a", slashSpread: ["b", "c"], smoothing: "cubic-arc" };
+
+  function arcSegments(center, radius, a0, a1, part) {
+    var out = [], total = a1 - a0, n = Math.max(1, Math.ceil(Math.abs(total) / (Math.PI / 2)));
+    for (var i = 0; i < n; i++) {
+      var s = a0 + total * i / n, e = a0 + total * (i + 1) / n, d = e - s;
+      var k = 4 / 3 * Math.tan(d / 4);
+      var p0 = { x: center.x + radius * Math.cos(s), y: center.y + radius * Math.sin(s) };
+      var p1 = { x: center.x + radius * Math.cos(e), y: center.y + radius * Math.sin(e) };
+      out.push({ kind: "cubic", from: p0,
+        c1: { x: p0.x - radius * Math.sin(s) * k, y: p0.y + radius * Math.cos(s) * k },
+        c2: { x: p1.x + radius * Math.sin(e) * k, y: p1.y - radius * Math.cos(e) * k },
+        to: p1, part: part });
+    }
+    return out;
+  }
+
+  // params: { styleCode(0=a,1=b,2=c), collarWidthCm, gatherRatio, vDropCm, vHollowCm,
+  //           spreadCount, spreadEachCm }
+  function computeFrillCollar(bodiceResult, params) {
+    var b = readBodice(bodiceResult); if (!b.ok) return b;
+    var P = params || {}, style = P.styleCode, W = P.collarWidthCm, GR = P.gatherRatio;
+    var VD = P.vDropCm, VH = P.vHollowCm, SC = P.spreadCount, SE = P.spreadEachCm;
+    if (!(style === 0 || style === 1 || style === 2)) return { ok: false, reason: "invalid-frill-style" };
+    if (!num(W) || W <= 0) return { ok: false, reason: "invalid-collar-width" };
+    if (!num(GR) || GR < 1) return { ok: false, reason: "invalid-gather-ratio" };
+    if (!num(VD) || VD < 0 || !num(VH) || VH < 0) return { ok: false, reason: "invalid-v-neck" };
+    if (!num(SC) || SC < 0 || Math.floor(SC) !== SC || !num(SE) || SE < 0) return { ok: false, reason: "invalid-spread" };
+    if (style === 0 && (!(GR > 1) || SC !== 0 || SE !== 0)) return { ok: false, reason: "invalid-gathered-frill" };
+    if (style !== 0 && (!(SC > 0) || !(SE > 0) || GR !== 1)) return { ok: false, reason: "invalid-flared-frill" };
+
+    var target = b.backCm + b.frontCm, vLen = null;
+    if (style === 2) {
+      if (!(VD > 0)) return { ok: false, reason: "invalid-v-neck" };
+      var fr = bodiceSeamFrame(bodiceResult, "front"); if (!fr.ok) return fr;
+      var fnpV = add(fr.neckPoint, fr.centerDir, VD);
+      var nPerp = { x: fr.centerDir.y, y: -fr.centerDir.x };
+      var inward = (nPerp.x * (fr.snp.x - fr.neckPoint.x) + nPerp.y * (fr.snp.y - fr.neckPoint.y)) >= 0
+        ? nPerp : { x: -nPerp.x, y: -nPerp.y };
+      var vg = bowedGuide(fr.snp, fnpV, VH, inward); if (!vg) return { ok: false, reason: "v-neck-failed" };
+      vLen = sumMeasure(vg.segs); target = b.backCm + vLen;
+    }
+
+    var outline = [], construction = [], anchors, cutAttach, outerLen, flareAngle = 0, spreadTotal = SC * SE;
+    if (style === 0) {
+      cutAttach = target * GR;
+      var a0 = { x: 0, y: 0 }, a1 = { x: cutAttach, y: 0 }, o1 = { x: cutAttach, y: -W }, o0 = { x: 0, y: -W };
+      outline = [L(a0, a1, "gather-edge"), L(a1, o1, "front-edge"), L(o1, o0, "outer"), L(o0, a0, "cb-fold")];
+      for (var gi = 1; gi < 8; gi++) {
+        var gx = cutAttach * gi / 8;
+        construction.push(L({ x: gx, y: 0 }, { x: gx, y: -Math.min(1.2, W * 0.2) }, "gather-mark"));
+      }
+      outerLen = cutAttach; anchors = { cbAttach: a0, cbOuter: o0, frontAttach: a1, frontOuter: o1 };
+    } else {
+      flareAngle = spreadTotal / W;
+      if (!(flareAngle > 0 && flareAngle < Math.PI * 1.9)) return { ok: false, reason: "spread-unreachable" };
+      var R = target / flareAngle, O = R + W, center = { x: 0, y: 0 };
+      var inner = arcSegments(center, R, 0, flareAngle, "neck-seam");
+      var outerForward = arcSegments(center, O, 0, flareAngle, "outer");
+      var i0 = inner[0].from, i1 = inner[inner.length - 1].to;
+      var o0a = outerForward[0].from, o1a = outerForward[outerForward.length - 1].to;
+      outline = inner.concat([L(i1, o1a, "front-edge")]);
+      outerForward.slice().reverse().forEach(function (s) { outline.push(reverseCubic(s, "outer")); });
+      outline.push(L(o0a, i0, "cb-fold"));
+      for (var si = 1; si < SC; si++) {
+        var aa = flareAngle * si / SC;
+        construction.push(L({ x: R * Math.cos(aa), y: R * Math.sin(aa) },
+          { x: O * Math.cos(aa), y: O * Math.sin(aa) }, "slash-line"));
+      }
+      cutAttach = sumMeasure(inner); outerLen = sumMeasure(outerForward);
+      anchors = { cbAttach: cp(i0), cbOuter: cp(o0a), frontAttach: cp(i1), frontOuter: cp(o1a), center: cp(center) };
+    }
+    var closed = validateClosedOutline(outline); if (!closed.ok) return { ok: false, reason: closed.reason };
+    return { ok: true, geometry: { outline: outline, construction: construction },
+      measure: { styleCode: style, collarWidthCm: W, gatherRatio: GR, vDropCm: VD, vHollowCm: VH,
+        spreadCount: SC, spreadEachCm: SE, spreadTotalCm: spreadTotal, flareAngleDeg: flareAngle * 180 / Math.PI,
+        backNeckLenCm: b.backCm, bodyFrontNeckLenCm: b.frontCm, vNeckLenCm: vLen,
+        neckTargetCm: target, cutAttachLenCm: cutAttach, finishedAttachLenCm: target,
+        outerLenCm: outerLen, cbWidthLenCm: W, frontWidthLenCm: W }, anchors: anchors };
+  }
+
   function validateClosedOutline(outline) {
     if (!Array.isArray(outline) || outline.length < 3) return { ok: false, reason: "empty" };
     for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (!nx.from || !outline[i].to || lineLen(outline[i].to, nx.from) > 1e-4) return { ok: false, reason: "not-closed" }; }
@@ -1650,6 +1737,8 @@
     SAILOR_COLLAR_U_METHOD: SAILOR_COLLAR_U_METHOD,
     computeBowCollar: computeBowCollar,           // family 6(보 칼라 X·Y·Z, P.71 — 직사각형 한 장)
     BOW_COLLAR_METHOD: BOW_COLLAR_METHOD,
+    computeFrillCollar: computeFrillCollar,       // family 7(프릴 칼라 a·b·c, P.72–73)
+    FRILL_COLLAR_METHOD: FRILL_COLLAR_METHOD,
     FLAT_COLLAR_T_METHOD: FLAT_COLLAR_T_METHOD,
     FLAT_COLLAR_S_METHOD: FLAT_COLLAR_S_METHOD,
     BAND_ONE_PIECE_METHOD: BAND_ONE_PIECE_METHOD,

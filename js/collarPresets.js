@@ -92,6 +92,17 @@
     { key: "ribbonLengthCm", label: "리본 길이(칼라 달림 끝부터)", unit: "cm", min: 0, minExclusive: true },
     { key: "attachEndFromCfCm", label: "칼라 달림 끝(앞 중심에서 목둘레선 따라)", unit: "cm", min: 0 }
   ];
+  // 프릴 칼라(교재 a·b·c, P.72–73). styleCode 0=개더 직사각형, 1=기본 목둘레 플레어, 2=V넥 플레어.
+  // 같은 키 순서를 공유해 checkpoint·annotation 이 한 계약으로 처리한다.
+  var FRILL_COLLAR_FIELDS = [
+    { key: "styleCode", label: "제도 방식(0 개더·1 플레어·2 V넥 플레어)", unit: "", min: 0 },
+    { key: "collarWidthCm", label: "칼라 폭", unit: "cm", min: 0, minExclusive: true },
+    { key: "gatherRatio", label: "개더 배율", unit: "배", min: 1 },
+    { key: "vDropCm", label: "V 목둘레(FNP에서 내림)", unit: "cm", min: 0 },
+    { key: "vHollowCm", label: "V선 휨(현에서)", unit: "cm", min: 0 },
+    { key: "spreadCount", label: "절개·전개 수", unit: "개", min: 0 },
+    { key: "spreadEachCm", label: "외곽 벌림(각 절개)", unit: "cm", min: 0 }
+  ];
   // 밴드+위 칼라 한 장(교재 R, P.68) 위 칼라 파라미터. 키 순서 = designCollar.computeBandOnePiece 계약.
   //   외곽 뒤 구간은 **몸판 뒤 목둘레 ×** 에서 오므로 입력에 두지 않는다(파생).
   var UPPER_ONE_PIECE_FIELDS = [
@@ -209,7 +220,12 @@
         { id: "bunka-bow-collar-Y", symbol: "Y", label: "Y · 칼라 폭 7 · 리본 60", page: 71, availability: "available", presetId: "bunka-bow-collar-Y", note: null },
         { id: "bunka-bow-collar-Z", symbol: "Z", label: "Z · 칼라 폭 15 · 리본 75", page: 71, availability: "available", presetId: "bunka-bow-collar-Z", note: null }
       ] },
-    { id: "frill-collar", order: 7, label: "프릴 칼라", symbol: "a", page: 72, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    { id: "frill-collar", order: 7, label: "프릴 칼라", symbol: "a", page: 72, generator: "frill-collar-v1", availability: "available", note: null,
+      variants: [
+        { id: "bunka-frill-collar-a", symbol: "a", label: "a · 직사각형 · 목둘레 1배 개더", page: 72, availability: "available", presetId: "bunka-frill-collar-a", note: null },
+        { id: "bunka-frill-collar-b", symbol: "b", label: "b · 목둘레선 · 6분할 플레어", page: 72, availability: "available", presetId: "bunka-frill-collar-b", note: null },
+        { id: "bunka-frill-collar-c", symbol: "c", label: "c · V넥 22 · 플레어", page: 73, availability: "available", presetId: "bunka-frill-collar-c", note: null }
+      ] },
     { id: "hood", order: 8, label: "후드", symbol: "d", page: 74, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
     { id: "tailored-collar", order: 9, label: "테일러드 칼라", symbol: "h", page: 78, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
     { id: "shawl-collar", order: 10, label: "숄 칼라", symbol: "j", page: 80, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
@@ -442,6 +458,24 @@
       bow: { collarWidthCm: 15, ribbonLengthCm: 75, attachEndFromCfCm: 3 }
     },
     {
+      id: "bunka-frill-collar-a", label: "교재 a", description: "프릴 칼라 a형(폭 8 · 목둘레 치수의 1배를 개더분으로 추가)",
+      source: "『パターン製作の基礎』 프릴 칼라 a형(P.72)", type: "frill-collar", baseMethod: "bunka-frill-collar-a-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "frill-collar",
+      frill: { styleCode: 0, collarWidthCm: 8, gatherRatio: 2, vDropCm: 0, vHollowCm: 0, spreadCount: 0, spreadEachCm: 0 }
+    },
+    {
+      id: "bunka-frill-collar-b", label: "교재 b", description: "프릴 칼라 b형(몸판 목둘레선 · 폭 8 · 6분할 · 외곽 각 3 벌림)",
+      source: "『パターン製作の基礎』 프릴 칼라 b형(P.72)", type: "frill-collar", baseMethod: "bunka-frill-collar-b-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "frill-collar",
+      frill: { styleCode: 1, collarWidthCm: 8, gatherRatio: 1, vDropCm: 0, vHollowCm: 0, spreadCount: 6, spreadEachCm: 3 }
+    },
+    {
+      id: "bunka-frill-collar-c", label: "교재 c", description: "프릴 칼라 c형(V넥 22 · 폭 8 · 목둘레 기준 절개·전개)",
+      source: "『パターン製作の基礎』 프릴 칼라 c형(P.73)", type: "frill-collar", baseMethod: "bunka-frill-collar-c-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "frill-collar",
+      frill: { styleCode: 2, collarWidthCm: 8, gatherRatio: 1, vDropCm: 22, vHollowCm: 1, spreadCount: 10, spreadEachCm: 3 }
+    },
+    {
       // 한 장 셔츠 칼라(family 2) 교재 G형. 아래 수치가 **유일한 출처**다(catalog 의 참고값과 중복 금지).
       //   제도 절차는 교재 P.147, 예시 도면은 P.63. 곡선 정리 규칙은 designCollar.ONE_PIECE_METHOD.
       id: "bunka-shirt-collar-G",
@@ -558,7 +592,7 @@
     if (hasDir && !CURVE_DIR[sec.attachCurveDirection]) fail("invalid-curve-direction", id + ".onePiece.attachCurveDirection");
   }
   // 한 레코드 검증(순수). 실패 시 throw(reason 포함).
-  var RECORD_TYPES = { "shirt-two-piece": 1, "shirt-one-piece": 1, "shirt-open-collar": 1, "shirt-wing-collar": 1, "shirt-band-one-piece": 1, "flat-collar": 1, "flat-collar-overlap": 1, "sailor-collar": 1, "bow-collar": 1, "stand-collar": 1 };
+  var RECORD_TYPES = { "shirt-two-piece": 1, "shirt-one-piece": 1, "shirt-open-collar": 1, "shirt-wing-collar": 1, "shirt-band-one-piece": 1, "flat-collar": 1, "flat-collar-overlap": 1, "sailor-collar": 1, "bow-collar": 1, "frill-collar": 1, "stand-collar": 1 };
   function validateRecord(r) {
     if (!r || typeof r !== "object") fail("invalid-record");
     ["id", "label", "description", "source", "type", "baseMethod", "familyId"].forEach(function (k) { if (!isStr(r[k])) fail("missing-field", (r.id || "?") + "." + k); });
@@ -581,6 +615,12 @@
       // 보 칼라: bow 섹션 하나뿐. 밴드·위 칼라·플랫·세일러 섹션을 빌려오지 않는다.
       ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.bow, BOW_COLLAR_FIELDS, "bow", r.id);
+      return true;
+    }
+    if (r.type === "frill-collar") {
+      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "bow"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      validateSection(r.frill, FRILL_COLLAR_FIELDS, "frill", r.id);
+      if (!(r.frill.styleCode === 0 || r.frill.styleCode === 1 || r.frill.styleCode === 2)) fail("out-of-range", r.id + ".frill.styleCode");
       return true;
     }
     if (r.type === "flat-collar-overlap") {
@@ -751,6 +791,7 @@
     if (r.type === "flat-collar-overlap") return { ok: true, id: r.id, type: r.type, flatOverlap: clone(r.flatOverlap) };
     if (r.type === "sailor-collar") return { ok: true, id: r.id, type: r.type, sailor: clone(r.sailor) };
     if (r.type === "bow-collar") return { ok: true, id: r.id, type: r.type, bow: clone(r.bow) };
+    if (r.type === "frill-collar") return { ok: true, id: r.id, type: r.type, frill: clone(r.frill) };
     if (r.type === "stand-collar") return { ok: true, id: r.id, type: r.type, standalone: clone(r.standalone), construction: clone(r.construction) };
     var d2 = { ok: true, id: r.id, type: r.type, stand: clone(r.stand), body: clone(r.body) };
     if (r.construction) d2.construction = clone(r.construction);
@@ -759,7 +800,7 @@
   // 선택 UI 옵션 모델(registry 에서 생성).
   function options() { return REG.list.map(function (r) { return { value: r.id, label: r.label }; }); }
   // 섹션 필드 의미·단위(표시용).
-  function fields(section) { return clone(section === "stand" ? STAND_FIELDS : section === "body" ? BODY_FIELDS : section === "onePiece" ? ONE_PIECE_FIELDS : section === "openCollar" ? OPEN_COLLAR_FIELDS : section === "tip" ? WING_TIP_FIELDS : section === "upper" ? UPPER_ONE_PIECE_FIELDS : section === "flat" ? FLAT_COLLAR_FIELDS : section === "flatOverlap" ? FLAT_COLLAR_T_FIELDS : section === "sailor" ? SAILOR_COLLAR_FIELDS : section === "bow" ? BOW_COLLAR_FIELDS : section === "standalone" ? STANDALONE_FIELDS : []); }
+  function fields(section) { return clone(section === "stand" ? STAND_FIELDS : section === "body" ? BODY_FIELDS : section === "onePiece" ? ONE_PIECE_FIELDS : section === "openCollar" ? OPEN_COLLAR_FIELDS : section === "tip" ? WING_TIP_FIELDS : section === "upper" ? UPPER_ONE_PIECE_FIELDS : section === "flat" ? FLAT_COLLAR_FIELDS : section === "flatOverlap" ? FLAT_COLLAR_T_FIELDS : section === "sailor" ? SAILOR_COLLAR_FIELDS : section === "bow" ? BOW_COLLAR_FIELDS : section === "frill" ? FRILL_COLLAR_FIELDS : section === "standalone" ? STANDALONE_FIELDS : []); }
   // 편집값이 프리셋 기본값과 같은지(표시 판단용, 저장 없음).
   function matches(id, stand, body) {
     var r = get(id); if (!r) return false;
@@ -773,6 +814,7 @@
     if (r.type === "flat-collar-overlap") return eq(stand, r.flatOverlap, FLAT_COLLAR_T_FIELDS);
     if (r.type === "sailor-collar") return eq(stand, r.sailor, SAILOR_COLLAR_FIELDS);
     if (r.type === "bow-collar") return eq(stand, r.bow, BOW_COLLAR_FIELDS);
+    if (r.type === "frill-collar") return eq(stand, r.frill, FRILL_COLLAR_FIELDS);
     if (r.type === "stand-collar") return eq(stand, r.standalone, STANDALONE_FIELDS);
     return eq(stand, r.stand, STAND_FIELDS) && eq(body, r.body, BODY_FIELDS);
   }
@@ -820,6 +862,15 @@
         sourceBodiceHash: bodice.hash, type: r.type, baseMethod: r.baseMethod, presetId: r.id,
         parameters: { bow: d.bow },
         bow: { geometry: bowRe.geometry, measure: bowRe.measure, anchors: bowRe.anchors }
+      } };
+    }
+    if (r.type === "frill-collar") {
+      var frillRe = DC.computeFrillCollar(bodice, d.frill);
+      if (!frillRe.ok) return { ok: false, stage: "collar", reason: frillRe.reason };
+      return { ok: true, draft: {
+        sourceBodiceHash: bodice.hash, type: r.type, baseMethod: r.baseMethod, presetId: r.id,
+        parameters: { frill: d.frill },
+        frill: { geometry: frillRe.geometry, measure: frillRe.measure, anchors: frillRe.anchors }
       } };
     }
     if (r.type === "flat-collar-overlap") {
