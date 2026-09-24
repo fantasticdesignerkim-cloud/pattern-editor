@@ -339,5 +339,188 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
   ok(CA.buildModel({ type: "shirt-band-one-piece", baseMethod: "bunka-band-collar-R-v1" }, BODICE) === null, "14: 한 조각 형상 없으면 표시 모델 없음");
 }
 
+// 15. 교재 S(플랫 칼라) 표시 모델 — 칼라 폭·앞 끝선만 치수, 달림선은 몸판 목둘레선이라 실측 결과로만
+{
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s2 = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s2.edge = edge; return s2; };
+  const we = (s2, e) => Object.assign({}, s2, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const dense = (sg) => { let t = 0, pr = sg.from; for (let i = 1; i <= 4000; i++) { const q = i / 4000, u = 1 - q;
+    const p = { x: u*u*u*sg.from.x + 3*u*u*q*sg.c1.x + 3*u*q*q*sg.c2.x + q*q*q*sg.to.x,
+                y: u*u*u*sg.from.y + 3*u*u*q*sg.c1.y + 3*u*q*q*sg.c2.y + q*q*q*sg.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const BL = dense(backNeck), FL = dense(frontNeck);
+  const FB = { hash: "BF1", sourceVersion: 1, necklineLengths: { back: BL, front: FL, half: BL + FL, finished: 2 * (BL + FL) },
+    back: { outline: [ln([0, 0], [0, 20], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 20], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } };
+  const FS = { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 };
+  const fl = DC.computeFlatCollarS(FB, FS);
+  const cd = { sourceBodiceHash: "BF1", type: "flat-collar", baseMethod: "bunka-flat-collar-S-v1",
+    parameters: { flat: FS }, flat: { geometry: fl.geometry, measure: fl.measure, anchors: fl.anchors } };
+  const model = CA.buildModel(cd, FB), inputs = {}, results = {}, dims = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  model.results.forEach(r => { results[r.key] = r; });
+  model.dims.forEach(d => { dims[d.id] = d; });
+  ok(model.recipe === "bunka-flat-collar-S-v1" && CA.recipes().indexOf("bunka-flat-collar-S-v1") >= 0, "15: S 전용 recipe 등록");
+  ok(inputs.collarWidthCm === 5.5 && inputs.frontEndFromFnpCm === 6 && inputs.frontEndOffsetCm === 4, "15: 제도 입력값 3개(칼라 폭·앞 끝선·안내선)");
+  ok(dims["cb-width"].text === 5.5 && dims["shoulder-butt"].text === 5.5 && dims["front-end"].text === 6, "15: 뒤 중심 폭·어깨 폭·앞 끝선 치수선");
+  ok(Math.abs(dims["cb-width"].from.x - dims["cb-width"].to.x) < 1e-9, "15: 뒤 중심 폭 치수선은 CB(수직)");
+  ok(dims["front-end-offset"].kind === "ref" && dims["front-end"].kind === "dim", "15: 안내선은 참조선(치수 아님)");
+  ok(!dims["attach"] && results.attachLen.value === fl.measure.attachLenCm, "15: 달림선은 치수선이 아니라 실측 결과로만");
+  ok(results.neckDiff.status === "match", "15: 달림선 = 몸판 목둘레 정합");
+  ok(results.cbWidth.value === fl.measure.cbWidthLenCm && results.shoulderWidth.value === fl.measure.shoulderWidthLenCm
+    && results.frontEnd.value === fl.measure.frontEndLenCm && results.outerLen.value === fl.measure.outerLenCm, "15: 실측 결과 행");
+  ok(/맞대/.test(model.note) && /플랫/.test(model.note), "15: 어깨 맞댐·플랫 칼라 안내");
+  ok(model.labels.some(l => l.id === "snp") && model.labels.some(l => l.id === "fnp") && model.labels.some(l => l.id === "cb"), "15: CB·SNP·FNP 라벨");
+  ok(CA.buildModel({ type: "flat-collar", baseMethod: "bunka-flat-collar-S-v1" }, FB) === null, "15: 형상 없으면 표시 모델 없음");
+}
+
+// 16. 교재 T(플랫 칼라 겹침형) 표시 모델 — 겹침·올림·칼라 폭·앞 끝선 치수와 부족분 보고
+{
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s2 = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s2.edge = edge; return s2; };
+  const we = (s2, e) => Object.assign({}, s2, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const dense = (sg) => { let t = 0, pr = sg.from; for (let i = 1; i <= 4000; i++) { const q = i / 4000, u = 1 - q;
+    const p = { x: u*u*u*sg.from.x + 3*u*u*q*sg.c1.x + 3*u*q*q*sg.c2.x + q*q*q*sg.to.x,
+                y: u*u*u*sg.from.y + 3*u*u*q*sg.c1.y + 3*u*q*q*sg.c2.y + q*q*q*sg.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const BL = dense(backNeck), FL = dense(frontNeck);
+  const TB = { hash: "BT1", sourceVersion: 1, necklineLengths: { back: BL, front: FL, half: BL + FL, finished: 2 * (BL + FL) },
+    back: { outline: [ln([0, 0], [0, 20], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 20], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } };
+  const TP = { collarWidthCm: 5.5, cbRiseCm: 0.5, shoulderOverlapCm: 3.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 };
+  const fl = DC.computeFlatCollarT(TB, TP);
+  const cd = { sourceBodiceHash: "BT1", type: "flat-collar-overlap", baseMethod: "bunka-flat-collar-T-v1",
+    parameters: { flatOverlap: TP }, flat: { geometry: fl.geometry, measure: fl.measure, anchors: fl.anchors } };
+  const model = CA.buildModel(cd, TB), inputs = {}, results = {}, dims = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  model.results.forEach(r => { results[r.key] = r; });
+  model.dims.forEach(d => { dims[d.id] = d; });
+  ok(model.recipe === "bunka-flat-collar-T-v1" && CA.recipes().indexOf("bunka-flat-collar-T-v1") >= 0, "16: T 전용 recipe 등록");
+  ok(inputs.collarWidthCm === 5.5 && inputs.cbRiseCm === 0.5 && inputs.shoulderOverlapCm === 3.5
+    && inputs.frontEndFromFnpCm === 6 && inputs.frontEndOffsetCm === 4, "16: 제도 입력값 5개");
+  ok(dims["cb-rise"].text === 0.5 && dims["cb-width"].text === 5.5 && dims["shoulder-width"].text === 5.5 && dims["front-end"].text === 6,
+    "16: 올림·뒤 중심 폭·어깨 폭·앞 끝선 치수선");
+  ok(Math.abs(dims["cb-rise"].from.x - dims["cb-rise"].to.x) < 1e-9 && Math.abs(dims["cb-width"].from.x - dims["cb-width"].to.x) < 1e-9,
+    "16: 올림·뒤 중심 폭 치수선은 CB(수직)");
+  ok(results.attachShortfall.value === fl.measure.attachShortfallCm && results.attachShortfall.value > 0,
+    "16: 부족분(늘려 박는 분) 결과 행");
+  ok(results.shoulderTipGap.value === fl.measure.shoulderTipGapCm && results.overlapAngle.value === fl.measure.overlapAngleDeg,
+    "16: 어깨 겹침·회전각 실측 결과 행");
+  ok(!results.neckDiff, "16: T 는 달림선 = 목둘레 정합 행을 쓰지 않는다(짧은 게 정상)");
+  ok(/겹쳐/.test(model.note) && /칼라 허리/.test(model.note), "16: 겹침·칼라 허리 안내");
+  ok(CA.buildModel({ type: "flat-collar-overlap", baseMethod: "bunka-flat-collar-T-v1" }, TB) === null, "16: 형상 없으면 표시 모델 없음");
+  // S recipe 는 그대로(같은 family 라도 분리)
+  {
+    const sFl = DC.computeFlatCollarS(TB, { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 });
+    const sModel = CA.buildModel({ type: "flat-collar", baseMethod: "bunka-flat-collar-S-v1",
+      parameters: { flat: { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 } },
+      flat: { geometry: sFl.geometry, measure: sFl.measure, anchors: sFl.anchors } }, TB);
+    ok(sModel.recipe === "bunka-flat-collar-S-v1" && sModel.inputs.length === 3, "16: S recipe 불변(입력 3개)");
+  }
+}
+
+// 17. 교재 U(세일러 칼라) 표시 모델 — V 파생 목선·겹침·네모 뒤판 치수
+{
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s2 = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s2.edge = edge; return s2; };
+  const we = (s2, e) => Object.assign({}, s2, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const dense = (sg) => { let t = 0, pr = sg.from; for (let i = 1; i <= 4000; i++) { const q = i / 4000, u = 1 - q;
+    const p = { x: u*u*u*sg.from.x + 3*u*u*q*sg.c1.x + 3*u*q*q*sg.c2.x + q*q*q*sg.to.x,
+                y: u*u*u*sg.from.y + 3*u*u*q*sg.c1.y + 3*u*q*q*sg.c2.y + q*q*q*sg.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const BL = dense(backNeck), FL = dense(frontNeck);
+  const UB = { hash: "BU1", sourceVersion: 1, necklineLengths: { back: BL, front: FL, half: BL + FL, finished: 2 * (BL + FL) },
+    back: { outline: [ln([0, 0], [0, 40], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 40], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } };
+  const UP = { vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 1.5 };
+  const sc = DC.computeSailorCollarU(UB, UP);
+  const cd = { sourceBodiceHash: "BU1", type: "sailor-collar", baseMethod: "bunka-sailor-collar-U-v1",
+    parameters: { sailor: UP }, sailor: { geometry: sc.geometry, measure: sc.measure, anchors: sc.anchors } };
+  const model = CA.buildModel(cd, UB), inputs = {}, results = {}, dims = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  model.results.forEach(r => { results[r.key] = r; });
+  model.dims.forEach(d => { dims[d.id] = d; });
+  ok(model.recipe === "bunka-sailor-collar-U-v1" && CA.recipes().indexOf("bunka-sailor-collar-U-v1") >= 0, "17: U 전용 recipe 등록");
+  ok(inputs.vDropCm === 12 && inputs.vHollowCm === 0.8 && inputs.shoulderOverlapCm === 1.5 && inputs.cbRiseCm === 0.5
+    && inputs.cbWidthCm === 11 && inputs.backOuterCm === 15.5 && inputs.shoulderWidthCm === 10 && inputs.frontOuterBowCm === 1.5,
+    "17: 제도 입력값 8개");
+  ok(dims["cb-rise"].text === 0.5 && dims["cb-width"].text === 11 && dims["back-outer"].text === 15.5 && dims["shoulder-width"].text === 10,
+    "17: 올림·뒤 중심 폭·뒤 외곽·어깨 폭 치수선");
+  ok(Math.abs(dims["cb-width"].from.x - dims["cb-width"].to.x) < 1e-9 && Math.abs(dims["back-outer"].from.y - dims["back-outer"].to.y) < 1e-9,
+    "17: 뒤 중심 폭은 수직 · 뒤 외곽은 그에 직각(수평)");
+  ok(dims["front-chord"].kind === "ref", "17: 앞 외곽 현은 참조선");
+  ok(results.vNeck.value === sc.measure.vNeckLenCm && results.neckTarget.value === sc.measure.neckTargetCm
+    && results.neckTarget.value !== UB.necklineLengths.half, "17: 파생 V 목선·칼라가 붙는 목둘레를 따로 보고(원래 목둘레 아님)");
+  ok(results.attachShortfall.value === sc.measure.attachShortfallCm && results.attachShortfall.value > 0, "17: 늘려 박는 분 보고");
+  ok(results.backCorner.value === sc.measure.backCornerAngleDeg && Math.abs(results.backCorner.value - 90) < 1e-6, "17: 뒤 중심 모서리 90° 보고");
+  ok(/V/.test(model.note) && /겹쳐/.test(model.note), "17: V·겹침 안내");
+  ok(results.vNeck.label === "파생 V 목선 실측(SNP→12 내린 점)", "17: U 라벨 문구 불변(내림 12)");
+  ok(model.labels.some(l => l.id === "snp") && model.labels.some(l => l.id === "fnp"), "17: SNP·FNP 라벨");
+  ok(CA.buildModel({ type: "sailor-collar", baseMethod: "bunka-sailor-collar-U-v1" }, UB) === null, "17: 형상 없으면 표시 모델 없음");
+  // 플랫 recipe 는 그대로
+  {
+    const fl = DC.computeFlatCollarS(UB, { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 });
+    const sModel = CA.buildModel({ type: "flat-collar", baseMethod: "bunka-flat-collar-S-v1",
+      parameters: { flat: { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 } },
+      flat: { geometry: fl.geometry, measure: fl.measure, anchors: fl.anchors } }, UB);
+    ok(sModel.recipe === "bunka-flat-collar-S-v1" && sModel.inputs.length === 3, "17: S recipe 불변");
+  }
+}
+
+// 17-VW. 교재 V·W 는 U 와 같은 표시 규칙을 공유한다 — 수치는 상수가 아니라 parameters 에서 온다
+{
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s2 = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s2.edge = edge; return s2; };
+  const we = (s2, e) => Object.assign({}, s2, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const B = { hash: "BVW", sourceVersion: 1, necklineLengths: { back: 8.5, front: 11.5, half: 20, finished: 40 },
+    back: { outline: [ln([0, 0], [0, 40], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 40], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } };
+  const VP = { vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 9, backOuterCm: 13.5, shoulderWidthCm: 7, frontOuterBowCm: 1 };
+  const WP = { vDropCm: 22, vHollowCm: 0.3, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 0.7 };
+  const mk = (P, method) => {
+    const r = DC.computeSailorCollarU(B, P);
+    return CA.buildModel({ sourceBodiceHash: "BVW", type: "sailor-collar", baseMethod: method,
+      parameters: { sailor: P }, sailor: { geometry: r.geometry, measure: r.measure, anchors: r.anchors } }, B);
+  };
+  const mv = mk(VP, "bunka-sailor-collar-V-v1"), mw = mk(WP, "bunka-sailor-collar-W-v1");
+  const idx = (m) => { const o = { inputs: {}, results: {}, dims: {} };
+    m.inputs.forEach(r => { o.inputs[r.key] = r.value; }); m.results.forEach(r => { o.results[r.key] = r; });
+    m.dims.forEach(d => { o.dims[d.id] = d; }); return o; };
+  const iv = idx(mv), iw = idx(mw);
+
+  ok(CA.recipes().indexOf("bunka-sailor-collar-V-v1") >= 0 && CA.recipes().indexOf("bunka-sailor-collar-W-v1") >= 0
+    && mv.recipe === "bunka-sailor-collar-V-v1" && mw.recipe === "bunka-sailor-collar-W-v1", "17-VW: V·W recipe 등록·출처 표기");
+  const JS = (x) => JSON.stringify(x);
+  ok(JS(mv.inputs.map(r => r.key)) === JS(mw.inputs.map(r => r.key)) && mv.inputs.length === 8,
+    "17-VW: 입력 항목·순서는 U 와 공유(8개)");
+  ok(iv.inputs.cbWidthCm === 9 && iv.inputs.backOuterCm === 13.5 && iv.inputs.shoulderWidthCm === 7 && iv.inputs.frontOuterBowCm === 1,
+    "17-VW: V 입력값 = 교재 수치");
+  ok(iw.inputs.vDropCm === 22 && iw.inputs.vHollowCm === 0.3 && iw.inputs.frontOuterBowCm === 0.7 && iw.inputs.cbWidthCm === 11,
+    "17-VW: W 입력값 = 교재 수치");
+  ok(iv.dims["cb-width"].text === 9 && iv.dims["back-outer"].text === 13.5 && iv.dims["shoulder-width"].text === 7
+    && iw.dims["cb-width"].text === 11 && iw.dims["back-outer"].text === 15.5, "17-VW: 치수선 값이 각 도해 수치");
+  // ★ 라벨의 내림 치수는 상수가 아니다 — W 는 22 로 표시된다(U·V 는 12)
+  ok(iv.results.vNeck.label === "파생 V 목선 실측(SNP→12 내린 점)"
+    && iw.results.vNeck.label === "파생 V 목선 실측(SNP→22 내린 점)", "17-VW: V 목선 라벨이 parameters 의 내림 치수를 따른다");
+  ok(iw.results.vNeck.value > iv.results.vNeck.value && iw.results.neckTarget.value > iv.results.neckTarget.value,
+    "17-VW: W 가 더 깊은 V 목선·긴 목둘레로 보고");
+  ok(Math.abs(iv.results.backCorner.value - 90) < 1e-6 && Math.abs(iw.results.backCorner.value - 90) < 1e-6, "17-VW: 뒤 중심 모서리 90° 보고");
+  ok(mv.note === mw.note && /겹쳐/.test(mv.note), "17-VW: 같은 제도 안내를 공유");
+  ok(CA.buildModel({ type: "sailor-collar", baseMethod: "bunka-sailor-collar-W-v1" }, B) === null, "17-VW: 형상 없으면 표시 모델 없음");
+  ok(CA.buildModel({ type: "sailor-collar", baseMethod: "bunka-sailor-collar-X-v1",
+    parameters: { sailor: VP }, sailor: { geometry: {}, measure: {}, anchors: {} } }, B) === null, "17-VW: 등록 안 된 recipe 는 표시 없음");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

@@ -333,5 +333,281 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   BODICE = bodice("BH1");
 }
 
+// 12. 플랫 칼라(교재 S): 달림선 = 몸판 목둘레선 · 칼라 폭(뒤 중심·어깨) · 앞 끝선 · 어깨 맞댐선
+{
+  BODICE_STALE = false; SLEEVE = { id: "s" }; SLEEVE_CHANGED = false; SLEEVE_INVAL = false;
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s2 = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s2.edge = edge; return s2; };
+  const we = (s2, e) => Object.assign({}, s2, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const dense = (sg) => { let t = 0, pr = sg.from; for (let i = 1; i <= 4000; i++) { const q = i / 4000, u = 1 - q;
+    const p = { x: u*u*u*sg.from.x + 3*u*u*q*sg.c1.x + 3*u*q*q*sg.c2.x + q*q*q*sg.to.x,
+                y: u*u*u*sg.from.y + 3*u*u*q*sg.c1.y + 3*u*q*q*sg.c2.y + q*q*q*sg.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const BL = dense(backNeck), FL = dense(frontNeck);
+  const flatBodice = (hash) => ({ hash: hash, sourceVersion: 1,
+    necklineLengths: { back: BL, front: FL, half: BL + FL, finished: 2 * (BL + FL) },
+    back: { outline: [ln([0, 0], [0, 20], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 20], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } });
+  BODICE = flatBodice("BF1");
+  const FS = { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 };
+  const mk = () => {
+    const fl = DC.computeFlatCollarS(flatBodice("BF1"), FS);
+    return { sourceBodiceHash: "BF1", type: "flat-collar", baseMethod: "bunka-flat-collar-S-v1", presetId: "bunka-flat-collar-S",
+      parameters: { flat: Object.assign({}, FS) },
+      flat: { geometry: fl.geometry, measure: fl.measure, anchors: fl.anchors } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  PROJECT = proj(mk());
+  ok(CC.check(PROJECT).ok, "12: S 초안이 완료 게이트 통과(" + CC.check(PROJECT).fails.join(",") + ")");
+  const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.type === "flat-collar" && Object.isFrozen(r.result.flat)
+    && JSON.stringify(r.result.flat.parameters) === JSON.stringify(FS) && r.result.symmetry === "half-cb-fold", "12: S 완료 스냅샷(한 조각)");
+  ok(!("stand" in r.result) && !("body" in r.result) && !("joined" in r.result) && !("tip" in r.result), "12: 밴드·위 칼라·끝 섹션을 만들지 않는다");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "12: 완료 직후 미변경");
+  const again = CC.complete(PROJECT);
+  ok(again.ok && again.idempotent === true && again.result === r.result, "12: 재완료 idempotent(같은 참조)");
+
+  // 게이트: 실측이 파라미터·목둘레와 어긋나면 차단
+  const badAttach = mk(); badAttach.flat.measure.attachLenCm += 0.5;
+  ok(CC.check(proj(badAttach)).fails.indexOf("attach-length-mismatch") >= 0, "12: 달림선 ≠ 몸판 목둘레 → 차단");
+  const badW = mk(); badW.flat.measure.shoulderWidthLenCm += 0.5;
+  ok(CC.check(proj(badW)).fails.indexOf("collar-width-mismatch") >= 0, "12: 어깨 칼라 폭 불일치 차단");
+  const badCb = mk(); badCb.flat.measure.cbWidthLenCm += 0.5;
+  ok(CC.check(proj(badCb)).fails.indexOf("collar-width-mismatch") >= 0, "12: 뒤 중심 칼라 폭 불일치 차단");
+  const badEnd = mk(); badEnd.flat.measure.frontEndLenCm += 0.5;
+  ok(CC.check(proj(badEnd)).fails.indexOf("front-end-mismatch") >= 0, "12: 앞 끝선 불일치 차단");
+  const badOff = mk(); badOff.flat.measure.frontEndOffsetLenCm += 0.5;
+  ok(CC.check(proj(badOff)).fails.indexOf("front-end-offset-mismatch") >= 0, "12: 칼라 끝 안내선 불일치 차단");
+  const noFlat = mk(); delete noFlat.flat;
+  ok(CC.check(proj(noFlat)).fails.indexOf("no-flat-collar") >= 0, "12: 형상 없음 → 차단");
+  const noButt = mk(); noButt.flat.geometry = Object.assign({}, noButt.flat.geometry, { construction: [] });
+  ok(CC.check(proj(noButt)).fails.indexOf("shoulder-butt-missing") >= 0, "12: 어깨 맞댐선 없음 → 차단");
+  const badParams = mk(); badParams.parameters.flat.collarWidthCm = 0;
+  ok(CC.check(proj(badParams)).fails.indexOf("flat-recompute") >= 0, "12: 재계산 불가한 파라미터 → 차단");
+
+  // 형상 identity: 칼라 폭만 달라도 hash 분리
+  const alt = mk(); alt.parameters.flat.collarWidthCm = 6;
+  const altGeom = DC.computeFlatCollarS(flatBodice("BF1"), alt.parameters.flat);
+  alt.flat.geometry = altGeom.geometry; alt.flat.measure = altGeom.measure;
+  const rAlt = CC.complete(proj(alt));
+  ok(rAlt.ok && rAlt.result.hash !== r.result.hash, "12: 칼라 폭이 다르면 hash 분리");
+
+  // 종류 분리 + 몸판 hash 변경 무효
+  PROJECT = proj(mk()); CC.complete(PROJECT);
+  BODICE = flatBodice("BF2");
+  ok(CC.invalidatedByBodice(PROJECT) === true, "12: 몸판 hash 변경 → S 무효");
+  BODICE = bodice("BH1");
+  PROJECT.working.collarDraft = makeDraft("BH1");
+  ok(CC.isCurrentCollarChanged(PROJECT) === true, "12: S 완료본 + 2피스 초안 → 변경됨(종류 혼동 없음)");
+}
+
+// 13. 플랫 칼라 T: 겹침 3.5 · 달림선 재작도(몸판 목둘레보다 짧다) · 칼라 폭 · 앞 끝선
+{
+  BODICE_STALE = false; SLEEVE = { id: "s" }; SLEEVE_CHANGED = false; SLEEVE_INVAL = false;
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s2 = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s2.edge = edge; return s2; };
+  const we = (s2, e) => Object.assign({}, s2, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const dense = (sg) => { let t = 0, pr = sg.from; for (let i = 1; i <= 4000; i++) { const q = i / 4000, u = 1 - q;
+    const p = { x: u*u*u*sg.from.x + 3*u*u*q*sg.c1.x + 3*u*q*q*sg.c2.x + q*q*q*sg.to.x,
+                y: u*u*u*sg.from.y + 3*u*u*q*sg.c1.y + 3*u*q*q*sg.c2.y + q*q*q*sg.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const BL = dense(backNeck), FL = dense(frontNeck);
+  const tBodice = (hash) => ({ hash: hash, sourceVersion: 1,
+    necklineLengths: { back: BL, front: FL, half: BL + FL, finished: 2 * (BL + FL) },
+    back: { outline: [ln([0, 0], [0, 20], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 20], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } });
+  BODICE = tBodice("BT1");
+  const TP = { collarWidthCm: 5.5, cbRiseCm: 0.5, shoulderOverlapCm: 3.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 };
+  const mk = () => {
+    const fl = DC.computeFlatCollarT(tBodice("BT1"), TP);
+    return { sourceBodiceHash: "BT1", type: "flat-collar-overlap", baseMethod: "bunka-flat-collar-T-v1", presetId: "bunka-flat-collar-T",
+      parameters: { flatOverlap: Object.assign({}, TP) },
+      flat: { geometry: fl.geometry, measure: fl.measure, anchors: fl.anchors } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  PROJECT = proj(mk());
+  ok(CC.check(PROJECT).ok, "13: T 초안이 완료 게이트 통과(" + CC.check(PROJECT).fails.join(",") + ")");
+  const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.type === "flat-collar-overlap" && Object.isFrozen(r.result.flat)
+    && JSON.stringify(r.result.flat.parameters) === JSON.stringify(TP) && r.result.symmetry === "half-cb-fold", "13: T 완료 스냅샷");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "13: 완료 직후 미변경");
+  const again = CC.complete(PROJECT);
+  ok(again.ok && again.idempotent === true && again.result === r.result, "13: 재완료 idempotent(같은 참조)");
+
+  // 게이트
+  const longer = mk(); longer.flat.measure.attachLenCm = longer.flat.measure.neckTargetCm + 0.2;
+  ok(CC.check(proj(longer)).fails.indexOf("attach-not-shorter") >= 0, "13: 달림선이 몸판 목둘레보다 길면 차단");
+  const badOv = mk(); badOv.flat.measure.shoulderTipGapCm += 0.5;
+  ok(CC.check(proj(badOv)).fails.indexOf("shoulder-overlap-mismatch") >= 0, "13: 어깨 겹침 불일치 차단");
+  const badW = mk(); badW.flat.measure.cbWidthLenCm += 0.5;
+  ok(CC.check(proj(badW)).fails.indexOf("collar-width-mismatch") >= 0, "13: 칼라 폭 불일치 차단");
+  const badEnd = mk(); badEnd.flat.measure.frontEndLenCm += 0.5;
+  ok(CC.check(proj(badEnd)).fails.indexOf("front-end-mismatch") >= 0, "13: 앞 끝선 불일치 차단");
+  const noMark = mk(); noMark.flat.geometry = Object.assign({}, noMark.flat.geometry, { construction: [] });
+  ok(CC.check(proj(noMark)).fails.indexOf("shoulder-mark-missing") >= 0, "13: 어깨선 표시 없음 차단");
+  const badParams = mk(); badParams.parameters.flatOverlap.shoulderOverlapCm = 99;
+  ok(CC.check(proj(badParams)).fails.indexOf("flat-recompute") >= 0, "13: 재계산 불가한 겹침 → 차단");
+
+  // 겹침만 달라도 hash 분리 + S 완료본과 종류 분리
+  const alt = mk(); alt.parameters.flatOverlap.shoulderOverlapCm = 2.5;
+  const altGeom = DC.computeFlatCollarT(tBodice("BT1"), alt.parameters.flatOverlap);
+  alt.flat.geometry = altGeom.geometry; alt.flat.measure = altGeom.measure;
+  const rAlt = CC.complete(proj(alt));
+  ok(rAlt.ok && rAlt.result.hash !== r.result.hash, "13: 겹침이 다르면 hash 분리");
+  {
+    const sFl = DC.computeFlatCollarS(tBodice("BT1"), { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 });
+    const sCd = { sourceBodiceHash: "BT1", type: "flat-collar", baseMethod: "bunka-flat-collar-S-v1", presetId: "bunka-flat-collar-S",
+      parameters: { flat: { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 } },
+      flat: { geometry: sFl.geometry, measure: sFl.measure, anchors: sFl.anchors } };
+    const pj = proj(mk()); const done = CC.complete(pj);
+    pj.working.collarDraft = sCd;
+    ok(done.ok && CC.isCurrentCollarChanged(pj) === true, "13: T 완료본 + S 초안 → 변경됨(같은 family 라도 분리)");
+    const sDone = CC.complete(pj);
+    ok(sDone.ok && sDone.result.type === "flat-collar" && sDone.result.hash !== done.result.hash, "13: S 완료본은 T 와 다른 type·hash");
+  }
+  // 몸판 hash 변경 → 무효
+  PROJECT = proj(mk()); CC.complete(PROJECT);
+  BODICE = tBodice("BT2");
+  ok(CC.invalidatedByBodice(PROJECT) === true, "13: 몸판 hash 변경 → T 무효");
+  BODICE = bodice("BH1");
+}
+
+// 14. 세일러 칼라 U: 겹침 · 뒤 중심 폭/외곽(직각) · 어깨 폭 · V 달림선(목둘레보다 짧다)
+{
+  BODICE_STALE = false; SLEEVE = { id: "s" }; SLEEVE_CHANGED = false; SLEEVE_INVAL = false;
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s2 = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s2.edge = edge; return s2; };
+  const we = (s2, e) => Object.assign({}, s2, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const dense = (sg) => { let t = 0, pr = sg.from; for (let i = 1; i <= 4000; i++) { const q = i / 4000, u = 1 - q;
+    const p = { x: u*u*u*sg.from.x + 3*u*u*q*sg.c1.x + 3*u*q*q*sg.c2.x + q*q*q*sg.to.x,
+                y: u*u*u*sg.from.y + 3*u*u*q*sg.c1.y + 3*u*q*q*sg.c2.y + q*q*q*sg.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const BL = dense(backNeck), FL = dense(frontNeck);
+  const uBodice = (hash) => ({ hash: hash, sourceVersion: 1,
+    necklineLengths: { back: BL, front: FL, half: BL + FL, finished: 2 * (BL + FL) },
+    back: { outline: [ln([0, 0], [0, 40], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 40], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } });
+  BODICE = uBodice("BU1");
+  const UP = { vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 1.5 };
+  const mk = () => {
+    const sc = DC.computeSailorCollarU(uBodice("BU1"), UP);
+    return { sourceBodiceHash: "BU1", type: "sailor-collar", baseMethod: "bunka-sailor-collar-U-v1", presetId: "bunka-sailor-collar-U",
+      parameters: { sailor: Object.assign({}, UP) },
+      sailor: { geometry: sc.geometry, measure: sc.measure, anchors: sc.anchors } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  PROJECT = proj(mk());
+  ok(CC.check(PROJECT).ok, "14: U 초안이 완료 게이트 통과(" + CC.check(PROJECT).fails.join(",") + ")");
+  const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.type === "sailor-collar" && Object.isFrozen(r.result.sailor)
+    && JSON.stringify(r.result.sailor.parameters) === JSON.stringify(UP) && r.result.symmetry === "half-cb-fold", "14: U 완료 스냅샷");
+  ok(!("flat" in r.result) && !("stand" in r.result) && !("body" in r.result), "14: 다른 family 섹션을 만들지 않는다");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "14: 완료 직후 미변경");
+  const again = CC.complete(PROJECT);
+  ok(again.ok && again.idempotent === true && again.result === r.result, "14: 재완료 idempotent(같은 참조)");
+
+  // 게이트
+  const longer = mk(); longer.sailor.measure.attachLenCm = longer.sailor.measure.neckTargetCm + 0.2;
+  ok(CC.check(proj(longer)).fails.indexOf("attach-not-shorter") >= 0, "14: 달림선이 목둘레보다 길면 차단");
+  const badCb = mk(); badCb.sailor.measure.cbWidthLenCm += 0.5;
+  ok(CC.check(proj(badCb)).fails.indexOf("collar-width-mismatch") >= 0, "14: 뒤 중심 폭 불일치 차단");
+  const badBack = mk(); badBack.sailor.measure.backOuterLenCm += 0.5;
+  ok(CC.check(proj(badBack)).fails.indexOf("back-outer-mismatch") >= 0, "14: 뒤 외곽 불일치 차단");
+  const badSh = mk(); badSh.sailor.measure.shoulderWidthLenCm += 0.5;
+  ok(CC.check(proj(badSh)).fails.indexOf("shoulder-width-mismatch") >= 0, "14: 어깨 폭 불일치 차단");
+  const badCorner = mk(); badCorner.sailor.measure.backCornerAngleDeg = 85;
+  ok(CC.check(proj(badCorner)).fails.indexOf("back-corner-not-square") >= 0, "14: 뒤 중심 모서리 직각 아님 차단");
+  const noSc = mk(); delete noSc.sailor;
+  ok(CC.check(proj(noSc)).fails.indexOf("no-sailor-collar") >= 0, "14: 형상 없음 차단");
+  const noMark = mk(); noMark.sailor.geometry = Object.assign({}, noMark.sailor.geometry, { construction: [] });
+  ok(CC.check(proj(noMark)).fails.indexOf("shoulder-mark-missing") >= 0, "14: 어깨선 표시 없음 차단");
+  const badParams = mk(); badParams.parameters.sailor.cbWidthCm = 0;
+  ok(CC.check(proj(badParams)).fails.indexOf("sailor-recompute") >= 0, "14: 재계산 불가 파라미터 차단");
+
+  // V 깊이만 달라도 hash 분리 · 플랫과 종류 분리
+  const alt = mk(); alt.parameters.sailor.vDropCm = 14;
+  const altGeom = DC.computeSailorCollarU(uBodice("BU1"), alt.parameters.sailor);
+  alt.sailor.geometry = altGeom.geometry; alt.sailor.measure = altGeom.measure;
+  const rAlt = CC.complete(proj(alt));
+  ok(rAlt.ok && rAlt.result.hash !== r.result.hash, "14: V 깊이가 다르면 hash 분리");
+  {
+    const fl = DC.computeFlatCollarS(uBodice("BU1"), { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 });
+    const pj = proj(mk()); const done = CC.complete(pj);
+    pj.working.collarDraft = { sourceBodiceHash: "BU1", type: "flat-collar", baseMethod: "bunka-flat-collar-S-v1", presetId: "bunka-flat-collar-S",
+      parameters: { flat: { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 } },
+      flat: { geometry: fl.geometry, measure: fl.measure, anchors: fl.anchors } };
+    ok(done.ok && CC.isCurrentCollarChanged(pj) === true, "14: U 완료본 + S 초안 → 변경됨(종류 분리)");
+  }
+  // 몸판 hash 변경 → 무효
+  PROJECT = proj(mk()); CC.complete(PROJECT);
+  BODICE = uBodice("BU2");
+  ok(CC.invalidatedByBodice(PROJECT) === true, "14: 몸판 hash 변경 → U 무효");
+  BODICE = bodice("BH1");
+}
+
+// 14-VW. 세일러 V·W 는 U 와 같은 게이트·서명 규칙을 쓰고, 수치가 다르면 hash 가 갈린다
+{
+  BODICE_STALE = false; SLEEVE = { id: "s" }; SLEEVE_CHANGED = false; SLEEVE_INVAL = false;
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s2 = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s2.edge = edge; return s2; };
+  const we = (s2, e) => Object.assign({}, s2, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const bod = (hash) => ({ hash: hash, sourceVersion: 1,
+    necklineLengths: { back: 8.5, front: 11.5, half: 20, finished: 40 },
+    back: { outline: [ln([0, 0], [0, 40], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 40], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } });
+  BODICE = bod("BVW");
+  const P = {
+    U: { vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5, cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 1.5 },
+    V: { vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5, cbWidthCm: 9, backOuterCm: 13.5, shoulderWidthCm: 7, frontOuterBowCm: 1 },
+    W: { vDropCm: 22, vHollowCm: 0.3, shoulderOverlapCm: 1.5, cbRiseCm: 0.5, cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 0.7 }
+  };
+  const mk = (k) => {
+    const sc = DC.computeSailorCollarU(bod("BVW"), P[k]);
+    return { sourceBodiceHash: "BVW", type: "sailor-collar", baseMethod: "bunka-sailor-collar-" + k + "-v1",
+      presetId: "bunka-sailor-collar-" + k, parameters: { sailor: Object.assign({}, P[k]) },
+      sailor: { geometry: sc.geometry, measure: sc.measure, anchors: sc.anchors } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+
+  const pv = proj(mk("V")), pw = proj(mk("W"));
+  ok(CC.check(pv).ok && CC.check(pw).ok, "14-VW: V·W 초안이 완료 게이트 통과(" + CC.check(pv).fails.concat(CC.check(pw).fails).join(",") + ")");
+  const rU = CC.complete(proj(mk("U"))), rV = CC.complete(pv), rW = CC.complete(pw);
+  ok(rV.ok && rW.ok && rV.result.type === "sailor-collar" && rW.result.type === "sailor-collar"
+    && Object.isFrozen(rV.result.sailor) && rW.result.symmetry === "half-cb-fold", "14-VW: V·W 완료 스냅샷");
+  ok(rU.result.hash !== rV.result.hash && rV.result.hash !== rW.result.hash && rU.result.hash !== rW.result.hash,
+    "14-VW: U·V·W hash 분리(파라미터·형상이 다르다)");
+  ok(rV.result.presetId === "bunka-sailor-collar-V" && rV.result.baseMethod === "bunka-sailor-collar-V-v1"
+    && rW.result.presetId === "bunka-sailor-collar-W", "14-VW: 출처 메타 보존");
+  ok(CC.isCurrentCollarChanged(pw) === false && CC.complete(pw).idempotent === true, "14-VW: W 완료 직후 미변경·재완료 idempotent");
+  // ★ 출처 메타(baseMethod/presetId)는 서명에 들어가지 않는다 — 같은 수치면 같은 hash
+  {
+    const asU = mk("V"); asU.baseMethod = "bunka-sailor-collar-U-v1"; asU.presetId = "bunka-sailor-collar-U";
+    ok(CC.complete(proj(asU)).result.hash === rV.result.hash, "14-VW: 출처 메타만 다르면 hash 동일(형상 전용 서명)");
+  }
+  // 게이트는 U 와 같은 규칙으로 V·W 에도 적용된다
+  const badW = mk("W"); badW.sailor.measure.shoulderWidthLenCm += 0.5;
+  ok(CC.check(proj(badW)).fails.indexOf("shoulder-width-mismatch") >= 0, "14-VW: W 어깨 폭 불일치 차단");
+  const badV = mk("V"); badV.sailor.measure.backOuterLenCm += 0.5;
+  ok(CC.check(proj(badV)).fails.indexOf("back-outer-mismatch") >= 0, "14-VW: V 뒤 외곽 불일치 차단");
+  const noMarkV = mk("V"); noMarkV.sailor.geometry = Object.assign({}, noMarkV.sailor.geometry, { construction: [] });
+  ok(CC.check(proj(noMarkV)).fails.indexOf("shoulder-mark-missing") >= 0, "14-VW: V 어깨선 표시 없음 차단");
+  // 완료본 U + 초안 V → 변경됨(같은 종류라도 수치가 다르다)
+  {
+    const pj = proj(mk("U")); CC.complete(pj);
+    pj.working.collarDraft = mk("V");
+    ok(CC.isCurrentCollarChanged(pj) === true, "14-VW: U 완료본 + V 초안 → 변경됨");
+  }
+  BODICE = bodice("BH1");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

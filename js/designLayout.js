@@ -91,6 +91,8 @@
     merge(cd.openCollar && cd.openCollar.geometry); // 오픈 칼라(family 2, 몸판 연동 L)
     merge(cd.tip && cd.tip.geometry);               // 윙 칼라 칼라 끝(family 3, Q)
     merge(cd.joined && cd.joined.geometry);         // 밴드+위 칼라 한 장(family 3, R)
+    merge(cd.flat && cd.flat.geometry);             // 플랫 칼라(family 4, S)
+    merge(cd.sailor && cd.sailor.geometry);         // 세일러 칼라(family 5, U)
     merge(cd.standalone && cd.standalone.geometry); // 단독 스탠드 칼라(family 1)
     return u;
   }

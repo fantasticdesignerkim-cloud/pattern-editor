@@ -334,6 +334,154 @@
     return { recipe: cd.baseMethod, mode: "parametric", note: null, dims: dims, labels: labels, inputs: inputs, results: results };
   }
 
+  // ── 교재 S(P.69): 플랫 칼라 — 몸판 목둘레선에 직접 그리고 어깨선에서 맞댄다 ──
+  //   달림선은 몸판 목둘레선 그대로라 치수선이 없고(참조선으로만 표시), 칼라 폭·앞 끝만 치수다.
+  function sRecipe(cd, bodice) {
+    var fp = (cd.parameters && cd.parameters.flat) || {};
+    var fl = cd.flat || null, fa = (fl && fl.anchors) || null, fm = (fl && fl.measure) || {};
+    var dims = [], labels = [];
+    if (fa) {
+      var cbNeck = pt(fa.cbNeck), cbOuter = pt(fa.cbOuter), snp = pt(fa.snp), sh = pt(fa.shoulder);
+      var fnp = pt(fa.fnp), tip = pt(fa.tip);
+      dim(dims, "cb-width", "dim", cbNeck, cbOuter, fp.collarWidthCm);      // 뒤 중심 칼라 폭
+      dim(dims, "shoulder-butt", "dim", snp, sh, fp.collarWidthCm);         // 어깨 칼라 폭 = 맞댐선
+      dim(dims, "front-end", "dim", fnp, tip, fp.frontEndFromFnpCm);        // FNP → 칼라 끝
+      if (fnp && tip) {
+        // 칼라 끝 안내선(앞 중심선에 평행)까지의 거리 — 프레임에서는 FNP 기준 보조선으로만 표시.
+        dim(dims, "front-end-offset", "ref", fnp, { x: tip.x, y: fnp.y }, null);
+      }
+      if (cbNeck) labels.push({ id: "cb", at: cbNeck, text: "CB" });
+      if (snp) labels.push({ id: "snp", at: snp, text: "SNP" });
+      if (fnp) labels.push({ id: "fnp", at: fnp, text: "FNP" });
+    }
+    var inputs = [
+      { key: "collarWidthCm", label: "칼라 폭(뒤 중심·어깨)", value: val(fp.collarWidthCm) },
+      { key: "frontEndFromFnpCm", label: "앞 칼라 폭(FNP→칼라 끝)", value: val(fp.frontEndFromFnpCm) },
+      { key: "frontEndOffsetCm", label: "칼라 끝 안내선(앞 중심선에서)", value: val(fp.frontEndOffsetCm) }
+    ];
+    var nl = (bodice && bodice.necklineLengths) || {};
+    var neckDiff = (num(nl.half) && num(fm.attachLenCm)) ? fm.attachLenCm - nl.half : null;
+    var results = [
+      { key: "neckBack", label: "몸판 뒤목(반쪽)", value: val(nl.back) },
+      { key: "neckFront", label: "몸판 앞목(반쪽)", value: val(nl.front) },
+      { key: "neckHalf", label: "반패턴 목둘레 합계(앞반+뒤반)", value: val(nl.half) },
+      { key: "neckFinished", label: "완성 목둘레(반패턴×2)", value: val(nl.finished) },
+      { key: "backAttach", label: "뒤 달림선 실측(몸판 목둘레선)", value: val(fm.backAttachLenCm) },
+      { key: "frontAttach", label: "앞 달림선 실측(몸판 목둘레선)", value: val(fm.frontAttachLenCm) },
+      { key: "attachLen", label: "달림선 실측 합계", value: val(fm.attachLenCm) },
+      { key: "neckDiff", label: "달림선 − 목둘레 합계", value: neckDiff, status: neckDiff == null ? null : (Math.abs(neckDiff) <= SEAM_MATCH_TOL ? "match" : "mismatch") },
+      { key: "cbWidth", label: "뒤 중심 칼라 폭 실측", value: val(fm.cbWidthLenCm) },
+      { key: "shoulderWidth", label: "어깨 칼라 폭 실측(맞댐선)", value: val(fm.shoulderWidthLenCm) },
+      { key: "frontEnd", label: "앞 끝선 실측(FNP→칼라 끝)", value: val(fm.frontEndLenCm) },
+      { key: "frontEndOffset", label: "칼라 끝 안내선 실측(앞 중심선에서)", value: val(fm.frontEndOffsetLenCm) },
+      { key: "outerLen", label: "칼라 외곽선 실측", value: val(fm.outerLenCm) }
+    ];
+    return { recipe: cd.baseMethod, mode: "parametric",
+      note: "몸판 목둘레선에 직접 제도한 앞·뒤 칼라를 어깨선에서 맞대어 한 장으로 — 칼라 허리가 없는 플랫 칼라",
+      dims: dims, labels: labels, inputs: inputs, results: results };
+  }
+
+  // ── 교재 U·V·W(P.70): 세일러 칼라 — 어깨를 겹쳐 그린 한 장(네모난 뒤판 + V 앞) ──
+  //   셋은 같은 제도(P.150)라 표시 규칙도 하나다. 수치는 전부 parameters 에서 읽고 상수를 적지 않는다.
+  function uRecipe(cd, bodice) {
+    var up = (cd.parameters && cd.parameters.sailor) || {};
+    var sc = cd.sailor || null, sa = (sc && sc.anchors) || null, sm = (sc && sc.measure) || {};
+    var dims = [], labels = [];
+    if (sa) {
+      var cbNeck = pt(sa.cbNeck), cbAttach = pt(sa.cbAttach), cbOuter = pt(sa.cbOuter);
+      var backOuter = pt(sa.backOuter), snp = pt(sa.snp), sh = pt(sa.shoulder), fnpV = pt(sa.fnpV);
+      dim(dims, "cb-rise", "dim", cbNeck, cbAttach, up.cbRiseCm);            // 뒤 중심 0.5 올림
+      dim(dims, "cb-width", "dim", cbAttach, cbOuter, up.cbWidthCm);         // 뒤 중심 칼라 폭 11
+      dim(dims, "back-outer", "dim", cbOuter, backOuter, up.backOuterCm);    // 뒤 외곽 15.5(CB 직각)
+      dim(dims, "shoulder-width", "dim", snp, sh, up.shoulderWidthCm);       // 어깨 칼라 폭 10
+      dim(dims, "front-chord", "ref", sh, fnpV, null);                       // 앞 외곽선의 현(휨 1.5 기준)
+      if (cbNeck) labels.push({ id: "cb", at: cbNeck, text: "CB" });
+      if (snp) labels.push({ id: "snp", at: snp, text: "SNP" });
+      if (fnpV) labels.push({ id: "fnp", at: fnpV, text: "FNP" });
+    }
+    var inputs = [
+      { key: "vDropCm", label: "V 목둘레(FNP에서 내림)", value: val(up.vDropCm) },
+      { key: "vHollowCm", label: "V선 휨(현에서)", value: val(up.vHollowCm) },
+      { key: "shoulderOverlapCm", label: "어깨선 겹침", value: val(up.shoulderOverlapCm) },
+      { key: "cbRiseCm", label: "뒤 중심 달림선 올림", value: val(up.cbRiseCm) },
+      { key: "cbWidthCm", label: "뒤 중심 칼라 폭", value: val(up.cbWidthCm) },
+      { key: "backOuterCm", label: "뒤 칼라 외곽(뒤 중심에 직각)", value: val(up.backOuterCm) },
+      { key: "shoulderWidthCm", label: "어깨 칼라 폭", value: val(up.shoulderWidthCm) },
+      { key: "frontOuterBowCm", label: "앞 외곽선 휨(현에서)", value: val(up.frontOuterBowCm) }
+    ];
+    var nl = (bodice && bodice.necklineLengths) || {};
+    var shortfall = num(sm.attachShortfallCm) ? sm.attachShortfallCm : null;
+    var results = [
+      { key: "neckBack", label: "몸판 뒤목(반쪽)", value: val(nl.back) },
+      { key: "neckFront", label: "몸판 앞목(반쪽·원래 목선)", value: val(nl.front) },
+      // ★ 세일러는 앞을 V 로 파낸 목둘레에 달린다 — 원래 앞목 치수가 아니라 파생 V선 길이가 기준.
+      //   내림 치수는 상수가 아니라 parameters 값이다(U·V 12 / W 22).
+      { key: "vNeck", label: "파생 V 목선 실측(SNP→" + (num(up.vDropCm) ? up.vDropCm : "지정") + " 내린 점)", value: val(sm.vNeckLenCm) },
+      { key: "neckTarget", label: "칼라가 붙는 목둘레(뒤목 + V선)", value: val(sm.neckTargetCm) },
+      { key: "attachLen", label: "달림선 실측(재작도)", value: val(sm.attachLenCm) },
+      { key: "attachShortfall", label: "목둘레 − 달림선(늘려 박는 분)", value: shortfall },
+      { key: "shoulderTipGap", label: "어깨 끝 간격 실측", value: val(sm.shoulderTipGapCm) },
+      { key: "overlapAngle", label: "겹침 회전각(도)", value: val(sm.overlapAngleDeg) },
+      { key: "cbWidth", label: "뒤 중심 칼라 폭 실측", value: val(sm.cbWidthLenCm) },
+      { key: "backOuter", label: "뒤 칼라 외곽 실측", value: val(sm.backOuterLenCm) },
+      { key: "backCorner", label: "뒤 중심 모서리 각(도)", value: val(sm.backCornerAngleDeg) },
+      { key: "shoulderWidth", label: "어깨 칼라 폭 실측", value: val(sm.shoulderWidthLenCm) },
+      { key: "backOuterEdge", label: "뒤 외곽선 실측(외곽 모서리→어깨)", value: val(sm.backOuterEdgeLenCm) },
+      { key: "frontOuter", label: "앞 외곽선 실측(곡선)", value: val(sm.frontOuterLenCm) },
+      { key: "outerLen", label: "칼라 외곽 전체 실측", value: val(sm.outerLenCm) }
+    ];
+    return { recipe: cd.baseMethod, mode: "parametric",
+      note: "앞뒤 어깨선을 겹쳐 한 장으로 제도 — 앞 목둘레를 V 로 파고(칼라 안에서만 파생) 뒤에서 앞의 순서로 외곽을 그린다",
+      dims: dims, labels: labels, inputs: inputs, results: results };
+  }
+
+  // ── 교재 T(P.69 하단): 플랫 칼라 — 어깨선을 3.5 겹쳐 한 장으로, 달림선은 0.5 올려 재작도 ──
+  function tRecipe(cd, bodice) {
+    var tp = (cd.parameters && cd.parameters.flatOverlap) || {};
+    var fl = cd.flat || null, fa = (fl && fl.anchors) || null, fm = (fl && fl.measure) || {};
+    var dims = [], labels = [];
+    if (fa) {
+      var cbNeck = pt(fa.cbNeck), cbAttach = pt(fa.cbAttach), cbOuter = pt(fa.cbOuter);
+      var snp = pt(fa.snp), sh = pt(fa.shoulder), fnp = pt(fa.fnp), tip = pt(fa.tip);
+      dim(dims, "cb-rise", "dim", cbNeck, cbAttach, tp.cbRiseCm);            // 몸판 목점 → 0.5 올림
+      dim(dims, "cb-width", "dim", cbAttach, cbOuter, tp.collarWidthCm);     // 뒤 중심 칼라 폭
+      dim(dims, "shoulder-width", "dim", snp, sh, tp.collarWidthCm);         // 어깨(앞 어깨선) 칼라 폭
+      dim(dims, "front-end", "dim", fnp, tip, tp.frontEndFromFnpCm);         // FNP → 칼라 끝
+      if (fnp && tip) dim(dims, "front-end-offset", "ref", fnp, { x: tip.x, y: fnp.y }, null);
+      if (cbNeck) labels.push({ id: "cb", at: cbNeck, text: "CB" });
+      if (snp) labels.push({ id: "snp", at: snp, text: "SNP" });
+      if (fnp) labels.push({ id: "fnp", at: fnp, text: "FNP" });
+    }
+    var inputs = [
+      { key: "collarWidthCm", label: "칼라 폭(뒤 중심·어깨)", value: val(tp.collarWidthCm) },
+      { key: "cbRiseCm", label: "뒤 중심 달림선 올림", value: val(tp.cbRiseCm) },
+      { key: "shoulderOverlapCm", label: "어깨선 겹침(어깨 끝 간격)", value: val(tp.shoulderOverlapCm) },
+      { key: "frontEndFromFnpCm", label: "앞 칼라 폭(FNP→칼라 끝)", value: val(tp.frontEndFromFnpCm) },
+      { key: "frontEndOffsetCm", label: "칼라 끝 안내선(앞 중심선에서)", value: val(tp.frontEndOffsetCm) }
+    ];
+    var nl = (bodice && bodice.necklineLengths) || {};
+    var shortfall = num(fm.attachShortfallCm) ? fm.attachShortfallCm : null;
+    var results = [
+      { key: "neckBack", label: "몸판 뒤목(반쪽)", value: val(nl.back) },
+      { key: "neckFront", label: "몸판 앞목(반쪽)", value: val(nl.front) },
+      { key: "neckHalf", label: "반패턴 목둘레 합계(앞반+뒤반)", value: val(nl.half) },
+      { key: "neckFinished", label: "완성 목둘레(반패턴×2)", value: val(nl.finished) },
+      { key: "attachLen", label: "달림선 실측(재작도)", value: val(fm.attachLenCm) },
+      // ★ 교재: 몸판 목둘레보다 약 0.5 짧고, 부족분은 칼라를 달 때 늘려 박는다(작은 칼라 허리).
+      { key: "attachShortfall", label: "몸판 목둘레 − 달림선(늘려 박는 분)", value: shortfall },
+      { key: "shoulderTipGap", label: "어깨 끝 간격 실측(겹침)", value: val(fm.shoulderTipGapCm) },
+      { key: "overlapAngle", label: "겹침 회전각(도)", value: val(fm.overlapAngleDeg) },
+      { key: "cbWidth", label: "뒤 중심 칼라 폭 실측", value: val(fm.cbWidthLenCm) },
+      { key: "shoulderWidth", label: "어깨 칼라 폭 실측", value: val(fm.shoulderWidthLenCm) },
+      { key: "frontEnd", label: "앞 끝선 실측(FNP→칼라 끝)", value: val(fm.frontEndLenCm) },
+      { key: "frontEndOffset", label: "칼라 끝 안내선 실측(앞 중심선에서)", value: val(fm.frontEndOffsetLenCm) },
+      { key: "outerLen", label: "칼라 외곽선 실측", value: val(fm.outerLenCm) }
+    ];
+    return { recipe: cd.baseMethod, mode: "parametric",
+      note: "앞뒤 어깨선을 겹쳐 한 장으로 제도 — 뒤 중심에서 0.5 올려 달림선을 다시 그리면 몸판 목둘레보다 약간 짧아지고, 그 부족분이 작은 칼라 허리가 된다",
+      dims: dims, labels: labels, inputs: inputs, results: results };
+  }
+
   // ── 교재 R(P.68 하단): 밴드+위 칼라 한 장 ──
   //   밴드는 M~Q 와 같은 P.148 골격이고, 밴드 윗선(이음선 자리)을 경계로 위 칼라가 한 조각으로 이어진다.
   //   위 칼라 표기: CB 3.5(수직) · 외곽 뒤 구간 = 뒤 목둘레 ×(수평) · 앞 칼라 폭 6.5(Ⓒ에서 수직)
@@ -408,6 +556,11 @@
     "bunka-open-collar-L-v1": lRecipe,
     "bunka-wing-collar-Q-v1": qRecipe,
     "bunka-band-collar-R-v1": rRecipe,
+    "bunka-flat-collar-S-v1": sRecipe,
+    "bunka-flat-collar-T-v1": tRecipe,
+    "bunka-sailor-collar-U-v1": uRecipe,
+    "bunka-sailor-collar-V-v1": uRecipe,
+    "bunka-sailor-collar-W-v1": uRecipe,
     "bunka-stand-collar-A-P146-v1": standaloneRecipe,
     "bunka-stand-collar-B-P146-v1": standaloneRecipe,
     "bunka-stand-collar-C-P146-v1": standaloneRecipe,
@@ -421,10 +574,14 @@
     var onePiece = collarDraft.type === "shirt-one-piece", standalone = collarDraft.type === "stand-collar";
     var openCollar = collarDraft.type === "shirt-open-collar", wing = collarDraft.type === "shirt-wing-collar";
     var joined = collarDraft.type === "shirt-band-one-piece";
+    var flat = collarDraft.type === "flat-collar" || collarDraft.type === "flat-collar-overlap";
+    var sailor = collarDraft.type === "sailor-collar";
     if (onePiece ? !(collarDraft.onePiece && collarDraft.onePiece.geometry)
       : openCollar ? !(collarDraft.openCollar && collarDraft.openCollar.geometry)
         : wing ? !(collarDraft.standGeometry && collarDraft.tip && collarDraft.tip.geometry)
           : joined ? !(collarDraft.joined && collarDraft.joined.geometry)
+            : flat ? !(collarDraft.flat && collarDraft.flat.geometry)
+              : sailor ? !(collarDraft.sailor && collarDraft.sailor.geometry)
             : standalone ? !(collarDraft.standalone && collarDraft.standalone.geometry) : !collarDraft.standGeometry) return null;
     var fn = RECIPES[collarDraft.baseMethod];
     return fn ? fn(collarDraft, bodiceResult || null) : null;

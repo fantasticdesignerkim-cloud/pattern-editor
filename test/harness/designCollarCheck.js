@@ -487,5 +487,380 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   ok(C.computeStand(B, { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 }, { horizontalTopLine: true }).horizontalTopLine === true, "13: Q 수평 꺾임선 경로 불변");
 }
 
+// 14. 교재 S(P.69) 플랫 칼라 — 몸판 목둘레선에 직접 제도하고 어깨선에서 맞댄다.
+//     몸판 형상은 입력일 뿐 바꾸지 않는다(의미 모서리 center/neckline/shoulder 만 읽는다).
+{
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s.edge = edge; return s; };
+  const withEdge = (s, e) => Object.assign({}, s, { edge: e });
+  // 뒤: CB(0,0)→(0,20) · 목둘레 (0,0)→SNP(8,-2) · 어깨 SNP→(18,2)
+  const backNeck = withEdge(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  // 앞: CF(40,4)→(40,20) · 목둘레 FNP(40,4)→SNP(32,-4) · 어깨 SNP→(22,0)  ← 뒤와 좌우 대칭 제도
+  const frontNeck = withEdge(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const BACK_LEN = denseLen(backNeck), FRONT_LEN = denseLen(frontNeck);
+  const bodyS = () => ({
+    hash: "BS", necklineLengths: { back: BACK_LEN, front: FRONT_LEN, half: BACK_LEN + FRONT_LEN, finished: 2 * (BACK_LEN + FRONT_LEN) },
+    back: { outline: [ln([0, 0], [0, 20], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 20], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] }
+  });
+  const FS = { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 };
+
+  ok(typeof C.computeFlatCollarS === "function" && J(C.FLAT_COLLAR_S_METHOD) === J({ page: 69, methodPage: 149, variant: "S",
+    bodyLinked: true, attachFrom: "bodice-neckline", join: "shoulder-butt", shoulderOverlapCm: 0, cbRiseCm: 0,
+    smoothing: "tangent-continuous-cubic", handleFraction: 1 / 3 }), "14: S API·제도법 메타(달림선 = 몸판 목둘레선 · 어깨 맞댐 · 겹침 0 · CB 올림 0)");
+
+  const B = bodyS(), r = C.computeFlatCollarS(B, FS);
+  ok(r.ok && C.validateClosedOutline(r.geometry.outline).ok, "14: S 폐곡선 한 조각(" + (r.reason || "") + ")");
+  ok(J(r.geometry.outline.map(s => s.part)) === J(["neck-seam", "neck-seam", "front-edge", "outer", "outer", "cb-fold"]),
+    "14: 구성 = 달림선(뒤·앞) + 앞 끝선 + 외곽 2 + 뒤 중심");
+  // ① 달림선 = 몸판 목둘레선 그대로(길이 책임: 실측 = ×+⊘)
+  ok(near(r.measure.backAttachLenCm, BACK_LEN, 1e-4) && near(r.measure.frontAttachLenCm, FRONT_LEN, 1e-4)
+    && near(r.measure.attachLenCm, BACK_LEN + FRONT_LEN, 1e-4) && near(r.measure.attachLenCm, r.measure.neckTargetCm, 1e-4),
+    "14: 달림선 실측 = 뒤 목둘레 + 앞 목둘레(재작도 없음)");
+  ok(near(partLen(r.geometry, "neck-seam"), BACK_LEN + FRONT_LEN, 1e-3), "14: 달림선 독립 측정 재검산");
+  // ② 칼라 폭: 뒤 중심·어깨 둘 다 5.5(맞댐 가능 조건)
+  const A = r.anchors;
+  ok(A.cbNeck.x === 0 && A.cbNeck.y === 0 && near(A.cbOuter.x, 0, 1e-9) && near(A.cbOuter.y, FS.collarWidthCm, 1e-9),
+    "14: 프레임 — CB 목점 = 원점, 뒤 중심 폭선은 수직 5.5");
+  ok(near(r.measure.cbWidthLenCm, FS.collarWidthCm, 1e-9) && near(r.measure.shoulderWidthLenCm, FS.collarWidthCm, 1e-9),
+    "14: 뒤 중심 폭 = 어깨 폭 = 5.5 실측");
+  ok(near(Math.hypot(A.shoulder.x - A.snp.x, A.shoulder.y - A.snp.y), FS.collarWidthCm, 1e-9), "14: 어깨 맞댐선 길이 = 칼라 폭");
+  // ③ 칼라 끝: 앞 중심선에 평행한 안내선(4) 위, FNP 에서 6
+  ok(near(r.measure.frontEndLenCm, FS.frontEndFromFnpCm, 1e-9) && near(r.measure.frontEndOffsetLenCm, FS.frontEndOffsetCm, 1e-9),
+    "14: 앞 끝선 6 · 안내선 4 실측");
+  ok(near(Math.hypot(A.tip.x - A.fnp.x, A.tip.y - A.fnp.y), FS.frontEndFromFnpCm, 1e-9), "14: 칼라 끝 anchor 도 FNP 에서 6");
+  // ④ 외곽선: 뒤 중심 폭선에 직각으로 출발 → 어깨 폭 지점 경유 → 칼라 끝(접선 연속)
+  const outer = r.geometry.outline.filter(s => s.part === "outer");
+  ok(outer.length === 2 && outer.every(s => s.kind === "cubic"), "14: 외곽선 = 접선 연속 cubic 2개");
+  // outline 은 칼라 끝 → 뒤 중심 방향이라 뒤 중심 쪽 끝이 outer[1].to 다.
+  ok(near(outer[1].to.x, A.cbOuter.x, 1e-9) && near(outer[1].to.y, A.cbOuter.y, 1e-9)
+    && near(outer[1].c2.y, outer[1].to.y, 1e-9), "14: 뒤 중심에서 폭선(CB)에 직각으로 출발");
+  ok(near(outer[0].to.x, A.shoulder.x, 1e-9) && near(outer[0].to.y, A.shoulder.y, 1e-9), "14: 외곽선이 어깨 폭 지점을 지난다");
+  {   // 이음점 접선 연속(들어오는 c2→to 방향 = 나가는 to→c1 방향)
+    const t1 = { x: outer[0].to.x - outer[0].c2.x, y: outer[0].to.y - outer[0].c2.y };
+    const t2 = { x: outer[1].c1.x - outer[1].from.x, y: outer[1].c1.y - outer[1].from.y };
+    const cross = t1.x * t2.y - t1.y * t2.x;
+    ok(Math.abs(cross) < 1e-9 && dot(t1, t2) > 0, "14: 어깨 폭 지점에서 접선 연속");
+  }
+  ok(near(r.measure.outerLenCm, partLen(r.geometry, "outer"), 1e-3) && r.measure.outerLenCm > r.measure.attachLenCm,
+    "14: 외곽선 실측 보고 · 달림선보다 길다(플랫 칼라)");
+  // ⑤ 어깨 맞댐: 앞·뒤가 어깨선을 사이에 두고 반대쪽(겹치지 않는다)
+  {
+    const butt = r.geometry.construction.filter(s => s.part === "shoulder-butt");
+    ok(butt.length === 1 && butt[0].kind === "line", "14: 어깨 맞댐선이 구성선으로 남는다");
+    const d = { x: A.shoulder.x - A.snp.x, y: A.shoulder.y - A.snp.y };
+    const sideBack = d.x * (A.cbNeck.y - A.snp.y) - d.y * (A.cbNeck.x - A.snp.x);
+    const sideFront = d.x * (A.fnp.y - A.snp.y) - d.y * (A.fnp.x - A.snp.x);
+    ok(sideBack * sideFront < 0, "14: 맞댄 앞·뒤가 어깨선 반대쪽(겹침 없음)");
+  }
+  // ⑥ 실패 계약(원자적 — geometry 없음)
+  ok(C.computeFlatCollarS(B, Object.assign({}, FS, { collarWidthCm: 0 })).reason === "invalid-collar-width"
+    && C.computeFlatCollarS(B, Object.assign({}, FS, { frontEndFromFnpCm: 0 })).reason === "invalid-front-end"
+    && C.computeFlatCollarS(B, Object.assign({}, FS, { frontEndOffsetCm: -1 })).reason === "invalid-front-end-offset"
+    && C.computeFlatCollarS(B, Object.assign({}, FS, { frontEndOffsetCm: 6 })).reason === "front-end-unreachable"
+    && !("geometry" in C.computeFlatCollarS(B, Object.assign({}, FS, { collarWidthCm: 0 }))), "14: 파라미터 범위 밖 거부(형상 없음)");
+  {
+    const noNeck = bodyS(); noNeck.back.outline = noNeck.back.outline.filter(s => s.edge !== "neckline");
+    const noCenter = bodyS(); noCenter.front.outline = noCenter.front.outline.filter(s => s.edge !== "center");
+    const noSh = bodyS(); noSh.back.outline = noSh.back.outline.filter(s => s.edge !== "shoulder");
+    ok(C.computeFlatCollarS(noNeck, FS).reason === "no-body-neckline"
+      && C.computeFlatCollarS(noCenter, FS).reason === "no-body-center"
+      && C.computeFlatCollarS(noSh, FS).reason === "no-body-shoulder"
+      && C.computeFlatCollarS({ hash: "x" }, FS).reason === "no-neckline", "14: 몸판 의미 모서리 누락 거부");
+    const dup = bodyS();
+    dup.back.outline.push(withEdge(cub([0, 0], [-3, 0], [-6, -1], [-8, -2]), "neckline"));   // 목점에 닿는 목둘레가 둘
+    ok(C.computeFlatCollarS(dup, FS).reason === "ambiguous-neck-point", "14: 목점이 유일하지 않으면 거부");
+  }
+  {   // 앞판이 뒤판과 같은 방향으로 제도돼 있으면 맞댔을 때 겹친다 → 임의로 뒤집지 않고 실패
+    const same = bodyS();
+    same.front = { outline: [ln([-40, 4], [-40, 20], "center"),
+      withEdge(cub([-40, 4], [-37, 2], [-34, -2], [-32, -4]), "neckline"),
+      ln([-32, -4], [-22, 0], "shoulder")], construction: [] };
+    ok(C.computeFlatCollarS(same, FS).reason === "shoulder-butt-overlap", "14: 맞댐이 겹치면 실패(반사 금지)");
+  }
+  // ⑦ 결정론·입력 비변형
+  {
+    const snap = J(B), snapP = J(FS);
+    ok(J(C.computeFlatCollarS(B, FS)) === J(r) && J(B) === snap && J(FS) === snapP, "14: 결정론·입력 비변형");
+  }
+  // ⑧ 다른 family 경로 불변(같은 모듈이지만 서로 건드리지 않는다)
+  {
+    const b2 = bodice(8.6087, 12.3874, 1.75);
+    ok(C.computeStand(b2, BAND.M).ok && C.computeBandOnePiece(b2, BAND.M, { upperWidthCm: 3.5, frontWidthCm: 6.5, outerBowCm: 0.5 }).ok,
+      "14: 밴드(M)·밴드+위 칼라(R) 경로 정상 유지");
+  }
+}
+
+// 15. 교재 T(P.69 하단) 플랫 칼라 — 어깨선 3.5 겹침 + 뒤 중심 0.5 올린 달림선 재작도.
+//     S(맞댐)와 같은 몸판 입력을 쓰되 결과는 서로 완전히 분리된다.
+{
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s.edge = edge; return s; };
+  const we = (s, e) => Object.assign({}, s, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const BACK_LEN = denseLen(backNeck), FRONT_LEN = denseLen(frontNeck);
+  const bodyT = () => ({
+    hash: "BT", necklineLengths: { back: BACK_LEN, front: FRONT_LEN, half: BACK_LEN + FRONT_LEN, finished: 2 * (BACK_LEN + FRONT_LEN) },
+    back: { outline: [ln([0, 0], [0, 20], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 20], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] }
+  });
+  const TP = { collarWidthCm: 5.5, cbRiseCm: 0.5, shoulderOverlapCm: 3.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 };
+  const SP2 = { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 };
+
+  ok(typeof C.computeFlatCollarT === "function" && J(C.FLAT_COLLAR_T_METHOD) === J({ page: 69, methodPage: 149, variant: "T",
+    bodyLinked: true, attachFrom: "redrawn-neckline", join: "shoulder-overlap", attachOffsetTaper: "cb-to-front-linear",
+    smoothing: "tangent-continuous-cubic", handleFraction: 1 / 3 }), "15: T API·제도법 메타(재작도 달림선·어깨 겹침)");
+
+  const B = bodyT(), r = C.computeFlatCollarT(B, TP);
+  ok(r.ok && C.validateClosedOutline(r.geometry.outline).ok, "15: T 폐곡선 한 조각(" + (r.reason || "") + ")");
+  ok(J(r.geometry.outline.map(s => s.part)) === J(["neck-seam", "neck-seam", "front-edge", "outer", "outer", "cb-fold"]),
+    "15: 구성 = 달림선 2 + 앞 끝선 + 외곽 2 + 뒤 중심");
+  const A = r.anchors;
+  // ① 겹침: 두 어깨 끝점 사이 거리 = 3.5 (SNP 는 맞춰져 있다)
+  ok(near(r.measure.shoulderTipGapCm, TP.shoulderOverlapCm, 1e-6), "15: 어깨 끝점 간격 실측 = 겹침 3.5");
+  ok(r.measure.overlapAngleDeg > 0 && r.measure.overlapAngleDeg < 90, "15: 겹침 회전각 보고");
+  // ② 뒤 중심: 몸판 목점 → 0.5 올린 달림선 시작 → 칼라 폭 5.5 (전부 CB 선 위, 수직)
+  ok(near(A.cbNeck.x, 0, 1e-9) && near(A.cbNeck.y, 0, 1e-9) && near(A.cbAttach.x, 0, 1e-9)
+    && near(A.cbAttach.y, -TP.cbRiseCm, 1e-9) && near(A.cbOuter.x, 0, 1e-9)
+    && near(A.cbOuter.y, TP.collarWidthCm - TP.cbRiseCm, 1e-9), "15: 목점(0,0) → 0.5 올림 → 폭 5.5 가 모두 CB 선 위");
+  ok(near(r.measure.cbWidthLenCm, TP.collarWidthCm, 1e-9) && near(r.measure.shoulderWidthLenCm, TP.collarWidthCm, 1e-9),
+    "15: 뒤 중심·어깨 칼라 폭 5.5 실측");
+  // ③ 달림선: 시작점에서 CB 에 직각 · 몸판 목둘레보다 짧다(교재: 약 0.5)
+  const attach = r.geometry.outline.filter(s => s.part === "neck-seam");
+  ok(near(attach[0].from.x, A.cbAttach.x, 1e-9) && near(attach[0].from.y, A.cbAttach.y, 1e-9)
+    && near(attach[0].c1.y, attach[0].from.y, 1e-9), "15: 달림선은 0.5 올린 점에서 CB 에 직각으로 출발");
+  ok(near(attach[attach.length - 1].to.x, A.fnp.x, 1e-9) && near(attach[attach.length - 1].to.y, A.fnp.y, 1e-9),
+    "15: 달림선은 FNP 에서 끝난다(앞 중심에서 몸판 목둘레선과 만난다)");
+  ok(r.measure.attachLenCm < r.measure.neckTargetCm && near(r.measure.attachShortfallCm, r.measure.neckTargetCm - r.measure.attachLenCm, 1e-9),
+    "15: 달림선 < 몸판 목둘레(부족분 보고)");
+  ok(r.measure.attachShortfallCm > 0.15 && r.measure.attachShortfallCm < 1.2, "15: 부족분이 교재 '약 0.5cm' 범위(" + r.measure.attachShortfallCm.toFixed(3) + ")");
+  ok(near(partLen(r.geometry, "neck-seam"), r.measure.attachLenCm, 1e-3), "15: 달림선 독립 측정 재검산");
+  // ④ 칼라 끝 6·4 (S 와 같은 ①② 절차)
+  ok(near(r.measure.frontEndLenCm, TP.frontEndFromFnpCm, 1e-9) && near(r.measure.frontEndOffsetLenCm, TP.frontEndOffsetCm, 1e-9),
+    "15: 앞 끝선 6 · 안내선 4 실측");
+  // ⑤ 외곽선: 뒤 중심 폭선에 직각 출발 · 어깨 폭 지점 통과 · 접선 연속
+  const outer = r.geometry.outline.filter(s => s.part === "outer");
+  ok(outer.length === 2 && near(outer[1].to.x, A.cbOuter.x, 1e-9) && near(outer[1].to.y, A.cbOuter.y, 1e-9)
+    && near(outer[1].c2.y, outer[1].to.y, 1e-9), "15: 외곽선이 뒤 중심에서 CB 에 직각");
+  ok(near(outer[0].to.x, A.shoulder.x, 1e-9) && near(outer[0].to.y, A.shoulder.y, 1e-9), "15: 외곽선이 어깨 폭 지점을 지난다");
+  ok(r.geometry.construction.length === 1 && r.geometry.construction[0].part === "shoulder-mark", "15: 어깨선 표시가 구성선으로 남는다");
+  // ⑥ 겹침 0 이면 S 의 맞댐과 같은 배치가 된다(달림선은 여전히 재작도)
+  {
+    const noOv = C.computeFlatCollarT(B, Object.assign({}, TP, { shoulderOverlapCm: 0, cbRiseCm: 0 }));
+    const s2 = C.computeFlatCollarS(B, SP2);
+    ok(noOv.ok && near(noOv.measure.shoulderTipGapCm, 0, 1e-6), "15: 겹침 0 → 어깨 끝점이 맞닿는다");
+    ok(noOv.ok && s2.ok && near(noOv.anchors.fnp.x, s2.anchors.fnp.x, 1e-6) && near(noOv.anchors.fnp.y, s2.anchors.fnp.y, 1e-6),
+      "15: 겹침 0·올림 0 이면 앞 조각 배치가 S 의 맞댐과 같다");
+    ok(noOv.ok && near(noOv.measure.attachLenCm, noOv.measure.neckTargetCm, 1e-3),
+      "15: 겹침 0·올림 0 이면 달림선 = 몸판 목둘레(재작도 offset 이 0)");
+  }
+  // ⑦ 실패 계약(원자적)
+  ok(C.computeFlatCollarT(B, Object.assign({}, TP, { collarWidthCm: 0 })).reason === "invalid-collar-width"
+    && C.computeFlatCollarT(B, Object.assign({}, TP, { cbRiseCm: -1 })).reason === "invalid-cb-rise"
+    && C.computeFlatCollarT(B, Object.assign({}, TP, { shoulderOverlapCm: -1 })).reason === "invalid-shoulder-overlap"
+    && C.computeFlatCollarT(B, Object.assign({}, TP, { shoulderOverlapCm: 99 })).reason === "shoulder-overlap-unreachable"
+    && C.computeFlatCollarT(B, Object.assign({}, TP, { frontEndOffsetCm: 6 })).reason === "front-end-unreachable"
+    && !("geometry" in C.computeFlatCollarT(B, Object.assign({}, TP, { collarWidthCm: 0 }))), "15: 파라미터 범위 밖 거부(형상 없음)");
+  {
+    const noSh = bodyT(); noSh.back.outline = noSh.back.outline.filter(s => s.edge !== "shoulder");
+    ok(C.computeFlatCollarT(noSh, TP).reason === "no-body-shoulder" && C.computeFlatCollarT({ hash: "x" }, TP).reason === "no-neckline",
+      "15: 몸판 의미 모서리 누락 거부");
+  }
+  // ⑧ 결정론·입력 비변형 · S 경로 불변
+  {
+    const snap = J(B), snapP = J(TP);
+    ok(J(C.computeFlatCollarT(B, TP)) === J(r) && J(B) === snap && J(TP) === snapP, "15: 결정론·입력 비변형");
+    const sNow = C.computeFlatCollarS(bodyT(), SP2);
+    ok(sNow.ok && near(sNow.measure.attachLenCm, BACK_LEN + FRONT_LEN, 1e-4) && near(sNow.measure.cbWidthLenCm, 5.5, 1e-9),
+      "15: 같은 몸판에서 S 결과는 그대로(달림선 = 몸판 목둘레)");
+  }
+}
+
+// 16. 교재 U(P.70 · 제도 방법 P.150) 세일러 칼라 — V 목둘레 내부 파생 + 어깨 겹침 + 네모난 뒤판
+{
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s.edge = edge; return s; };
+  const we = (s, e) => Object.assign({}, s, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const BACK_LEN = denseLen(backNeck), FRONT_LEN = denseLen(frontNeck);
+  const bodyU = () => ({
+    hash: "BU", necklineLengths: { back: BACK_LEN, front: FRONT_LEN, half: BACK_LEN + FRONT_LEN, finished: 2 * (BACK_LEN + FRONT_LEN) },
+    back: { outline: [ln([0, 0], [0, 40], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 40], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] }
+  });
+  const UP = { vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 1.5 };
+
+  ok(typeof C.computeSailorCollarU === "function" && J(C.SAILOR_COLLAR_U_METHOD) === J({ page: 70, methodPage: 150, variant: "U",
+    bodyLinked: true, vNeck: "derived-internal", join: "shoulder-overlap", attachOffsetTaper: "cb-to-front-linear",
+    backOuterSquare: true, smoothing: "tangent-continuous-cubic", handleFraction: 1 / 3 }), "16: U API·제도법 메타(V 내부 파생·어깨 겹침·네모 뒤판)");
+
+  const B = bodyU(), r = C.computeSailorCollarU(B, UP);
+  ok(r.ok && C.validateClosedOutline(r.geometry.outline).ok, "16: U 폐곡선 한 조각(" + (r.reason || "") + ")");
+  ok(J(r.geometry.outline.map(s => s.part)) === J(["neck-seam", "neck-seam", "neck-seam", "outer", "outer", "outer-back", "outer-cb", "cb-fold"]),
+    "16: 구성 = 달림선 3 + 앞 외곽 2 + 뒤 외곽선 + 뒤 중심 직각변 + 뒤 중심");
+  const A = r.anchors;
+  // ① V 목둘레는 칼라 안에서만 파생한다 — 몸판 입력은 그대로
+  {
+    const snap = J(B);
+    C.computeSailorCollarU(B, UP);
+    ok(J(B) === snap, "16: 몸판 geometry 입력 비변형(V 는 칼라 내부 파생)");
+    // FNP_V = 앞 목점에서 앞 중심선(=+y)으로 12 내린 점 → 프레임 밖 원좌표로 검산
+    const drop = Math.hypot(0, UP.vDropCm);
+    ok(near(r.measure.vDropCm, 12, 1e-9) && r.measure.vNeckLenCm > drop, "16: V 목선은 12 내림보다 길다(SNP→깊은 점)");
+    ok(near(r.measure.neckTargetCm, r.measure.backNeckLenCm + r.measure.vNeckLenCm, 1e-9),
+      "16: 칼라가 붙는 목둘레 = 뒤목 + 파생 V선(원래 앞목 아님)");
+    ok(!near(r.measure.neckTargetCm, B.necklineLengths.half, 1e-3), "16: 원래 몸판 목둘레(라운드)와 다르다");
+  }
+  // ② 겹침: 짧은 쪽 어깨 길이에서 1.5 겹치는 각
+  {
+    const Lmin = Math.min(r.measure.backShoulderLenCm, r.measure.frontShoulderLenCm);
+    const want = 2 * Math.asin(UP.shoulderOverlapCm / (2 * Lmin)) * 180 / Math.PI;
+    ok(near(r.measure.overlapAngleDeg, want, 1e-6) && r.measure.overlapAngleDeg > 0, "16: 겹침 각 = 2·asin(1.5/2L) (짧은 어깨 기준)");
+    ok(C.computeSailorCollarU(B, Object.assign({}, UP, { shoulderOverlapCm: 999 })).reason === "shoulder-overlap-unreachable",
+      "16: 어깨 길이로 만들 수 없는 겹침은 거부");
+  }
+  // ③ 뒤 중심: 목점 → 0.5 올림 → 폭 11 이 모두 CB 선 위(수직), 외곽 15.5 는 CB 에 직각
+  ok(near(A.cbNeck.x, 0, 1e-9) && near(A.cbNeck.y, 0, 1e-9) && near(A.cbAttach.x, 0, 1e-9)
+    && near(A.cbAttach.y, -UP.cbRiseCm, 1e-9) && near(A.cbOuter.x, 0, 1e-9)
+    && near(A.cbOuter.y, UP.cbWidthCm - UP.cbRiseCm, 1e-9), "16: 0.5 올림 → 뒤 중심 폭 11 이 CB 선 위");
+  ok(near(r.measure.cbWidthLenCm, UP.cbWidthCm, 1e-9) && near(r.measure.backOuterLenCm, UP.backOuterCm, 1e-9)
+    && near(r.measure.backCornerAngleDeg, 90, 1e-6), "16: 뒤 중심 11 · 외곽 15.5 · 사잇각 90°");
+  ok(near(A.backOuter.y, A.cbOuter.y, 1e-9) && Math.abs(A.backOuter.x - A.cbOuter.x) > 1, "16: 외곽 15.5 는 CB 에 직각(프레임 x축)");
+  // ④ 어깨 칼라 폭 10 · 뒤 외곽선은 직선 · 어깨선 표시
+  ok(near(r.measure.shoulderWidthLenCm, UP.shoulderWidthCm, 1e-9), "16: 어깨 칼라 폭 10 실측");
+  {
+    const back = r.geometry.outline.filter(s => s.part === "outer-back");
+    ok(back.length === 1 && back[0].kind === "line"
+      && near(back[0].from.x, A.shoulder.x, 1e-9) && near(back[0].to.x, A.backOuter.x, 1e-9), "16: 뒤 칼라 외곽선은 어깨↔외곽 모서리 직선");
+    ok(r.geometry.construction.length === 1 && r.geometry.construction[0].part === "shoulder-mark", "16: 어깨선 표시가 구성선");
+  }
+  // ⑤ 달림선: 0.5 올린 점에서 CB 직각 출발 · FNP(V 깊은 점)에서 끝 · 목둘레보다 짧다
+  {
+    const attach = r.geometry.outline.filter(s => s.part === "neck-seam");
+    ok(near(attach[0].from.x, A.cbAttach.x, 1e-9) && near(attach[0].from.y, A.cbAttach.y, 1e-9)
+      && near(attach[0].c1.y, attach[0].from.y, 1e-9), "16: 달림선은 0.5 올린 점에서 CB 에 직각 출발");
+    ok(near(attach[attach.length - 1].to.x, A.fnpV.x, 1e-9) && near(attach[attach.length - 1].to.y, A.fnpV.y, 1e-9),
+      "16: 달림선은 V 깊은 점(FNP)에서 끝난다");
+    ok(r.measure.attachLenCm < r.measure.neckTargetCm && r.measure.attachShortfallCm > 0, "16: 달림선 < 목둘레(늘려 박는 분)");
+    ok(near(partLen(r.geometry, "neck-seam"), r.measure.attachLenCm, 1e-3), "16: 달림선 독립 측정 재검산");
+  }
+  // ⑥ 앞 외곽선: 어깨 폭 지점 ↔ FNP 를 잇는 완만한 곡선(현보다 길다), 휨 0 이면 현과 같아진다
+  {
+    const fo = r.geometry.outline.filter(s => s.part === "outer");
+    const chord = Math.hypot(A.fnpV.x - A.shoulder.x, A.fnpV.y - A.shoulder.y);
+    ok(fo.length === 2 && fo.every(s => s.kind === "cubic") && r.measure.frontOuterLenCm > chord, "16: 앞 외곽선 = cubic 2개·현보다 길다");
+    const flat0 = C.computeSailorCollarU(B, Object.assign({}, UP, { frontOuterBowCm: 0 }));
+    ok(flat0.ok && near(flat0.measure.frontOuterLenCm, Math.hypot(flat0.anchors.fnpV.x - flat0.anchors.shoulder.x, flat0.anchors.fnpV.y - flat0.anchors.shoulder.y), 1e-6),
+      "16: 휨 0 → 앞 외곽선 = 현 길이");
+  }
+  // ⑦ 실패 계약(원자적)
+  ok(C.computeSailorCollarU(B, Object.assign({}, UP, { vDropCm: 0 })).reason === "invalid-v-drop"
+    && C.computeSailorCollarU(B, Object.assign({}, UP, { vHollowCm: -1 })).reason === "invalid-v-hollow"
+    && C.computeSailorCollarU(B, Object.assign({}, UP, { cbWidthCm: 0 })).reason === "invalid-collar-width"
+    && C.computeSailorCollarU(B, Object.assign({}, UP, { backOuterCm: 0 })).reason === "invalid-back-outer"
+    && C.computeSailorCollarU(B, Object.assign({}, UP, { shoulderWidthCm: 0 })).reason === "invalid-shoulder-width"
+    && C.computeSailorCollarU(B, Object.assign({}, UP, { frontOuterBowCm: -1 })).reason === "invalid-front-bow"
+    && !("geometry" in C.computeSailorCollarU(B, Object.assign({}, UP, { vDropCm: 0 }))), "16: 파라미터 범위 밖 거부(형상 없음)");
+  {
+    const noSh = bodyU(); noSh.front.outline = noSh.front.outline.filter(s => s.edge !== "shoulder");
+    ok(C.computeSailorCollarU(noSh, UP).reason === "no-body-shoulder" && C.computeSailorCollarU({ hash: "x" }, UP).reason === "no-neckline",
+      "16: 몸판 의미 모서리 누락 거부");
+  }
+  // ⑧ 결정론 · S/T 경로 불변
+  {
+    const snapP = J(UP);
+    ok(J(C.computeSailorCollarU(B, UP)) === J(r) && J(UP) === snapP, "16: 결정론·파라미터 비변형");
+    const s2 = C.computeFlatCollarS(bodyU(), { collarWidthCm: 5.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 });
+    const t2 = C.computeFlatCollarT(bodyU(), { collarWidthCm: 5.5, cbRiseCm: 0.5, shoulderOverlapCm: 3.5, frontEndFromFnpCm: 6, frontEndOffsetCm: 4 });
+    ok(s2.ok && near(s2.measure.attachLenCm, BACK_LEN + FRONT_LEN, 1e-4) && t2.ok && t2.measure.attachShortfallCm > 0,
+      "16: 같은 몸판에서 S·T 경로 정상 유지");
+  }
+}
+
+// 16-VW. 교재 V·W(P.70) — U 와 **같은 생성기·같은 기준점**, 수치만 다르다(V: 폭 축소 / W: V넥 심화)
+{
+  const cub = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const ln = (a, b, edge) => { const s = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s.edge = edge; return s; };
+  const we = (s, e) => Object.assign({}, s, { edge: e });
+  const backNeck = we(cub([0, 0], [3, 0], [6, -1], [8, -2]), "neckline");
+  const frontNeck = we(cub([40, 4], [37, 2], [34, -2], [32, -4]), "neckline");
+  const BACK_LEN = denseLen(backNeck), FRONT_LEN = denseLen(frontNeck);
+  const body = () => ({
+    hash: "BVW", necklineLengths: { back: BACK_LEN, front: FRONT_LEN, half: BACK_LEN + FRONT_LEN, finished: 2 * (BACK_LEN + FRONT_LEN) },
+    back: { outline: [ln([0, 0], [0, 40], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 40], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] }
+  });
+  const UP = { vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 1.5 };
+  const VP = { vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 9, backOuterCm: 13.5, shoulderWidthCm: 7, frontOuterBowCm: 1 };
+  const WP = { vDropCm: 22, vHollowCm: 0.3, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 0.7 };
+  const B = body(), u = C.computeSailorCollarU(B, UP), v = C.computeSailorCollarU(B, VP), w = C.computeSailorCollarU(B, WP);
+
+  ok(v.ok && w.ok && C.validateClosedOutline(v.geometry.outline).ok && C.validateClosedOutline(w.geometry.outline).ok,
+    "16-VW: V·W 폐곡선 한 조각(" + [v.reason, w.reason].filter(Boolean).join() + ")");
+  ok(J(v.geometry.outline.map(s => s.part)) === J(u.geometry.outline.map(s => s.part))
+    && J(w.geometry.outline.map(s => s.part)) === J(u.geometry.outline.map(s => s.part)),
+    "16-VW: 구성·primitive 순서는 U 와 동일(같은 제도 절차)");
+  ok(v.geometry.construction.length === 1 && v.geometry.construction[0].part === "shoulder-mark"
+    && w.geometry.construction[0].part === "shoulder-mark", "16-VW: 어깨선 표시 유지");
+
+  // ① 각 치수의 시작점·끝점·방향이 U 와 같다 — 값만 바뀐다(뒤 중심 수직 · 외곽 직각 · 어깨 폭)
+  [[v, VP, "V"], [w, WP, "W"]].forEach(([r, P, tag]) => {
+    const A = r.anchors;
+    ok(near(A.cbNeck.x, 0, 1e-9) && near(A.cbAttach.x, 0, 1e-9) && near(A.cbAttach.y, -P.cbRiseCm, 1e-9)
+      && near(A.cbOuter.x, 0, 1e-9) && near(A.cbOuter.y, P.cbWidthCm - P.cbRiseCm, 1e-9), "16-VW: " + tag + " 뒤 중심 올림→폭이 CB 선 위");
+    ok(near(r.measure.cbWidthLenCm, P.cbWidthCm, 1e-9) && near(r.measure.backOuterLenCm, P.backOuterCm, 1e-9)
+      && near(r.measure.backCornerAngleDeg, 90, 1e-6) && near(A.backOuter.y, A.cbOuter.y, 1e-9),
+      "16-VW: " + tag + " 뒤 외곽은 CB 에 직각·실측 = 입력");
+    ok(near(r.measure.shoulderWidthLenCm, P.shoulderWidthCm, 1e-9), "16-VW: " + tag + " 어깨 칼라 폭 실측 = 입력");
+    const attach = r.geometry.outline.filter(s => s.part === "neck-seam");
+    ok(near(attach[0].from.y, A.cbAttach.y, 1e-9) && near(attach[0].c1.y, attach[0].from.y, 1e-9)
+      && near(attach[attach.length - 1].to.x, A.fnpV.x, 1e-9) && near(attach[attach.length - 1].to.y, A.fnpV.y, 1e-9),
+      "16-VW: " + tag + " 달림선은 올린 점에서 CB 직각 출발 → V 깊은 점에서 끝");
+    ok(r.measure.attachLenCm < r.measure.neckTargetCm && r.measure.attachShortfallCm > 0, "16-VW: " + tag + " 달림선 < 목둘레(늘려 박는 분)");
+    ok(near(r.measure.overlapAngleDeg, u.measure.overlapAngleDeg, 1e-9) && near(r.measure.shoulderTipGapCm, u.measure.shoulderTipGapCm, 1e-9),
+      "16-VW: " + tag + " 겹침 1.5 는 U 와 동일");
+  });
+
+  // ② V: 목둘레·겹침은 U 와 같고 폭만 좁다 → 달림선은 U 와 완전히 같은 선
+  ok(near(v.measure.vNeckLenCm, u.measure.vNeckLenCm, 1e-12) && near(v.measure.neckTargetCm, u.measure.neckTargetCm, 1e-12)
+    && J(v.geometry.outline.filter(s => s.part === "neck-seam")) === J(u.geometry.outline.filter(s => s.part === "neck-seam")),
+    "16-VW: V 달림선·V 목선은 U 와 동일(칼라 허리와 목둘레는 U와 같다)");
+  ok(v.measure.outerLenCm < u.measure.outerLenCm && v.measure.backOuterEdgeLenCm < u.measure.backOuterEdgeLenCm,
+    "16-VW: V 는 폭이 좁아 외곽·뒤 외곽선이 짧다");
+
+  // ③ W: 폭 계열은 U 와 같고 목둘레만 깊다 → 뒤 칼라(CB·외곽·어깨)는 U 와 같은 자리, 앞만 길어진다
+  ok(near(w.measure.cbWidthLenCm, u.measure.cbWidthLenCm, 1e-12) && near(w.measure.backOuterLenCm, u.measure.backOuterLenCm, 1e-12)
+    && near(w.anchors.cbOuter.y, u.anchors.cbOuter.y, 1e-12) && near(w.anchors.shoulder.x, u.anchors.shoulder.x, 1e-9)
+    && near(w.anchors.shoulder.y, u.anchors.shoulder.y, 1e-9), "16-VW: W 뒤 칼라 기준점은 U 와 같다");
+  ok(w.measure.vNeckLenCm > u.measure.vNeckLenCm && w.measure.neckTargetCm > u.measure.neckTargetCm
+    && w.measure.attachLenCm > u.measure.attachLenCm, "16-VW: W 는 V넥 22 로 목선·달림선이 길다");
+  ok(near(w.measure.vDropCm, 22, 1e-12) && near(w.measure.vHollowCm, 0.3, 1e-12)
+    && Math.hypot(w.anchors.fnpV.x - w.anchors.snp.x, w.anchors.fnpV.y - w.anchors.snp.y)
+      > Math.hypot(u.anchors.fnpV.x - u.anchors.snp.x, u.anchors.fnpV.y - u.anchors.snp.y), "16-VW: W FNP 가 더 깊다(SNP 에서 먼 점)");
+  // 앞 외곽 휨은 U(1.5) > V(1) > W(0.7) — 현 대비 여분으로 비교(현 길이가 서로 다르므로 절대 길이로 비교하지 않는다)
+  {
+    const slack = (r) => r.measure.frontOuterLenCm - Math.hypot(r.anchors.fnpV.x - r.anchors.shoulder.x, r.anchors.fnpV.y - r.anchors.shoulder.y);
+    ok(slack(u) > slack(v) && slack(v) > slack(w) && slack(w) > 0, "16-VW: 앞 외곽 휨 U 1.5 > V 1 > W 0.7(현 대비 여분)");
+  }
+
+  // ④ 결정론·입력 비변형·U 경로 불변
+  {
+    const snapB = J(B), snapV = J(VP), snapW = J(WP);
+    ok(J(C.computeSailorCollarU(B, VP)) === J(v) && J(C.computeSailorCollarU(B, WP)) === J(w)
+      && J(B) === snapB && J(VP) === snapV && J(WP) === snapW, "16-VW: 결정론·몸판/파라미터 비변형");
+    ok(J(C.computeSailorCollarU(body(), UP)) === J(u), "16-VW: U 결과 불변(같은 몸판·같은 수치)");
+  }
+  // ⑤ 실패 계약은 값과 무관하게 같다
+  ok(C.computeSailorCollarU(B, Object.assign({}, WP, { cbWidthCm: 0 })).reason === "invalid-collar-width"
+    && C.computeSailorCollarU(B, Object.assign({}, VP, { vDropCm: -1 })).reason === "invalid-v-drop"
+    && !("geometry" in C.computeSailorCollarU(B, Object.assign({}, VP, { vDropCm: -1 }))), "16-VW: 범위 밖 거부(형상 없음)");
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

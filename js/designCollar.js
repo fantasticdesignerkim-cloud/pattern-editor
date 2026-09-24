@@ -1024,6 +1024,534 @@
       stand: st };
   }
 
+  // ── 플랫 칼라 S(교재 P.69) — 몸판에 직접 그리고 어깨선에서 맞댄다 ──
+  // 근거: P.69 S 본문·도해 + P.149(플랫 칼라 T 제도 방법)의 **공통 절차**.
+  //   공통(P.149 ①②⑤⑥): 칼라 끝 안내선(앞 중심선에 평행) → FNP 에서 안내선으로 앞 칼라 폭(6·4)
+  //     → 어깨에서 칼라 폭(5.5) → 뒤 중심에서 칼라 끝까지 외곽선(③ 뒤 중심 폭선에 **직각**,
+  //     나머지는 완만한 곡선으로 ②에 연결).
+  //   S 전용(T 와 다른 점): 앞뒤 몸판을 **겹치지 않는다**(T 의 어깨 3.5 겹침 없음) ·
+  //     달림선은 **몸판 목둘레선 그대로**(T 의 ④ 재작도·뒤 중심 0.5 올림 없음) ·
+  //     앞뒤 칼라를 **어깨선에서 맞대어**(butt) 한 장으로 잇는다.
+  //   ★ 몸판 형상은 입력일 뿐 바꾸지 않는다 — 최종 bodice geometry 의 목둘레선·어깨선·중심선만 읽는다.
+  //   ★ 어깨 칼라 폭은 교재대로 **제도된 어깨선 위 직선거리**로 잡는다(뒤 어깨다트 절개량을
+  //     빼거나 더하는 자동 보정을 하지 않는다 — 봉제 길이 정리는 패턴 확정 단계 책임).
+  var FLAT_COLLAR_S_METHOD = { page: 69, methodPage: 149, variant: "S", bodyLinked: true,
+    attachFrom: "bodice-neckline", join: "shoulder-butt", shoulderOverlapCm: 0, cbRiseCm: 0,
+    smoothing: "tangent-continuous-cubic", handleFraction: SEAM_HANDLE_FRACTION };
+
+  // 몸판 한 조각에서 목점·목둘레 체인·SNP·중심선 방향·어깨선 방향을 **의미 모서리(SV3)** 로만 읽는다.
+  //   실패: no-body-neckline / no-body-center / no-body-shoulder / ambiguous-neck-point.
+  function bodiceSeamFrame(bodiceResult, piece) {
+    var pc = bodiceResult && bodiceResult[piece];
+    if (!pc || !Array.isArray(pc.outline)) return { ok: false, reason: "no-body-neckline" };
+    var neck = [], center = [], shoulder = [];
+    pc.outline.forEach(function (s) {
+      if (s.edge === "neckline") neck.push(s);
+      else if (s.edge === "center") center.push(s);
+      else if (s.edge === "shoulder") shoulder.push(s);
+    });
+    if (!neck.length) return { ok: false, reason: "no-body-neckline" };
+    if (!center.length) return { ok: false, reason: "no-body-center" };
+    if (!shoulder.length) return { ok: false, reason: "no-body-shoulder" };
+    var hits = [];
+    neck.forEach(function (n) {
+      var ne = primEnds(n); if (!ne) return;
+      center.forEach(function (c) {
+        var ce = primEnds(c); if (!ce) return;
+        ne.forEach(function (p) {
+          ce.forEach(function (q) {
+            if (lineLen(p, q) <= JOIN_TOL && !hits.some(function (h) { return lineLen(h, p) <= JOIN_TOL; })) hits.push(cp(p));
+          });
+        });
+      });
+    });
+    if (hits.length !== 1) return { ok: false, reason: "ambiguous-neck-point" };
+    var neckPoint = hits[0];
+    // 목점에서 출발하는 목둘레 primitive 도 하나여야 체인이 유일하다(둘 이상이면 방향을 고를 수 없다).
+    var starts = neck.filter(function (n) {
+      var e = primEnds(n); return !!e && (lineLen(e[0], neckPoint) <= JOIN_TOL || lineLen(e[1], neckPoint) <= JOIN_TOL);
+    });
+    if (starts.length !== 1) return { ok: false, reason: "ambiguous-neck-point" };
+    var chain = chainFromPoint(neck, neckPoint);
+    if (!chain.length) return { ok: false, reason: "no-body-neckline" };
+    var snp = cp(chain[chain.length - 1].to);
+    var centerChain = chainFromPoint(center, neckPoint);
+    if (!centerChain.length) return { ok: false, reason: "no-body-center" };
+    var centerFar = cp(centerChain[centerChain.length - 1].to);
+    if (lineLen(centerFar, neckPoint) < 1e-6) return { ok: false, reason: "no-body-center" };
+    // 어깨선 방향 = SNP 에 닿는 어깨 span(뒤판은 어깨다트로 끊겨 있어도 SNP 쪽 span 이 어깨선이다).
+    var sdir = null;
+    shoulder.forEach(function (s) {
+      if (sdir) return;
+      var e = primEnds(s); if (!e) return;
+      if (lineLen(e[0], snp) <= JOIN_TOL) sdir = unit(sub(e[1], e[0]));
+      else if (lineLen(e[1], snp) <= JOIN_TOL) sdir = unit(sub(e[0], e[1]));
+    });
+    if (!sdir) return { ok: false, reason: "no-body-shoulder" };
+    // 어깨 끝점(SP): 어깨 span 의 끝점 중 SNP 에서 어깨선 방향으로 가장 먼 점.
+    //   뒤판은 어깨다트로 span 이 끊겨 있어도(두 span 이 같은 직선) 제도된 어깨 끝을 그대로 얻는다.
+    var tip = null, far = -Infinity;
+    shoulder.forEach(function (s) {
+      var e = primEnds(s); if (!e) return;
+      e.forEach(function (p) {
+        var d = (p.x - snp.x) * sdir.x + (p.y - snp.y) * sdir.y;
+        if (d > far) { far = d; tip = cp(p); }
+      });
+    });
+    return { ok: true, neckPoint: neckPoint, chain: chain, snp: snp, shoulderTip: tip,
+      centerDir: unit(sub(centerFar, neckPoint)), shoulderDir: sdir };
+  }
+
+  // 외곽선: 뒤 중심 폭선(③)에 직각으로 출발해 어깨 폭 지점을 지나 칼라 끝까지 완만한 곡선.
+  //   smoothBandGuide 와 같은 관례(접선 연속·핸들 = 현 길이 × 1/3)이고, 출발 접선만
+  //   프레임 x 축(= CB 에 직각) 방향으로 둔다.
+  function flatOuterGuide(P0, Pm, P1, part) {
+    var chord = unit(sub(P1, P0));
+    var h1 = lineLen(P0, Pm) * SEAM_HANDLE_FRACTION, h2 = lineLen(Pm, P1) * SEAM_HANDLE_FRACTION;
+    var sx = (Pm.x >= P0.x) ? 1 : -1;
+    return [
+      { kind: "cubic", from: cp(P0), c1: { x: P0.x + sx * h1, y: P0.y }, c2: add(Pm, chord, -h1), to: cp(Pm), part: part },
+      { kind: "cubic", from: cp(Pm), c1: add(Pm, chord, h2), c2: add(P1, chord, -h2), to: cp(P1), part: part }
+    ];
+  }
+
+  // params: { collarWidthCm(5.5), frontEndFromFnpCm(6), frontEndOffsetCm(4) }
+  //   실패: no-bodice / no-neckline / 몸판 의미 모서리 실패 / invalid-collar-width /
+  //     invalid-front-end / invalid-front-end-offset / front-end-unreachable /
+  //     shoulder-butt-overlap / self-intersection.
+  function computeFlatCollarS(bodiceResult, params) {
+    var b = readBodice(bodiceResult);
+    if (!b.ok) return b;
+    var P = params || {};
+    var W = P.collarWidthCm, EL = P.frontEndFromFnpCm, EO = P.frontEndOffsetCm;
+    if (!num(W) || W <= 0) return { ok: false, reason: "invalid-collar-width" };
+    if (!num(EL) || EL <= 0) return { ok: false, reason: "invalid-front-end" };
+    if (!num(EO) || EO < 0) return { ok: false, reason: "invalid-front-end-offset" };
+    if (!(EO < EL)) return { ok: false, reason: "front-end-unreachable" };   // 안내선까지 EL 로 닿지 않는다
+    var bk = bodiceSeamFrame(bodiceResult, "back"); if (!bk.ok) return bk;
+    var fr = bodiceSeamFrame(bodiceResult, "front"); if (!fr.ok) return fr;
+
+    // 뒤: 뒤 중심 칼라 폭(③) · 어깨 칼라 폭(⑤)
+    var cbNeck = bk.neckPoint, cbOuter = add(cbNeck, bk.centerDir, W);
+    var shoulderB = add(bk.snp, bk.shoulderDir, W);
+    // 앞: 칼라 끝(① 안내선 ∥ 앞 중심선 · ② FNP 에서 EL)
+    var nPerp = { x: fr.centerDir.y, y: -fr.centerDir.x };
+    var inward = (nPerp.x * (fr.snp.x - fr.neckPoint.x) + nPerp.y * (fr.snp.y - fr.neckPoint.y)) >= 0
+      ? nPerp : { x: -nPerp.x, y: -nPerp.y };                 // 앞 중심선에서 몸판 안쪽
+    var tipF = add(add(fr.neckPoint, inward, EO), fr.centerDir, Math.sqrt(EL * EL - EO * EO));
+    var shoulderF = add(fr.snp, fr.shoulderDir, W);
+
+    // 맞댐: 앞 조각을 어깨선(SNP→어깨 폭 지점)에 맞춰 **회전 이동**(뒤집지 않는다).
+    var a = unit(sub(shoulderF, fr.snp)), c = unit(sub(shoulderB, bk.snp));
+    var rc = a.x * c.x + a.y * c.y, rs = a.x * c.y - a.y * c.x;
+    var toBack = function (p) {
+      var dx = p.x - fr.snp.x, dy = p.y - fr.snp.y;
+      return { x: bk.snp.x + dx * rc - dy * rs, y: bk.snp.y + dx * rs + dy * rc };
+    };
+    // 맞댄 두 조각은 어깨선을 사이에 두고 **반대쪽**이어야 한다(겹치면 임의로 뒤집지 않고 실패).
+    var fnpB = toBack(fr.neckPoint);
+    var sideBack = c.x * (cbNeck.y - bk.snp.y) - c.y * (cbNeck.x - bk.snp.x);
+    var sideFront = c.x * (fnpB.y - bk.snp.y) - c.y * (fnpB.x - bk.snp.x);
+    if (!(sideBack * sideFront < 0)) return { ok: false, reason: "shoulder-butt-overlap" };
+
+    // 칼라 프레임: CB 목점 = 원점, CB 의 몸통 방향 → +y (순수 회전, 반사 없음).
+    var fc = bk.centerDir.y, fs = bk.centerDir.x;
+    var toFrame = function (p) {
+      var dx = p.x - cbNeck.x, dy = p.y - cbNeck.y;
+      return { x: dx * fc - dy * fs, y: dx * fs + dy * fc };
+    };
+    var mapBack = function (p) { return toFrame(p); };
+    var mapFront = function (p) { return toFrame(toBack(p)); };
+    var mapSeg = function (s, f, part) {
+      return s.kind === "line"
+        ? { kind: "line", from: f(s.from), to: f(s.to), part: part }
+        : { kind: "cubic", from: f(s.from), c1: f(s.c1), c2: f(s.c2), to: f(s.to), part: part };
+    };
+
+    var O = { x: 0, y: 0 };
+    var cbOuterC = mapBack(cbOuter), snpC = mapBack(bk.snp), shoulderC = mapBack(shoulderB);
+    var fnpC = mapFront(fr.neckPoint), tipC = mapFront(tipF);
+    // 달림선 = 몸판 목둘레선 그대로(뒤 CB→SNP + 앞 SNP→FNP).
+    var backAttach = bk.chain.map(function (s) { return mapSeg(s, mapBack, "neck-seam"); });
+    var frontAttach = fr.chain.slice().reverse().map(function (s) { return mapSeg(reverseSeg(s), mapFront, "neck-seam"); });
+    var outer = flatOuterGuide(cbOuterC, shoulderC, tipC, "outer");
+
+    var outline = backAttach.concat(frontAttach);
+    outline.push(L(fnpC, tipC, "front-edge"));                                    // 앞 끝선(②)
+    outer.slice().reverse().forEach(function (s) { outline.push(reverseCubic(s, "outer")); });
+    outline.push(L(cbOuterC, O, "cb-fold"));                                      // 뒤 중심(접어 재단)
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    var backLen = sumMeasure(backAttach), frontLen = sumMeasure(frontAttach);
+    return { ok: true,
+      geometry: { outline: outline, construction: [L(snpC, shoulderC, "shoulder-butt")] },
+      measure: {
+        collarWidthCm: W, frontEndFromFnpCm: EL, frontEndOffsetCm: EO,
+        backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm, neckTargetCm: b.backCm + b.frontCm,
+        backAttachLenCm: backLen, frontAttachLenCm: frontLen, attachLenCm: backLen + frontLen,
+        cbWidthLenCm: lineLen(O, cbOuterC),                    // 실측 = 뒤 중심 칼라 폭
+        shoulderWidthLenCm: lineLen(snpC, shoulderC),          // 실측 = 어깨 칼라 폭(맞댐선 길이)
+        frontEndLenCm: lineLen(fnpC, tipC),                    // 실측 = FNP→칼라 끝
+        frontEndOffsetLenCm: Math.abs(inward.x * (tipF.x - fr.neckPoint.x) + inward.y * (tipF.y - fr.neckPoint.y)),
+        outerLenCm: sumMeasure(outer)
+      },
+      anchors: { cbNeck: O, cbOuter: cbOuterC, snp: snpC, shoulder: shoulderC, fnp: fnpC, tip: tipC } };
+  }
+
+  // ── 플랫 칼라 T(교재 P.69 하단 · 제도 방법 P.149) — 어깨선을 겹쳐서 한 장으로 제도 ──
+  // 판독 근거(PDF 1쪽 P.69 / 17쪽 P.149 직접 판독):
+  //   ① 앞 몸판을 베끼고 ② SNP 를 맞춘 뒤 ③ 지정 치수(3.5)를 겹친다 — 3.5 는 **두 어깨 끝점
+  //      사이의 직선 거리**다(도해의 치수 호가 앞·뒤 어깨 끝을 잇는다. 실측: 어깨 끝 간격 83px,
+  //      같은 도해의 앞 끝선 6cm=154px 기준 ≈3.2~3.5cm).
+  //   ④ 뒤 중심에서 FNP 를 향해 목둘레(달림선)를 다시 그린다. 시작점은 몸판 뒤 목점에서
+  //      **목 쪽으로 0.5 올린 점**이고, 첫 시작은 뒤 중심선에 직각이다.
+  //      ★ 이 곡선은 겹친 몸판 목둘레선을 **바깥(목 쪽)으로 밀어 다시 그린 것**이고
+  //        앞 중심(FNP)에서 몸판 목둘레선과 다시 만난다(도해 실측: CB 0.5 → 중간 0.5~0.7 →
+  //        FNP 0). 구현 관례로 **offset 량을 호길이 비례로 0.5 → 0 으로 줄인다** —
+  //        교재가 명시한 길이 계약("몸판의 목둘레 치수보다 전체가 약 0.5cm 짧아진다")을
+  //        재현하는 읽기다(이 방식 −0.68cm. 단일 cubic −4.3 / SNP 통과 −1.1 / 균일 0.5 −1.4).
+  //   ⑤ 어깨에서 칼라 폭(5.5): **SNP 에서 앞 어깨선을 따라** 외곽선까지(실측: 치수 호가
+  //      SNP 에서 다트 없는 쪽 = 앞 어깨선 방향 157°로 뻗는다. 뒤 어깨선 쪽에는 다트 틈이 있다).
+  //   ⑥ 외곽선: 뒤 중심 폭선(③)에 직각으로 출발 → 어깨 폭 지점 → 칼라 끝(② 6·4)으로 완만한 곡선.
+  //   S 와 다른 점: 겹침 3.5(S 는 0) · 달림선 재작도(S 는 몸판 목둘레선 그대로) · 뒤 중심 0.5 올림(S 는 0).
+  //   ★ 몸판 형상은 입력일 뿐 바꾸지 않는다.
+  var FLAT_COLLAR_T_METHOD = { page: 69, methodPage: 149, variant: "T", bodyLinked: true,
+    attachFrom: "redrawn-neckline", join: "shoulder-overlap", attachOffsetTaper: "cb-to-front-linear",
+    smoothing: "tangent-continuous-cubic", handleFraction: SEAM_HANDLE_FRACTION };
+
+  // 세그먼트의 t 에서의 접선(정규화 전). 직선은 상수.
+  function segTangentAt(s, t) {
+    if (s.kind === "line") return sub(s.to, s.from);
+    var u = 1 - t;
+    return { x: 3 * (-u * u * s.from.x + (u * u - 2 * u * t) * s.c1.x + (2 * u * t - t * t) * s.c2.x + t * t * s.to.x),
+      y: 3 * (-u * u * s.from.y + (u * u - 2 * u * t) * s.c1.y + (2 * u * t - t * t) * s.c2.y + t * t * s.to.y) };
+  }
+  // 체인을 바깥 법선 방향으로 offset(시작 rise → 끝 0, 호길이 비례). 접선 방향은 보존되므로
+  //   시작점의 직각 계약(달림선 ⊥ 뒤 중심선)이 그대로 유지된다.
+  function offsetChainTaper(chain, rise, outwardAtStart) {
+    var lens = chain.map(segMeasure), total = 0, i;
+    for (i = 0; i < lens.length; i++) total += lens[i];
+    if (!(total > 0)) return null;
+    var t0 = segTangentAt(chain[0], 0);
+    if (!(Math.hypot(t0.x, t0.y) > 1e-9)) return null;
+    var u0 = unit(t0), left = { x: u0.y, y: -u0.x };
+    var handed = (left.x * outwardAtStart.x + left.y * outwardAtStart.y) >= 0 ? 1 : -1;
+    var normAt = function (s, t) {
+      var d = segTangentAt(s, t);
+      if (!(Math.hypot(d.x, d.y) > 1e-9)) d = segTangentAt(s, t < 0.5 ? t + 1e-3 : t - 1e-3);
+      var un = unit(d);
+      return handed > 0 ? { x: un.y, y: -un.x } : { x: -un.y, y: un.x };
+    };
+    // ★ 이음점(예: SNP 모서리)에서는 앞뒤 법선의 이등분선을 공유해야 offset 체인이 끊기지 않는다.
+    var joinN = [], acc0 = 0;
+    for (i = 0; i <= chain.length; i++) {
+      var nPrev = i > 0 ? normAt(chain[i - 1], 1) : null;
+      var nNext = i < chain.length ? normAt(chain[i], 0) : null;
+      var nn = nPrev && nNext ? unit({ x: nPrev.x + nNext.x, y: nPrev.y + nNext.y }) : (nPrev || nNext);
+      joinN.push(nn);
+    }
+    var out = [], acc = 0;
+    for (i = 0; i < chain.length; i++) {
+      var s = chain[i], segLen = lens[i], base = acc;
+      var amtAt = function (t) { return rise * (1 - (base + segLen * t) / total); };
+      var at = function (t, pt) { return add(pt, normAt(s, t), amtAt(t)); };
+      var p0 = add(s.from, joinN[i], amtAt(0)), p1 = add(s.to, joinN[i + 1], amtAt(1));
+      if (s.kind === "line") out.push({ kind: "line", from: p0, to: p1 });
+      else out.push({ kind: "cubic", from: p0, c1: at(1 / 3, s.c1), c2: at(2 / 3, s.c2), to: p1 });
+      acc += segLen;
+    }
+    // ★ 시작 접선 복원: 법선 offset 은 이론상 접선을 보존하지만, 제어점을 각자의 법선으로
+    //   옮기면 시작 접선이 1~2° 흔들린다. 교재의 "첫 시작은 직각" 계약을 정확히 지키도록
+    //   첫 제어점을 원래 시작 접선 방향으로 되돌린다(길이는 유지).
+    var f0 = out[0];
+    if (f0 && f0.kind === "cubic") {
+      var hLen = lineLen(f0.from, f0.c1);
+      if (hLen > 1e-9) f0.c1 = add(f0.from, u0, hLen);
+    }
+    return out;
+  }
+
+  // params: { collarWidthCm(5.5), cbRiseCm(0.5), shoulderOverlapCm(3.5), frontEndFromFnpCm(6), frontEndOffsetCm(4) }
+  //   실패: no-bodice / no-neckline / 몸판 의미 모서리 실패 / invalid-collar-width / invalid-cb-rise /
+  //     invalid-shoulder-overlap / shoulder-overlap-unreachable / invalid-front-end /
+  //     invalid-front-end-offset / front-end-unreachable / attach-offset-failed / self-intersection.
+  function computeFlatCollarT(bodiceResult, params) {
+    var b = readBodice(bodiceResult);
+    if (!b.ok) return b;
+    var P = params || {};
+    var W = P.collarWidthCm, RISE = P.cbRiseCm, OV = P.shoulderOverlapCm, EL = P.frontEndFromFnpCm, EO = P.frontEndOffsetCm;
+    if (!num(W) || W <= 0) return { ok: false, reason: "invalid-collar-width" };
+    if (!num(RISE) || RISE < 0) return { ok: false, reason: "invalid-cb-rise" };
+    if (!num(OV) || OV < 0) return { ok: false, reason: "invalid-shoulder-overlap" };
+    if (!num(EL) || EL <= 0) return { ok: false, reason: "invalid-front-end" };
+    if (!num(EO) || EO < 0) return { ok: false, reason: "invalid-front-end-offset" };
+    if (!(EO < EL)) return { ok: false, reason: "front-end-unreachable" };
+    var bk = bodiceSeamFrame(bodiceResult, "back"); if (!bk.ok) return bk;
+    var fr = bodiceSeamFrame(bodiceResult, "front"); if (!fr.ok) return fr;
+    if (!bk.shoulderTip || !fr.shoulderTip) return { ok: false, reason: "no-body-shoulder" };
+
+    // ③ 겹침: SNP 를 맞춘 뒤 두 어깨 끝점 거리가 OV 가 되도록 앞 조각을 회전한다.
+    var Lb = lineLen(bk.snp, bk.shoulderTip), Lf = lineLen(fr.snp, fr.shoulderTip);
+    if (!(Lb > 0 && Lf > 0)) return { ok: false, reason: "no-body-shoulder" };
+    if (OV < Math.abs(Lb - Lf) - 1e-9 || OV > Lb + Lf) return { ok: false, reason: "shoulder-overlap-unreachable" };
+    var cosT = (Lf * Lf + Lb * Lb - OV * OV) / (2 * Lf * Lb);
+    var theta = Math.acos(Math.max(-1, Math.min(1, cosT)));
+
+    // S 와 같은 맞댐(어깨선 일치)에서 출발해, 뒤 조각이 있는 쪽으로 theta 만큼 더 돌려 겹친다.
+    var aDir = unit(sub(fr.shoulderTip, fr.snp)), cDir = unit(sub(bk.shoulderTip, bk.snp));
+    var rc = aDir.x * cDir.x + aDir.y * cDir.y, rs = aDir.x * cDir.y - aDir.y * cDir.x;
+    var buttP = function (p) {
+      var dx = p.x - fr.snp.x, dy = p.y - fr.snp.y;
+      return { x: bk.snp.x + dx * rc - dy * rs, y: bk.snp.y + dx * rs + dy * rc };
+    };
+    var sideOf = function (p) { return cDir.x * (p.y - bk.snp.y) - cDir.y * (p.x - bk.snp.x); };
+    var sideBack = sideOf(bk.neckPoint);
+    if (!(Math.abs(sideBack) > 1e-9)) return { ok: false, reason: "no-body-shoulder" };
+    var dirSign = sideBack > 0 ? 1 : -1;               // 뒤 조각이 있는 쪽으로 앞을 돌린다 = 겹침
+    var ct = Math.cos(dirSign * theta), st = Math.sin(dirSign * theta);
+    var toBack = function (p) {
+      var q = buttP(p), dx = q.x - bk.snp.x, dy = q.y - bk.snp.y;
+      return { x: bk.snp.x + dx * ct - dy * st, y: bk.snp.y + dx * st + dy * ct };
+    };
+    var mapSegBack = function (s, f) {
+      return s.kind === "line" ? { kind: "line", from: f(s.from), to: f(s.to) }
+        : { kind: "cubic", from: f(s.from), c1: f(s.c1), c2: f(s.c2), to: f(s.to) };
+    };
+
+    // ④ 달림선: 겹친 몸판 목둘레(뒤 CB→SNP + 앞 SNP→FNP)를 바깥으로 0.5 → 0 offset.
+    var frontChainRot = fr.chain.slice().reverse().map(function (s) { return mapSegBack(reverseSeg(s), toBack); });
+    var neckChain = bk.chain.map(function (s) { return mapSegBack(s, function (p) { return cp(p); }); }).concat(frontChainRot);
+    var outward = { x: -bk.centerDir.x, y: -bk.centerDir.y };     // 뒤 중심선에서 몸판 바깥(목 쪽)
+    var attachRaw = offsetChainTaper(neckChain, RISE, outward);
+    if (!attachRaw) return { ok: false, reason: "attach-offset-failed" };
+
+    var A0 = cp(attachRaw[0].from);                                // = 몸판 뒤 목점 + 0.5(목 쪽)
+    var cbOuter = add(A0, bk.centerDir, W);                        // ③ 뒤 중심 칼라 폭
+    var shoulderDirRot = unit(sub(toBack(fr.shoulderTip), bk.snp));  // 겹친 뒤의 앞 어깨선
+    var shoulderPt = add(bk.snp, shoulderDirRot, W);               // ⑤ 어깨 칼라 폭
+    // ①② 칼라 끝: 앞 중심선에 평행한 안내선(EO) 위, FNP 에서 EL
+    var nPerp = { x: fr.centerDir.y, y: -fr.centerDir.x };
+    var inward = (nPerp.x * (fr.snp.x - fr.neckPoint.x) + nPerp.y * (fr.snp.y - fr.neckPoint.y)) >= 0
+      ? nPerp : { x: -nPerp.x, y: -nPerp.y };
+    var tipF = add(add(fr.neckPoint, inward, EO), fr.centerDir, Math.sqrt(EL * EL - EO * EO));
+
+    // 칼라 프레임: CB 목점 = 원점, CB 의 몸통 방향 → +y (순수 회전).
+    var fc = bk.centerDir.y, fs = bk.centerDir.x;
+    var toFrame = function (p) {
+      var dx = p.x - bk.neckPoint.x, dy = p.y - bk.neckPoint.y;
+      return { x: dx * fc - dy * fs, y: dx * fs + dy * fc };
+    };
+    var mapPart = function (s, part) {
+      return s.kind === "line" ? { kind: "line", from: toFrame(s.from), to: toFrame(s.to), part: part }
+        : { kind: "cubic", from: toFrame(s.from), c1: toFrame(s.c1), c2: toFrame(s.c2), to: toFrame(s.to), part: part };
+    };
+    var attach = attachRaw.map(function (s) { return mapPart(s, "neck-seam"); });
+    var A0C = toFrame(A0), cbOuterC = toFrame(cbOuter), snpC = toFrame(bk.snp), shoulderC = toFrame(shoulderPt);
+    var fnpC = toFrame(toBack(fr.neckPoint)), tipC = toFrame(toBack(tipF));
+    var outer = flatOuterGuide(cbOuterC, shoulderC, tipC, "outer");
+
+    var outline = attach.slice();
+    outline.push(L(fnpC, tipC, "front-edge"));
+    outer.slice().reverse().forEach(function (s) { outline.push(reverseCubic(s, "outer")); });
+    outline.push(L(cbOuterC, A0C, "cb-fold"));
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    var attachLen = sumMeasure(attach), neckTarget = b.backCm + b.frontCm;
+    return { ok: true,
+      geometry: { outline: outline, construction: [L(snpC, shoulderC, "shoulder-mark")] },
+      measure: {
+        collarWidthCm: W, cbRiseCm: RISE, shoulderOverlapCm: OV, frontEndFromFnpCm: EL, frontEndOffsetCm: EO,
+        backNeckLenCm: b.backCm, frontNeckLenCm: b.frontCm, neckTargetCm: neckTarget,
+        backShoulderLenCm: Lb, frontShoulderLenCm: Lf, overlapAngleDeg: theta * 180 / Math.PI,
+        shoulderTipGapCm: lineLen(toBack(fr.shoulderTip), bk.shoulderTip),   // 실측 = 겹침 3.5
+        attachLenCm: attachLen,
+        attachShortfallCm: neckTarget - attachLen,        // 교재: 몸판 목둘레보다 약 0.5 짧다
+        cbWidthLenCm: lineLen(A0C, cbOuterC),
+        shoulderWidthLenCm: lineLen(snpC, shoulderC),
+        frontEndLenCm: lineLen(fnpC, tipC),
+        frontEndOffsetLenCm: Math.abs(inward.x * (tipF.x - fr.neckPoint.x) + inward.y * (tipF.y - fr.neckPoint.y)),
+        outerLenCm: sumMeasure(outer)
+      },
+      anchors: { cbNeck: toFrame(bk.neckPoint), cbAttach: A0C, cbOuter: cbOuterC, snp: snpC,
+        shoulder: shoulderC, fnp: fnpC, tip: tipC } };
+  }
+
+  // ── 세일러 칼라(교재 U·V·W, P.70 · 제도 방법 P.150) ──
+  // ★ 하나의 생성기가 세 도해를 모두 만든다. 교재 본문이 V = "칼라 폭을 조정하여 Ⓤ와 같은 방식으로
+  //   제도한다", W = "목둘레를 바꿔 Ⓤ와 같이 제도한다" 라고 못박듯, 절차·기준점·방향은 같고 수치만
+  //   다르다(V: 폭 11/15.5/10/1.5 → 9/13.5/7/1 · W: 목둘레 12·0.8 → 22·0.3, 앞 외곽 휨 1.5 → 0.7).
+  //   함수명·METHOD.variant 의 "U" 는 교재가 제도 방법을 U 로 예시했다는 출처 표기다(파라미터로 분기하지 않는다).
+  //   아래 판독 근거는 그 예시(U) 도해 기준이다.
+  // 판독 근거(PDF 2쪽 P.70 / 18쪽 P.150 직접 판독):
+  //   본문 U: "목둘레는 FNP에서 12cm 내리고 칼라 폭은 어깨에서 10cm … 플랫 칼라 T(P.69)와 같이
+  //   앞뒤 어깨선을 겹쳐서 베끼고, 칼라를 제도한다. 칼라 외곽의 모양은 뒤에서 앞의 순서로 그린다."
+  //   ① (몸판) V 목둘레: 앞 목점에서 **앞 중심선을 따라 12 내린 점**까지, 현에서 **0.8** 만큼
+  //      몸판 안쪽으로 휜 곡선(P.70 앞 몸판 도해). ★ 몸판을 바꾸지 않고 칼라 안에서만 파생한다.
+  //   ② 겹침: SNP 를 맞추고 **지정 치수 1.5** 를 겹친다(P.150 1-③, 실측 어깨 끝 간격 1.63cm ≈ 1.5).
+  //   ③ 달림선: 뒤 중심에서 0.5 올린 점에서 **몸판과 평행**(P.150 2-⑤) 하게 긋고, SNP 에서 FNP 까지
+  //      완만한 곡선으로 잇는다(P.150 3-①) — T 와 같은 taper offset(뒤 중심 0.5 → 앞 0).
+  //   ④ 뒤 중심 칼라 폭 **11**(P.150 2-①), 그 끝에서 ①에 **직각**으로 칼라 외곽 **15.5**(2-③).
+  //      실측: |apex→달림선| 10.9cm, |apex→외곽 모서리| 15.8cm, 사잇각 89.8°.
+  //   ⑤ 어깨에서 칼라 폭 **10**(2-②) — SNP 에서 **앞 어깨선**을 따라(실측 159° = 다트 없는 쪽).
+  //   ⑥ 뒤 칼라 외곽선은 ③과 ②를 **직선**으로 잇는다(2-④ · 세일러의 네모난 뒤판).
+  //   ⑦ 앞 칼라 외곽선은 현에서 **1.5** 휜 완만한 곡선으로 FNP 에 연결(3-②).
+  var SAILOR_COLLAR_U_METHOD = { page: 70, methodPage: 150, variant: "U", bodyLinked: true,
+    vNeck: "derived-internal", join: "shoulder-overlap", attachOffsetTaper: "cb-to-front-linear",
+    backOuterSquare: true, smoothing: "tangent-continuous-cubic", handleFraction: SEAM_HANDLE_FRACTION };
+
+  // 양 끝점과 "현에서 bow 만큼 벗어난 중점"을 지나는 완만한 곡선(중점에서 접선 연속).
+  //   교재는 곡률값 없이 "완만한 곡선"만 지정하므로 핸들 = 각 반현 × 1/3 의 구현 관례를 쓴다.
+  //   bow = 0 이면 현을 그대로 따라간다.
+  function bowedGuide(P0, P1, bow, sideHint, part) {
+    var d = sub(P1, P0), len = Math.hypot(d.x, d.y);
+    if (!(len > 1e-9)) return null;
+    var chord = { x: d.x / len, y: d.y / len };
+    var n = { x: -chord.y, y: chord.x };
+    if (sideHint && (n.x * sideHint.x + n.y * sideHint.y) < 0) n = { x: -n.x, y: -n.y };
+    var M = add(mid(P0, P1), n, bow);
+    var h1 = lineLen(P0, M) * SEAM_HANDLE_FRACTION, h2 = lineLen(M, P1) * SEAM_HANDLE_FRACTION;
+    var u0 = unit(sub(M, P0)), u1 = unit(sub(P1, M));
+    return { mid: M, segs: [
+      { kind: "cubic", from: cp(P0), c1: add(P0, u0, h1), c2: add(M, chord, -h1), to: cp(M), part: part },
+      { kind: "cubic", from: cp(M), c1: add(M, chord, h2), c2: add(P1, u1, -h2), to: cp(P1), part: part }
+    ] };
+  }
+
+  // params: { vDropCm(12), vHollowCm(0.8), shoulderOverlapCm(1.5), cbRiseCm(0.5),
+  //           cbWidthCm(11), backOuterCm(15.5), shoulderWidthCm(10), frontOuterBowCm(1.5) }
+  //   실패: no-bodice / no-neckline / 몸판 의미 모서리 실패 / invalid-v-drop / invalid-v-hollow /
+  //     invalid-shoulder-overlap / shoulder-overlap-unreachable / invalid-cb-rise / invalid-collar-width /
+  //     invalid-back-outer / invalid-shoulder-width / invalid-front-bow / v-neck-failed /
+  //     attach-offset-failed / self-intersection.
+  function computeSailorCollarU(bodiceResult, params) {
+    var b = readBodice(bodiceResult);
+    if (!b.ok) return b;
+    var P = params || {};
+    var VD = P.vDropCm, VH = P.vHollowCm, OV = P.shoulderOverlapCm, RISE = P.cbRiseCm;
+    var CBW = P.cbWidthCm, BOUT = P.backOuterCm, SHW = P.shoulderWidthCm, FBOW = P.frontOuterBowCm;
+    if (!num(VD) || VD <= 0) return { ok: false, reason: "invalid-v-drop" };
+    if (!num(VH) || VH < 0) return { ok: false, reason: "invalid-v-hollow" };
+    if (!num(OV) || OV < 0) return { ok: false, reason: "invalid-shoulder-overlap" };
+    if (!num(RISE) || RISE < 0) return { ok: false, reason: "invalid-cb-rise" };
+    if (!num(CBW) || CBW <= 0) return { ok: false, reason: "invalid-collar-width" };
+    if (!num(BOUT) || BOUT <= 0) return { ok: false, reason: "invalid-back-outer" };
+    if (!num(SHW) || SHW <= 0) return { ok: false, reason: "invalid-shoulder-width" };
+    if (!num(FBOW) || FBOW < 0) return { ok: false, reason: "invalid-front-bow" };
+    var bk = bodiceSeamFrame(bodiceResult, "back"); if (!bk.ok) return bk;
+    var fr = bodiceSeamFrame(bodiceResult, "front"); if (!fr.ok) return fr;
+    if (!bk.shoulderTip || !fr.shoulderTip) return { ok: false, reason: "no-body-shoulder" };
+
+    // ① V 목둘레(칼라 내부 파생 — 몸판 geometry 는 바꾸지 않는다)
+    var fnpV = add(fr.neckPoint, fr.centerDir, VD);
+    var nPerp = { x: fr.centerDir.y, y: -fr.centerDir.x };
+    var inward = (nPerp.x * (fr.snp.x - fr.neckPoint.x) + nPerp.y * (fr.snp.y - fr.neckPoint.y)) >= 0
+      ? nPerp : { x: -nPerp.x, y: -nPerp.y };                       // 앞 중심선에서 몸판 안쪽
+    var vCurve = bowedGuide(fr.snp, fnpV, VH, inward);
+    if (!vCurve) return { ok: false, reason: "v-neck-failed" };
+
+    // ② 겹침: SNP 를 맞춘 뒤 **짧은 쪽 어깨선 끝에서 OV 만큼 겹치도록** 앞 조각을 회전한다.
+    //   ★ 기준 반지름 = min(뒤, 앞 제도 어깨 길이). 교재 블록은 앞뒤 제도 어깨가 거의 같아
+    //     "두 어깨 끝점 사이 거리"와 같은 값이지만, 이 앱의 블록은 뒤 어깨가 어깨다트 절개량
+    //     (1.79cm)만큼 길어 두 정의가 갈린다. 실측으로 교재 도해의 겹침 각을 재현하는 쪽은
+    //     이 정의다 — P.150(U) 실측 7.5° ↔ 이 식 7.62°, P.149(T) 실측 18° ↔ 이 식 18.1°.
+    //   (플랫 칼라 T 는 현재 "두 어깨 끝점 거리" 기준으로 구현돼 있다 — 통일은 별도 보정 사안.)
+    var Lb = lineLen(bk.snp, bk.shoulderTip), Lf = lineLen(fr.snp, fr.shoulderTip);
+    if (!(Lb > 0 && Lf > 0)) return { ok: false, reason: "no-body-shoulder" };
+    var Lmin = Math.min(Lb, Lf);
+    if (OV > 2 * Lmin) return { ok: false, reason: "shoulder-overlap-unreachable" };
+    var theta = 2 * Math.asin(Math.max(-1, Math.min(1, OV / (2 * Lmin))));
+    var aDir = unit(sub(fr.shoulderTip, fr.snp)), cDir = unit(sub(bk.shoulderTip, bk.snp));
+    var rc = aDir.x * cDir.x + aDir.y * cDir.y, rs = aDir.x * cDir.y - aDir.y * cDir.x;
+    var buttP = function (p) {
+      var dx = p.x - fr.snp.x, dy = p.y - fr.snp.y;
+      return { x: bk.snp.x + dx * rc - dy * rs, y: bk.snp.y + dx * rs + dy * rc };
+    };
+    var sideBack = cDir.x * (bk.neckPoint.y - bk.snp.y) - cDir.y * (bk.neckPoint.x - bk.snp.x);
+    if (!(Math.abs(sideBack) > 1e-9)) return { ok: false, reason: "no-body-shoulder" };
+    var dirSign = sideBack > 0 ? 1 : -1;
+    var ct = Math.cos(dirSign * theta), st = Math.sin(dirSign * theta);
+    var toBack = function (p) {
+      var q = buttP(p), dx = q.x - bk.snp.x, dy = q.y - bk.snp.y;
+      return { x: bk.snp.x + dx * ct - dy * st, y: bk.snp.y + dx * st + dy * ct };
+    };
+    var mapSegBack = function (s) {
+      return s.kind === "line" ? { kind: "line", from: toBack(s.from), to: toBack(s.to) }
+        : { kind: "cubic", from: toBack(s.from), c1: toBack(s.c1), c2: toBack(s.c2), to: toBack(s.to) };
+    };
+
+    // ③ 달림선: (뒤 목둘레 + V선) 체인을 바깥으로 0.5 → 0 taper offset
+    var vRot = vCurve.segs.map(function (s) { return mapSegBack({ kind: s.kind, from: s.from, c1: s.c1, c2: s.c2, to: s.to }); });
+    var neckChain = bk.chain.map(function (s) { return { kind: s.kind, from: cp(s.from), c1: s.c1 ? cp(s.c1) : undefined, c2: s.c2 ? cp(s.c2) : undefined, to: cp(s.to) }; }).concat(vRot);
+    var outward = { x: -bk.centerDir.x, y: -bk.centerDir.y };
+    var attachRaw = offsetChainTaper(neckChain, RISE, outward);
+    if (!attachRaw) return { ok: false, reason: "attach-offset-failed" };
+
+    var A0 = cp(attachRaw[0].from);
+    var apex = add(A0, bk.centerDir, CBW);                          // ④ 뒤 중심 칼라 폭 11
+    var shoulderDirRot = unit(sub(toBack(fr.shoulderTip), bk.snp)); // ⑤ 겹친 뒤의 앞 어깨선
+    var P10 = add(bk.snp, shoulderDirRot, SHW);
+    // ④ 외곽 15.5: CB 에 직각이고, 칼라가 퍼지는 쪽(어깨 폭 지점 방향)
+    var perp = { x: -bk.centerDir.y, y: bk.centerDir.x };
+    if ((perp.x * (P10.x - apex.x) + perp.y * (P10.y - apex.y)) < 0) perp = { x: -perp.x, y: -perp.y };
+    var P15 = add(apex, perp, BOUT);
+    var fnpVRot = toBack(fnpV);
+    // ⑦ 앞 외곽선: 현에서 FBOW 만큼 **달림선 반대쪽**으로 휜 완만한 곡선
+    var frontChordMid = mid(P10, fnpVRot);
+    var awaySide = sub(frontChordMid, bk.snp);
+    var frontOuter = bowedGuide(P10, fnpVRot, FBOW, awaySide, "outer");
+    if (!frontOuter) return { ok: false, reason: "invalid-front-bow" };
+
+    // 칼라 프레임: CB 목점 = 원점, CB 의 몸통 방향 → +y (순수 회전)
+    var fc = bk.centerDir.y, fs = bk.centerDir.x;
+    var toFrame = function (p) {
+      var dx = p.x - bk.neckPoint.x, dy = p.y - bk.neckPoint.y;
+      return { x: dx * fc - dy * fs, y: dx * fs + dy * fc };
+    };
+    var mapPart = function (s, part) {
+      return s.kind === "line" ? { kind: "line", from: toFrame(s.from), to: toFrame(s.to), part: part }
+        : { kind: "cubic", from: toFrame(s.from), c1: toFrame(s.c1), c2: toFrame(s.c2), to: toFrame(s.to), part: part };
+    };
+    var attach = attachRaw.map(function (s) { return mapPart(s, "neck-seam"); });
+    var frontOut = frontOuter.segs.map(function (s) { return mapPart(s, "outer"); });
+    var A0C = toFrame(A0), apexC = toFrame(apex), p15C = toFrame(P15), p10C = toFrame(P10);
+    var snpC = toFrame(bk.snp), fnpC = toFrame(fnpVRot);
+
+    var outline = attach.slice();
+    frontOut.slice().reverse().forEach(function (s) { outline.push(reverseCubic(s, "outer")); });  // FNP → 어깨
+    outline.push(L(p10C, p15C, "outer-back"));                      // ⑥ 뒤 칼라 외곽선(직선)
+    outline.push(L(p15C, apexC, "outer-cb"));                       // ④ 15.5(CB 직각)
+    outline.push(L(apexC, A0C, "cb-fold"));                         // ④ 11(뒤 중심)
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    var backNeck = sumMeasure(bk.chain), vLen = sumMeasure(vCurve.segs);
+    var attachLen = sumMeasure(attach), neckTarget = backNeck + vLen;
+    var frontOuterLen = sumMeasure(frontOut);
+    var apexA = unit(sub(A0C, apexC)), apexB = unit(sub(p15C, apexC));
+    return { ok: true,
+      geometry: { outline: outline, construction: [L(snpC, p10C, "shoulder-mark")] },
+      measure: {
+        vDropCm: VD, vHollowCm: VH, shoulderOverlapCm: OV, cbRiseCm: RISE,
+        cbWidthCm: CBW, backOuterCm: BOUT, shoulderWidthCm: SHW, frontOuterBowCm: FBOW,
+        bodyBackNeckLenCm: b.backCm, bodyFrontNeckLenCm: b.frontCm,
+        backNeckLenCm: backNeck, vNeckLenCm: vLen, neckTargetCm: neckTarget,
+        backShoulderLenCm: Lb, frontShoulderLenCm: Lf, overlapAngleDeg: theta * 180 / Math.PI,
+        shoulderTipGapCm: lineLen(toBack(fr.shoulderTip), bk.shoulderTip),
+        attachLenCm: attachLen, attachShortfallCm: neckTarget - attachLen,
+        cbWidthLenCm: lineLen(A0C, apexC),
+        backOuterLenCm: lineLen(apexC, p15C),
+        backCornerAngleDeg: Math.acos(Math.max(-1, Math.min(1, apexA.x * apexB.x + apexA.y * apexB.y))) * 180 / Math.PI,
+        shoulderWidthLenCm: lineLen(snpC, p10C),
+        backOuterEdgeLenCm: lineLen(p10C, p15C),
+        frontOuterLenCm: frontOuterLen,
+        outerLenCm: frontOuterLen + lineLen(p10C, p15C) + lineLen(p15C, apexC)
+      },
+      anchors: { cbNeck: toFrame(bk.neckPoint), cbAttach: A0C, cbOuter: apexC, backOuter: p15C,
+        shoulder: p10C, snp: snpC, fnpV: fnpC } };
+  }
+
   function validateClosedOutline(outline) {
     if (!Array.isArray(outline) || outline.length < 3) return { ok: false, reason: "empty" };
     for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (!nx.from || !outline[i].to || lineLen(outline[i].to, nx.from) > 1e-4) return { ok: false, reason: "not-closed" }; }
@@ -1043,6 +1571,12 @@
     computeOnePiece: computeOnePiece,   // family 2(한 장 셔츠 칼라, P.147)
     ONE_PIECE_METHOD: ONE_PIECE_METHOD,
     computeBandOnePiece: computeBandOnePiece,   // family 3(밴드+위 칼라 한 장 R, P.68)
+    computeFlatCollarS: computeFlatCollarS,     // family 4(플랫 칼라 S, P.69 · 제도 방법 P.149 공통 절차)
+    computeFlatCollarT: computeFlatCollarT,     // family 4(플랫 칼라 T, P.69 하단 · 제도 방법 P.149)
+    computeSailorCollarU: computeSailorCollarU,   // family 5(세일러 칼라 U, P.70 · 제도 방법 P.150)
+    SAILOR_COLLAR_U_METHOD: SAILOR_COLLAR_U_METHOD,
+    FLAT_COLLAR_T_METHOD: FLAT_COLLAR_T_METHOD,
+    FLAT_COLLAR_S_METHOD: FLAT_COLLAR_S_METHOD,
     BAND_ONE_PIECE_METHOD: BAND_ONE_PIECE_METHOD,
     computeWingTip: computeWingTip,   // family 3(윙 칼라 Q, P.68 — 수평 꺾임선 + 칼라 끝)
     WING_METHOD: WING_METHOD,

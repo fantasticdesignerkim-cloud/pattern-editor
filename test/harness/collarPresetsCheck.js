@@ -47,7 +47,7 @@ function standFBodice(hash) {
 {
   ok(Object.isFrozen(CP) && typeof CP.composeDraft === "function", "1: API frozen");
   const L = CP.list();
-  ok(Array.isArray(L) && L.length === 18 && Object.isFrozen(L), "1: 실행 레코드 18개(A~F·M~R·G~L)·목록 frozen");
+  ok(Array.isArray(L) && L.length === 23 && Object.isFrozen(L), "1: 실행 레코드 23개(A~F·M~R·S·T·U·V·W·G~L)·목록 frozen");
   const M = CP.get(CP.DEFAULT_ID);
   ok(M.id === "bunka-shirt-collar-M" && CP.DEFAULT_ID === M.id && CP.get(M.id) === M, "1: M id·기본 id·get 동일 참조");
   ok(M.label === "교재 M 기본형" && M.type === "shirt-two-piece" && M.baseMethod === "bunka-band-collar-P148-v1", "1: 표시 이름·type·baseMethod(P.148 공통 제도법)");
@@ -74,7 +74,7 @@ function standFBodice(hash) {
   try { M.stand.bandWidthCm = 9; } catch (_) {}
   try { M.body.cbWidthCm = 9; } catch (_) {}
   try { CP.list().push({}); } catch (_) {}
-  ok(J(M) === before && CP.list().length === 18 && Object.isFrozen(M.stand) && Object.isFrozen(M.body) && Object.isFrozen(M.neckline), "3: 레코드·섹션·목록 변경 불가");
+  ok(J(M) === before && CP.list().length === 23 && Object.isFrozen(M.stand) && Object.isFrozen(M.body) && Object.isFrozen(M.neckline), "3: 레코드·섹션·목록 변경 불가");
   const d = CP.defaults(M.id);
   ok(d.ok && !Object.isFrozen(d.stand) && d.stand !== M.stand && d.body !== M.body, "3: defaults 는 편집 가능한 clone");
   d.stand.bandWidthCm = 5; d.body.cbWidthCm = 7;
@@ -105,7 +105,7 @@ function standFBodice(hash) {
 // 5. 옵션 모델·알 수 없는 id 거부
 {
   const o = CP.options();
-  ok(J(o.map(x => x.value)) === J(["bunka-stand-collar-A", "bunka-stand-collar-B", "bunka-stand-collar-C", "bunka-stand-collar-D", "bunka-stand-collar-E", "bunka-stand-collar-F", "bunka-shirt-collar-M", "bunka-band-collar-N", "bunka-band-collar-O", "bunka-band-collar-P", "bunka-band-collar-Q", "bunka-band-collar-R", "bunka-shirt-collar-G", "bunka-shirt-collar-H", "bunka-shirt-collar-I", "bunka-shirt-collar-J", "bunka-shirt-collar-K", "bunka-shirt-collar-L"]), "5: 옵션 = registry 레코드(A~F·M~R·G~L)");
+  ok(J(o.map(x => x.value)) === J(["bunka-stand-collar-A", "bunka-stand-collar-B", "bunka-stand-collar-C", "bunka-stand-collar-D", "bunka-stand-collar-E", "bunka-stand-collar-F", "bunka-shirt-collar-M", "bunka-band-collar-N", "bunka-band-collar-O", "bunka-band-collar-P", "bunka-band-collar-Q", "bunka-band-collar-R", "bunka-flat-collar-S", "bunka-flat-collar-T", "bunka-sailor-collar-U", "bunka-sailor-collar-V", "bunka-sailor-collar-W", "bunka-shirt-collar-G", "bunka-shirt-collar-H", "bunka-shirt-collar-I", "bunka-shirt-collar-J", "bunka-shirt-collar-K", "bunka-shirt-collar-L"]), "5: 옵션 = registry 레코드(A~F·M~R·S·T·U·V·W·G~L)");
   ok(CP.defaults("nope").ok === false && CP.defaults("nope").reason === "unknown-collar-preset", "5: defaults 알 수 없는 id 거부");
   ok(CP.composeDraft("nope", bodice(), DC).reason === "unknown-collar-preset", "5: composeDraft 알 수 없는 id 거부");
   ok(CP.matches(CP.DEFAULT_ID, { bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 }, CP.defaults(CP.DEFAULT_ID).body) === true
@@ -182,9 +182,9 @@ function project(cd) { return { sourceBlock: { id: "block-1", version: 1, canoni
     ["hood", 8, "후드", "d", 74], ["tailored-collar", 9, "테일러드 칼라", "h", 78], ["shawl-collar", 10, "숄 칼라", "j", 80],
     ["high-neck", 11, "하이넥", "l", 82]];
   ok(J(F.map(f => [f.id, f.order, f.label, f.symbol, f.page])) === J(want), "8: 교재 순서·id·표시명·표식·페이지 정확");
-  ok(F.filter(f => f.availability === "available").map(f => f.id).join() === "stand-collar,shirt-collar-one-piece,shirt-collar-with-band", "8: available family = 스탠드(A)·셔츠(G)·밴드 셔츠(M)");
+  ok(F.filter(f => f.availability === "available").map(f => f.id).join() === "stand-collar,shirt-collar-one-piece,shirt-collar-with-band,flat-collar,sailor-collar", "8: available family = 스탠드(A)·셔츠(G)·밴드 셔츠(M)·플랫(S)·세일러(U)");
   ok(F.every(f => f.availability === "available" ? typeof f.generator === "string" : f.generator === null), "8: generator 는 구현된 family 만");
-  ok(F.filter(f => f.availability === "pending-source").every(f => f.note === CP.PENDING_NOTE) && F.filter(f => f.availability === "pending-source").length === 8, "8: 미구현 family 8개 안내 문구");
+  ok(F.filter(f => f.availability === "pending-source").every(f => f.note === CP.PENDING_NOTE) && F.filter(f => f.availability === "pending-source").length === 6, "8: 미구현 family 6개 안내 문구");
   const M = CP.family("shirt-collar-with-band");
   ok(M && CP.family("nope") === null && CP.family("__proto__") === null, "8: family 조회·알 수 없는 id null");
   try { F.push({}); } catch (_) {}
@@ -235,8 +235,8 @@ function project(cd) { return { sourceBlock: { id: "block-1", version: 1, canoni
   c = cat(); c[0].symbol = ""; throwsReason(() => CP.buildCatalog(c, recs()), "missing-field", "11: 표식 누락");
   c = cat(); c[0].page = 0; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-page", "11: 잘못된 페이지");
   c = cat(); c[0].availability = "soon"; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-availability", "11: 알 수 없는 상태");
-  c = cat(); c[3].generator = "made-up"; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-generator", "11: 미구현 family 에 generator 금지");
-  c = cat(); c[3].variants = [{ id: "flat-x", symbol: "X", label: "X", availability: "available", presetId: "bunka-shirt-collar-M", note: null }];
+  c = cat(); c[5].generator = "made-up"; throwsReason(() => CP.buildCatalog(c, recs()), "invalid-generator", "11: 미구현 family 에 generator 금지");
+  c = cat(); c[5].variants = [{ id: "bow-x", symbol: "X", label: "X", availability: "available", presetId: "bunka-shirt-collar-M", note: null }];
   throwsReason(() => CP.buildCatalog(c, recs()), "unavailable-family-variant", "11: 미구현 family 의 available variant 금지");
   c = cat(); c[2].variants[0].presetId = "nope"; throwsReason(() => CP.buildCatalog(c, recs()), "unknown-variant-preset", "11: 없는 preset 참조");
   c = cat(); c[2].variants[5].availability = "pending-source"; throwsReason(() => CP.buildCatalog(c, recs()), "pending-variant-preset", "11: 미구현 variant 는 preset 없음");
@@ -294,8 +294,13 @@ const ONE = "shirt-collar-one-piece";
   const pendingFams = CP.families().filter(f => f.availability !== "available");
   ok(pendingFams.length > 0 && pendingFams.every(f => f.variants.length === 0), "15: 자료 없는 family 는 빈 슬롯");
   ok(pendingFams.every(f => { const r = CP.resolve(f.id, "bunka-shirt-collar-M"); return r.ok === false && r.reason === "unknown-collar-variant" && !("presetId" in r); }), "15: 자료 없는 family resolve 거부(M 대체 없음)");
-  ok(CP.families().filter(f => f.availability === "available").every(f => f.variants.every(v => { const r = CP.resolve(f.id, v.id); return r.ok === true && r.presetId === v.presetId; })), "15: 구현 family 의 모든 variant 가 자기 레코드로 해석");
-  ok(CP.list().length === 18, "15: 실행 레코드 = A~F·M~R·G~L");
+  ok(CP.families().filter(f => f.availability === "available").every(f => f.variants.every(v => {
+    const r = CP.resolve(f.id, v.id);
+    return v.availability === "available"
+      ? (r.ok === true && r.presetId === v.presetId)
+      : (r.ok === false && r.reason === "collar-preset-unavailable" && !("presetId" in r));   // 구현 family 안의 참고 슬롯(T)도 거부
+  })), "15: 구현 family 의 available variant 는 자기 레코드로 해석 · 참고 슬롯은 거부");
+  ok(CP.list().length === 23, "15: 실행 레코드 = A~F·M~R·S·T·U·V·W·G~L");
   ok(J(CP.variantOptions(ONE)) === J(CP.variants(ONE).map(v => ({ value: v.id, label: v.label, available: true }))), "15: family 2 옵션 G~L 전부 available");
 }
 // 16. 참고 수치 검증(조용히 수용 금지)
@@ -908,6 +913,111 @@ const BAND_FAM = "shirt-collar-with-band";
   throwsReason(() => CP.validateRecord(badR4), "mixed-record-sections", "31: 2피스 레코드에 위 칼라 한 장 섹션 금지");
   const badR5 = JSON.parse(J(R)); badR5.id = "bad-r5"; delete badR5.upper.outerBowCm;
   throwsReason(() => CP.validateRecord(badR5), "bad-section-keys", "31: 위 칼라 필수 키 누락 거부");
+}
+
+// 32. 세일러 V·W 실행 레코드·초안·완료본: U 와 **같은 생성기(P.150)**, 수치만 다르다 — U 는 불변
+{
+  // 세일러는 앞뒤 몸판을 겹쳐 그리므로 뒤판 외곽(의미 모서리)까지 필요하다 — 이 블록 전용 픽스처.
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  const sailorBodice = (hash) => ({
+    hash: hash || "BS1", sourceVersion: 1,
+    necklineLengths: { back: 8.5, front: 11.5, half: 20, finished: 40 },
+    back: { outline: [ln([0, 0], [0, 40], "center"), cub([0, 0], [3, 0], [6, -1], [8, -2], "neckline"), ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 40], "center"), cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline"), ln([32, -4], [22, 0], "shoulder")], construction: [] }
+  });
+  const proj = (draft) => ({ working: { collarDraft: draft } });
+  BODICE = sailorBodice("BS1");
+
+  const U = CP.get("bunka-sailor-collar-U"), V = CP.get("bunka-sailor-collar-V"), W = CP.get("bunka-sailor-collar-W");
+  ok(V && W && V.type === "sailor-collar" && W.type === "sailor-collar" && V.familyId === "sailor-collar" && W.familyId === "sailor-collar",
+    "32: V·W 레코드 type·family(U 와 같은 세일러 family)");
+  ok(V.baseMethod === "bunka-sailor-collar-V-v1" && W.baseMethod === "bunka-sailor-collar-W-v1" && U.baseMethod === "bunka-sailor-collar-U-v1",
+    "32: 출처 baseMethod 는 도해별로 분리(U 불변)");
+  // ★ 교재 P.70 도해 수치(각 치수의 시작점·끝점·방향은 U 와 동일)
+  ok(J(V.sailor) === J({ vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 9, backOuterCm: 13.5, shoulderWidthCm: 7, frontOuterBowCm: 1 }), "32: V 수치(목둘레 12·0.8 유지 · 폭 9·13.5·7 · 앞 휨 1)");
+  ok(J(W.sailor) === J({ vDropCm: 22, vHollowCm: 0.3, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 0.7 }), "32: W 수치(목둘레 22·0.3 · 폭은 U 와 같음 · 앞 휨 0.7)");
+  ok(J(U.sailor) === J({ vDropCm: 12, vHollowCm: 0.8, shoulderOverlapCm: 1.5, cbRiseCm: 0.5,
+    cbWidthCm: 11, backOuterCm: 15.5, shoulderWidthCm: 10, frontOuterBowCm: 1.5 }), "32: U 레코드 수치 불변");
+  // U 대비 무엇이 같고 무엇이 달라지는지(교재 본문 근거)를 고정한다
+  ok(V.sailor.vDropCm === U.sailor.vDropCm && V.sailor.vHollowCm === U.sailor.vHollowCm
+    && V.sailor.shoulderOverlapCm === U.sailor.shoulderOverlapCm && V.sailor.cbRiseCm === U.sailor.cbRiseCm,
+    "32: V 는 목둘레·겹침·뒤 중심 올림이 U 와 같다(\"칼라 허리와 목둘레는 U와 같다\")");
+  ok(V.sailor.cbWidthCm < U.sailor.cbWidthCm && V.sailor.backOuterCm < U.sailor.backOuterCm
+    && V.sailor.shoulderWidthCm < U.sailor.shoulderWidthCm,
+    "32: 어깨 폭을 좁히면 뒤 중심 길이도 함께 짧다(교재 균형 설명)");
+  ok(W.sailor.cbWidthCm === U.sailor.cbWidthCm && W.sailor.backOuterCm === U.sailor.backOuterCm
+    && W.sailor.shoulderWidthCm === U.sailor.shoulderWidthCm && W.sailor.vDropCm > U.sailor.vDropCm,
+    "32: W 는 폭 계열이 U 와 같고 목둘레만 깊다(\"목둘레를 바꿔 U와 같이 제도한다\")");
+  ok(/P\.70/.test(V.source) && /P\.150/.test(V.source) && /P\.70/.test(W.source) && /P\.150/.test(W.source), "32: 출처에 도해(P.70)·제도 방법(P.150)");
+  ok(CP.fields("sailor").map(f => f.key).join() === Object.keys(V.sailor).join()
+    && Object.keys(V.sailor).join() === Object.keys(U.sailor).join(), "32: 필드·키 순서는 U 와 공유(엔진·서명 계약)");
+
+  // catalog: family 5 는 U·V·W 전부 실행
+  const vs = CP.variants("sailor-collar");
+  ok(J(vs.map(v => [v.symbol, v.availability, v.presetId])) === J([["U", "available", "bunka-sailor-collar-U"],
+    ["V", "available", "bunka-sailor-collar-V"], ["W", "available", "bunka-sailor-collar-W"]]), "32: 세일러 슬롯 U·V·W 전부 실행");
+  ok(vs.every(v => !("reference" in v) && !("requiresMethodPage" in v) && v.note === null), "32: 실행 전환된 슬롯에 참고 메모 잔재 없음");
+  ok(["U", "V", "W"].every(x => CP.resolve("sailor-collar", "bunka-sailor-collar-" + x).presetId === "bunka-sailor-collar-" + x), "32: V·W resolve ok");
+  ok(CP.variantByPreset("bunka-sailor-collar-W").symbol === "W" && CP.variantByPreset("bunka-sailor-collar-U").symbol === "U"
+    && CP.variantByPreset("nope") === null && CP.variantByPreset(null) === null, "32: presetId → 교재 표식 역조회");
+  const t32 = CP.displayTitle("sailor-collar", "bunka-sailor-collar-V");
+  ok(t32.familyLabel === "세일러 칼라" && t32.symbol === "V" && t32.page === 70, "32: V 표시 제목(선택 variant 표식·페이지)");
+
+  // composeDraft → 같은 생성기, 파라미터만 다르다
+  const mkDraft = (id) => CP.composeDraft(id, BODICE, DC);
+  const dU = mkDraft(U.id), dV = mkDraft(V.id), dW = mkDraft(W.id);
+  ok(dU.ok && dV.ok && dW.ok, "32: U·V·W draft 생성(" + [dU.reason, dV.reason, dW.reason].filter(Boolean).join() + ")");
+  ok(dV.draft.type === "sailor-collar" && dV.draft.presetId === V.id && J(dV.draft.parameters) === J({ sailor: V.sailor })
+    && dW.draft.presetId === W.id && J(dW.draft.parameters) === J({ sailor: W.sailor }), "32: draft 파라미터·출처 메타");
+  ok([dV, dW].every(d => d.draft.sailor && d.draft.sailor.geometry && !("standGeometry" in d.draft) && !("body" in d.draft) && !("flat" in d.draft)),
+    "32: 한 조각(sailor)만 — 밴드·2피스 본체·플랫 섹션 없음");
+  // 독립 재계산과 대조(생성기 공유 증명)
+  ok(J(dV.draft.sailor.geometry) === J(DC.computeSailorCollarU(BODICE, V.sailor).geometry)
+    && J(dW.draft.sailor.geometry) === J(DC.computeSailorCollarU(BODICE, W.sailor).geometry), "32: 같은 생성기 재계산과 일치");
+  ok(J(dV.draft.sailor.geometry.outline.map(s => s.part)) === J(dU.draft.sailor.geometry.outline.map(s => s.part))
+    && J(dW.draft.sailor.geometry.outline.map(s => s.part)) === J(dU.draft.sailor.geometry.outline.map(s => s.part)),
+    "32: 구성(part 순서)은 U 와 동일 — 수치만 다르다");
+  // 실측이 입력 수치를 재현한다
+  const mV = dV.draft.sailor.measure, mW = dW.draft.sailor.measure, mU = dU.draft.sailor.measure;
+  ok(Math.abs(mV.cbWidthLenCm - 9) < 1e-6 && Math.abs(mV.backOuterLenCm - 13.5) < 1e-6
+    && Math.abs(mV.shoulderWidthLenCm - 7) < 1e-6 && Math.abs(mV.backCornerAngleDeg - 90) < 1e-6, "32: V 실측 = 9·13.5·7·직각");
+  ok(Math.abs(mW.cbWidthLenCm - 11) < 1e-6 && Math.abs(mW.backOuterLenCm - 15.5) < 1e-6
+    && Math.abs(mW.shoulderWidthLenCm - 10) < 1e-6 && Math.abs(mW.vDropCm - 22) < 1e-9, "32: W 실측 = 11·15.5·10 · 내림 22");
+  ok(mW.vNeckLenCm > mU.vNeckLenCm && mW.neckTargetCm > mU.neckTargetCm, "32: W 는 V넥이 깊어 목선·달림 목표가 길다");
+  ok(mV.outerLenCm < mU.outerLenCm, "32: V 는 칼라 폭이 좁아 외곽이 짧다");
+  ok(CP.matches(V.id, V.sailor) && !CP.matches(V.id, Object.assign({}, V.sailor, { shoulderWidthCm: 10 }))
+    && !CP.matches(V.id, U.sailor) && !CP.matches(W.id, U.sailor), "32: preset 일치 판정(U 수치를 V·W 로 오인하지 않음)");
+
+  // 완료본: 수치가 다르면 hash 가 갈린다 · 재완료 idempotent
+  const doneU = CC.complete(proj(JSON.parse(J(dU.draft))));
+  const doneV = CC.complete(proj(JSON.parse(J(dV.draft))));
+  const pjW = proj(JSON.parse(J(dW.draft)));
+  const doneW = CC.complete(pjW), againW = CC.complete(pjW);
+  ok(doneV.ok && doneW.ok && doneV.result.type === "sailor-collar" && Object.isFrozen(doneV.result)
+    && J(doneV.result.sailor.parameters) === J(V.sailor) && doneW.result.symmetry === "half-cb-fold",
+    "32: V·W 완료 스냅샷(" + [doneV.reason, doneW.reason].filter(Boolean).join() + ")");
+  ok(doneU.ok && doneU.result.hash !== doneV.result.hash && doneV.result.hash !== doneW.result.hash
+    && doneU.result.hash !== doneW.result.hash, "32: U·V·W hash 분리");
+  ok(againW.idempotent === true && CC.isCurrentCollarChanged(pjW) === false, "32: W 재완료 idempotent·직후 미변경");
+  ok(doneV.result.presetId === V.id && doneW.result.presetId === W.id && doneU.result.presetId === U.id, "32: 완료본 출처 메타 보존");
+
+  // 레코드 검증(조용히 수용 금지)
+  const badV1 = JSON.parse(J(V)); badV1.id = "bad-v1"; badV1.sailor.shoulderWidthCm = 0;
+  throwsReason(() => CP.validateRecord(badV1), "out-of-range", "32: 어깨 칼라 폭 0 거부");
+  const badV2 = JSON.parse(J(W)); badV2.id = "bad-v2"; badV2.sailor.vDropCm = 0;
+  throwsReason(() => CP.validateRecord(badV2), "out-of-range", "32: V 목둘레 내림 0 거부");
+  const badV3 = JSON.parse(J(V)); badV3.id = "bad-v3"; badV3.flat = { collarWidthCm: 5.5 };
+  throwsReason(() => CP.validateRecord(badV3), "mixed-record-sections", "32: 플랫 섹션 혼용 거부");
+  const badV4 = JSON.parse(J(W)); badV4.id = "bad-v4"; delete badV4.sailor.frontOuterBowCm;
+  throwsReason(() => CP.validateRecord(badV4), "bad-section-keys", "32: 세일러 필수 키 누락 거부");
+
+  // U 경로 불변 + 다른 family 도 같은 세션에서 그대로 완료된다
+  ok(J(CP.defaults(U.id)) === J({ ok: true, id: U.id, type: "sailor-collar", sailor: U.sailor }), "32: U defaults 불변");
+  ok((function () { const r = CC.complete(proj(CP.composeDraft("bunka-flat-collar-T", BODICE, DC).draft)); return r.ok && r.result.type === "flat-collar-overlap"; })(), "32: T 플랫 완료 유지");
 }
 
 console.log("══════════════════════════════════════════════");
