@@ -97,6 +97,7 @@
     merge(cd.frill && cd.frill.geometry);           // 프릴 칼라(family 7, a·b·c)
     merge(cd.hood && cd.hood.geometry);             // 후드(family 8, d)
     merge(cd.tailored && cd.tailored.geometry);     // 테일러드 칼라(family 9, h·i)
+    merge(cd.shawl && cd.shawl.geometry);           // 숄 칼라(family 10, j·k)
     merge(cd.standalone && cd.standalone.geometry); // 단독 스탠드 칼라(family 1)
     return u;
   }

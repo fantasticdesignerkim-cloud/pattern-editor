@@ -384,6 +384,18 @@ function _appendCollarTailored(root, collarDraft, off, scale){
   root.appendChild(g);
 }
 
+// 숄 칼라(교재 j·k, collarDraft.shawl): 위 칼라 한 조각(깃아귀 없음) + 몸판 파생(라펠·꺾임선).
+function _appendCollarShawl(root, collarDraft, off, scale){
+  const sw=collarDraft && collarDraft.shawl;
+  if(!sw || !sw.geometry || !Array.isArray(sw.geometry.outline)) return;
+  const d=_partPathD(sw.geometry.outline); if(!d) return;
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-collar":"shawl" });
+  g.appendChild(E("path",{ d, class:"design-collar-onepiece", fill:"none" }));
+  const sc=_partPathD(sw.geometry.construction||[]);
+  if(sc) g.appendChild(E("path",{ d:sc, class:"design-collar-fold", fill:"none" }));
+  root.appendChild(g);
+}
+
 // 카라 제도 보조수치 오버레이(표시 전용): collarAnnotation 표시 모델(카라 로컬 cm)을 카라 offset 동승으로 그린다.
 //   보조선=가는 점선, 치수선=양끝 tick + 라벨. 선 굵기는 px 고정(줌 무관). 형상·hash 무관.
 function _appendCollarAnnotation(root, model, off, scale){
@@ -524,7 +536,7 @@ function render(){
       svg.appendChild(pRoot);
     }
     // 카라 스탠드 파생(있을 때만): 별도 조각(L.collar offset). 몸판 hash 변경 시 standGeometry=null 로 숨김.
-    if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body || dp.working.collarDraft.onePiece || dp.working.collarDraft.openCollar || dp.working.collarDraft.tip || dp.working.collarDraft.joined || dp.working.collarDraft.flat || dp.working.collarDraft.sailor || dp.working.collarDraft.bow || dp.working.collarDraft.frill || dp.working.collarDraft.hood || dp.working.collarDraft.tailored || dp.working.collarDraft.standalone)) {
+    if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body || dp.working.collarDraft.onePiece || dp.working.collarDraft.openCollar || dp.working.collarDraft.tip || dp.working.collarDraft.joined || dp.working.collarDraft.flat || dp.working.collarDraft.sailor || dp.working.collarDraft.bow || dp.working.collarDraft.frill || dp.working.collarDraft.hood || dp.working.collarDraft.tailored || dp.working.collarDraft.shawl || dp.working.collarDraft.standalone)) {
       const cOff = L.collar || { dx: 0, dy: 0 };
       const cRoot = E("g"); cRoot.setAttribute("data-design-root", "collar");
       _appendCollarStand(cRoot, dp.working.collarDraft, cOff, scale);
@@ -540,6 +552,7 @@ function render(){
       _appendCollarFrill(cRoot, dp.working.collarDraft, cOff, scale);
       _appendCollarHood(cRoot, dp.working.collarDraft, cOff, scale);
       _appendCollarTailored(cRoot, dp.working.collarDraft, cOff, scale);
+      _appendCollarShawl(cRoot, dp.working.collarDraft, cOff, scale);
       // 제도 보조수치(카라 탭·토글 ON·유효 모델일 때만, 매 렌더 새 그룹 — 중복 누적 없음).
       if (typeof window.collarAnnotationForRender === "function") _appendCollarAnnotation(cRoot, window.collarAnnotationForRender(), cOff, scale);
       // 관리형 collar-body 선(무효 시 빨강 점선) + 편집 overlay(카라 offset transform 동승).

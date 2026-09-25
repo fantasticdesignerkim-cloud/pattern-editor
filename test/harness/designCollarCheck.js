@@ -1178,5 +1178,99 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   }
 }
 
+// 21. 교재 j·k(P.80·81 · 제도 방법 P.154–155) 숄 칼라 — 테일러드와 단계 1~4 공유, **깃아귀 없음**.
+//   P.154 머리말: "테일러드 칼라처럼 앞 몸판을 완성하고 칼라를 제도한다 … 칼라 외곽을 자연스러운
+//   곡선으로 잇는다."  5-❷: "뒤 중심에서 **라펠 폭을 지나, 꺾임 끝까지** 완만한 곡선으로 연결".
+{
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  const frontNeck = cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline");
+  const BACK_LEN = 8.5, FRONT_LEN = denseLen(frontNeck);
+  const body = () => ({ hash: "BSW", sourceVersion: 1,
+    necklineLengths: { back: BACK_LEN, front: FRONT_LEN, half: BACK_LEN + FRONT_LEN, finished: 2 * (BACK_LEN + FRONT_LEN) },
+    front: { outline: [ln([40, 4], [40, 38], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder"),
+      cub([22, 0], [24, 8], [23, 15], [23, 20.6], "armhole"), ln([23, 20.6], [23, 38], "side-seam"),
+      ln([23, 38], [40, 38], "waist")], construction: [] } });
+  const JP = { collarStandCm: 3, collarWidthCm: 4, lapelWidthCm: 6, layDownCm: 2.5, neckShiftCm: 1,
+    frontNeckCm: 2, frontRiseCm: 1 };
+  const KP = Object.assign({}, JP, { collarStandCm: 1, layDownCm: 6, neckShiftCm: 0.6 });
+  const B = body(), j = C.computeShawlCollar(B, JP), k = C.computeShawlCollar(B, KP);
+
+  ok(typeof C.computeShawlCollar === "function" && C.SHAWL_METHOD.methodPages.join() === "154,155"
+    && C.SHAWL_METHOD.notch === false && C.SHAWL_METHOD.facing === "deferred"
+    && C.SHAWL_METHOD.shoulderExtensionCm === 0.7, "21: API·제도법 메타(P.154–155 · 깃아귀 없음 · 안단 보류)");
+  ok(j.ok && k.ok && C.validateClosedOutline(j.geometry.outline).ok && C.validateClosedOutline(k.geometry.outline).ok,
+    "21: j·k 폐곡선 한 조각(" + [j.reason, k.reason].filter(Boolean).join() + ")");
+  if (!j.ok || !k.ok) throw new Error("21: 숄 픽스처 생성 실패");
+  ok(J(j.geometry.outline.map(s => s.part)) === J(["neck-seam", "neck-seam", "cb-stand", "cb-width", "outer", "collar-lapel-seam"]),
+    "21: 구성 = 달림선 · 뒤 중심(허리·폭) · 외곽 · 칼라↔라펠 이음선");
+  ok(J(k.geometry.outline.map(s => s.part)) === J(j.geometry.outline.map(s => s.part)), "21: j·k 구성 동일");
+  // ★ 깃아귀가 없다 — 테일러드의 칼라 끝 정삼각형 수치가 아예 없어야 한다
+  ok(!("collarTipToLapelCm" in j.measure) && !("lapelToGorgeCm" in j.measure) && !("tipRadiusCm" in j.measure),
+    "21: 깃아귀(칼라 끝 정삼각형) 수치가 없다");
+
+  [[j, JP, "j"], [k, KP, "k"]].forEach(([r, P, tag]) => {
+    const m = r.measure, a = r.anchors;
+    ok(near(m.backAttachLenCm, BACK_LEN, 1e-9), "21: " + tag + " 뒤 칼라 달림선 = 몸판 뒤 목둘레");
+    ok(near(m.cbStandLenCm, P.collarStandCm, 1e-9) && near(m.cbWidthLenCm, P.collarWidthCm, 1e-9),
+      "21: " + tag + " 칼라 허리 " + P.collarStandCm + " · 폭 " + P.collarWidthCm);
+    ok(near(m.lapelWidthLenCm, P.lapelWidthCm, 1e-9), "21: " + tag + " 라펠 폭 " + P.lapelWidthCm);
+    // ★ 5-❷ 외곽 한 줄기: 칼라 몫 + 라펠 몫 = 전체
+    ok(near(m.outerLenCm, m.collarOuterLenCm + m.lapelOuterLenCm, 1e-9),
+      "21: " + tag + " 외곽은 뒤 중심→꺾임 끝 한 줄기(칼라 몫 + 라펠 몫 = 전체)");
+    // 라펠 폭 지점은 **꺾임점이 아니라 통과점** — 칼라 몫의 끝 접선과 라펠 몫의 시작 접선이 같다
+    {
+      const co = r.geometry.outline.filter(s => s.part === "outer")[0];
+      const lo = r.bodyLink.lapelOutline[0];
+      const t1 = sub(co.to, co.c2), t2 = sub(lo.c1, lo.from);
+      ok(near(dot(t1, t2) / (norm(t1) * norm(t2)), 1, 1e-9),
+        "21: " + tag + " 라펠 폭 지점에서 외곽이 각지지 않는다(접선 연속)");
+    }
+    // ★ 5-❶ Ⓐ 주변이 각지지 않아야 한다(교재가 확대 그림으로 강조)
+    {
+      const at = r.geometry.outline.filter(s => s.part === "neck-seam");
+      const t1 = sub(at[0].to, at[0].c2), t2 = sub(at[1].c1, at[1].from);
+      ok(near(dot(t1, t2) / (norm(t1) * norm(t2)), 1, 1e-9) && near(at[0].to.x, a.standPoint.x, 1e-9),
+        "21: " + tag + " 달림선이 Ⓐ 에서 각지지 않는다");
+    }
+    ok(near(norm(sub(a.standPoint, a.snp)), P.collarStandCm, 1e-9)
+      && near(m.standRemainderCm, P.collarStandCm - 0.7, 1e-9), "21: " + tag + " Ⓐ = SNP+허리 · 1-❸ = 허리−0.7");
+    ok(near(a.breakPoint.y, (a.bust.y + a.waist.y) / 2, 1e-9), "21: " + tag + " 꺾임 끝 = BL~WL 2등분");
+    ok(r.bodyLink.breakLine.length && r.bodyLink.lapelOutline.length && r.bodyLink.frontNeckLine.length,
+      "21: " + tag + " 라펠·꺾임선 bodyLink 파생");
+  });
+
+  // 테일러드와 같은 몸판·같은 단계 1~4 → 공용 골격 값이 일치한다(라펠 폭만 다름)
+  {
+    const TP = { collarStandCm: 3, collarWidthCm: 4, lapelWidthCm: 6, layDownCm: 2.5, neckShiftCm: 1,
+      tipRadiusCm: 3, lapelBowCm: 0.5, frontNeckCm: 2, frontRiseCm: 1 };
+    const t = C.computeTailoredCollar(B, TP);
+    ok(t.ok && near(t.measure.backAttachLenCm, j.measure.backAttachLenCm, 1e-12)
+      && near(t.anchors.standPoint.x, j.anchors.standPoint.x, 1e-12)
+      && near(t.anchors.lapelTip.x, j.anchors.lapelTip.x, 1e-12)
+      && near(t.anchors.outerTop.y, j.anchors.outerTop.y, 1e-12),
+      "21: 같은 수치면 테일러드와 단계 1~4 결과가 동일(lapelFrame 공용)");
+  }
+  // k 는 허리가 낮아 누임 회전각이 크다(교재 인과)
+  ok(k.measure.layDownAngleDeg > j.measure.layDownAngleDeg && k.measure.cbStandLenCm < j.measure.cbStandLenCm,
+    "21: k 는 허리 1·누임 6 으로 회전각이 크다");
+  // 결정론·비변형
+  {
+    const snapB = J(B), snapP = J(JP);
+    ok(J(C.computeShawlCollar(B, JP)) === J(j) && J(B) === snapB && J(JP) === snapP, "21: 결정론·비변형");
+  }
+  // 실패 계약 — 테일러드와 공유(lapelFrame), tipRadius 는 요구하지 않는다
+  {
+    const bad = (P) => C.computeShawlCollar(B, Object.assign({}, JP, P));
+    ok(bad({ collarStandCm: 0.5 }).reason === "invalid-collar-stand" && bad({ lapelWidthCm: 0 }).reason === "invalid-lapel-width"
+      && bad({ layDownCm: 0 }).reason === "invalid-lay-down", "21: 범위 밖 거부(공용 계약)");
+    ok(C.computeShawlCollar(B, JP).ok && !("tipRadiusCm" in JP), "21: 깃아귀 수치 없이도 생성된다");
+    ok(C.computeShawlCollar(null, JP).reason === "no-bodice"
+      && C.computeShawlCollar({ necklineLengths: { back: 8, front: 11 } }, JP).reason === "no-body-neckline",
+      "21: 몸판 없음·의미 모서리 없음");
+  }
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

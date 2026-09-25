@@ -1970,18 +1970,21 @@
   //     invalid-front-neck / invalid-front-rise / no-body-armhole / no-body-waist / ambiguous-bust-line /
   //     ambiguous-waist-line / lapel-guide-unreachable / lapel-tip-unreachable / lay-down-unreachable /
   //     collar-tip-unreachable / self-intersection.
-  function computeTailoredCollar(bodiceResult, params) {
-    var b = readBodice(bodiceResult); if (!b.ok) return b;
+  // ── 라펠 계열 공용 골격(테일러드 P.152 · 숄 P.154 의 단계 1~4) ──
+  // 두 제도는 **단계 1~4 가 사실상 같다**(숄 P.154 머리말: "테일러드 칼라처럼 앞 몸판을 완성하고
+  //   칼라를 제도한다"). 여기서 한 번만 만들고, 갈라지는 단계 5 만 각 생성기가 갖는다.
+  //   반환 좌표계는 **몸판 프레임 그대로** — 라펠·bodyLink 와 같은 프레임이어야 보조수치가 성립한다.
+  //   tipRadiusCm·lapelBowCm 은 테일러드 전용이라 여기서 검증하지 않는다.
+  function lapelFrame(bodiceResult, params) {
     var P = params || {};
+    var b = readBodice(bodiceResult); if (!b.ok) return b;
     var CS = P.collarStandCm, CW = P.collarWidthCm, LW = P.lapelWidthCm, LD = P.layDownCm;
-    var NS = P.neckShiftCm, TR = P.tipRadiusCm, LB = P.lapelBowCm, FN = P.frontNeckCm, FRise = P.frontRiseCm;
+    var NS = P.neckShiftCm, FN = P.frontNeckCm, FRise = P.frontRiseCm;
     if (!num(CS) || CS <= 0) return { ok: false, reason: "invalid-collar-stand" };
     if (!num(CW) || CW <= 0) return { ok: false, reason: "invalid-collar-width" };
     if (!num(LW) || LW <= 0) return { ok: false, reason: "invalid-lapel-width" };
     if (!num(LD) || LD <= 0) return { ok: false, reason: "invalid-lay-down" };
     if (!num(NS) || NS < 0) return { ok: false, reason: "invalid-neck-shift" };
-    if (!num(TR) || TR <= 0) return { ok: false, reason: "invalid-tip-radius" };
-    if (!num(LB) || LB < 0) return { ok: false, reason: "invalid-lapel-bow" };
     if (!num(FN) || FN < 0) return { ok: false, reason: "invalid-front-neck" };
     if (!num(FRise) || FRise < 0) return { ok: false, reason: "invalid-front-rise" };
     var EXT = TAILORED_METHOD.shoulderExtensionCm;
@@ -2021,13 +2024,6 @@
       return { ok: false, reason: "lapel-tip-unreachable" };
     // 2-❹ 앞 목둘레선 방향 기준점 — 라펠 폭 수선의 발에서 꺾임선을 따라 FN(도해 2)
     var gorgeAim = add(lapelFoot, foldDir, FN);
-    // 5-❶ Point 박스: 라펠 끝에서 반지름 TR 반원 → 그 위에 **칼라 달림 끝**을 잡는다.
-    //   세 개의 3 은 라펠끝→칼라달림끝 · 라펠끝→칼라끝 · 칼라달림끝→칼라끝 — **정삼각형**이다.
-    //   원 위 위치("원하는 위치")는 2-❹ 가 정한 깃아귀 방향으로 잡는다.
-    var gorgeDir = unit(sub(gorgeAim, lapelTip));
-    if (!(Math.abs(gorgeDir.x) + Math.abs(gorgeDir.y) > 1e-9)) return { ok: false, reason: "collar-tip-unreachable" };
-    var gorge = add(lapelTip, gorgeDir, TR);
-
     // 3 뒤 칼라 달림선을 누인다 — Ⓑ를 Ⓐ 중심으로 SP 쪽으로 누임 치수(호길이)만큼 회전
     var theta = LD / b.backCm;
     if (!(theta > 0 && theta < Math.PI)) return { ok: false, reason: "lay-down-unreachable" };
@@ -2042,6 +2038,35 @@
     if ((backN.x * (B2.x - SP.x) + backN.y * (B2.y - SP.y)) < 0) backN = { x: -backN.x, y: -backN.y };
     var standTop = add(B2, backN, CS);          // 칼라 허리
     var outerTop = add(standTop, backN, CW);    // 칼라 폭
+
+
+    return { ok: true, b: b, bw: bw, fr: fr, FNP: FNP, SNP: SNP, SP: SP, centerDir: centerDir, up: up,
+      extDir: extDir, EXT: EXT, tBust: tBust, tWaist: tWaist, breakPoint: breakPoint,
+      neckShiftPt: neckShiftPt, A: A, foldDir: foldDir, foldN: foldN, B: B, frontUp: frontUp,
+      guideDir: guideDir, lapelTip: lapelTip, lapelFoot: lapelFoot, gorgeAim: gorgeAim,
+      theta: theta, B2: B2, backDir: backDir, backN: backN, standTop: standTop, outerTop: outerTop };
+  }
+
+  function computeTailoredCollar(bodiceResult, params) {
+    var P = params || {};
+    var TR = P.tipRadiusCm, LB = P.lapelBowCm;
+    if (!num(TR) || TR <= 0) return { ok: false, reason: "invalid-tip-radius" };
+    if (!num(LB) || LB < 0) return { ok: false, reason: "invalid-lapel-bow" };
+    var F = lapelFrame(bodiceResult, P); if (!F.ok) return F;
+    var b = F.b, bw = F.bw, CS = P.collarStandCm, CW = P.collarWidthCm, LW = P.lapelWidthCm;
+    var LD = P.layDownCm, NS = P.neckShiftCm, FN = P.frontNeckCm, FRise = P.frontRiseCm, EXT = F.EXT;
+    var FNP = F.FNP, SNP = F.SNP, SP = F.SP, breakPoint = F.breakPoint, neckShiftPt = F.neckShiftPt;
+    var A = F.A, foldDir = F.foldDir, frontUp = F.frontUp, lapelTip = F.lapelTip;
+    var lapelFoot = F.lapelFoot, gorgeAim = F.gorgeAim, theta = F.theta, B = F.B, B2 = F.B2;
+    var backDir = F.backDir, standTop = F.standTop, outerTop = F.outerTop;
+    var tBust = F.tBust, tWaist = F.tWaist;
+
+    // 5-❶ Point 박스: 라펠 끝에서 반지름 TR 반원 → 그 위에 **칼라 달림 끝**을 잡는다.
+    //   세 개의 3 은 라펠끝→칼라달림끝 · 라펠끝→칼라끝 · 칼라달림끝→칼라끝 — **정삼각형**이다.
+    //   원 위 위치("원하는 위치")는 2-❹ 가 정한 깃아귀 방향으로 잡는다.
+    var gorgeDir = unit(sub(gorgeAim, lapelTip));
+    if (!(Math.abs(gorgeDir.x) + Math.abs(gorgeDir.y) > 1e-9)) return { ok: false, reason: "collar-tip-unreachable" };
+    var gorge = add(lapelTip, gorgeDir, TR);
 
     // 5-❶ 칼라 끝 = 반지름 TR 인 두 반원(라펠 끝 · 칼라 달림 끝)의 교점 — 바깥쪽
     var xs = circleIntersect(lapelTip, gorge, TR);
@@ -2120,6 +2145,93 @@
       bodyLink: bodyLink };
   }
 
+  // ── 숄 칼라(교재 j·k, P.80·P.81 · 제도 방법 P.154–155) ──
+  // 판독 근거(docs/book/P080·P081·P154 에 전문):
+  //   10교시 머리말 "위 칼라와 라펠로 구성되어 있지만 **깃아귀가 없고** … 칼라를 꺾었을 때 이음선이
+  //     보이지 않도록 안단은 겉 라펠과 겉 위 칼라까지 이어서 재단한다. **칼라 폭은 일정하게 두고
+  //     칼라 허리의 높이를 변경한 2종류**."
+  //   k 본문은 테일러드 i 와 같은 인과를 쓴다 — 허리 ↓ → 칼라 외곽 부족 → 누임 ↑(허리 1·누임 6).
+  //   P.154 머리말 "**테일러드 칼라처럼 앞 몸판을 완성하고 칼라를 제도한다** … 칼라 외곽을
+  //     **자연스러운 곡선으로 잇는다** … 앞 몸판과 칼라의 이음선은 안 칼라 쪽에만 있고 겉 칼라는 안단과 이어진다."
+  //   단계 1~4 는 테일러드와 같다(lapelFrame 공용). 갈라지는 것은 5 뿐:
+  //     5-❶ 칼라 달림선을 완성한다(몸판의 목둘레선과 완만한 곡선으로 연결)
+  //         ★ 교재가 확대 그림으로 강조 — "**Ⓐ 주변이 각지지 않도록** 완만하게 잇는 것이 포인트"
+  //     5-❷ 칼라 외곽선을 그린다(**뒤 중심에서 라펠 폭을 지나, 꺾임 끝까지** 완만한 곡선으로 연결)
+  //         → 테일러드의 "칼라 끝 정삼각형 작도"가 **없다**. 외곽이 라펠까지 한 줄기다.
+  // ★ 칼라 조각의 앞 경계 = 라펠 폭 지점(lapelTip) ↔ 앞 목둘레선 기준점(gorgeAim) 의 이음선.
+  //   외곽 한 줄기 곡선의 **앞쪽 절반(outerTop→lapelTip)** 이 칼라 몫이고, 나머지(lapelTip→꺾임 끝)는
+  //   라펠 몫이라 bodyLink 로 간다. 라펠 폭 지점은 **꺾임점이 아니라 통과점**이다(교재 "자연스러운 곡선").
+  // ★ 안단(겉 라펠 + 겉 위 칼라)은 **이번 증분에서 만들지 않는다** — 앞 몸판의 일부를 포함하는 조각이고
+  //   도해 수치(3·7·3·3)의 기준선이 확정되지 않았다(docs/book/P154.md "보류" 참고).
+  var SHAWL_METHOD = { pages: [80, 81], methodPages: [154, 155], piece: "upper-collar", bodyLinked: true,
+    shoulderExtensionCm: 0.7, breakPoint: "midpoint-of-BL-WL", notch: false,
+    outerLine: "one-curve-through-lapel-width-to-break-point", facing: "deferred",
+    smoothing: "tangent-continuous-cubic", handleFraction: SEAM_HANDLE_FRACTION };
+
+  // params: { collarStandCm, collarWidthCm, lapelWidthCm, layDownCm, neckShiftCm, frontNeckCm, frontRiseCm }
+  //   실패: lapelFrame 과 같은 계약 + self-intersection / outer-curve-failed / attach-curve-failed.
+  function computeShawlCollar(bodiceResult, params) {
+    var P = params || {};
+    var F = lapelFrame(bodiceResult, P); if (!F.ok) return F;
+    var b = F.b, CS = P.collarStandCm, CW = P.collarWidthCm, LW = P.lapelWidthCm, LD = P.layDownCm;
+    var NS = P.neckShiftCm, FN = P.frontNeckCm, FRise = P.frontRiseCm;
+    var A = F.A, B2 = F.B2, standTop = F.standTop, outerTop = F.outerTop;
+    var lapelTip = F.lapelTip, lapelFoot = F.lapelFoot, gorgeAim = F.gorgeAim, breakPoint = F.breakPoint;
+
+    // 5-❷ 칼라 외곽선 = 뒤 중심(outerTop) → **라펠 폭 지점**(lapelTip) → 꺾임 끝, 한 줄기 완만한 곡선.
+    //   앞쪽 절반이 칼라, 뒤쪽 절반이 라펠이다(같은 곡선이라 라펠 폭 지점에서 각이 지지 않는다).
+    var outerFull = smoothVia(outerTop, lapelTip, breakPoint, "outer");
+    if (!outerFull) return { ok: false, reason: "outer-curve-failed" };
+    // 5-❶ 칼라 달림선 — Ⓐ 에서 각지지 않게(교재 강조). 깃아귀 기준점 → Ⓐ → Ⓑ' 를 한 곡선으로 잇는다.
+    var attach = smoothVia(gorgeAim, A, B2, "neck-seam");
+    if (!attach) return { ok: false, reason: "attach-curve-failed" };
+
+    var outline = attach.slice();
+    outline.push(L(B2, standTop, "cb-stand"));
+    outline.push(L(standTop, outerTop, "cb-width"));
+    outline.push(cloneSeg(outerFull[0], "outer"));                 // outerTop → 라펠 폭 지점
+    outline.push(L(lapelTip, gorgeAim, "collar-lapel-seam"));      // 안 칼라 쪽 이음선
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    var construction = [
+      L(B2, standTop, "cb-guide"),
+      L(standTop, add(standTop, { x: -F.backDir.x, y: -F.backDir.y }, lineLen(standTop, gorgeAim)), "fold-guide")
+    ];
+    var by = function (part) { return outline.filter(function (s) { return s.part === part; }); };
+    var lapelOuter = cloneSeg(outerFull[1], "lapel-edge");         // 라펠 폭 지점 → 꺾임 끝(몸판 몫)
+    var bodyLink = {
+      breakLine: [L(breakPoint, A, "break-line")],
+      lapelOutline: [lapelOuter],
+      frontNeckLine: smoothVia(F.neckShiftPt, mid(F.neckShiftPt, gorgeAim), gorgeAim, "front-neck")
+        || [L(F.neckShiftPt, gorgeAim, "front-neck")],
+      shoulderExtension: [L(F.SNP, A, "shoulder-extension")],
+      guideLine: [L(F.SP, lapelTip, "lapel-guide")]
+    };
+    return { ok: true,
+      geometry: { outline: outline, construction: construction },
+      measure: {
+        collarStandCm: CS, collarWidthCm: CW, lapelWidthCm: LW, layDownCm: LD, neckShiftCm: NS,
+        frontNeckCm: FN, frontRiseCm: FRise, shoulderExtensionCm: F.EXT, standRemainderCm: CS - F.EXT,
+        backNeckLenCm: b.backCm, bodyFrontNeckLenCm: b.frontCm,
+        backAttachLenCm: lineLen(A, B2),                            // = 뒤 목둘레(회전 반지름 보존)
+        attachLenCm: sumMeasure(by("neck-seam")),
+        cbStandLenCm: lineLen(B2, standTop), cbWidthLenCm: lineLen(standTop, outerTop),
+        lapelWidthLenCm: lineLen(lapelFoot, lapelTip),
+        collarOuterLenCm: segMeasure(outerFull[0]), lapelOuterLenCm: segMeasure(outerFull[1]),
+        outerLenCm: sumMeasure(outerFull),                          // 뒤 중심 → 꺾임 끝 한 줄기
+        seamLenCm: lineLen(lapelTip, gorgeAim),                     // 칼라↔라펠 이음선
+        breakLineLenCm: lineLen(breakPoint, A),
+        bustToWaistCm: F.tWaist - F.tBust, breakPointFromBustCm: (F.tWaist - F.tBust) / 2,
+        layDownAngleDeg: F.theta * 180 / Math.PI
+      },
+      anchors: { fnp: F.FNP, snp: F.SNP, sp: F.SP, breakPoint: cp(breakPoint), neckShift: cp(F.neckShiftPt),
+        standPoint: cp(A), backGuideEnd: cp(F.B), backAttachEnd: cp(B2), standTop: cp(standTop),
+        outerTop: cp(outerTop), lapelTip: cp(lapelTip), lapelFoot: cp(lapelFoot), gorgeAim: cp(gorgeAim),
+        frontUp: cp(F.frontUp), bust: cp(F.bw.bust), waist: cp(F.bw.waist) },
+      bodyLink: bodyLink };
+  }
+
   function validateClosedOutline(outline) {
     if (!Array.isArray(outline) || outline.length < 3) return { ok: false, reason: "empty" };
     for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (!nx.from || !outline[i].to || lineLen(outline[i].to, nx.from) > 1e-4) return { ok: false, reason: "not-closed" }; }
@@ -2149,6 +2261,8 @@
     FRILL_COLLAR_METHOD: FRILL_COLLAR_METHOD,
     computeTailoredCollar: computeTailoredCollar,  // family 9(테일러드 칼라 h·i, P.78·79 · 제도 방법 P.152–153)
     TAILORED_METHOD: TAILORED_METHOD,
+    computeShawlCollar: computeShawlCollar,       // family 10(숄 칼라 j·k, P.80·81 · 제도 방법 P.154–155)
+    SHAWL_METHOD: SHAWL_METHOD,
     computeHood: computeHood,                     // family 8(후드 d, P.74 · 제도 방법 P.151)
     HOOD_METHOD: HOOD_METHOD,
     HOOD_STYLE: HOOD_STYLE,

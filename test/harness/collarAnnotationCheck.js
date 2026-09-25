@@ -730,5 +730,69 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
   ok(CA.recipes().indexOf("bunka-hood-d-v1") >= 0, "21: 기존 recipe 등록 유지");
 }
 
+// 22. 숄 칼라 j·k — 깃아귀 치수 없이 **외곽 한 줄기**를 결과로 보고한다
+{
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  const frontNeck = cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline");
+  const dense = (s2) => { let t = 0, pr = s2.from; for (let k = 1; k <= 4000; k++) {
+    const u = 1 - k / 4000, tt = k / 4000;
+    const p = { x: u*u*u*s2.from.x + 3*u*u*tt*s2.c1.x + 3*u*tt*tt*s2.c2.x + tt*tt*tt*s2.to.x,
+                y: u*u*u*s2.from.y + 3*u*u*tt*s2.c1.y + 3*u*tt*tt*s2.c2.y + tt*tt*tt*s2.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const FL = dense(frontNeck), BKL = 8.5;
+  const swBodice = (hash) => ({ hash: hash, sourceVersion: 1,
+    necklineLengths: { back: BKL, front: FL, half: BKL + FL, finished: 2 * (BKL + FL) },
+    front: { outline: [ln([40, 4], [40, 38], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder"),
+      cub([22, 0], [24, 8], [23, 15], [23, 20.6], "armhole"), ln([23, 20.6], [23, 38], "side-seam"),
+      ln([23, 38], [40, 38], "waist")], construction: [] } });
+  const JP = { collarStandCm: 3, collarWidthCm: 4, lapelWidthCm: 6, layDownCm: 2.5, neckShiftCm: 1,
+    frontNeckCm: 2, frontRiseCm: 1 };
+  const KP = Object.assign({}, JP, { collarStandCm: 1, layDownCm: 6, neckShiftCm: 0.6 });
+  const SB = swBodice("BSW");
+  const mk = (P, k) => {
+    const r = DC.computeShawlCollar(SB, P);
+    return CA.buildModel({ sourceBodiceHash: "BSW", type: "shawl-collar", baseMethod: "bunka-shawl-collar-" + k + "-v1",
+      parameters: { shawl: P }, shawl: { geometry: r.geometry, measure: r.measure, anchors: r.anchors, bodyLink: r.bodyLink } }, SB);
+  };
+  const idx = (m) => { const o = { inputs: {}, results: {}, dims: {}, labels: {} };
+    m.inputs.forEach(r => { o.inputs[r.key] = r.value; });
+    m.results.forEach(r => { o.results[r.key] = r; });
+    m.dims.forEach(d => { o.dims[d.id] = d; });
+    m.labels.forEach(l => { o.labels[l.id] = l; });
+    return o; };
+  const mj = mk(JP, "j"), mkk = mk(KP, "k");
+  const ij = idx(mj), ik = idx(mkk);
+
+  ok(["j", "k"].every(k => CA.recipes().indexOf("bunka-shawl-collar-" + k + "-v1") >= 0)
+    && mj.recipe === "bunka-shawl-collar-j-v1", "22: j·k recipe 등록·출처 표기");
+  ok(ij.inputs.collarStandCm === 3 && ij.inputs.layDownCm === 2.5 && ij.inputs.lapelWidthCm === 6
+    && ik.inputs.collarStandCm === 1 && ik.inputs.layDownCm === 6, "22: 제도 입력값 7개(도해별 수치)");
+  ok(ij.dims["collar-stand"].text === 3 && ij.dims["collar-width"].text === 4
+    && ij.dims["lapel-width"].text === 6, "22: 허리·폭·라펠 폭 치수선");
+  // ★ 깃아귀가 없으니 칼라 끝 정삼각형 치수선·라벨이 없어야 한다
+  ok(!ij.dims["tip-lapel"] && !ij.dims["collar-tip"] && !ij.labels.gorge && !ij.labels.tip,
+    "22: 칼라 끝 정삼각형 치수선·깃아귀 라벨이 없다");
+  ok(ij.dims["break-line"].kind === "ref" && ij.dims["lapel-guide"].kind === "ref"
+    && ij.dims["bust-waist"].kind === "ref" && ij.dims["shoulder-ext"].kind === "ref",
+    "22: 꺾임선·안내선·BL~WL·어깨 연장은 참조선");
+  ok(ij.labels.snp && ij.labels.stand && ij.labels.break && ij.labels["lapel-tip"], "22: SNP·Ⓐ·꺾임 끝·라펠 폭 라벨");
+  // ★ 1-❸ 표기·누임 회전각은 입력이 아니라 파생 결과다(테일러드와 같은 계약)
+  ok(!("standRemainderCm" in ij.inputs) && !("layDownAngleDeg" in ij.inputs)
+    && Math.abs(ij.results.standRemainder.value - 2.3) < 1e-9, "22: 1-❸ 표기 2.3 은 파생 결과(교재 인쇄값)");
+  ok(ij.results.backDiff.status === "match" && Math.abs(ij.results.backAttach.value - BKL) < 1e-6,
+    "22: 뒤 달림선 = 뒤 목둘레 정합 보고");
+  // ★ 5-❷ 외곽 한 줄기 — 두 몫과 전체가 결과로 보고되고 정합 상태가 match
+  ok(ij.results.outerContinuity.status === "match"
+    && Math.abs(ij.results.outerContinuity.value) < 1e-9
+    && ij.results.collarOuter.value > 0 && ij.results.lapelOuter.value > 0,
+    "22: 외곽 한 줄기 확인(전체 − 칼라 몫 − 라펠 몫 = 0)");
+  ok(ik.results.layDownAngle.value > ij.results.layDownAngle.value, "22: k 의 누임 회전각이 더 크다");
+  ok(mj.note === mkk.note && /깃아귀가 없/.test(mj.note) && /한 줄기/.test(mj.note), "22: 같은 제도 안내를 공유");
+  ok(CA.buildModel({ type: "shawl-collar", baseMethod: "bunka-shawl-collar-j-v1" }, SB) === null, "22: 형상 없으면 표시 없음");
+  ok(CA.recipes().indexOf("bunka-tailored-collar-h-v1") >= 0, "22: 기존 recipe 등록 유지");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

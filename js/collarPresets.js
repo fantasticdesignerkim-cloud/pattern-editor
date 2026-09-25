@@ -133,6 +133,18 @@
     { key: "frontNeckCm", label: "앞 목둘레선(깃아귀 방향)", unit: "cm", min: 0 },
     { key: "frontRiseCm", label: "앞 중심 올림", unit: "cm", min: 0 }
   ];
+  // 숄 칼라(교재 j·k, P.80·81 · 제도 방법 P.154–155) 파라미터. 키 순서 = designCollar.computeShawlCollar 계약.
+  //   테일러드와 단계 1~4 를 공유하지만 **깃아귀가 없어** tipRadiusCm·lapelBowCm 이 없다 —
+  //   외곽이 뒤 중심에서 꺾임 끝까지 한 줄기라 칼라 끝 작도도 라펠 외형 휨도 쓰지 않는다.
+  var SHAWL_FIELDS = [
+    { key: "collarStandCm", label: "칼라 허리", unit: "cm", min: 0, minExclusive: true },
+    { key: "collarWidthCm", label: "칼라 폭(뒤)", unit: "cm", min: 0, minExclusive: true },
+    { key: "lapelWidthCm", label: "라펠 폭", unit: "cm", min: 0, minExclusive: true },
+    { key: "layDownCm", label: "누임 치수(★)", unit: "cm", min: 0, minExclusive: true },
+    { key: "neckShiftCm", label: "목둘레 이동량", unit: "cm", min: 0 },
+    { key: "frontNeckCm", label: "앞 목둘레선(이음선 기준)", unit: "cm", min: 0 },
+    { key: "frontRiseCm", label: "앞 중심 올림", unit: "cm", min: 0 }
+  ];
   // 밴드+위 칼라 한 장(교재 R, P.68) 위 칼라 파라미터. 키 순서 = designCollar.computeBandOnePiece 계약.
   //   외곽 뒤 구간은 **몸판 뒤 목둘레 ×** 에서 오므로 입력에 두지 않는다(파생).
   var UPPER_ONE_PIECE_FIELDS = [
@@ -283,7 +295,14 @@
         { id: "bunka-tailored-collar-h", symbol: "h", label: "h · 칼라 허리 3 · 누임 2.5", page: 78, availability: "available", presetId: "bunka-tailored-collar-h", note: null },
         { id: "bunka-tailored-collar-i", symbol: "i", label: "i · 칼라 허리 1 · 누임 6", page: 79, availability: "available", presetId: "bunka-tailored-collar-i", note: null }
       ] },
-    { id: "shawl-collar", order: 10, label: "숄 칼라", symbol: "j", page: 80, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] },
+    // 숄 칼라 family: j·k 전부 P.80·81 도해 + P.154–155 제도 방법으로 실행 가능.
+    //   교재: "칼라 폭은 일정하게 두고 칼라 허리의 높이를 변경한 2종류" — 테일러드와 같은 구조.
+    //   ★ 안단(겉 라펠 + 겉 위 칼라)은 앞 몸판을 포함하는 별도 조각이라 이번 범위 밖이다.
+    { id: "shawl-collar", order: 10, label: "숄 칼라", symbol: "j", page: 80, generator: "shawl-collar-v1", availability: "available", note: null,
+      variants: [
+        { id: "bunka-shawl-collar-j", symbol: "j", label: "j · 칼라 허리 3 · 누임 2.5", page: 80, availability: "available", presetId: "bunka-shawl-collar-j", note: null },
+        { id: "bunka-shawl-collar-k", symbol: "k", label: "k · 칼라 허리 1 · 누임 6", page: 81, availability: "available", presetId: "bunka-shawl-collar-k", note: null }
+      ] },
     { id: "high-neck", order: 11, label: "하이넥", symbol: "l", page: 82, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] }
   ];
 
@@ -568,6 +587,27 @@
         tipRadiusCm: 3, lapelBowCm: 0.5, frontNeckCm: 2, frontRiseCm: 1 }
     },
     {
+      // 교재 j(P.80) 숄 칼라 — 본문 "숄 칼라의 기본형. 몸판의 목둘레, 라펠, 위 칼라의 순으로 제도한다.
+      //   꺾임 끝은 BL과 WL 사이를 2등분한 위치로, 칼라 폭은 뒤에서 4cm, 라펠에서 6cm,
+      //   누임 치수(★)는 2.5cm로 설정."  테일러드 h 와 라펠 폭(8→6)·깃아귀 유무만 다르다.
+      id: "bunka-shawl-collar-j", label: "교재 j", description: "숄 칼라 j형(칼라 허리 3 · 누임 2.5 · 라펠 폭 6 · 깃아귀 없음)",
+      source: "『パターン製作の基礎』 숄 칼라 j형(P.80) · 제도 방법 P.154–155",
+      type: "shawl-collar", baseMethod: "bunka-shawl-collar-j-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "shawl-collar",
+      shawl: { collarStandCm: 3, collarWidthCm: 4, lapelWidthCm: 6, layDownCm: 2.5, neckShiftCm: 1,
+        frontNeckCm: 2, frontRiseCm: 1 }
+    },
+    {
+      // 교재 k(P.81) — 본문 "Ⓙ와 같이 제도한다. 칼라 허리를 낮게 설정하면 칼라 외곽의 치수가 많이
+      //   필요하다. 이 치수를 확보하기 위해 누임 치수를 6cm로 늘려서 칼라를 그린다."(테일러드 i 와 같은 인과)
+      id: "bunka-shawl-collar-k", label: "교재 k", description: "숄 칼라 k형(칼라 허리 1 · 누임 6 으로 외곽 치수 확보)",
+      source: "『パターン製作の基礎』 숄 칼라 k형(P.81) · 제도 방법 P.154–155",
+      type: "shawl-collar", baseMethod: "bunka-shawl-collar-k-v1",
+      neckline: { requiredType: "shirt", enforcement: "metadata-only" }, familyId: "shawl-collar",
+      shawl: { collarStandCm: 1, collarWidthCm: 4, lapelWidthCm: 6, layDownCm: 6, neckShiftCm: 0.6,
+        frontNeckCm: 2, frontRiseCm: 1 }
+    },
+    {
       // 한 장 셔츠 칼라(family 2) 교재 G형. 아래 수치가 **유일한 출처**다(catalog 의 참고값과 중복 금지).
       //   제도 절차는 교재 P.147, 예시 도면은 P.63. 곡선 정리 규칙은 designCollar.ONE_PIECE_METHOD.
       id: "bunka-shirt-collar-G",
@@ -684,7 +724,7 @@
     if (hasDir && !CURVE_DIR[sec.attachCurveDirection]) fail("invalid-curve-direction", id + ".onePiece.attachCurveDirection");
   }
   // 한 레코드 검증(순수). 실패 시 throw(reason 포함).
-  var RECORD_TYPES = { "shirt-two-piece": 1, "shirt-one-piece": 1, "shirt-open-collar": 1, "shirt-wing-collar": 1, "shirt-band-one-piece": 1, "flat-collar": 1, "flat-collar-overlap": 1, "sailor-collar": 1, "bow-collar": 1, "frill-collar": 1, "hood": 1, "tailored-collar": 1, "stand-collar": 1 };
+  var RECORD_TYPES = { "shirt-two-piece": 1, "shirt-one-piece": 1, "shirt-open-collar": 1, "shirt-wing-collar": 1, "shirt-band-one-piece": 1, "flat-collar": 1, "flat-collar-overlap": 1, "sailor-collar": 1, "bow-collar": 1, "frill-collar": 1, "hood": 1, "tailored-collar": 1, "shawl-collar": 1, "stand-collar": 1 };
   function validateRecord(r) {
     if (!r || typeof r !== "object") fail("invalid-record");
     ["id", "label", "description", "source", "type", "baseMethod", "familyId"].forEach(function (k) { if (!isStr(r[k])) fail("missing-field", (r.id || "?") + "." + k); });
@@ -692,32 +732,32 @@
     if (!r.neckline || !isStr(r.neckline.requiredType) || r.neckline.enforcement !== "metadata-only") fail("invalid-neckline", r.id);
     if (r.type === "shirt-one-piece") {
       // 한 장 칼라: 밴드/본체 섹션을 쓰지 않는다(M 전용 의미를 빌려오지 않음).
-      ["stand", "body", "openCollar", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "openCollar", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateOnePiece(r.onePiece, r.id);
       if (!(r.onePiece.frontCollarWidthCm > r.onePiece.tipProjectionCm)) fail("out-of-range", r.id + ".onePiece.frontCollarWidthCm");   // 엔진 계약: 앞 폭 > 칼라 끝(수평)
       return true;
     }
     if (r.type === "sailor-collar") {
       // 세일러 칼라: sailor 섹션 하나뿐. 다른 family 섹션을 빌려오지 않는다.
-      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.sailor, SAILOR_COLLAR_FIELDS, "sailor", r.id);
       return true;
     }
     if (r.type === "bow-collar") {
       // 보 칼라: bow 섹션 하나뿐. 밴드·위 칼라·플랫·세일러 섹션을 빌려오지 않는다.
-      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.bow, BOW_COLLAR_FIELDS, "bow", r.id);
       return true;
     }
     if (r.type === "frill-collar") {
-      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.frill, FRILL_COLLAR_FIELDS, "frill", r.id);
       if (!(r.frill.styleCode === 0 || r.frill.styleCode === 1 || r.frill.styleCode === 2)) fail("out-of-range", r.id + ".frill.styleCode");
       return true;
     }
     if (r.type === "hood") {
       // 후드: hood 섹션 하나뿐. 다른 family 섹션을 빌려오지 않는다.
-      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "frill", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "frill", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.hood, HOOD_FIELDS, "hood", r.id);
       if (r.hood.styleCode !== 0) fail("out-of-range", r.id + ".hood.styleCode");   // 현재 실행 가능한 도해는 d 뿐
       if (!(r.hood.headCircumferenceCm / 2 + r.hood.widthOffsetCm > 0)) fail("out-of-range", r.id + ".hood.widthOffsetCm");
@@ -727,36 +767,43 @@
     }
     if (r.type === "tailored-collar") {
       // 테일러드 칼라: tailored 섹션 하나뿐.
-      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "frill", "hood"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "frill", "hood", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.tailored, TAILORED_FIELDS, "tailored", r.id);
       // 엔진 계약: 1-❸(칼라 허리 − 어깨선 연장 0.7) > 0
       if (!(r.tailored.collarStandCm > 0.7)) fail("out-of-range", r.id + ".tailored.collarStandCm");
       return true;
     }
+    if (r.type === "shawl-collar") {
+      // 숄 칼라: shawl 섹션 하나뿐. 테일러드의 tailored 섹션(깃아귀 수치 포함)을 빌려오지 않는다.
+      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "frill", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      validateSection(r.shawl, SHAWL_FIELDS, "shawl", r.id);
+      if (!(r.shawl.collarStandCm > 0.7)) fail("out-of-range", r.id + ".shawl.collarStandCm");   // 1-❸ > 0
+      return true;
+    }
     if (r.type === "flat-collar-overlap") {
       // 플랫 칼라 T: flatOverlap 섹션 하나뿐(S 의 flat 과도 섞지 않는다).
-      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "sailor", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flat", "sailor", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.flatOverlap, FLAT_COLLAR_T_FIELDS, "flatOverlap", r.id);
       if (!(r.flatOverlap.frontEndFromFnpCm > r.flatOverlap.frontEndOffsetCm)) fail("out-of-range", r.id + ".flatOverlap.frontEndFromFnpCm");
       return true;
     }
     if (r.type === "flat-collar") {
       // 플랫 칼라: flat 섹션 하나뿐. 밴드(stand)·위 칼라(body/upper)·한 장·오픈·끝 섹션을 빌려오지 않는다.
-      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flatOverlap", "sailor", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "openCollar", "standalone", "construction", "tip", "upper", "flatOverlap", "sailor", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.flat, FLAT_COLLAR_FIELDS, "flat", r.id);
       if (!(r.flat.frontEndFromFnpCm > r.flat.frontEndOffsetCm)) fail("out-of-range", r.id + ".flat.frontEndFromFnpCm");   // 안내선까지 닿아야 한다
       return true;
     }
     if (r.type === "shirt-band-one-piece") {
       // 밴드+위 칼라 한 장: 밴드(stand) + 위 칼라(upper). 2피스 body·칼라 끝 tip 을 빌려오지 않는다.
-      ["body", "onePiece", "openCollar", "standalone", "construction", "tip", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["body", "onePiece", "openCollar", "standalone", "construction", "tip", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.stand, STAND_FIELDS, "stand", r.id);
       validateSection(r.upper, UPPER_ONE_PIECE_FIELDS, "upper", r.id);
       return true;
     }
     if (r.type === "shirt-wing-collar") {
       // 윙 칼라: 밴드(stand) + 칼라 끝(tip). 위 칼라(body)·한 장·오픈 섹션을 빌려오지 않는다.
-      ["body", "onePiece", "openCollar", "standalone", "construction", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["body", "onePiece", "openCollar", "standalone", "construction", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.stand, STAND_FIELDS, "stand", r.id);
       validateSection(r.tip, WING_TIP_FIELDS, "tip", r.id);
       if (!(r.tip.tipEdgeCm > r.tip.tipSetbackCm)) fail("out-of-range", r.id + ".tip.tipEdgeCm");     // 파생 세로 성분 > 0
@@ -766,13 +813,13 @@
     }
     if (r.type === "shirt-open-collar") {
       // 오픈 칼라: 밴드/본체/한 장 섹션을 쓰지 않는다(각 제도의 의미를 빌려오지 않음).
-      ["stand", "body", "onePiece", "standalone", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "standalone", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       validateSection(r.openCollar, OPEN_COLLAR_FIELDS, "openCollar", r.id);
       if (!(r.openCollar.frontEndRiseCm < r.openCollar.collarStandCm + r.openCollar.backCollarWidthCm)) fail("out-of-range", r.id + ".openCollar.frontEndRiseCm");   // 엔진 계약: 앞 끝선 길이 > 0
       return true;
     }
     if (r.type === "stand-collar") {
-      ["stand", "body", "onePiece", "openCollar", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+      ["stand", "body", "onePiece", "openCollar", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
       var c = r.construction;
       if (!c || typeof c.fitNeckSeam !== "boolean" || typeof c.baselineReductionCm !== "number" || !isFinite(c.baselineReductionCm) || c.baselineReductionCm < 0 ||
         typeof c.guideRiseCm !== "number" || !isFinite(c.guideRiseCm) || c.guideRiseCm < 0 ||
@@ -783,7 +830,7 @@
       validateSection(r.standalone, STANDALONE_FIELDS, "standalone", r.id);
       return true;
     }
-    ["onePiece", "openCollar", "standalone", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
+    ["onePiece", "openCollar", "standalone", "tip", "upper", "flat", "flatOverlap", "sailor", "bow", "hood", "tailored", "shawl"].forEach(function (k) { if (k in r) fail("mixed-record-sections", r.id + "." + k); });
     // 선택적 형상 옵션(교재 O = D 방식 기초선 감산·안내점 올림). 없으면 기존 M·N·P 와 완전히 동일한 제도다.
     if ("construction" in r) {
       var bc = r.construction;
@@ -904,6 +951,7 @@
     if (r.type === "frill-collar") return { ok: true, id: r.id, type: r.type, frill: clone(r.frill) };
     if (r.type === "hood") return { ok: true, id: r.id, type: r.type, hood: clone(r.hood) };
     if (r.type === "tailored-collar") return { ok: true, id: r.id, type: r.type, tailored: clone(r.tailored) };
+    if (r.type === "shawl-collar") return { ok: true, id: r.id, type: r.type, shawl: clone(r.shawl) };
     if (r.type === "stand-collar") return { ok: true, id: r.id, type: r.type, standalone: clone(r.standalone), construction: clone(r.construction) };
     var d2 = { ok: true, id: r.id, type: r.type, stand: clone(r.stand), body: clone(r.body) };
     if (r.construction) d2.construction = clone(r.construction);
@@ -912,7 +960,7 @@
   // 선택 UI 옵션 모델(registry 에서 생성).
   function options() { return REG.list.map(function (r) { return { value: r.id, label: r.label }; }); }
   // 섹션 필드 의미·단위(표시용).
-  function fields(section) { return clone(section === "stand" ? STAND_FIELDS : section === "body" ? BODY_FIELDS : section === "onePiece" ? ONE_PIECE_FIELDS : section === "openCollar" ? OPEN_COLLAR_FIELDS : section === "tip" ? WING_TIP_FIELDS : section === "upper" ? UPPER_ONE_PIECE_FIELDS : section === "flat" ? FLAT_COLLAR_FIELDS : section === "flatOverlap" ? FLAT_COLLAR_T_FIELDS : section === "sailor" ? SAILOR_COLLAR_FIELDS : section === "bow" ? BOW_COLLAR_FIELDS : section === "frill" ? FRILL_COLLAR_FIELDS : section === "hood" ? HOOD_FIELDS : section === "tailored" ? TAILORED_FIELDS : section === "standalone" ? STANDALONE_FIELDS : []); }
+  function fields(section) { return clone(section === "stand" ? STAND_FIELDS : section === "body" ? BODY_FIELDS : section === "onePiece" ? ONE_PIECE_FIELDS : section === "openCollar" ? OPEN_COLLAR_FIELDS : section === "tip" ? WING_TIP_FIELDS : section === "upper" ? UPPER_ONE_PIECE_FIELDS : section === "flat" ? FLAT_COLLAR_FIELDS : section === "flatOverlap" ? FLAT_COLLAR_T_FIELDS : section === "sailor" ? SAILOR_COLLAR_FIELDS : section === "bow" ? BOW_COLLAR_FIELDS : section === "frill" ? FRILL_COLLAR_FIELDS : section === "hood" ? HOOD_FIELDS : section === "tailored" ? TAILORED_FIELDS : section === "shawl" ? SHAWL_FIELDS : section === "standalone" ? STANDALONE_FIELDS : []); }
   // 편집값이 프리셋 기본값과 같은지(표시 판단용, 저장 없음).
   function matches(id, stand, body) {
     var r = get(id); if (!r) return false;
@@ -929,6 +977,7 @@
     if (r.type === "frill-collar") return eq(stand, r.frill, FRILL_COLLAR_FIELDS);
     if (r.type === "hood") return eq(stand, r.hood, HOOD_FIELDS);
     if (r.type === "tailored-collar") return eq(stand, r.tailored, TAILORED_FIELDS);
+    if (r.type === "shawl-collar") return eq(stand, r.shawl, SHAWL_FIELDS);
     if (r.type === "stand-collar") return eq(stand, r.standalone, STANDALONE_FIELDS);
     return eq(stand, r.stand, STAND_FIELDS) && eq(body, r.body, BODY_FIELDS);
   }
@@ -1005,6 +1054,16 @@
         sourceBodiceHash: bodice.hash, type: r.type, baseMethod: r.baseMethod, presetId: r.id,
         parameters: { tailored: d.tailored },
         tailored: { geometry: tlRe.geometry, measure: tlRe.measure, anchors: tlRe.anchors, bodyLink: tlRe.bodyLink }
+      } };
+    }
+    if (r.type === "shawl-collar") {
+      // 테일러드와 같은 1~4 단계 위에, 깃아귀 없이 외곽을 한 줄기 곡선으로 잇는다.
+      var swRe = DC.computeShawlCollar(bodice, d.shawl);
+      if (!swRe.ok) return { ok: false, stage: "collar", reason: swRe.reason };
+      return { ok: true, draft: {
+        sourceBodiceHash: bodice.hash, type: r.type, baseMethod: r.baseMethod, presetId: r.id,
+        parameters: { shawl: d.shawl },
+        shawl: { geometry: swRe.geometry, measure: swRe.measure, anchors: swRe.anchors, bodyLink: swRe.bodyLink }
       } };
     }
     if (r.type === "flat-collar-overlap") {

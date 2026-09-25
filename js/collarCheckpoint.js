@@ -14,6 +14,7 @@
 //   (보 칼라 X·Y·Z: 직사각형 폐곡선 + 달림선 실측 = ×+⊠ + 리본 길이·칼라 폭 실측 일치) /
 //   (후드 d: 한 조각 폐곡선 + 앞·뒤 달림선 실측 = 몸판 앞목·뒤목 + 폭·길이 = 머리둘레·후드 치수 파생) /
 //   (테일러드 h·i: 폐곡선 + 뒤 달림선 = 뒤 목둘레 + 칼라 허리·폭·라펠 폭 + 칼라 끝 정삼각형 + 라펠 bodyLink) /
+//   (숄 j·k: 폐곡선 + 뒤 달림선 = 뒤 목둘레 + 허리·폭·라펠 폭 + 외곽 한 줄기(칼라+라펠) + **깃아귀 없음**) /
 //   body manual 이면 관리선 존재·invalid===false / gap(CB 제도 간격) 기록 / 위칼라 이음선 길이 = 밴드 기준 봉제 길이
 //   (= 밴드 윗선 ⒸⒹ 전체, 앞 끝선 연장 미포함 — P.148 step 3) / 실측·파라미터 유한. 실패 시 기존 collarResult·현재 geometry 불변.
 // ══════════════════════════════════════════════
@@ -66,6 +67,8 @@
   // family 9 테일러드 칼라(h·i, P.78·79 · 제도 방법 P.152–153): 앞 몸판 위에 라펠 → 위 칼라.
   //   라펠·몸판 목둘레선은 bodyLink 파생이고 몸판 geometry 는 바뀌지 않는다.
   function isTailored(cd) { return !!(cd && cd.type === "tailored-collar"); }
+  // family 10 숄 칼라(j·k, P.80·81 · 제도 방법 P.154–155): 테일러드와 1~4 공유, **깃아귀가 없다**.
+  function isShawl(cd) { return !!(cd && cd.type === "shawl-collar"); }
   function isStandalone(cd) { return !!(cd && cd.type === "stand-collar"); }
 
   // ── 검사 ──
@@ -291,6 +294,36 @@
         && Array.isArray(bl.lapelOutline) && bl.lapelOutline.length)) fails.push("lapel-link-missing");
       return { ok: fails.length === 0, fails: fails, _bodice: bodice, _tailored: tlRe, _lengths: null, _stand: null };
     }
+    // ── 숄 칼라(family 10, j·k): 뒤 달림선 = 뒤 목둘레 · 허리·폭·라펠 폭 · **깃아귀 없음**(한 줄기 외곽) ──
+    if (isShawl(cd)) {
+      var sw = cd.shawl;
+      if (!(sw && sw.geometry)) fails.push("no-shawl-collar");
+      else { var vsw = DC.validateClosedOutline(sw.geometry.outline); if (!vsw.ok) fails.push("shawl-" + vsw.reason); }
+      var swRe = null;
+      if (bodice && cd.parameters && cd.parameters.shawl) {
+        swRe = DC.computeShawlCollar(bodice, cd.parameters.shawl);
+        if (!swRe.ok) fails.push("shawl-recompute");
+      } else fails.push("no-collar-params");
+      var wm = sw && sw.measure, wp = cd.parameters && cd.parameters.shawl;
+      if (!(wm && wp && num(wm.backAttachLenCm) && num(wm.backNeckLenCm) && num(wm.cbStandLenCm)
+        && num(wm.cbWidthLenCm) && num(wm.lapelWidthLenCm) && num(wm.collarOuterLenCm)
+        && num(wm.lapelOuterLenCm) && num(wm.outerLenCm) && num(wm.standRemainderCm))) fails.push("unmeasured");
+      else {
+        if (Math.abs(wm.backAttachLenCm - wm.backNeckLenCm) > 0.01) fails.push("back-attach-mismatch");
+        if (Math.abs(wm.cbStandLenCm - wp.collarStandCm) > 0.01) fails.push("collar-stand-mismatch");
+        if (Math.abs(wm.cbWidthLenCm - wp.collarWidthCm) > 0.01) fails.push("collar-width-mismatch");
+        if (Math.abs(wm.lapelWidthLenCm - wp.lapelWidthCm) > 0.01) fails.push("lapel-width-mismatch");
+        // ★ 교재 5-❷: 외곽은 뒤 중심에서 꺾임 끝까지 **한 줄기** — 칼라 몫 + 라펠 몫 = 전체
+        if (Math.abs(wm.outerLenCm - (wm.collarOuterLenCm + wm.lapelOuterLenCm)) > 0.01) fails.push("outer-not-continuous");
+        if (Math.abs(wm.standRemainderCm - (wp.collarStandCm - wm.shoulderExtensionCm)) > 0.01) fails.push("stand-remainder-mismatch");
+      }
+      // ★ 깃아귀가 없어야 한다 — 칼라 끝 정삼각형(테일러드) 흔적이 있으면 종류가 섞인 것이다
+      if (wm && (num(wm.collarTipToLapelCm) || num(wm.lapelToGorgeCm))) fails.push("shawl-has-notch");
+      var swBl = sw && sw.bodyLink;
+      if (!(swBl && Array.isArray(swBl.breakLine) && swBl.breakLine.length
+        && Array.isArray(swBl.lapelOutline) && swBl.lapelOutline.length)) fails.push("lapel-link-missing");
+      return { ok: fails.length === 0, fails: fails, _bodice: bodice, _shawl: swRe, _lengths: null, _stand: null };
+    }
     // ── 플랫 칼라 T(family 4): 겹침 3.5 · 달림선 재작도(몸판 목둘레보다 짧다) · 칼라 폭·앞 끝 ──
     if (isFlatOverlapCollar(cd)) {
       var ft = cd.flat;
@@ -475,6 +508,15 @@
         tp: res.tailored.parameters, tg: canonGeom(res.tailored.geometry), tc: canonSegs((res.tailored.geometry || {}).construction),
         tm: res.tailored.measures,
         bk: canonSegs((res.tailored.bodyLink || {}).breakLine), lp: canonSegs((res.tailored.bodyLink || {}).lapelOutline),
+        sym: res.symmetry
+      });
+    }
+    if (res.type === "shawl-collar") {
+      return JSON.stringify({
+        sbh: res.sourceBodiceHash, nk: res.necklineLengths,
+        wp: res.shawl.parameters, wg: canonGeom(res.shawl.geometry), wc: canonSegs((res.shawl.geometry || {}).construction),
+        wm: res.shawl.measures,
+        bk: canonSegs((res.shawl.bodyLink || {}).breakLine), lp: canonSegs((res.shawl.bodyLink || {}).lapelOutline),
         sym: res.symmetry
       });
     }
@@ -670,6 +712,24 @@
       proj.working.collarResult = tailoredRes;
       return { ok: true, result: tailoredRes, check: c };
     }
+    if (isShawl(cd)) {
+      var shawlRes = {
+        schemaVersion: 1, type: "shawl-collar",
+        baseMethod: cd.baseMethod || null, presetId: cd.presetId || null,
+        sourceBodiceHash: cd.sourceBodiceHash,
+        sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+        necklineLengths: clone(bodice.necklineLengths),
+        shawl: { parameters: clone(cd.parameters.shawl), geometry: clone(cd.shawl.geometry),
+          measures: clone(cd.shawl.measure || {}), bodyLink: clone(cd.shawl.bodyLink || {}) },
+        symmetry: "half-cb-seam"
+      };
+      shawlRes.hash = hashStr(signatureOf(shawlRes));
+      var prevSw = proj.working.collarResult;
+      if (prevSw && prevSw.hash === shawlRes.hash) return { ok: true, result: prevSw, idempotent: true, check: c };
+      shawlRes.completedAt = Date.now(); deepFreeze(shawlRes);
+      proj.working.collarResult = shawlRes;
+      return { ok: true, result: shawlRes, check: c };
+    }
     if (isFlatOverlapCollar(cd)) {
       var flatTRes = {
         schemaVersion: 1, type: "flat-collar-overlap",
@@ -850,6 +910,16 @@
         symmetry: "half-cb-seam" };
       return hashStr(signatureOf(curTl)) !== res.hash;
     }
+    if (isShawl(cd)) {
+      if (!cd.shawl || !cd.shawl.geometry || !cd.parameters || !cd.parameters.shawl) return true;
+      if (res.type !== "shawl-collar") return true;
+      var swRecalc = DC.computeShawlCollar(bodice, cd.parameters.shawl); if (!swRecalc.ok) return true;
+      var curSw = { type: "shawl-collar", sourceBodiceHash: cd.sourceBodiceHash, necklineLengths: bodice.necklineLengths,
+        shawl: { parameters: cd.parameters.shawl, geometry: cd.shawl.geometry,
+          measures: cd.shawl.measure || {}, bodyLink: cd.shawl.bodyLink || {} },
+        symmetry: "half-cb-seam" };
+      return hashStr(signatureOf(curSw)) !== res.hash;
+    }
     if (isFlatOverlapCollar(cd)) {
       if (!cd.flat || !cd.flat.geometry || !cd.parameters || !cd.parameters.flatOverlap) return true;
       if (res.type !== "flat-collar-overlap") return true;
@@ -887,7 +957,7 @@
         symmetry: "half-cb-fold" };
       return hashStr(signatureOf(curStandalone)) !== res.hash;
     }
-    if (res.type === "shirt-one-piece" || res.type === "shirt-open-collar" || res.type === "shirt-wing-collar" || res.type === "shirt-band-one-piece" || res.type === "flat-collar" || res.type === "flat-collar-overlap" || res.type === "sailor-collar" || res.type === "bow-collar" || res.type === "frill-collar" || res.type === "hood" || res.type === "tailored-collar" || res.type === "stand-collar") return true;   // 2피스 draft vs 다른 종류 완료본
+    if (res.type === "shirt-one-piece" || res.type === "shirt-open-collar" || res.type === "shirt-wing-collar" || res.type === "shirt-band-one-piece" || res.type === "flat-collar" || res.type === "flat-collar-overlap" || res.type === "sailor-collar" || res.type === "bow-collar" || res.type === "frill-collar" || res.type === "hood" || res.type === "tailored-collar" || res.type === "shawl-collar" || res.type === "stand-collar") return true;   // 2피스 draft vs 다른 종류 완료본
     if (!cd.standGeometry || !cd.body || !cd.body.geometry) return true;               // 카라 형상 없음/숨김
     if (cd.body.mode === "manual" && cd.body.invalid) return true;                     // 무효 편집
     if (!cd.parameters || !cd.parameters.stand) return true;

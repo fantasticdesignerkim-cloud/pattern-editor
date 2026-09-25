@@ -849,5 +849,75 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   BODICE = bodice("BH1");
 }
 
+// 19. 숄 칼라 j·k(P.80·81 · 제도 방법 P.154–155) — 길이 책임 · **외곽 한 줄기** · 깃아귀 없음
+{
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  const frontNeck = cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline");
+  const dense = (s2) => { let t = 0, pr = s2.from; for (let k = 1; k <= 4000; k++) {
+    const u = 1 - k / 4000, tt = k / 4000;
+    const p = { x: u*u*u*s2.from.x + 3*u*u*tt*s2.c1.x + 3*u*tt*tt*s2.c2.x + tt*tt*tt*s2.to.x,
+                y: u*u*u*s2.from.y + 3*u*u*tt*s2.c1.y + 3*u*tt*tt*s2.c2.y + tt*tt*tt*s2.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const FL = dense(frontNeck), BKL = 8.5;
+  const swBodice = (hash) => ({ hash: hash, sourceVersion: 1,
+    necklineLengths: { back: BKL, front: FL, half: BKL + FL, finished: 2 * (BKL + FL) },
+    front: { outline: [ln([40, 4], [40, 38], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder"),
+      cub([22, 0], [24, 8], [23, 15], [23, 20.6], "armhole"), ln([23, 20.6], [23, 38], "side-seam"),
+      ln([23, 38], [40, 38], "waist")], construction: [] } });
+  const JP = { collarStandCm: 3, collarWidthCm: 4, lapelWidthCm: 6, layDownCm: 2.5, neckShiftCm: 1,
+    frontNeckCm: 2, frontRiseCm: 1 };
+  BODICE = swBodice("BSW1");
+  const mk = (P, k) => {
+    const sw = DC.computeShawlCollar(swBodice("BSW1"), P);
+    return { sourceBodiceHash: "BSW1", type: "shawl-collar", baseMethod: "bunka-shawl-collar-" + k + "-v1",
+      presetId: "bunka-shawl-collar-" + k, parameters: { shawl: Object.assign({}, P) },
+      shawl: { geometry: sw.geometry, measure: sw.measure, anchors: sw.anchors, bodyLink: sw.bodyLink } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  PROJECT = proj(mk(JP, "j"));
+  ok(CC.check(PROJECT).ok, "19: j 초안이 완료 게이트 통과(" + CC.check(PROJECT).fails.join(",") + ")");
+  const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.type === "shawl-collar" && Object.isFrozen(r.result.shawl)
+    && r.result.symmetry === "half-cb-seam", "19: j 완료 스냅샷(뒤 중심 봉제)");
+  ok(r.result.shawl.bodyLink && Object.isFrozen(r.result.shawl.bodyLink)
+    && r.result.shawl.bodyLink.breakLine.length, "19: 라펠·꺾임선 bodyLink 가 스냅샷에 남는다");
+  ok(!("stand" in r.result) && !("tailored" in r.result) && !("hood" in r.result), "19: 다른 family 섹션 없음");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "19: 완료 직후 미변경");
+  const again = CC.complete(PROJECT);
+  ok(again.ok && again.idempotent === true && again.result === r.result, "19: 재완료 idempotent");
+
+  // 게이트
+  const g = (patch, code, label) => {
+    const cd = mk(JP, "j"); patch(cd);
+    ok(CC.check(proj(cd)).fails.indexOf(code) >= 0, "19: " + label);
+  };
+  g(cd => cd.shawl.measure.backAttachLenCm += 0.2, "back-attach-mismatch", "뒤 달림선 ≠ 뒤 목둘레 차단");
+  g(cd => cd.shawl.measure.cbStandLenCm += 0.2, "collar-stand-mismatch", "칼라 허리 불일치 차단");
+  g(cd => cd.shawl.measure.cbWidthLenCm += 0.2, "collar-width-mismatch", "칼라 폭 불일치 차단");
+  g(cd => cd.shawl.measure.lapelWidthLenCm += 0.2, "lapel-width-mismatch", "라펠 폭 불일치 차단");
+  g(cd => cd.shawl.measure.standRemainderCm += 0.2, "stand-remainder-mismatch", "1-❸ 표기 불일치 차단");
+  // ★ 5-❷ 외곽 한 줄기 계약
+  g(cd => cd.shawl.measure.lapelOuterLenCm += 0.2, "outer-not-continuous",
+    "외곽 몫 합 ≠ 전체면 차단(뒤 중심→꺾임 끝 한 줄기)");
+  // ★ 깃아귀가 섞이면 차단
+  g(cd => { cd.shawl.measure.collarTipToLapelCm = 3; }, "shawl-has-notch", "칼라 끝 정삼각형 흔적 차단");
+  g(cd => { cd.shawl.bodyLink = { breakLine: [], lapelOutline: [] }; }, "lapel-link-missing", "라펠 파생 기록 없음 차단");
+  g(cd => { delete cd.shawl; }, "no-shawl-collar", "형상 없음 차단");
+  g(cd => { cd.parameters.shawl.collarStandCm = 0.5; }, "shawl-recompute", "재계산 불가 파라미터 차단");
+
+  // k 와 hash 분리 · 종류 분리
+  const KP = Object.assign({}, JP, { collarStandCm: 1, layDownCm: 6, neckShiftCm: 0.6 });
+  const rK = CC.complete(proj(mk(KP, "k")));
+  ok(rK.ok && rK.result.hash !== r.result.hash, "19: k 는 j 와 hash 분리");
+  {
+    const pj = proj(mk(JP, "j")); const done = CC.complete(pj);
+    pj.working.collarResult = Object.assign({}, pj.working.collarResult, { type: "tailored-collar" });
+    ok(done.ok && CC.isCurrentCollarChanged(pj) === true, "19: 완료본 종류가 다르면 변경됨");
+  }
+  BODICE = bodice("BH1");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }
