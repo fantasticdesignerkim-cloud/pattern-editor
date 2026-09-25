@@ -184,7 +184,9 @@ function project(cd) { return { sourceBlock: { id: "block-1", version: 1, canoni
   ok(J(F.map(f => [f.id, f.order, f.label, f.symbol, f.page])) === J(want), "8: 교재 순서·id·표시명·표식·페이지 정확");
   ok(F.filter(f => f.availability === "available").map(f => f.id).join() === "stand-collar,shirt-collar-one-piece,shirt-collar-with-band,flat-collar,sailor-collar,bow-collar,frill-collar,hood,tailored-collar,shawl-collar", "8: available family = 기존 9종 + 숄(j)");
   ok(F.every(f => f.availability === "available" ? typeof f.generator === "string" : f.generator === null), "8: generator 는 구현된 family 만");
-  ok(F.filter(f => f.availability === "pending-source").every(f => f.note === CP.PENDING_NOTE) && F.filter(f => f.availability === "pending-source").length === 1, "8: 미구현 family 1개 안내 문구");
+  // ★ 하이넥은 "자료 부족(PENDING_NOTE)"이 아니라 **구조가 달라서** 보류다 — 판독은 끝났다(docs/book/P082.md).
+  ok(F.filter(f => f.availability === "pending-source").map(f => f.id).join() === "high-neck"
+    && CP.family("high-neck").note !== CP.PENDING_NOTE, "8: 미구현 family = 하이넥 하나 · 자료부족 문구 아님");
   const M = CP.family("shirt-collar-with-band");
   ok(M && CP.family("nope") === null && CP.family("__proto__") === null, "8: family 조회·알 수 없는 id null");
   try { F.push({}); } catch (_) {}
@@ -200,7 +202,7 @@ function project(cd) { return { sourceBlock: { id: "block-1", version: 1, canoni
   ok(vs.length === 6 && J(vs.map(v => v.id)) === J(["A", "B", "C", "D", "E", "F"].map(x => "bunka-stand-collar-" + x)), "9: 스탠드 A~F 슬롯 6개");
   ok(vs.every(v => v.availability === "available" && v.presetId === v.id), "9: A~F 실행");
   ok(vs.every(v => !("stand" in v) && !("body" in v) && !("parameters" in v) && !("geometry" in v)), "9: 수치·형상 데이터 없음");
-  ok(CP.variants("high-neck").length === 0 && CP.variants("nope").length === 0 && Object.isFrozen(CP.variants("nope")), "9: 다른 미구현 family 는 빈 슬롯");
+  ok(CP.variants("nope").length === 0 && Object.isFrozen(CP.variants("nope")), "9: 알 수 없는 family 는 빈 슬롯");
   ok(CP.variant("stand-collar", "bunka-stand-collar-A") === vs[0] && CP.variant("stand-collar", "bunka-stand-collar-B") === vs[1] && CP.variant("stand-collar", "nope") === null, "9: variant 조회");
   ok(J(CP.variantOptions("stand-collar").map(v => v.available)) === J([true, true, true, true, true, true]), "9: A~F 옵션 available");
   ok(J(CP.variantOptions("shirt-collar-with-band").map(o => [o.value, o.available])) === J([["bunka-shirt-collar-M", true], ["bunka-band-collar-N", true], ["bunka-band-collar-O", true], ["bunka-band-collar-P", true], ["bunka-band-collar-Q", true], ["bunka-band-collar-R", true]]), "9: family 3 = M~R 전부 실행");
@@ -290,9 +292,14 @@ const ONE = "shirt-collar-one-piece";
 // 15. 미구현 선택은 여전히 거부 — 어떤 경로에서도 M/G~L 로 대체되지 않는다
 {
   BODICE = bodice("BH1");
-  // ★ 구현된 세 family 에는 더 이상 참고 슬롯이 없다(R 까지 전환). 자료 없는 family 는 variant 자체가 없다.
+  // ★ 구현된 세 family 에는 더 이상 참고 슬롯이 없다(R 까지 전환).
+  //   미구현 family(하이넥)는 **판독 결과를 슬롯으로 들고 있되** 실행 수치는 없다 — 슬롯 유무가 아니라
+  //   "presetId 가 없고 해석이 거부된다"가 계약이다.
   const pendingFams = CP.families().filter(f => f.availability !== "available");
-  ok(pendingFams.length > 0 && pendingFams.every(f => f.variants.length === 0), "15: 자료 없는 family 는 빈 슬롯");
+  ok(pendingFams.length > 0 && pendingFams.every(f => f.variants.every(v => v.presetId === null
+    && v.availability === "pending-source")), "15: 미구현 family 슬롯은 실행 수치를 갖지 않는다");
+  ok(pendingFams.every(f => f.variants.every(v => CP.resolve(f.id, v.id).ok === false)),
+    "15: 미구현 슬롯은 어느 것도 해석되지 않는다");
   ok(pendingFams.every(f => { const r = CP.resolve(f.id, "bunka-shirt-collar-M"); return r.ok === false && r.reason === "unknown-collar-variant" && !("presetId" in r); }), "15: 자료 없는 family resolve 거부(M 대체 없음)");
   ok(CP.families().filter(f => f.availability === "available").every(f => f.variants.every(v => {
     const r = CP.resolve(f.id, v.id);
@@ -1341,6 +1348,35 @@ const BAND_FAM = "shirt-collar-with-band";
   const bad3 = JSON.parse(J(Jr)); bad3.id = "bad-s3"; delete bad3.shawl.layDownCm;
   throwsReason(() => CP.validateRecord(bad3), "bad-section-keys", "37: 필수 키 누락 거부");
   BODICE = bodice("BH1");
+}
+
+// 38. 하이넥 l·m·n(P.82): **판독 완료 · 실행 보류**를 데이터로 고정한다.
+//   후드 e·f·g 와 같은 취급 — 교재 수치는 문장으로만 남기고 형상은 만들지 않는다.
+//   ★ 보류 사유가 "자료가 없다"가 아니라 "몸판에 이어서 재단하는 칼라라 별도 조각이 없다"는 점을 잠근다.
+{
+  const vs = CP.variants("high-neck");
+  ok(vs.length === 3 && J(vs.map(v => v.symbol)) === J(["l", "m", "n"]), "38: 하이넥 슬롯 l·m·n");
+  ok(J(vs.map(v => v.id)) === J(["l", "m", "n"].map(x => "bunka-high-neck-" + x)), "38: variant id");
+  ok(vs.every(v => v.availability === "pending-source" && v.presetId === null), "38: 셋 다 실행 안 함(presetId 없음)");
+  ok(vs.every(v => v.page === 82), "38: 전부 P.82 도해");
+  // 형상·실행 데이터가 catalog 에 섞이지 않는다(검증기 계약 재확인)
+  ok(vs.every(v => !("stand" in v) && !("body" in v) && !("parameters" in v) && !("geometry" in v)), "38: 수치·형상 데이터 없음");
+  // ★ blockedBy = 왜 못 그리는가. 셋 다 있어야 한다(없으면 "그냥 아직 안 함"과 구별이 안 된다)
+  ok(vs.every(v => typeof v.blockedBy === "string" && v.blockedBy.length > 0), "38: 셋 다 blockedBy 기록");
+  ok(vs.every(v => typeof v.referenceNote === "string" && v.referenceNote.length > 0), "38: 셋 다 교재 수치 문장 기록");
+  // ★ 전용 제도 방법 페이지는 m 에만 있다(l·n 은 교재에 도해만 — 그래서 기준선이 미확정이다)
+  ok(vs[1].requiresMethodPage === 156, "38: m 은 제도 방법 P.156 필요");
+  ok(!("requiresMethodPage" in vs[0]) && !("requiresMethodPage" in vs[2]), "38: l·n 은 전용 제도 페이지 없음");
+  // family 는 실행 불가 유지 — generator 없음, 옵션 전부 비활성
+  const f = CP.family("high-neck");
+  ok(f.availability === "pending-source" && f.generator === null, "38: family 실행 불가 유지");
+  ok(CP.variantOptions("high-neck").every(o => o.available === false), "38: 세부 제도 옵션 전부 비활성");
+  ok(CP.familyOptions().filter(o => o.available === false).map(o => o.value).join() === "high-neck", "38: 비활성 family = 하이넥 하나");
+  // 해석은 명시적 거부(절대 M 으로 fallback 하지 않는다 — 10번 계약 재확인)
+  ok(CP.resolve("high-neck", "bunka-high-neck-l").ok === false, "38: 해석 거부");
+  ok(CP.get("bunka-high-neck-l") === null && CP.get("bunka-high-neck-m") === null, "38: 레코드 없음");
+  // 표시 제목은 선택 variant 의 표식·페이지를 따른다
+  ok(CP.displayTitle("high-neck", "bunka-high-neck-n").symbol === "n" && CP.displayTitle("high-neck", "bunka-high-neck-n").page === 82, "38: 표시 제목 n·P.82");
 }
 
 console.log("══════════════════════════════════════════════");

@@ -200,6 +200,17 @@
     v.note = "제도 구조 미확정";
     return v;
   }
+  // 하이넥 참고 전용 variant(실행 수치 아님). **판독은 끝났고**(P.82 · m 은 P.156/P.167) 형상만 만들지 않는다.
+  //   blockedBy = **왜 칼라 생성기로 못 그리는가**. 하이넥 셋은 전부 "몸판에 이어서 재단하는" 칼라라
+  //   별도 조각이 없고, 그래서 다른 12개 family 가 공유하는 "달림선 = 몸판 목둘레" 검증이 성립하지 않는다.
+  //   methodPage 는 m 에만 있다(l·n 은 전용 제도 방법 페이지가 교재에 없고 도해뿐).
+  function highNeckRefVariant(id, symbol, label, referenceNote, blockedBy, methodPage) {
+    var v = pendingVariant(id, symbol, label);
+    v.page = 82; v.referenceNote = referenceNote; v.blockedBy = blockedBy;
+    if (methodPage) v.requiresMethodPage = methodPage;
+    v.note = "몸판 연장형 — 별도 설계 필요";
+    return v;
+  }
   var CATALOG = [
     // 스탠드 family: A~F는 P.60~62 도면과 P.146 제도법을 기반으로 실행 가능.
     { id: "stand-collar", order: 1, label: "스탠드 칼라", symbol: "A", page: 60, generator: "stand-collar-v1", availability: "available", note: null,
@@ -303,7 +314,22 @@
         { id: "bunka-shawl-collar-j", symbol: "j", label: "j · 칼라 허리 3 · 누임 2.5", page: 80, availability: "available", presetId: "bunka-shawl-collar-j", note: null },
         { id: "bunka-shawl-collar-k", symbol: "k", label: "k · 칼라 허리 1 · 누임 6", page: 81, availability: "available", presetId: "bunka-shawl-collar-k", note: null }
       ] },
-    { id: "high-neck", order: 11, label: "하이넥", symbol: "l", page: 82, generator: null, availability: "pending-source", note: PENDING_NOTE, variants: [] }
+    // 하이넥 family: P.82 판독 완료(docs/book/P082.md · P156.md · P167.md). **자료 부족이 아니라 구조가 다르다** —
+    //   머리말 그대로 "몸판에 이어서 재단하는 높은 칼라"라, 셋 다 칼라 조각을 만들지 않고 몸판 외곽선을 목 위로
+    //   연장한다. 재개한다면 카라 단계가 아니라 **몸판 네크라인 단계**의 확장으로 설계해야 한다(별도 승인 후).
+    { id: "high-neck", order: 11, label: "하이넥", symbol: "l", page: 82, generator: null, availability: "pending-source",
+      note: "몸판 연장형 — 칼라 조각이 아니다", variants: [
+        highNeckRefVariant("bunka-high-neck-l", "l", "l · 몸판에 이어서 세운다",
+          "뒤 중심 3 · 앞 중심 2 · 옆목 0.7·1·2 · 앞 여밈분 1.5 (전용 제도 방법 페이지 없음 — 도해만) · 몸판 연장형이라 별도 칼라 조각이 없다",
+          "몸판 외곽선을 목 위로 연장하므로 '달림선 = 몸판 목둘레' 게이트가 성립하지 않는다. 세우는 치수의 기준선(목둘레선 직각 / 어깨선 연장 직각)도 도해만으로는 미확정."),
+        highNeckRefVariant("bunka-high-neck-m", "m", "m · 목둘레 다트를 이용한다",
+          "뒤 3·3·0.7·1·4 / 앞 0.7·1.2·3·3·1·1·0.5 · 앞 여밈분 1.5 · 몸판 다트를 목둘레로 이동한 뒤 세운다",
+          "칼라가 몸판 다트를 옮기고(P.156 단계 1) 마지막에 다트를 맞대어 위 끝선을 다시 그린다(P.167). 칼라는 bodiceResult 를 읽기만 한다는 계약과 정면으로 충돌하고, 단방향 파라미터 계산으로 끝나지 않는다.",
+          156),
+        highNeckRefVariant("bunka-high-neck-n", "n", "n · 앞 몸판에 이어서 칼라를 그린다",
+          "SNP 1 내림 · 뒤 목둘레 치수(×)를 수직으로 잡아 4.5 눕힘 · 뒤 중심 8 · 앞 여밈분 1.5 (전용 제도 방법 페이지 없음 — 도해만)",
+          "칼라가 앞 몸판과 한 장이라 별도 조각이 아니다. 눕힘 치수 4.5 의 측정 기준(호 회전 / 수평 이동)과 뒤 중심 8 의 의미(총 높이 / 스탠드만)가 미확정.")
+      ] }
   ];
 
   var RECORDS = [

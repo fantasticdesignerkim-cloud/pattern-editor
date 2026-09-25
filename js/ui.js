@@ -1056,9 +1056,18 @@
     const r = resolveCollarSelection();
     return r.ok ? window.collarPresets.defaults(r.presetId) : { ok: false, reason: r.reason };
   }
+  // ★ 미구현 사유는 slot 마다 다르다 — "자료가 없다"(PENDING_NOTE) / "제도 구조 미확정"(후드 e·f·g) /
+  //   "몸판 연장형 — 별도 설계 필요"(하이넥 l·m·n). slot 이 자기 사유를 들고 있으면 그것을 쓰고,
+  //   없을 때만 일반 문구로 떨어진다. 판독을 마친 슬롯을 "자료 없음"이라고 말하지 않기 위해서다.
+  function pendingSlotNote() {
+    if (!window.collarPresets) return "";
+    const v = window.collarPresets.variant(selectedCollarFamilyId(), selectedCollarVariantId());
+    return (v && typeof v.note === "string" && v.note) ? v.note : "";
+  }
   function collarSelectionStr(reason) {
     const m = { "unknown-collar-family": "카라 종류를 선택하세요", "unknown-collar-variant": "세부 제도형을 선택하세요",
       "collar-preset-unavailable": (window.collarPresets ? window.collarPresets.PENDING_NOTE : "제도 자료 확인 후 제공"), "no-module": "" };
+    if (reason === "collar-preset-unavailable") { const n = pendingSlotNote(); if (n) return n; }
     return m[reason] != null ? m[reason] : "";
   }
   // 세부 제도 select 옵션을 현재 종류에서 다시 만든다(미구현 variant 는 disabled 슬롯).
@@ -1170,7 +1179,8 @@
       "ambiguous-front-neck-point": "몸판 앞 중심 목점을 하나로 특정할 수 없습니다",
       "break-start-out-of-neckline": "앞 직선 구간이 몸판 앞 목둘레선보다 깁니다",
       "attach-length-unreachable": "달림선을 목둘레 길이에 맞출 수 없습니다", "self-intersection": "스탠드 형상이 교차합니다 · 값을 조정하세요", "unknown-collar-preset": "알 수 없는 카라 프리셋", "unknown-collar-family": "알 수 없는 카라 종류",
-      "unknown-collar-variant": "세부 제도형을 선택하세요", "collar-preset-unavailable": "이 카라는 제도 자료 확인 후 제공", "no-module": "" };
+      "unknown-collar-variant": "세부 제도형을 선택하세요", "collar-preset-unavailable": null, "no-module": "" };
+    if (reason === "collar-preset-unavailable") return pendingSlotNote() || (window.collarPresets ? window.collarPresets.PENDING_NOTE : "제도 자료 확인 후 제공");   // 호출부가 "적용 불가: " 를 붙인다
     return m[reason] || "카라를 적용할 수 없습니다";
   }
   function onApplyCollar() {
