@@ -183,6 +183,7 @@
         <!-- 옆선 곡선화: 진동밑→허리→밑단 꺾임을 두 cubic 으로 부드럽게(0=직선, 1=자동 곡률). hem 있을 때만. -->
         <div class="row"><label for="inpBodySideCurve">옆선 곡선화 (0–1)</label><input id="inpBodySideCurve" type="number" min="0" max="1" step="0.05"></div>
         <div class="row"><label for="inpBodyWaistDartTotal">허리 다트량 (cm · 봉제 a·b·d·e)</label><input id="inpBodyWaistDartTotal" type="number" min="0.1" max="40" step="0.25"></div>
+        <div class="row"><label for="inpBodyWaistTarget">목표 완성 허리 (cm)</label><input id="inpBodyWaistTarget" type="number" min="30" max="200" step="0.5"></div>
         <!-- 네크라인(parametric): 기본형 카드 선택 + 공통 입력(목너비·앞목·뒤목 깊이) + 형태별 입력.
              원본 reference 에서 비누적 재계산. 형태: 원형유지/라운드/V넥/스퀘어/보트. 직접편집은 증분 3. -->
         <div class="row" style="margin-top:8px"><label>네크라인</label></div>
@@ -411,7 +412,7 @@
 <!-- 디자인 geometry renderer D2(builder만): window.designRenderer. render.js hook·append 없음. -->
 <script src="js/designRenderer.js?v=2026092402"></script>
 <!-- DB1a 몸판 grain-기준 길이 연장 순수 변환: window.designBodice.computeGeometry. UI·render hook·working 대입 없음. -->
-<script src="js/designBodice.js?v=2026092610"></script>
+<script src="js/designBodice.js?v=2026092620"></script>
 <!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
 <script src="js/designPlacket.js?v=2026082001"></script>
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
@@ -440,7 +441,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026092610"></script>
+<script src="js/ui.js?v=2026092620"></script>
 
 </body>
 </html>

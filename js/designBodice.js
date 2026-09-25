@@ -615,6 +615,30 @@
       });
     });
   }
+  // 허리선이 차지하는 가로 폭(중심↔옆선). 허리선은 수평이라 x 범위 = 폭이고,
+  //   이는 bodiceCheckpoint.girthMeasure 가 y=WL 에서 재는 외곽 폭과 같은 값이다(회귀로 잠금).
+  function waistSpanWidth(piece) {
+    var sp = waistSpanX(piece);
+    return sp ? (sp.hi - sp.lo) : 0;
+  }
+  // 재배분 대상이 **아닌** 허리 조임의 합 — 옆선 c(locked)와 뒤중심 접어재단 f(onFold).
+  //   f 는 다리가 하나라 접힘선(apex)까지가 반패턴 몫이다.
+  function fixedWaistSuppression(piece) {
+    var m = {}, order = [];
+    (piece.construction || []).forEach(function (seg) {
+      var d = seg && seg.dart;
+      if (!d || d.boundary !== "waist" || !seg.from || !seg.to) return;
+      if (!d.locked && !d.onFold) return;                 // 봉제 다트는 대상 아님
+      var id = d.id; if (!m[id]) { m[id] = []; order.push(id); }
+      m[id].push(seg);
+    });
+    return order.reduce(function (t, id) {
+      var segs = m[id];
+      if (segs.length === 1) return t + Math.abs(dartMouthPt(segs[0]).x - dartApexPt(segs[0]).x);
+      return t + Math.abs(dartMouthPt(segs[0]).x - dartMouthPt(segs[1]).x);
+    }, 0);
+  }
+
   function checkWaistDarts(piece, who) {
     var span = waistSpanX(piece);
     var iv = waistMouthIntervals(piece).slice().sort(function (p, q) { return p.lo - q.lo; });
@@ -633,6 +657,7 @@
     var hOff = body.hemSideOffsetCm; if (hOff == null) hOff = 0;       // 밑단 옆선 이동(양수=바깥)
     var curve = body.sideSeamCurve; if (curve == null) curve = 0;     // 옆선 곡선화(0=직선, 0–1)
     var dartTot = body.waistDartTotalCm;                               // 봉제 허리다트(a·b·d·e) 합. 미지정=원형 그대로
+    var waistTarget = body.targetFinishedWaistCm;                      // 목표 완성 허리(전체 둘레). 미지정=미사용
     // 입력 정규화 경계: 정확한 0(전부) 만 no-op. 길이·여유량 음수 실패. 옆선 오프셋은 부호 허용(안/밖).
     if (typeof L !== "number" || !isFinite(L) || L < 0) fail("invalid-body-length", L);
     if (typeof E !== "number" || !isFinite(E) || E < 0) fail("invalid-body-ease", E);
@@ -642,6 +667,10 @@
     // 다트 총량은 **미지정(null/undefined)이 "원형 그대로"** 다 — 0 은 다트를 없애는 퇴화라 받지 않는다.
     var applyDarts = (dartTot != null);
     if (applyDarts && (typeof dartTot !== "number" || !isFinite(dartTot) || dartTot <= 0)) fail("invalid-waist-dart-total", dartTot);
+    // 목표 완성 허리: 필요한 봉제 다트 총량을 **역산**한다. 다트량 직접 지정과 동시 사용은 과결정이라 거부.
+    var applyTarget = (waistTarget != null);
+    if (applyTarget && (typeof waistTarget !== "number" || !isFinite(waistTarget) || waistTarget <= 0)) fail("invalid-waist-target", waistTarget);
+    if (applyTarget && applyDarts) fail("waist-overdetermined");
     // 네크라인(parametric). mode==="manual" / type==="original" / 없음이면 미적용(원본 목선 유지).
     var neckline = (opts && opts.neckline) || null;
     var applyNeck = !!(neckline && neckline.mode === "parametric" && NECK_TYPES[neckline.type]);
@@ -649,7 +678,7 @@
       var np = neckline.parameters || {};
       ["neckWidthCm", "frontDepthCm", "backDepthCm", "vPointDepthCm", "squareWidthCm", "cornerRadiusCm", "curveAmountNorm"].forEach(function (k) { var v = np[k]; if (v != null && (typeof v !== "number" || !isFinite(v))) fail("invalid-neckline-param", k); });
     }
-    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck && !applyDarts) return deepClone(referenceGeometry);
+    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck && !applyDarts && !applyTarget) return deepClone(referenceGeometry);
     // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
     var delta = E / 4;   // 전체 가슴둘레 여유량 → 각 옆선 E/4 (앞반쪽 + 뒤반쪽, ×2측 = E)
     var src = deepClone(referenceGeometry);
@@ -666,10 +695,20 @@
     if (bLen != null) bPiece.necklineLenCm = bLen;
     // 허리 다트 재배분은 **마지막**. a·b·d·e 는 앞선 변환에서 움직이지 않으므로 순서 무관하지만,
     // 겹침·범위 검사를 최종 허리선(옆선 이동 반영) 위에서 해야 정확하다.
-    if (applyDarts) {
+    if (applyDarts || applyTarget) {
       var blockTotal = sewnWaistDartTotal(fPiece) + sewnWaistDartTotal(bPiece);
       if (!(blockTotal > EPS)) fail("no-sewn-waist-dart");
-      var sD = dartTot / blockTotal;
+      var wantSewn = dartTot;
+      if (applyTarget) {
+        // 완성 허리 = (외곽반 − 조임합반) × 2.  조임합반 = 봉제 다트 + 고정 조임(c·f).
+        //   ⇒ 필요한 봉제 다트 = 외곽반 − 목표/2 − 고정 조임
+        var outlineHalf = waistSpanWidth(fPiece) + waistSpanWidth(bPiece);
+        var fixedSupp = fixedWaistSuppression(fPiece) + fixedWaistSuppression(bPiece);
+        wantSewn = outlineHalf - waistTarget / 2 - fixedSupp;
+        // 목표가 너무 크면 다트를 없애도 닿지 않는다 — 지어내지 말고 정직하게 실패한다.
+        if (!(wantSewn > EPS)) fail("target-waist-unreachable", waistTarget);
+      }
+      var sD = wantSewn / blockTotal;
       scaleSewnWaistDarts(fPiece, sD); scaleSewnWaistDarts(bPiece, sD);
       checkWaistDarts(fPiece, "front"); checkWaistDarts(bPiece, "back");
     }

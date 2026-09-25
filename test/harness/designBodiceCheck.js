@@ -712,6 +712,43 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
   }
   ok(JSON.stringify(ref) === REF_JSON, "4i: 성공·실패 어느 경우에도 입력 불변");
 
+  // ── 목표 완성 허리(targetFinishedWaistCm) 역산 ──
+  //   완성 허리 = (외곽반 − 조임합반) × 2,  조임합반 = 봉제 다트 + 고정 조임(c·f)
+  //   앞 외곽반 24.45 + 뒤 23.05 = 47.5 · 고정 조임 c앞 0.7 + c뒤 0.7 + f 0.5 = 1.9
+  {
+    const outlineHalf = 24.45 + 23.05, fixedSupp = 0.7 + 0.7 + 0.5;
+    const finishedOf = (sewnSum) => (outlineHalf - (sewnSum + fixedSupp)) * 2;
+    // (47.5 − (10.7 + 1.9)) × 2 = 69.8
+    ok(near(finishedOf(base), 69.8, 1e-9), "4i: 원형 다트 기준 완성 허리 69.8(검산)");
+
+    // 목표를 주면 그 목표가 정확히 나온다
+    [70, 66, 75].forEach(target => {
+      const r = DB.computeGeometry(ref, { body: { targetFinishedWaistCm: target } });
+      ok(near(finishedOf(sewnTotal(r)), target, 1e-9), "4i: 목표 " + target + "cm → 완성 허리 일치");
+    });
+    // 역산된 다트량 = 외곽반 − 목표/2 − 고정 조임
+    {
+      const r = DB.computeGeometry(ref, { body: { targetFinishedWaistCm: 70 } });
+      ok(near(sewnTotal(r), outlineHalf - 35 - fixedSupp, 1e-9), "4i: 역산 다트량 = 외곽반 − 목표/2 − 고정 조임");
+      // c·f 는 역시 불변
+      ok(eq(groupsOf(ref.front, x => x.dart.locked), groupsOf(r.front, x => x.dart.locked))
+        && eq(groupsOf(ref.back, x => x.dart.onFold), groupsOf(r.back, x => x.dart.onFold)), "4i: 목표 역산도 c·f 불변");
+    }
+    // 목표가 너무 크면 다트를 없애도 닿지 않는다 → 정직하게 실패
+    throws(() => DB.computeGeometry(ref, { body: { targetFinishedWaistCm: 95 } }), "target-waist-unreachable", "4i: 닿지 않는 목표 거부");
+    // 목표가 너무 작으면 다트가 과대 → 기존 겹침/범위 검사가 잡는다
+    {
+      let reason = null;
+      try { DB.computeGeometry(ref, { body: { targetFinishedWaistCm: 31 } }); } catch (e) { reason = e.reason; }
+      ok(reason === "waist-dart-overlap" || reason === "waist-dart-out-of-range", "4i: 과소 목표는 다트 검사가 거부(" + reason + ")");
+    }
+    // 범위·동시 지정 거부
+    throws(() => DB.computeGeometry(ref, { body: { targetFinishedWaistCm: 0 } }), "invalid-waist-target", "4i: 목표 0 거부");
+    throws(() => DB.computeGeometry(ref, { body: { targetFinishedWaistCm: NaN } }), "invalid-waist-target", "4i: 목표 NaN 거부");
+    throws(() => DB.computeGeometry(ref, { body: { targetFinishedWaistCm: 70, waistDartTotalCm: 8 } }), "waist-overdetermined", "4i: 목표+다트량 동시 지정 거부(과결정)");
+    ok(JSON.stringify(ref) === REF_JSON, "4i: 목표 역산 전 구간 입력 불변");
+  }
+
   // 길이 연장과 결합 — hem 을 적용하면 waist 가 construction 으로 옮겨간다. 그 뒤에도 허리선 범위를
   //   찾아 검사·배분이 되어야 한다(옆선 이동과의 조합은 실제 도안으로 브라우저에서 확인한다 —
   //   이 픽스처는 c 다리 한쪽만 옆선에 붙어 있어 실제 기하를 대표하지 못한다).
