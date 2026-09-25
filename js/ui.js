@@ -1015,7 +1015,8 @@
   function committedCollar(project) {
     const cd = project && project.working && project.working.collarDraft;
     const st = (cd && cd.parameters && cd.parameters.stand) ? cd.parameters.stand : null;
-    return { has: !!cd, bandWidthCm: st ? st.bandWidthCm : null, frontRiseCm: st ? st.frontRiseCm : null, frontEndCm: st ? st.frontEndCm : null,
+    return { has: !!cd, presetId: (cd && cd.presetId) || null,
+      bandWidthCm: st ? st.bandWidthCm : null, frontRiseCm: st ? st.frontRiseCm : null, frontEndCm: st ? st.frontEndCm : null,
       geom: !!(cd && cd.standGeometry), measure: cd ? cd.measure : null };
   }
   // 몸판 완료본 hash 가 collarDraft.sourceBodiceHash 와 다르면 stale(기존 geometry 숨김·높이 파라미터 보존).
@@ -1182,7 +1183,9 @@
     if (!fr.valid) { setCollarNote("앞 중심 올림 범위를 확인하세요(0–10cm)"); return; }
     // 앞 끝선(⑪)은 입력이 없다 — 커밋값, 없으면 선택 제도형 기본값(교재 0.5).
     const pdNow = collarPresetDefaults(), cNow = committedCollar(project);
-    const endCm = (cNow.frontEndCm != null) ? cNow.frontEndCm : (pdNow.ok && pdNow.stand ? pdNow.stand.frontEndCm : 0.5);
+    // 앞 끝선도 같은 규칙 — 제도형이 바뀌면 옛 커밋값을 들고 가지 않는다.
+    const keepEnd = cNow.has && pdNow.ok && cNow.presetId === pdNow.id && cNow.frontEndCm != null;
+    const endCm = keepEnd ? cNow.frontEndCm : (pdNow.ok && pdNow.stand ? pdNow.stand.frontEndCm : 0.5);
     const r = deriveCollar(project, h.v, fr.v, endCm);
     if (!r.ok) { setCollarNote("적용 불가: " + collarFailStr(r.reason)); return; }   // 실패 시 이전 유지
     if (window.designLayout) window.designLayout.afterCollar();
@@ -1533,9 +1536,14 @@
     if (isFrillCollar(project)) { updateFrillCollarPanel(project, gate, pd); return; }
     if (isHoodCollar(project)) { updateHoodCollarPanel(project, gate, pd); return; }
     if (isStandaloneCollar(project)) { updateStandaloneCollarPanel(project, gate, pd); return; }
-    if (c.has && c.bandWidthCm != null) setIf("inpCollarStandHeight", c.bandWidthCm);
+    // ★ 커밋값은 **선택 제도형이 그대로일 때만** 우선한다(사용자 수정값을 기본값으로 덮지 않기 위해).
+    //   제도형을 바꾸면 입력칸도 새 제도형 기본값으로 따라가야 한다 — 안 그러면 수치는 옛 제도형 것,
+    //   construction(기초선 감산·안내점 올림)은 새 제도형 것이 되어 **교재에 없는 모순 조합**이 만들어진다.
+    //   (실측 회귀: N 적용 후 O 선택 → 적용 시 올림 3 + O 의 기초선 −2.5 조합으로 엔진이 거부했다.)
+    const keepEdits = c.has && pd.ok && c.presetId === pd.id;
+    if (keepEdits && c.bandWidthCm != null) setIf("inpCollarStandHeight", c.bandWidthCm);
     else if (pd.ok) setIf("inpCollarStandHeight", pd.stand.bandWidthCm);
-    if (c.has && c.frontRiseCm != null) setIf("inpCollarFrontRise", c.frontRiseCm);
+    if (keepEdits && c.frontRiseCm != null) setIf("inpCollarFrontRise", c.frontRiseCm);
     else if (pd.ok) setIf("inpCollarFrontRise", pd.stand.frontRiseCm);
     syncCollarPresetLabel();
     const applyBtn = document.getElementById("btnApplyCollar"), resetBtn = document.getElementById("btnResetCollar");
