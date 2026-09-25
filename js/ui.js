@@ -417,6 +417,20 @@
       }
     });
   }
+  // 완성 가슴(BL)·허리(WL) 둘레와 실측 대비 여유. **읽기 전용 계측** — 형상·게이트를 건드리지 않는다.
+  //   외곽 = 다트 전 폭, 완성 = 그 높이를 지나는 다트를 뺀 실제 둘레. 여유가 음수면 못 입는 패턴이라 경고.
+  function girthNote(project) {
+    const el = document.getElementById("designGirthNote"); if (!el) return;
+    const m = (project && window.bodiceCheckpoint) ? window.bodiceCheckpoint.girthMeasure(project) : null;
+    if (!m || !m.bust || !m.waist) { el.textContent = ""; el.removeAttribute("data-ok"); return; }
+    const one = (label, g, ease, body) => label + " 완성 " + fmtL(g.finishedCm) + "cm"
+      + (ease == null ? "" : " (여유 " + (ease >= 0 ? "+" : "") + fmtL(ease) + ")")
+      + " · 외곽 " + fmtL(g.outlineCm) + "cm";
+    const tight = [m.bustEaseCm, m.waistEaseCm].some(v => typeof v === "number" && v < 0);
+    el.textContent = one("가슴", m.bust, m.bustEaseCm) + " / " + one("허리", m.waist, m.waistEaseCm)
+      + (tight ? " · ⚠ 실측보다 작다" : "");
+    el.setAttribute("data-ok", tight ? "0" : "1");
+  }
   // 앞·뒤 옆선 봉제 길이 + 차이(정합 검증) 문구. 차이 > 1cm 이면 주의.
   function sideLenNote(project) {
     const g = project && project.working && project.working.geometry;
@@ -2004,7 +2018,7 @@
     setIf("inpNeckCurveAmount", cn.CA); setIf("inpNeckVDepth", cn.VD);
     setIf("inpNeckSquareWidth", cn.SW); setIf("inpNeckCornerRadius", cn.CR);
     setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv, cn.type));
-    sideLenNote(project); neckLenNote(project);
+    girthNote(project); sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
     // 앞중심 여밈 입력·상태 복원(포커스 중 안 덮음)
@@ -2057,7 +2071,7 @@
     setBack(st.nCA, st.nCA.v); setBack(st.nVD, st.nVD.v); setBack(st.nSW, st.nSW.v); setBack(st.nCR, st.nCR.v);
     const necked = st.neckType !== "original";
     setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0 && !necked) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv, st.neckType));
-    sideLenNote(project); neckLenNote(project);
+    girthNote(project); sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
     updateBodiceCheckpointUI(project);   // 몸판 변경 → 검사 요약·완료 상태(변경됨) 갱신

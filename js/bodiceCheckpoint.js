@@ -292,6 +292,132 @@
       };
     });
   }
+  // ── 완성 치수(둘레) 계측 ── 읽기 전용. 형상을 바꾸지 않고 **현재 유효 외곽**에서 잰다.
+  //   완성 둘레 = (그 높이의 외곽 폭 − 그 높이를 지나는 다트 폭의 합) × 2  (앞·뒤 반패턴 → 전체)
+  //   ★ 다트는 "허리에서만" 빼는 게 아니다 — 다트는 apex 로 갈수록 좁아지므로 **그 높이에서의 폭**을
+  //     각각 계산해서 뺀다(예: 앞 b·뒤 d·e·f 는 BL 을 지나가지만 a·c 는 BL 위에서 이미 닫혀 0).
+  //   ★ 접어재단 반쪽 다트(f: onFold·다리 1개)는 intakeCm 이 null 이라 **단순 intake 합산에서 누락된다.**
+  //     여기서는 다리↔apex(접힘선) 거리로 반패턴 몫을 직접 계산하므로 빠지지 않는다.
+  var GIRTH_SAMPLES = 24;          // cubic 평탄화 해상도(cubicLen 과 같은 관례)
+  var GIRTH_EPS = 1e-9;
+  // ★ isFinite(null) 은 true 다(Number(null)===0). 높이가 없을 때 0 으로 새지 않도록 엄격히 본다.
+  function isNum(v) { return typeof v === "number" && isFinite(v); }
+  function bezPt(p0, p1, p2, p3, t) {
+    var u = 1 - t;
+    return { x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x,
+             y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y };
+  }
+  function polyOf(seg) {
+    if (!seg) return [];
+    if (seg.kind === "line") return [seg.from, seg.to];
+    if (seg.kind === "cubic") {
+      var o = [seg.from];
+      for (var i = 1; i <= GIRTH_SAMPLES; i++) o.push(bezPt(seg.from, seg.c1, seg.c2, seg.to, i / GIRTH_SAMPLES));
+      return o;
+    }
+    if (seg.kind === "path" && Array.isArray(seg.commands)) {
+      var pts = [], cur = null;
+      seg.commands.forEach(function (c) {
+        if (c.type === "M") { cur = c.points[0]; pts.push(cur); return; }
+        if (c.type !== "C" || !cur) return;
+        for (var k = 1; k <= GIRTH_SAMPLES; k++) pts.push(bezPt(cur, c.points[0], c.points[1], c.points[2], k / GIRTH_SAMPLES));
+        cur = c.points[2];
+      });
+      return pts;
+    }
+    return [];
+  }
+  function allSegs(proj, piece) {
+    var g = proj.working.geometry && proj.working.geometry[piece];
+    if (!g) return [];
+    return [].concat(g.outline || [], g.construction || []);
+  }
+  // WL: waist edge 의 대표 y. hem 연장 시 waist 는 outline → construction 으로 옮겨가므로 둘 다 본다.
+  function waistLineY(proj, piece) {
+    var ys = [];
+    allSegs(proj, piece).forEach(function (s) {
+      if (s.edge !== "waist") return;
+      endpointsOf(s).forEach(function (pt) { if (pt && isNum(pt.y)) ys.push(pt.y); });
+    });
+    if (!ys.length) return null;
+    return ys.reduce(function (a, b) { return a + b; }, 0) / ys.length;
+  }
+  // BL: 진동밑점의 y = side-seam 끝점 중 가장 위(작은 y). 옆선이 곡선이어도 끝점은 그대로다.
+  function bustLineY(proj, piece) {
+    var m = Infinity;
+    allSegs(proj, piece).forEach(function (s) {
+      if (s.edge !== "side-seam") return;
+      endpointsOf(s).forEach(function (pt) { if (pt && isNum(pt.y) && pt.y < m) m = pt.y; });
+    });
+    return isFinite(m) ? m : null;
+  }
+  // 그 높이에서 외곽이 차지하는 가로 폭(중심선 ↔ 옆선). 수평선과의 교차 x 들의 최대−최소.
+  function outlineWidthAtY(proj, piece, y) {
+    var eff = effectiveOutline(proj, piece);
+    if (!eff || !eff.length || !isNum(y)) return null;
+    var xs = [];
+    eff.forEach(function (seg) {
+      var pts = polyOf(seg);
+      for (var i = 1; i < pts.length; i++) {
+        var a = pts[i - 1], b = pts[i];
+        if (!a || !b) continue;
+        if ((a.y - y) * (b.y - y) > GIRTH_EPS) continue;          // 같은 쪽 → 교차 없음
+        if (Math.abs(b.y - a.y) < GIRTH_EPS) { xs.push(a.x, b.x); continue; }   // 수평 구간
+        var t = (y - a.y) / (b.y - a.y);
+        if (t < -GIRTH_EPS || t > 1 + GIRTH_EPS) continue;
+        xs.push(a.x + t * (b.x - a.x));
+      }
+    });
+    if (xs.length < 2) return null;
+    return Math.max.apply(null, xs) - Math.min.apply(null, xs);
+  }
+  // 다트가 그 높이에서 잡아먹는 폭. 다리는 apex 에서 경계까지의 직선이라 선형 보간.
+  //   apex 바깥(다트가 존재하지 않는 높이)이면 0. 다리 1개(접어재단)는 접힘선(apex.x)까지의 거리.
+  function dartWidthAtY(rec, y) {
+    if (!rec || !rec.apex || !Array.isArray(rec.legs) || !rec.legs.length) return 0;
+    var xs = [];
+    for (var i = 0; i < rec.legs.length; i++) {
+      var leg = rec.legs[i], dy = leg.y - rec.apex.y;
+      if (Math.abs(dy) < GIRTH_EPS) return 0;
+      var t = (y - rec.apex.y) / dy;
+      if (t < 0 || t > 1) return 0;
+      xs.push(rec.apex.x + t * (leg.x - rec.apex.x));
+    }
+    if (xs.length >= 2) return Math.abs(xs[0] - xs[1]);
+    return Math.abs(xs[0] - rec.apex.x);
+  }
+  function suppressionAtY(proj, piece, y) {
+    return dartRecords(proj, piece).reduce(function (t, rec) { return t + dartWidthAtY(rec, y); }, 0);
+  }
+  function girthAt(proj, y) {
+    if (!isNum(y)) return null;
+    var fo = outlineWidthAtY(proj, "front", y), bo = outlineWidthAtY(proj, "back", y);
+    if (fo === null || bo === null) return null;
+    var supp = suppressionAtY(proj, "front", y) + suppressionAtY(proj, "back", y);
+    return { outlineCm: round4((fo + bo) * 2), suppressionCm: round4(supp * 2),
+      finishedCm: round4(((fo + bo) - supp) * 2) };
+  }
+  // 공개 계측: 가슴(BL)·허리(WL) 의 외곽/완성 둘레와 **실측 대비 여유**.
+  //   실측은 DOM 이 아니라 **완료본에 고정된 baseSource.measurements**(frozen)에서 읽는다.
+  function girthMeasure(proj) {
+    proj = proj || project(); if (!proj) return null;
+    var ms = (proj.baseSource && proj.baseSource.measurements) || null;
+    var wy = waistLineY(proj, "front"), by = bustLineY(proj, "front");
+    var waist = girthAt(proj, wy), bust = girthAt(proj, by);
+    var ease = function (g, body) {
+      if (!g || !isNum(body)) return null;
+      return round4(g.finishedCm - body);
+    };
+    return {
+      bodyBustCm: (ms && isNum(ms.B)) ? ms.B : null,
+      bodyWaistCm: (ms && isNum(ms.W)) ? ms.W : null,
+      bustLineY: isNum(by) ? round4(by) : null,
+      waistLineY: isNum(wy) ? round4(wy) : null,
+      bust: bust, waist: waist,
+      bustEaseCm: ease(bust, ms && ms.B), waistEaseCm: ease(waist, ms && ms.W)
+    };
+  }
+
   // 의미 전용 deterministic fingerprint. **기존 형상 hash 와 분리** — 의미만 바뀌어도 바뀐다.
   function semanticFingerprint(perPiece) {
     var parts = [];
@@ -646,5 +772,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

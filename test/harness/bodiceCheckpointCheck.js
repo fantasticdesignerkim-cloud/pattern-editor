@@ -493,6 +493,88 @@ function fakeProject(backSideTopY, opts) {
   }
 }
 
+// 13. 완성 둘레 계측(girthMeasure) — 읽기 전용.
+//   ★ 핵심: 접어재단 반쪽 다트(onFold·다리 1개)는 intakeCm 이 null 이라 **단순 intake 합산에서 빠진다.**
+//   계측이 그걸 포함하는지, 그리고 다트 폭을 "그 높이에서" 재는지를 손으로 검산 가능한 픽스처로 고정한다.
+{
+  const L = (a, b, edge) => { const s = { kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }; if (edge) s.edge = edge; return s; };
+  const leg = (a, b, id, apexAt, extra) => Object.assign(L(a, b), { dart: Object.assign({ id, apexAt, boundary: "waist" }, extra || {}) });
+  // 단순 직사각 조각: 중심 cx, 옆선 cx∓20, 허리 y=30, BL(=side-seam 위끝) y=10
+  const rect = (cx, dir) => ({
+    outline: [
+      L([cx, 0], [cx, 30], "center"),
+      L([cx + dir * 20, 10], [cx + dir * 20, 30], "side-seam"),
+      L([cx, 30], [cx + dir * 20, 30], "waist"),
+      L([cx, 0], [cx + dir * 20, 10])
+    ],
+    construction: []
+  });
+  const mk = (opts) => {
+    opts = opts || {};
+    const front = rect(40, -1), back = rect(0, 1);
+    // 앞 허리다트: apex (30,10) · 다리 (29,30)(31,30) → 허리 폭 2, BL(=apex) 폭 0, y=20 에서 폭 1
+    front.construction.push(leg([29, 30], [30, 10], "f-waist", "to"), leg([31, 30], [30, 10], "f-waist", "to"));
+    // 뒤 접어재단 반쪽 다트: apex (0,5) · 다리 (0.5,30) → intakeCm 은 null 이지만 반패턴 몫 0.5 가 존재
+    back.construction.push(leg([0.5, 30], [0, 5], "b-fold", "to", { onFold: true }));
+    if (opts.hemLike) {   // hem 연장처럼 waist 가 construction 으로 옮겨간 경우
+      [front, back].forEach(p => {
+        const w = p.outline.filter(s => s.edge === "waist");
+        p.outline = p.outline.filter(s => s.edge !== "waist");
+        w.forEach(s => p.construction.push(s));
+      });
+    }
+    return {
+      sourceBlock: { version: 1 },
+      baseSource: opts.noMeasure ? {} : { measurements: { B: 70, W: 64 } },
+      working: { geometry: { front, back, shared: { construction: [] }, sleeve: { outline: [], construction: [] } },
+        parameters: {}, designOutline: opts.designOutline || null, frontPlacket: null, patternLines: [], bodiceResult: null }
+    };
+  };
+
+  const P = mk();
+  const m = BC.girthMeasure(P);
+  ok(m && m.waistLineY === 30 && m.bustLineY === 10, "13: WL/BL 높이 자동 검출(허리 edge · 옆선 위끝)");
+  // 허리: 외곽 (20+20)×2=80 · 다트 (2 + 0.5)×2=5 · 완성 75
+  ok(near(m.waist.outlineCm, 80) && near(m.waist.suppressionCm, 5) && near(m.waist.finishedCm, 75), "13: 허리 외곽 80 · 다트 5 · 완성 75");
+  // ★ 접어재단 반쪽 다트(0.5)가 빠지지 않았다 — intakeCm 합산이었다면 4 가 나왔을 것
+  ok(!near(m.waist.suppressionCm, 4), "13: onFold 반쪽 다트를 누락하지 않는다");
+  // 가슴(BL=y10): 앞 다트는 apex 라 0, 뒤 접어재단은 0.1 → 외곽 80 · 다트 0.2 · 완성 79.8
+  ok(near(m.bust.outlineCm, 80) && near(m.bust.suppressionCm, 0.2) && near(m.bust.finishedCm, 79.8), "13: 다트 폭을 **그 높이에서** 잰다(apex 에선 0)");
+  ok(near(m.bustEaseCm, 9.8) && near(m.waistEaseCm, 11), "13: 실측(baseSource) 대비 여유");
+  ok(m.bodyBustCm === 70 && m.bodyWaistCm === 64, "13: 실측은 DOM 이 아니라 baseSource.measurements");
+
+  // hem 연장처럼 waist 가 construction 으로 이동해도 같은 값
+  const mh = BC.girthMeasure(mk({ hemLike: true }));
+  ok(mh && mh.waistLineY === 30 && near(mh.waist.finishedCm, 75), "13: waist 가 construction 으로 옮겨가도 계측된다");
+
+  // designOutline(외곽 대체) 우선 — 앞 옆선을 5 안쪽으로 줄인 대체 외곽
+  const alt = { front: { outline: [L([40, 0], [40, 30], "center"), L([25, 10], [25, 30], "side-seam"),
+    L([40, 30], [25, 30], "waist"), L([40, 0], [25, 10])] } };
+  const md = BC.girthMeasure(mk({ designOutline: alt }));
+  ok(near(md.waist.outlineCm, 70), "13: designOutline 이 있으면 그쪽으로 잰다(앞 15 + 뒤 20)×2");
+
+  // 실측이 없으면 여유는 지어내지 않고 null
+  const mn = BC.girthMeasure(mk({ noMeasure: true }));
+  ok(mn.bustEaseCm === null && mn.waistEaseCm === null && mn.bodyWaistCm === null && mn.waist !== null,
+    "13: 실측 없으면 여유 null(둘레는 그대로 측정)");
+
+  // 순수성: 계측이 입력을 변형하지 않는다 · 결정론
+  const Pp = mk(), snap = JSON.stringify(Pp.working.geometry);
+  const a1 = JSON.stringify(BC.girthMeasure(Pp)), a2 = JSON.stringify(BC.girthMeasure(Pp));
+  ok(snap === JSON.stringify(Pp.working.geometry), "13: 입력 geometry 비변형");
+  ok(a1 === a2, "13: 결정론");
+
+  // 허리 edge 가 아예 없으면 허리는 null(0cm 으로 보이지 않는다)
+  const Pw = mk();
+  ["front", "back"].forEach(k => { Pw.working.geometry[k].outline = Pw.working.geometry[k].outline.filter(s => s.edge !== "waist"); });
+  const mw = BC.girthMeasure(Pw);
+  ok(mw.waist === null && mw.waistLineY === null && mw.bust !== null, "13: 허리 측정 불가는 null(가슴은 계속 측정)");
+  // 인자 없이 부르면 현재 project 로 떨어진다(다른 getter 와 같은 관례) — 현재도 없으면 null
+  { const keep = PROJECT; PROJECT = null;
+    ok(BC.girthMeasure(null) === null && BC.girthMeasure() === null, "13: project 가 아예 없으면 null");
+    PROJECT = keep; }
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

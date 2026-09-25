@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026092020">
+<link rel="stylesheet" href="css/style.css?v=2026092540">
 </head>
 <body>
 
@@ -214,6 +214,7 @@
         </div>
         <div class="row note" id="designBodyNote" aria-live="polite">허리선에서 엉덩이선까지 · 중심선 기준</div>
         <!-- 앞·뒤 옆선 봉제 길이 + 차이(봉제 정합 검증). 곡선화 반영 실측. -->
+        <div class="row note" id="designGirthNote" aria-live="polite"></div>
         <div class="row note" id="designSideLenNote" aria-live="polite"></div>
         <!-- 앞·뒤 목둘레 길이 + 합계(카라 단계 기준). parametric 네크라인 실측. -->
         <div class="row note" id="designNeckLenNote" aria-live="polite"></div>
@@ -419,7 +420,7 @@
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026091620"></script>
 <!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
-<script src="js/bodiceCheckpoint.js?v=2026092502"></script>
+<script src="js/bodiceCheckpoint.js?v=2026092540"></script>
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
 <script src="js/sleeveMeasure.js?v=2026082011"></script>
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
@@ -438,7 +439,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026092531"></script>
+<script src="js/ui.js?v=2026092540"></script>
 
 </body>
 </html>
