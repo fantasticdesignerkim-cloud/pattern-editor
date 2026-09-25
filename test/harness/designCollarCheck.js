@@ -979,7 +979,7 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   ok(typeof C.computeHood === "function" && C.HOOD_METHOD.methodPage === 151 && C.HOOD_METHOD.pages[0] === 74
     && C.HOOD_METHOD.piece === "half-cb-seam" && C.HOOD_STYLE.d === 0, "19: API·제도법 메타(P.74 · 제도 방법 P.151)");
   ok(h.ok && C.validateClosedOutline(h.geometry.outline).ok, "19: 한 조각 폐곡선(" + (h.reason || "") + ")");
-  if (!h.ok) { console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`); if (FAIL) process.exit(1); }
+  if (!h.ok) throw new Error("19: 후드 픽스처 생성 실패 — " + h.reason);   // 이후 검사가 h 에 의존한다
   const m = h.measure, a = h.anchors;
   ok(J(h.geometry.outline.map(s => s.part)) === J(["front-edge", "top-straight", "cb-seam", "cb-seam", "neck-seam", "neck-seam", "neck-seam"]),
     "19: 구성 = 앞 끝선 · 윗변 직선 · 뒤 중심선 · 달림선(뒤+앞)");
@@ -1068,6 +1068,113 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
       "19: 몸판·목둘레·의미 모서리 없음");
     // 반지름이 과대하면 앞 달림선 길이를 맞출 각도가 없다 → 정직하게 차단
     ok(bad({ snpRadiusCm: 40 }).reason === "attach-angle-unreachable", "19: 각도 해가 없으면 차단");
+  }
+}
+
+// 20. 교재 h·i(P.78·79 · 제도 방법 P.152–153) 테일러드 칼라 — 앞 몸판 위에 라펠 → 위 칼라.
+//   9교시 머리말: "칼라 폭은 일정하게 두고, **칼라 허리의 높이와 누임 치수를 변경한 2종류**".
+//   i 본문: "칼라 허리를 낮게 설정하면 칼라 외곽의 치수가 많이 필요하다. 그 치수를 확보하기 위해
+//   누임 치수를 6cm로 늘려서 칼라를 그린다." → h(3/2.5) ↔ i(1/6) 은 짝으로 움직인다.
+{
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  // 앞판: 앞 중심 x=40(+y 아래) · FNP(40,4) · SNP(32,−4) · SP(22,0) · 진동밑점(23,20.6) · 허리 y=38
+  const frontNeck = cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline");
+  const BACK_LEN = 8.5, FRONT_LEN = denseLen(frontNeck);
+  const body = () => ({ hash: "BTL", sourceVersion: 1,
+    necklineLengths: { back: BACK_LEN, front: FRONT_LEN, half: BACK_LEN + FRONT_LEN, finished: 2 * (BACK_LEN + FRONT_LEN) },
+    front: { outline: [ln([40, 4], [40, 38], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder"),
+      cub([22, 0], [24, 8], [23, 15], [23, 20.6], "armhole"), ln([23, 20.6], [23, 38], "side-seam"),
+      ln([23, 38], [40, 38], "waist")], construction: [] } });
+  const HP = { collarStandCm: 3, collarWidthCm: 4, lapelWidthCm: 8, layDownCm: 2.5, neckShiftCm: 1,
+    tipRadiusCm: 3, lapelBowCm: 0.5, frontNeckCm: 2, frontRiseCm: 1 };
+  const IP = Object.assign({}, HP, { collarStandCm: 1, layDownCm: 6, neckShiftCm: 0.6 });
+  const B = body(), h20 = C.computeTailoredCollar(B, HP), i20 = C.computeTailoredCollar(B, IP);
+
+  ok(typeof C.computeTailoredCollar === "function" && C.TAILORED_METHOD.methodPages.join() === "152,153"
+    && C.TAILORED_METHOD.shoulderExtensionCm === 0.7 && C.TAILORED_METHOD.breakPoint === "midpoint-of-BL-WL",
+    "20: API·제도법 메타(P.152–153 · 어깨선 연장 0.7 은 제도법 상수)");
+  ok(h20.ok && i20.ok && C.validateClosedOutline(h20.geometry.outline).ok && C.validateClosedOutline(i20.geometry.outline).ok,
+    "20: h·i 폐곡선 한 조각(" + [h20.reason, i20.reason].filter(Boolean).join() + ")");
+  if (!h20.ok || !i20.ok) throw new Error("20: 테일러드 픽스처 생성 실패");
+  ok(J(i20.geometry.outline.map(s => s.part)) === J(h20.geometry.outline.map(s => s.part)),
+    "20: 구성·primitive 순서는 h·i 동일(같은 제도)");
+
+  [[h20, HP, "h"], [i20, IP, "i"]].forEach(([r, P, tag]) => {
+    const m = r.measure, a = r.anchors;
+    // ① 길이 책임: 1-❺ 안내선이 뒤 목둘레이고 3 은 그 길이를 반지름으로 회전 → 뒤 달림선 = 뒤 목둘레
+    ok(near(m.backAttachLenCm, BACK_LEN, 1e-9) && near(m.backNeckLenCm, BACK_LEN, 1e-12),
+      "20: " + tag + " 뒤 칼라 달림선 = 몸판 뒤 목둘레(누여도 보존)");
+    // ② 4-❶ 뒤 중심선은 뒤 달림선에 **직각**, 칼라 허리 → 칼라 폭
+    {
+      const ad = sub(a.backAttachEnd, a.standPoint), cbd = sub(a.standTop, a.backAttachEnd);
+      ok(near(dot(ad, cbd) / (norm(ad) * norm(cbd)), 0, 1e-9), "20: " + tag + " 뒤 중심선 ⊥ 뒤 달림선");
+      ok(near(m.cbStandLenCm, P.collarStandCm, 1e-9) && near(m.cbWidthLenCm, P.collarWidthCm, 1e-9),
+        "20: " + tag + " 칼라 허리 " + P.collarStandCm + " · 칼라 폭 " + P.collarWidthCm);
+      const w = sub(a.outerTop, a.standTop);
+      ok(near(dot(w, cbd) / (norm(w) * norm(cbd)), 1, 1e-9), "20: " + tag + " 칼라 폭은 뒤 중심선을 이어 간다");
+    }
+    // ③ 2-❶ 라펠 폭은 꺾임선에 직각, 끝이 1-❼ 안내선 위
+    {
+      const fold = sub(a.standPoint, a.breakPoint), lw = sub(a.lapelTip, a.lapelFoot);
+      ok(near(dot(fold, lw) / (norm(fold) * norm(lw)), 0, 1e-9) && near(m.lapelWidthLenCm, P.lapelWidthCm, 1e-9),
+        "20: " + tag + " 라펠 폭 " + P.lapelWidthCm + " · 꺾임선에 직각");
+      const g = sub(a.lapelTip, a.sp), upv = sub(a.frontUp, a.sp);
+      ok(near(Math.abs(g.x * upv.y - g.y * upv.x) / (norm(g) * norm(upv)), 0, 1e-9),
+        "20: " + tag + " 라펠 끝은 1-❼ 안내선(SP–앞중심 올림) 위");
+    }
+    // ④ 5-❶ Point: 라펠끝·깃아귀·칼라끝이 한 변 = tipRadius 인 **정삼각형**
+    ok(near(m.collarTipToLapelCm, P.tipRadiusCm, 1e-9) && near(m.collarTipToGorgeCm, P.tipRadiusCm, 1e-9)
+      && near(m.lapelToGorgeCm, P.tipRadiusCm, 1e-9), "20: " + tag + " 칼라 끝 = 반지름 " + P.tipRadiusCm + " 정삼각형");
+    // ⑤ 꺾임 끝 = BL 과 WL 의 2등분(앞 중심선 위)
+    ok(near(a.breakPoint.x, a.fnp.x, 1e-9) && near(a.breakPoint.y, (a.bust.y + a.waist.y) / 2, 1e-9)
+      && near(m.breakPointFromBustCm, m.bustToWaistCm / 2, 1e-9), "20: " + tag + " 꺾임 끝 = BL~WL 2등분");
+    // ⑥ 1-❷❸ 어깨선 연장 위: Ⓐ = SNP + 칼라 허리 · 1-❸ 표기 = 칼라 허리 − 0.7
+    ok(near(norm(sub(a.standPoint, a.snp)), P.collarStandCm, 1e-9)
+      && near(m.standRemainderCm, P.collarStandCm - 0.7, 1e-9), "20: " + tag + " Ⓐ = SNP+칼라허리 · 1-❸ = 허리−0.7");
+    // ⑦ 몸판 파생(bodyLink)만 만들고 몸판 자체는 안 건드린다
+    ok(r.bodyLink && r.bodyLink.breakLine.length && r.bodyLink.lapelOutline.length
+      && r.bodyLink.frontNeckLine.length && r.bodyLink.shoulderExtension.length,
+      "20: " + tag + " 라펠·꺾임선·앞목둘레선은 bodyLink 파생");
+  });
+
+  // ⑧ 교재 h 도해에 **인쇄된 2.3** 이 규칙(허리 3 − 연장 0.7)으로 재현된다 — 판독 검증
+  ok(near(h20.measure.standRemainderCm, 2.3, 1e-9), "20: h 의 1-❸ 표기 2.3 재현(교재 인쇄값)");
+  // ⑨ i: 허리를 낮추면 누임이 커지고 회전각이 커진다(교재 인과)
+  ok(i20.measure.layDownAngleDeg > h20.measure.layDownAngleDeg && i20.measure.cbStandLenCm < h20.measure.cbStandLenCm,
+    "20: i 는 허리가 낮고 누임 회전각이 크다(" + h20.measure.layDownAngleDeg.toFixed(1) + "° → " + i20.measure.layDownAngleDeg.toFixed(1) + "°)");
+  // ⑩ 누임은 **호길이**라 회전각 = 누임/뒤목둘레
+  ok(near(h20.measure.layDownAngleDeg, HP.layDownCm / BACK_LEN * 180 / Math.PI, 1e-9),
+    "20: 누임 치수는 Ⓐ 중심 호길이(회전각 = 누임/뒤 목둘레)");
+  // ⑪ 라펠 폭·칼라 폭은 h·i 공통이라 결과도 같다
+  ok(near(i20.measure.lapelWidthLenCm, h20.measure.lapelWidthLenCm, 1e-9)
+    && near(i20.measure.cbWidthLenCm, h20.measure.cbWidthLenCm, 1e-9), "20: 라펠 폭·칼라 폭은 h·i 공통");
+
+  // ⑫ 결정론·입력 비변형
+  {
+    const snapB = J(B), snapP = J(HP);
+    ok(J(C.computeTailoredCollar(B, HP)) === J(h20) && J(B) === snapB && J(HP) === snapP, "20: 결정론·비변형");
+  }
+  // ⑬ 실패 계약
+  {
+    const bad = (P) => C.computeTailoredCollar(B, Object.assign({}, HP, P));
+    ok(bad({ collarStandCm: 0 }).reason === "invalid-collar-stand" && bad({ collarStandCm: 0.5 }).reason === "invalid-collar-stand",
+      "20: 칼라 허리 ≤ 어깨선 연장 0.7 거부(1-❸ ≤ 0)");
+    ok(bad({ collarWidthCm: 0 }).reason === "invalid-collar-width" && bad({ lapelWidthCm: 0 }).reason === "invalid-lapel-width"
+      && bad({ layDownCm: 0 }).reason === "invalid-lay-down" && bad({ tipRadiusCm: 0 }).reason === "invalid-tip-radius",
+      "20: 범위 밖 거부");
+    ok([bad({ collarStandCm: 0 }), bad({ layDownCm: -1 })].every(r => !("geometry" in r)), "20: 실패 시 형상 없음");
+    ok(C.computeTailoredCollar(null, HP).reason === "no-bodice"
+      && C.computeTailoredCollar({ necklineLengths: { back: 8, front: 11 } }, HP).reason === "no-body-neckline",
+      "20: 몸판 없음·의미 모서리 없음");
+    // 진동선·허리선이 없으면 BL·WL 을 못 찾는다 → 정직하게 차단
+    {
+      const noArm = body(); noArm.front.outline = noArm.front.outline.filter(s => s.edge !== "armhole");
+      ok(C.computeTailoredCollar(noArm, HP).reason === "no-body-armhole", "20: 진동선 없으면 BL 파생 불가로 차단");
+      const noWaist = body(); noWaist.front.outline = noWaist.front.outline.filter(s => s.edge !== "waist");
+      ok(C.computeTailoredCollar(noWaist, HP).reason === "no-body-waist", "20: 허리선 없으면 WL 파생 불가로 차단");
+    }
   }
 }
 

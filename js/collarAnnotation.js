@@ -569,6 +569,67 @@
       dims: dims, labels: labels, inputs: inputs, results: results };
   }
 
+  // ── 교재 h·i(P.78·79 · 제도 방법 P.152–153): 테일러드 칼라 — 앞 몸판 위에 라펠 → 위 칼라 ──
+  //   h·i 는 같은 제도라 표시 규칙도 하나다. 수치는 전부 parameters 에서 읽는다.
+  function tailoredRecipe(cd, bodice) {
+    var tp = (cd.parameters && cd.parameters.tailored) || {};
+    var tl = cd.tailored || null, ta = (tl && tl.anchors) || null, tm = (tl && tl.measure) || {};
+    var dims = [], labels = [];
+    if (ta) {
+      var snp = pt(ta.snp), sp = pt(ta.sp), A = pt(ta.standPoint), B2 = pt(ta.backAttachEnd);
+      var standTop = pt(ta.standTop), outerTop = pt(ta.outerTop);
+      var lapelTip = pt(ta.lapelTip), lapelFoot = pt(ta.lapelFoot), gorge = pt(ta.gorge), tip = pt(ta.collarTip);
+      var brk = pt(ta.breakPoint), bust = pt(ta.bust), waist = pt(ta.waist);
+      dim(dims, "collar-stand", "dim", B2, standTop, tp.collarStandCm);       // 4-❶ 칼라 허리
+      dim(dims, "collar-width", "dim", standTop, outerTop, tp.collarWidthCm); // 4-❶ 칼라 폭
+      dim(dims, "back-attach", "dim", A, B2, val(tm.backAttachLenCm));        // 3-❸ = 뒤 목둘레
+      dim(dims, "lapel-width", "dim", lapelFoot, lapelTip, tp.lapelWidthCm);  // 2-❶ 꺾임선에 직각
+      dim(dims, "shoulder-ext", "ref", snp, A, tp.collarStandCm);             // 1-❷❸ 어깨선 연장 위
+      dim(dims, "break-line", "ref", brk, A, null);                           // 1-❹ 꺾임선
+      dim(dims, "lapel-guide", "ref", sp, lapelTip, null);                    // 1-❼ 안내선
+      dim(dims, "bust-waist", "ref", bust, waist, val(tm.bustToWaistCm));     // 꺾임 끝 = 2등분
+      dim(dims, "tip-lapel", "dim", lapelTip, tip, tp.tipRadiusCm);           // 5-❶ 정삼각형
+      dim(dims, "tip-gorge", "dim", gorge, tip, tp.tipRadiusCm);
+      if (snp) labels.push({ id: "snp", at: snp, text: "SNP" });
+      if (A) labels.push({ id: "stand", at: A, text: "Ⓐ" });
+      if (B2) labels.push({ id: "back-end", at: B2, text: "Ⓑ'" });
+      if (brk) labels.push({ id: "break", at: brk, text: "꺾임 끝" });
+      if (gorge) labels.push({ id: "gorge", at: gorge, text: "깃아귀" });
+    }
+    var inputs = [
+      { key: "collarStandCm", label: "칼라 허리", value: val(tp.collarStandCm) },
+      { key: "collarWidthCm", label: "칼라 폭(뒤)", value: val(tp.collarWidthCm) },
+      { key: "lapelWidthCm", label: "라펠 폭", value: val(tp.lapelWidthCm) },
+      { key: "layDownCm", label: "누임 치수(★)", value: val(tp.layDownCm) },
+      { key: "neckShiftCm", label: "목둘레 이동량", value: val(tp.neckShiftCm) },
+      { key: "tipRadiusCm", label: "칼라 끝(반원 반지름)", value: val(tp.tipRadiusCm) },
+      { key: "lapelBowCm", label: "라펠 외형 휨", value: val(tp.lapelBowCm) },
+      { key: "frontNeckCm", label: "앞 목둘레선(깃아귀 방향)", value: val(tp.frontNeckCm) },
+      { key: "frontRiseCm", label: "앞 중심 올림", value: val(tp.frontRiseCm) }
+    ];
+    var nl = (bodice && bodice.necklineLengths) || {};
+    var backDiff = (num(tm.backAttachLenCm) && num(tm.backNeckLenCm)) ? tm.backAttachLenCm - tm.backNeckLenCm : null;
+    var results = [
+      { key: "neckBack", label: "몸판 뒤목(반쪽)", value: val(nl.back) },
+      { key: "backAttach", label: "뒤 칼라 달림선 실측", value: val(tm.backAttachLenCm) },
+      { key: "backDiff", label: "뒤 달림선 − 뒤 목둘레", value: backDiff,
+        status: backDiff == null ? null : (Math.abs(backDiff) <= SEAM_MATCH_TOL ? "match" : "mismatch") },
+      // 1-❸ 도해 표기(h 2.3)는 입력이 아니라 **칼라 허리 − 어깨선 연장 0.7** 파생이다.
+      { key: "standRemainder", label: "1-❸ 표기(칼라 허리 − " + (num(tm.shoulderExtensionCm) ? tm.shoulderExtensionCm : "연장") + ")", value: val(tm.standRemainderCm) },
+      { key: "layDownAngle", label: "누임 회전각(도 · 호길이 파생)", value: val(tm.layDownAngleDeg) },
+      { key: "cbStand", label: "칼라 허리 실측", value: val(tm.cbStandLenCm) },
+      { key: "cbWidth", label: "칼라 폭 실측", value: val(tm.cbWidthLenCm) },
+      { key: "lapelWidth", label: "라펠 폭 실측", value: val(tm.lapelWidthLenCm) },
+      { key: "tipTriangle", label: "칼라 끝 정삼각형 한 변(라펠끝→칼라끝)", value: val(tm.collarTipToLapelCm) },
+      { key: "bustWaist", label: "BL~WL(꺾임 끝은 2등분)", value: val(tm.bustToWaistCm) },
+      { key: "breakLine", label: "꺾임선 실측", value: val(tm.breakLineLenCm) },
+      { key: "outerLen", label: "칼라 외곽선 실측", value: val(tm.outerLenCm) }
+    ];
+    return { recipe: cd.baseMethod, mode: "parametric",
+      note: "앞 몸판 위에 라펠 → 위 칼라 순으로 제도 — 꺾임 끝은 BL과 WL의 2등분, 뒤 달림선은 뒤 목둘레를 누여서 만든다",
+      dims: dims, labels: labels, inputs: inputs, results: results };
+  }
+
   // ── 교재 T(P.69 하단): 플랫 칼라 — 어깨선을 3.5 겹쳐 한 장으로, 달림선은 0.5 올려 재작도 ──
   function tRecipe(cd, bodice) {
     var tp = (cd.parameters && cd.parameters.flatOverlap) || {};
@@ -702,6 +763,8 @@
     "bunka-frill-collar-b-v1": frillRecipe,
     "bunka-frill-collar-c-v1": frillRecipe,
     "bunka-hood-d-v1": hoodRecipe,
+    "bunka-tailored-collar-h-v1": tailoredRecipe,
+    "bunka-tailored-collar-i-v1": tailoredRecipe,
     "bunka-stand-collar-A-P146-v1": standaloneRecipe,
     "bunka-stand-collar-B-P146-v1": standaloneRecipe,
     "bunka-stand-collar-C-P146-v1": standaloneRecipe,
@@ -720,6 +783,7 @@
     var bow = collarDraft.type === "bow-collar";
     var frill = collarDraft.type === "frill-collar";
     var hood = collarDraft.type === "hood";
+    var tailored = collarDraft.type === "tailored-collar";
     if (onePiece ? !(collarDraft.onePiece && collarDraft.onePiece.geometry)
       : openCollar ? !(collarDraft.openCollar && collarDraft.openCollar.geometry)
         : wing ? !(collarDraft.standGeometry && collarDraft.tip && collarDraft.tip.geometry)
@@ -729,6 +793,7 @@
                 : bow ? !(collarDraft.bow && collarDraft.bow.geometry)
                   : frill ? !(collarDraft.frill && collarDraft.frill.geometry)
                     : hood ? !(collarDraft.hood && collarDraft.hood.geometry)
+                      : tailored ? !(collarDraft.tailored && collarDraft.tailored.geometry)
             : standalone ? !(collarDraft.standalone && collarDraft.standalone.geometry) : !collarDraft.standGeometry) return null;
     var fn = RECIPES[collarDraft.baseMethod];
     return fn ? fn(collarDraft, bodiceResult || null) : null;

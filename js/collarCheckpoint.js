@@ -13,6 +13,7 @@
 //   (윙 칼라 Q: 밴드·칼라 끝 폐곡선 + 달림선 = ×+⊘ + 칼라 끝 7·1.5·4.5 실측 일치) /
 //   (보 칼라 X·Y·Z: 직사각형 폐곡선 + 달림선 실측 = ×+⊠ + 리본 길이·칼라 폭 실측 일치) /
 //   (후드 d: 한 조각 폐곡선 + 앞·뒤 달림선 실측 = 몸판 앞목·뒤목 + 폭·길이 = 머리둘레·후드 치수 파생) /
+//   (테일러드 h·i: 폐곡선 + 뒤 달림선 = 뒤 목둘레 + 칼라 허리·폭·라펠 폭 + 칼라 끝 정삼각형 + 라펠 bodyLink) /
 //   body manual 이면 관리선 존재·invalid===false / gap(CB 제도 간격) 기록 / 위칼라 이음선 길이 = 밴드 기준 봉제 길이
 //   (= 밴드 윗선 ⒸⒹ 전체, 앞 끝선 연장 미포함 — P.148 step 3) / 실측·파라미터 유한. 실패 시 기존 collarResult·현재 geometry 불변.
 // ══════════════════════════════════════════════
@@ -62,6 +63,9 @@
   function isFrillCollar(cd) { return !!(cd && cd.type === "frill-collar"); }
   // family 8 후드(d, P.74 · 제도 방법 P.151): 앞 몸판 FNP 위에 직접 제도한 한 조각(뒤 중심 봉제).
   function isHood(cd) { return !!(cd && cd.type === "hood"); }
+  // family 9 테일러드 칼라(h·i, P.78·79 · 제도 방법 P.152–153): 앞 몸판 위에 라펠 → 위 칼라.
+  //   라펠·몸판 목둘레선은 bodyLink 파생이고 몸판 geometry 는 바뀌지 않는다.
+  function isTailored(cd) { return !!(cd && cd.type === "tailored-collar"); }
   function isStandalone(cd) { return !!(cd && cd.type === "stand-collar"); }
 
   // ── 검사 ──
@@ -254,6 +258,39 @@
         && hd.geometry.construction.some(function (s5) { return s5.part === "mid-guide"; }))) fails.push("hood-guide-missing");
       return { ok: fails.length === 0, fails: fails, _bodice: bodice, _hood: hdRe, _lengths: null, _stand: null };
     }
+    // ── 테일러드 칼라(family 9, h·i): 뒤 달림선 = 뒤 목둘레 · 칼라 허리·폭 · 라펠 폭 · 칼라 끝 정삼각형 ──
+    if (isTailored(cd)) {
+      var tl = cd.tailored;
+      if (!(tl && tl.geometry)) fails.push("no-tailored-collar");
+      else { var vtl = DC.validateClosedOutline(tl.geometry.outline); if (!vtl.ok) fails.push("tailored-" + vtl.reason); }
+      var tlRe = null;
+      if (bodice && cd.parameters && cd.parameters.tailored) {
+        tlRe = DC.computeTailoredCollar(bodice, cd.parameters.tailored);
+        if (!tlRe.ok) fails.push("tailored-recompute");
+      } else fails.push("no-collar-params");
+      var tm = tl && tl.measure, tp2 = cd.parameters && cd.parameters.tailored;
+      if (!(tm && tp2 && num(tm.backAttachLenCm) && num(tm.backNeckLenCm) && num(tm.cbStandLenCm)
+        && num(tm.cbWidthLenCm) && num(tm.lapelWidthLenCm) && num(tm.collarTipToLapelCm)
+        && num(tm.collarTipToGorgeCm) && num(tm.lapelToGorgeCm) && num(tm.standRemainderCm))) fails.push("unmeasured");
+      else {
+        // ★ 길이 책임: 1-❺ 안내선이 뒤 목둘레 치수이고 3 은 그 길이를 반지름으로 회전 → 뒤 달림선 = 뒤 목둘레
+        if (Math.abs(tm.backAttachLenCm - tm.backNeckLenCm) > 0.01) fails.push("back-attach-mismatch");
+        if (Math.abs(tm.cbStandLenCm - tp2.collarStandCm) > 0.01) fails.push("collar-stand-mismatch");
+        if (Math.abs(tm.cbWidthLenCm - tp2.collarWidthCm) > 0.01) fails.push("collar-width-mismatch");
+        if (Math.abs(tm.lapelWidthLenCm - tp2.lapelWidthCm) > 0.01) fails.push("lapel-width-mismatch");
+        // ★ 5-❶ Point: 라펠끝·칼라달림끝·칼라끝이 한 변 = tipRadiusCm 인 정삼각형
+        if (Math.abs(tm.collarTipToLapelCm - tp2.tipRadiusCm) > 0.01
+          || Math.abs(tm.collarTipToGorgeCm - tp2.tipRadiusCm) > 0.01
+          || Math.abs(tm.lapelToGorgeCm - tp2.tipRadiusCm) > 0.01) fails.push("collar-tip-mismatch");
+        // 1-❸ 표기 = 칼라 허리 − 어깨선 연장 0.7 (h 도해 2.3)
+        if (Math.abs(tm.standRemainderCm - (tp2.collarStandCm - tm.shoulderExtensionCm)) > 0.01) fails.push("stand-remainder-mismatch");
+      }
+      // 몸판 파생(라펠·꺾임선)은 있어야 한다 — 몸판 geometry 는 바꾸지 않되 출처는 남긴다
+      var bl = tl && tl.bodyLink;
+      if (!(bl && Array.isArray(bl.breakLine) && bl.breakLine.length
+        && Array.isArray(bl.lapelOutline) && bl.lapelOutline.length)) fails.push("lapel-link-missing");
+      return { ok: fails.length === 0, fails: fails, _bodice: bodice, _tailored: tlRe, _lengths: null, _stand: null };
+    }
     // ── 플랫 칼라 T(family 4): 겹침 3.5 · 달림선 재작도(몸판 목둘레보다 짧다) · 칼라 폭·앞 끝 ──
     if (isFlatOverlapCollar(cd)) {
       var ft = cd.flat;
@@ -432,6 +469,15 @@
         sym: res.symmetry
       });
     }
+    if (res.type === "tailored-collar") {
+      return JSON.stringify({
+        sbh: res.sourceBodiceHash, nk: res.necklineLengths,
+        tp: res.tailored.parameters, tg: canonGeom(res.tailored.geometry), tc: canonSegs((res.tailored.geometry || {}).construction),
+        tm: res.tailored.measures,
+        bk: canonSegs((res.tailored.bodyLink || {}).breakLine), lp: canonSegs((res.tailored.bodyLink || {}).lapelOutline),
+        sym: res.symmetry
+      });
+    }
     if (res.type === "flat-collar-overlap") {
       return JSON.stringify({
         sbh: res.sourceBodiceHash, nk: res.necklineLengths,
@@ -605,6 +651,25 @@
       proj.working.collarResult = hoodRes;
       return { ok: true, result: hoodRes, check: c };
     }
+    if (isTailored(cd)) {
+      var tailoredRes = {
+        schemaVersion: 1, type: "tailored-collar",
+        baseMethod: cd.baseMethod || null, presetId: cd.presetId || null,
+        sourceBodiceHash: cd.sourceBodiceHash,
+        sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+        necklineLengths: clone(bodice.necklineLengths),
+        // bodyLink = 라펠·꺾임선의 **몸판 프레임 파생 출처**. 몸판 geometry 는 변경하지 않는다.
+        tailored: { parameters: clone(cd.parameters.tailored), geometry: clone(cd.tailored.geometry),
+          measures: clone(cd.tailored.measure || {}), bodyLink: clone(cd.tailored.bodyLink || {}) },
+        symmetry: "half-cb-seam"   // 위 칼라는 뒤 중심 봉제(접어 재단 아님)
+      };
+      tailoredRes.hash = hashStr(signatureOf(tailoredRes));
+      var prevTl = proj.working.collarResult;
+      if (prevTl && prevTl.hash === tailoredRes.hash) return { ok: true, result: prevTl, idempotent: true, check: c };
+      tailoredRes.completedAt = Date.now(); deepFreeze(tailoredRes);
+      proj.working.collarResult = tailoredRes;
+      return { ok: true, result: tailoredRes, check: c };
+    }
     if (isFlatOverlapCollar(cd)) {
       var flatTRes = {
         schemaVersion: 1, type: "flat-collar-overlap",
@@ -775,6 +840,16 @@
         symmetry: "half-cb-seam" };
       return hashStr(signatureOf(curHood)) !== res.hash;
     }
+    if (isTailored(cd)) {
+      if (!cd.tailored || !cd.tailored.geometry || !cd.parameters || !cd.parameters.tailored) return true;
+      if (res.type !== "tailored-collar") return true;
+      var tlRecalc = DC.computeTailoredCollar(bodice, cd.parameters.tailored); if (!tlRecalc.ok) return true;
+      var curTl = { type: "tailored-collar", sourceBodiceHash: cd.sourceBodiceHash, necklineLengths: bodice.necklineLengths,
+        tailored: { parameters: cd.parameters.tailored, geometry: cd.tailored.geometry,
+          measures: cd.tailored.measure || {}, bodyLink: cd.tailored.bodyLink || {} },
+        symmetry: "half-cb-seam" };
+      return hashStr(signatureOf(curTl)) !== res.hash;
+    }
     if (isFlatOverlapCollar(cd)) {
       if (!cd.flat || !cd.flat.geometry || !cd.parameters || !cd.parameters.flatOverlap) return true;
       if (res.type !== "flat-collar-overlap") return true;
@@ -812,7 +887,7 @@
         symmetry: "half-cb-fold" };
       return hashStr(signatureOf(curStandalone)) !== res.hash;
     }
-    if (res.type === "shirt-one-piece" || res.type === "shirt-open-collar" || res.type === "shirt-wing-collar" || res.type === "shirt-band-one-piece" || res.type === "flat-collar" || res.type === "flat-collar-overlap" || res.type === "sailor-collar" || res.type === "bow-collar" || res.type === "frill-collar" || res.type === "hood" || res.type === "stand-collar") return true;   // 2피스 draft vs 다른 종류 완료본
+    if (res.type === "shirt-one-piece" || res.type === "shirt-open-collar" || res.type === "shirt-wing-collar" || res.type === "shirt-band-one-piece" || res.type === "flat-collar" || res.type === "flat-collar-overlap" || res.type === "sailor-collar" || res.type === "bow-collar" || res.type === "frill-collar" || res.type === "hood" || res.type === "tailored-collar" || res.type === "stand-collar") return true;   // 2피스 draft vs 다른 종류 완료본
     if (!cd.standGeometry || !cd.body || !cd.body.geometry) return true;               // 카라 형상 없음/숨김
     if (cd.body.mode === "manual" && cd.body.invalid) return true;                     // 무효 편집
     if (!cd.parameters || !cd.parameters.stand) return true;

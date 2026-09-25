@@ -675,5 +675,60 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
     "20: 기존 recipe 등록 유지");
 }
 
+// 21. 테일러드 칼라 h·i — 하나의 recipe 가 두 도해를 표시하고, 파생값은 결과로만 보고한다
+{
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  const frontNeck = cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline");
+  const dense = (s2) => { let t = 0, pr = s2.from; for (let k = 1; k <= 4000; k++) {
+    const u = 1 - k / 4000, tt = k / 4000;
+    const p = { x: u*u*u*s2.from.x + 3*u*u*tt*s2.c1.x + 3*u*tt*tt*s2.c2.x + tt*tt*tt*s2.to.x,
+                y: u*u*u*s2.from.y + 3*u*u*tt*s2.c1.y + 3*u*tt*tt*s2.c2.y + tt*tt*tt*s2.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const FL = dense(frontNeck), BKL = 8.5;
+  const tlBodice = (hash) => ({ hash: hash, sourceVersion: 1,
+    necklineLengths: { back: BKL, front: FL, half: BKL + FL, finished: 2 * (BKL + FL) },
+    front: { outline: [ln([40, 4], [40, 38], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder"),
+      cub([22, 0], [24, 8], [23, 15], [23, 20.6], "armhole"), ln([23, 20.6], [23, 38], "side-seam"),
+      ln([23, 38], [40, 38], "waist")], construction: [] } });
+  const TP = { collarStandCm: 3, collarWidthCm: 4, lapelWidthCm: 8, layDownCm: 2.5, neckShiftCm: 1,
+    tipRadiusCm: 3, lapelBowCm: 0.5, frontNeckCm: 2, frontRiseCm: 1 };
+  const IP = Object.assign({}, TP, { collarStandCm: 1, layDownCm: 6, neckShiftCm: 0.6 });
+  const TB = tlBodice("BTL");
+  const mk = (P, k) => {
+    const r = DC.computeTailoredCollar(TB, P);
+    return CA.buildModel({ sourceBodiceHash: "BTL", type: "tailored-collar", baseMethod: "bunka-tailored-collar-" + k + "-v1",
+      parameters: { tailored: P }, tailored: { geometry: r.geometry, measure: r.measure, anchors: r.anchors, bodyLink: r.bodyLink } }, TB);
+  };
+  const idx = (m) => { const o = { inputs: {}, results: {}, dims: {}, labels: {} };
+    m.inputs.forEach(r => { o.inputs[r.key] = r.value; });
+    m.results.forEach(r => { o.results[r.key] = r; });
+    m.dims.forEach(d => { o.dims[d.id] = d; });
+    m.labels.forEach(l => { o.labels[l.id] = l; });
+    return o; };
+  const mh = mk(TP, "h"), mi = mk(IP, "i");
+  const ih = idx(mh), ii = idx(mi);
+
+  ok(["h", "i"].every(k => CA.recipes().indexOf("bunka-tailored-collar-" + k + "-v1") >= 0)
+    && mh.recipe === "bunka-tailored-collar-h-v1", "21: h·i recipe 등록·출처 표기");
+  ok(ih.inputs.collarStandCm === 3 && ih.inputs.layDownCm === 2.5 && ih.inputs.lapelWidthCm === 8
+    && ii.inputs.collarStandCm === 1 && ii.inputs.layDownCm === 6, "21: 제도 입력값 9개(도해별 수치)");
+  ok(ih.dims["collar-stand"].text === 3 && ih.dims["collar-width"].text === 4
+    && ih.dims["lapel-width"].text === 8 && ih.dims["tip-lapel"].text === 3, "21: 허리·폭·라펠·칼라 끝 치수선");
+  ok(ih.dims["break-line"].kind === "ref" && ih.dims["lapel-guide"].kind === "ref" && ih.dims["bust-waist"].kind === "ref",
+    "21: 꺾임선·안내선·BL~WL 은 참조선");
+  ok(ih.labels.snp && ih.labels.stand && ih.labels.break && ih.labels.gorge, "21: SNP·Ⓐ·꺾임 끝·깃아귀 라벨");
+  // ★ 1-❸ 표기·누임 회전각은 입력이 아니라 파생 결과다
+  ok(!("standRemainderCm" in ih.inputs) && !("layDownAngleDeg" in ih.inputs)
+    && Math.abs(ih.results.standRemainder.value - 2.3) < 1e-9, "21: 1-❸ 표기 2.3 은 파생 결과(교재 인쇄값)");
+  ok(ih.results.backDiff.status === "match" && Math.abs(ih.results.backAttach.value - BKL) < 1e-6,
+    "21: 뒤 달림선 = 뒤 목둘레 정합 보고");
+  ok(ii.results.layDownAngle.value > ih.results.layDownAngle.value, "21: i 의 누임 회전각이 더 크다");
+  ok(mh.note === mi.note && /라펠/.test(mh.note) && /2등분/.test(mh.note), "21: 같은 제도 안내를 공유");
+  ok(CA.buildModel({ type: "tailored-collar", baseMethod: "bunka-tailored-collar-h-v1" }, TB) === null, "21: 형상 없으면 표시 없음");
+  ok(CA.recipes().indexOf("bunka-hood-d-v1") >= 0, "21: 기존 recipe 등록 유지");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

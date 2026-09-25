@@ -778,5 +778,76 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   BODICE = bodice("BH1");
 }
 
+// 18. 테일러드 칼라 h·i(P.78·79 · 제도 방법 P.152–153) — 길이 책임 · 정삼각형 칼라 끝 · bodyLink
+{
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  const frontNeck = cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline");
+  const dense = (s2) => { let t = 0, pr = s2.from; for (let k = 1; k <= 4000; k++) {
+    const u = 1 - k / 4000, tt = k / 4000;
+    const p = { x: u*u*u*s2.from.x + 3*u*u*tt*s2.c1.x + 3*u*tt*tt*s2.c2.x + tt*tt*tt*s2.to.x,
+                y: u*u*u*s2.from.y + 3*u*u*tt*s2.c1.y + 3*u*tt*tt*s2.c2.y + tt*tt*tt*s2.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const FL = dense(frontNeck), BKL = 8.5;
+  const tlBodice = (hash) => ({ hash: hash, sourceVersion: 1,
+    necklineLengths: { back: BKL, front: FL, half: BKL + FL, finished: 2 * (BKL + FL) },
+    front: { outline: [ln([40, 4], [40, 38], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder"),
+      cub([22, 0], [24, 8], [23, 15], [23, 20.6], "armhole"), ln([23, 20.6], [23, 38], "side-seam"),
+      ln([23, 38], [40, 38], "waist")], construction: [] } });
+  const TP = { collarStandCm: 3, collarWidthCm: 4, lapelWidthCm: 8, layDownCm: 2.5, neckShiftCm: 1,
+    tipRadiusCm: 3, lapelBowCm: 0.5, frontNeckCm: 2, frontRiseCm: 1 };
+  BODICE = tlBodice("BTL1");
+  const mk = (P, k) => {
+    const tl = DC.computeTailoredCollar(tlBodice("BTL1"), P);
+    return { sourceBodiceHash: "BTL1", type: "tailored-collar", baseMethod: "bunka-tailored-collar-" + k + "-v1",
+      presetId: "bunka-tailored-collar-" + k, parameters: { tailored: Object.assign({}, P) },
+      tailored: { geometry: tl.geometry, measure: tl.measure, anchors: tl.anchors, bodyLink: tl.bodyLink } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  PROJECT = proj(mk(TP, "h"));
+  ok(CC.check(PROJECT).ok, "18: h 초안이 완료 게이트 통과(" + CC.check(PROJECT).fails.join(",") + ")");
+  const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.type === "tailored-collar" && Object.isFrozen(r.result.tailored)
+    && r.result.symmetry === "half-cb-seam", "18: h 완료 스냅샷(뒤 중심 봉제)");
+  ok(r.result.tailored.bodyLink && Object.isFrozen(r.result.tailored.bodyLink)
+    && r.result.tailored.bodyLink.breakLine.length, "18: 라펠·꺾임선 bodyLink 가 스냅샷에 남는다");
+  ok(!("stand" in r.result) && !("hood" in r.result) && !("flat" in r.result), "18: 다른 family 섹션 없음");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "18: 완료 직후 미변경");
+  const again = CC.complete(PROJECT);
+  ok(again.ok && again.idempotent === true && again.result === r.result, "18: 재완료 idempotent");
+
+  // 게이트
+  const badBack = mk(TP, "h"); badBack.tailored.measure.backAttachLenCm += 0.2;
+  ok(CC.check(proj(badBack)).fails.indexOf("back-attach-mismatch") >= 0, "18: 뒤 달림선 ≠ 뒤 목둘레 차단");
+  const badStand = mk(TP, "h"); badStand.tailored.measure.cbStandLenCm += 0.2;
+  ok(CC.check(proj(badStand)).fails.indexOf("collar-stand-mismatch") >= 0, "18: 칼라 허리 불일치 차단");
+  const badW = mk(TP, "h"); badW.tailored.measure.cbWidthLenCm += 0.2;
+  ok(CC.check(proj(badW)).fails.indexOf("collar-width-mismatch") >= 0, "18: 칼라 폭 불일치 차단");
+  const badLap = mk(TP, "h"); badLap.tailored.measure.lapelWidthLenCm += 0.2;
+  ok(CC.check(proj(badLap)).fails.indexOf("lapel-width-mismatch") >= 0, "18: 라펠 폭 불일치 차단");
+  const badTip = mk(TP, "h"); badTip.tailored.measure.collarTipToGorgeCm += 0.2;
+  ok(CC.check(proj(badTip)).fails.indexOf("collar-tip-mismatch") >= 0, "18: 칼라 끝 정삼각형 깨지면 차단");
+  const badRem = mk(TP, "h"); badRem.tailored.measure.standRemainderCm += 0.2;
+  ok(CC.check(proj(badRem)).fails.indexOf("stand-remainder-mismatch") >= 0, "18: 1-❸ 표기 불일치 차단");
+  const noBl = mk(TP, "h"); noBl.tailored.bodyLink = { breakLine: [], lapelOutline: [] };
+  ok(CC.check(proj(noBl)).fails.indexOf("lapel-link-missing") >= 0, "18: 라펠 파생 기록 없음 차단");
+  const noTl = mk(TP, "h"); delete noTl.tailored;
+  ok(CC.check(proj(noTl)).fails.indexOf("no-tailored-collar") >= 0, "18: 형상 없음 차단");
+  const badParams = mk(TP, "h"); badParams.parameters.tailored.collarStandCm = 0.5;
+  ok(CC.check(proj(badParams)).fails.indexOf("tailored-recompute") >= 0, "18: 재계산 불가 파라미터 차단");
+
+  // i 와 hash 분리 · 종류 분리
+  const IP = Object.assign({}, TP, { collarStandCm: 1, layDownCm: 6, neckShiftCm: 0.6 });
+  const rI = CC.complete(proj(mk(IP, "i")));
+  ok(rI.ok && rI.result.hash !== r.result.hash, "18: i 는 h 와 hash 분리");
+  {
+    const pj = proj(mk(TP, "h")); const done = CC.complete(pj);
+    pj.working.collarResult = Object.assign({}, pj.working.collarResult, { type: "hood" });
+    ok(done.ok && CC.isCurrentCollarChanged(pj) === true, "18: 완료본 종류가 다르면 변경됨");
+  }
+  BODICE = bodice("BH1");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }
