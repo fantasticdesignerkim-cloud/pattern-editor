@@ -1,5 +1,8 @@
 # 교재 페이지 색인 — 어느 노트를 열지 고르는 표
 
+> **이 표의 쪽번호는 전부 [패턴학교]**(`패턴학교-상의편.pdf`)다. 원형의 근거인 [학교책]은 별개의
+> 문헌이며 [SCHOOL-BLOCK.md](SCHOOL-BLOCK.md) 에 있다 — 출처 구분은 [README.md](README.md) 참고.
+
 규칙·도구 사용법은 [README.md](README.md). **실행 수치의 단일 진실은 `js/collarPresets.js` 레코드**이고
 이 표는 "어디를 보면 되는가"만 가리킨다.
 
