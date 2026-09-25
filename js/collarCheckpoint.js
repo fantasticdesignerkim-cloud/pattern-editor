@@ -12,6 +12,7 @@
 //   (오픈 칼라 L: 한 조각 폐곡선 + 달림선 실측 = ×+⊘ + 몸판 꺾임선 출처 존재) /
 //   (윙 칼라 Q: 밴드·칼라 끝 폐곡선 + 달림선 = ×+⊘ + 칼라 끝 7·1.5·4.5 실측 일치) /
 //   (보 칼라 X·Y·Z: 직사각형 폐곡선 + 달림선 실측 = ×+⊠ + 리본 길이·칼라 폭 실측 일치) /
+//   (후드 d: 한 조각 폐곡선 + 앞·뒤 달림선 실측 = 몸판 앞목·뒤목 + 폭·길이 = 머리둘레·후드 치수 파생) /
 //   body manual 이면 관리선 존재·invalid===false / gap(CB 제도 간격) 기록 / 위칼라 이음선 길이 = 밴드 기준 봉제 길이
 //   (= 밴드 윗선 ⒸⒹ 전체, 앞 끝선 연장 미포함 — P.148 step 3) / 실측·파라미터 유한. 실패 시 기존 collarResult·현재 geometry 불변.
 // ══════════════════════════════════════════════
@@ -59,6 +60,8 @@
   function isBowCollar(cd) { return !!(cd && cd.type === "bow-collar"); }
   // family 7 프릴 칼라(a·b·c): 개더형 또는 절개·전개형 한 조각.
   function isFrillCollar(cd) { return !!(cd && cd.type === "frill-collar"); }
+  // family 8 후드(d, P.74 · 제도 방법 P.151): 앞 몸판 FNP 위에 직접 제도한 한 조각(뒤 중심 봉제).
+  function isHood(cd) { return !!(cd && cd.type === "hood"); }
   function isStandalone(cd) { return !!(cd && cd.type === "stand-collar"); }
 
   // ── 검사 ──
@@ -218,6 +221,38 @@
         }
       }
       return { ok: fails.length === 0, fails: fails, _bodice: bodice, _frill: fcRe, _lengths: null, _stand: null };
+    }
+    // ── 후드(family 8, d): 달림선 실측 = 앞목 + 뒤목(교재 "이 제도의 포인트") · 폭·길이 파생 · 뒤 중심선 ──
+    if (isHood(cd)) {
+      var hd = cd.hood;
+      if (!(hd && hd.geometry)) fails.push("no-hood");
+      else { var vhd = DC.validateClosedOutline(hd.geometry.outline); if (!vhd.ok) fails.push("hood-" + vhd.reason); }
+      var hdRe = null;
+      if (bodice && cd.parameters && cd.parameters.hood) {
+        hdRe = DC.computeHood(bodice, cd.parameters.hood);
+        if (!hdRe.ok) fails.push("hood-recompute");
+      } else fails.push("no-collar-params");
+      var hm = hd && hd.measure, hp = cd.parameters && cd.parameters.hood;
+      if (!(hm && hp && num(hm.attachLenCm) && num(hm.neckTargetCm) && num(hm.frontAttachLenCm)
+        && num(hm.backAttachLenCm) && num(hm.hoodWidthCm) && num(hm.hoodLengthCm)
+        && num(hm.snpRadiusLenCm) && num(hm.topStraightLenCm))) fails.push("unmeasured");
+      else {
+        // ★ 길이 책임: 앞·뒤 달림선이 각각 몸판 앞목·뒤목과 같아야 한다(늘려 박는 분 없음)
+        if (Math.abs(hm.frontAttachLenCm - hm.bodyFrontNeckLenCm) > 0.01) fails.push("front-attach-mismatch");
+        if (Math.abs(hm.backAttachLenCm - hm.backNeckLenCm) > 0.01) fails.push("back-attach-mismatch");
+        if (Math.abs(hm.attachLenCm - hm.neckTargetCm) > 0.01) fails.push("attach-length-mismatch");
+        // 폭·길이는 머리 둘레·후드 치수에서 파생된 값이어야 한다(교재 공식)
+        if (Math.abs(hm.hoodWidthCm - (hp.headCircumferenceCm / 2 + hp.widthOffsetCm)) > 0.01) fails.push("hood-width-mismatch");
+        if (Math.abs(hm.hoodLengthCm - (hp.hoodMeasureCm + hp.lengthOffsetCm)) > 0.01) fails.push("hood-length-mismatch");
+        if (Math.abs(hm.frontEdgeLenCm - hm.hoodLengthCm) > 0.01) fails.push("hood-length-mismatch");
+        if (Math.abs(hm.topStraightLenCm - hp.topStraightCm) > 0.01) fails.push("top-straight-mismatch");
+        if (Math.abs(hm.snpRadiusLenCm - hp.snpRadiusCm) > 0.01) fails.push("snp-radius-mismatch");
+      }
+      // 1-❸ 뒤 중심 안내선 · 3-❸ 2등분점 안내선
+      if (!(hd && hd.geometry && Array.isArray(hd.geometry.construction)
+        && hd.geometry.construction.some(function (s4) { return s4.part === "cb-guide"; })
+        && hd.geometry.construction.some(function (s5) { return s5.part === "mid-guide"; }))) fails.push("hood-guide-missing");
+      return { ok: fails.length === 0, fails: fails, _bodice: bodice, _hood: hdRe, _lengths: null, _stand: null };
     }
     // ── 플랫 칼라 T(family 4): 겹침 3.5 · 달림선 재작도(몸판 목둘레보다 짧다) · 칼라 폭·앞 끝 ──
     if (isFlatOverlapCollar(cd)) {
@@ -389,6 +424,14 @@
         sym: res.symmetry
       });
     }
+    if (res.type === "hood") {
+      return JSON.stringify({
+        sbh: res.sourceBodiceHash, nk: res.necklineLengths,
+        hp: res.hood.parameters, hg: canonGeom(res.hood.geometry), hc: canonSegs((res.hood.geometry || {}).construction),
+        hm: res.hood.measures,
+        sym: res.symmetry
+      });
+    }
     if (res.type === "flat-collar-overlap") {
       return JSON.stringify({
         sbh: res.sourceBodiceHash, nk: res.necklineLengths,
@@ -544,6 +587,23 @@
       frillRes.completedAt = Date.now(); deepFreeze(frillRes);
       proj.working.collarResult = frillRes;
       return { ok: true, result: frillRes, check: c };
+    }
+    if (isHood(cd)) {
+      var hoodRes = {
+        schemaVersion: 1, type: "hood",
+        baseMethod: cd.baseMethod || null, presetId: cd.presetId || null,   // 출처 메타 — signatureOf 미포함
+        sourceBodiceHash: cd.sourceBodiceHash,
+        sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+        necklineLengths: clone(bodice.necklineLengths),
+        hood: { parameters: clone(cd.parameters.hood), geometry: clone(cd.hood.geometry), measures: clone(cd.hood.measure || {}) },
+        symmetry: "half-cb-seam"   // ★ 후드는 접어 재단이 아니라 **뒤 중심 봉제**(중심에서 이어준다)
+      };
+      hoodRes.hash = hashStr(signatureOf(hoodRes));
+      var prevHood = proj.working.collarResult;
+      if (prevHood && prevHood.hash === hoodRes.hash) return { ok: true, result: prevHood, idempotent: true, check: c };
+      hoodRes.completedAt = Date.now(); deepFreeze(hoodRes);
+      proj.working.collarResult = hoodRes;
+      return { ok: true, result: hoodRes, check: c };
     }
     if (isFlatOverlapCollar(cd)) {
       var flatTRes = {
@@ -706,6 +766,15 @@
         symmetry: "half-cb-fold" };
       return hashStr(signatureOf(curFrill)) !== res.hash;
     }
+    if (isHood(cd)) {
+      if (!cd.hood || !cd.hood.geometry || !cd.parameters || !cd.parameters.hood) return true;
+      if (res.type !== "hood") return true;
+      var hoodRecalc = DC.computeHood(bodice, cd.parameters.hood); if (!hoodRecalc.ok) return true;
+      var curHood = { type: "hood", sourceBodiceHash: cd.sourceBodiceHash, necklineLengths: bodice.necklineLengths,
+        hood: { parameters: cd.parameters.hood, geometry: cd.hood.geometry, measures: cd.hood.measure || {} },
+        symmetry: "half-cb-seam" };
+      return hashStr(signatureOf(curHood)) !== res.hash;
+    }
     if (isFlatOverlapCollar(cd)) {
       if (!cd.flat || !cd.flat.geometry || !cd.parameters || !cd.parameters.flatOverlap) return true;
       if (res.type !== "flat-collar-overlap") return true;
@@ -743,7 +812,7 @@
         symmetry: "half-cb-fold" };
       return hashStr(signatureOf(curStandalone)) !== res.hash;
     }
-    if (res.type === "shirt-one-piece" || res.type === "shirt-open-collar" || res.type === "shirt-wing-collar" || res.type === "shirt-band-one-piece" || res.type === "flat-collar" || res.type === "flat-collar-overlap" || res.type === "sailor-collar" || res.type === "bow-collar" || res.type === "frill-collar" || res.type === "stand-collar") return true;   // 2피스 draft vs 다른 종류 완료본
+    if (res.type === "shirt-one-piece" || res.type === "shirt-open-collar" || res.type === "shirt-wing-collar" || res.type === "shirt-band-one-piece" || res.type === "flat-collar" || res.type === "flat-collar-overlap" || res.type === "sailor-collar" || res.type === "bow-collar" || res.type === "frill-collar" || res.type === "hood" || res.type === "stand-collar") return true;   // 2피스 draft vs 다른 종류 완료본
     if (!cd.standGeometry || !cd.body || !cd.body.geometry) return true;               // 카라 형상 없음/숨김
     if (cd.body.mode === "manual" && cd.body.invalid) return true;                     // 무효 편집
     if (!cd.parameters || !cd.parameters.stand) return true;

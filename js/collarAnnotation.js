@@ -515,6 +515,60 @@
       dims: dims, labels: labels, inputs: inputs, results: results };
   }
 
+  // ── 교재 d(P.74 · 제도 방법 P.151): 후드 — 앞 몸판 FNP 위에 직접 제도한 한 조각 ──
+  //   수치는 전부 parameters 에서 읽는다. 폭·길이는 머리 둘레·후드 치수에서 파생된 값이라 결과로 보고한다.
+  function hoodRecipe(cd, bodice) {
+    var hp = (cd.parameters && cd.parameters.hood) || {};
+    var hd = cd.hood || null, ha = (hd && hd.anchors) || null, hm = (hd && hd.measure) || {};
+    var dims = [], labels = [];
+    if (ha) {
+      var fnp = pt(ha.fnp), frontTop = pt(ha.frontTop), topBack = pt(ha.topBack);
+      var topEnd = pt(ha.topStraightEnd), corner = pt(ha.corner), cbBottom = pt(ha.cbBottom);
+      var B = pt(ha.attachJoin), A = pt(ha.frontMid), snp = pt(ha.snp), gm2 = pt(ha.guideMid2);
+      dim(dims, "hood-length", "dim", fnp, frontTop, val(hm.hoodLengthCm));      // ❶ 앞 끝선 = 후드 길이
+      dim(dims, "hood-width", "dim", frontTop, topBack, val(hm.hoodWidthCm));    // ❷ 후드 폭
+      dim(dims, "top-straight", "dim", frontTop, topEnd, hp.topStraightCm);      // 윗변 직선 8
+      dim(dims, "corner-curve", "ref", topBack, corner, hp.cornerCurveCm);       // 뒤 위 모서리 대각 6.5
+      dim(dims, "snp-radius", "dim", snp, B, hp.snpRadiusCm);                    // 2-❷ SNP 기준 반원
+      dim(dims, "cb-guide", "ref", pt(ha.cbGuideBottom), topBack, null);         // 1-❸ 뒤 중심 안내선
+      dim(dims, "mid-guide", "ref", pt(ha.guideMid1), gm2, null);                // 3-❸ 2등분점 안내선
+      dim(dims, "back-attach", "dim", cbBottom, B, val(hm.backAttachLenCm));     // 3-❶ 뒤 목둘레 치수
+      if (fnp) labels.push({ id: "fnp", at: fnp, text: "FNP" });
+      if (snp) labels.push({ id: "snp", at: snp, text: "SNP" });
+      if (A) labels.push({ id: "mid-front", at: A, text: "Ⓐ" });
+      if (B) labels.push({ id: "attach-join", at: B, text: "Ⓑ" });
+    }
+    var inputs = [
+      { key: "headCircumferenceCm", label: "머리 둘레", value: val(hp.headCircumferenceCm) },
+      { key: "hoodMeasureCm", label: "후드 치수", value: val(hp.hoodMeasureCm) },
+      { key: "widthOffsetCm", label: "후드 폭 보정(머리둘레/2 에서)", value: val(hp.widthOffsetCm) },
+      { key: "lengthOffsetCm", label: "후드 길이 보정(후드 치수에서)", value: val(hp.lengthOffsetCm) },
+      { key: "topStraightCm", label: "윗변 직선(앞 위 모서리에서)", value: val(hp.topStraightCm) },
+      { key: "cornerCurveCm", label: "뒤 위 모서리 곡선(대각)", value: val(hp.cornerCurveCm) },
+      { key: "snpRadiusCm", label: "SNP 기준 반원 반지름(Ⓑ)", value: val(hp.snpRadiusCm) }
+    ];
+    var nl = (bodice && bodice.necklineLengths) || {};
+    var attachDiff = (num(hm.attachLenCm) && num(hm.neckTargetCm)) ? hm.attachLenCm - hm.neckTargetCm : null;
+    var results = [
+      { key: "hoodWidth", label: "후드 폭(머리둘레/2 + 보정)", value: val(hm.hoodWidthCm) },
+      { key: "hoodLength", label: "후드 길이(후드 치수 + 보정)", value: val(hm.hoodLengthCm) },
+      { key: "neckBack", label: "몸판 뒤목(반쪽)", value: val(nl.back) },
+      { key: "neckFront", label: "몸판 앞목(반쪽)", value: val(nl.front) },
+      { key: "frontAttach", label: "앞 달림선 실측", value: val(hm.frontAttachLenCm) },
+      { key: "backAttach", label: "뒤 달림선 실측", value: val(hm.backAttachLenCm) },
+      { key: "attachLen", label: "달림선 실측 합계", value: val(hm.attachLenCm) },
+      { key: "attachDiff", label: "달림선 − 몸판 목둘레", value: attachDiff,
+        status: attachDiff == null ? null : (Math.abs(attachDiff) <= SEAM_MATCH_TOL ? "match" : "mismatch") },
+      // Ⓑ 각도·뒤 달림선 처짐은 입력이 아니라 **길이 책임을 맞춘 결과**다(교재 도해 처짐 표기 0.6).
+      { key: "snpAngle", label: "Ⓑ 방향각(도 · 길이로 결정)", value: val(hm.snpAngleDeg) },
+      { key: "backBow", label: "뒤 달림선 처짐(파생 · 교재 도해 0.6)", value: val(hm.backSeamBowCm) },
+      { key: "cbLen", label: "뒤 중심선 실측", value: val(hm.cbLenCm) }
+    ];
+    return { recipe: cd.baseMethod, mode: "parametric",
+      note: "앞 몸판 FNP 위에 직접 제도 — 앞뒤 몸판 목둘레와 같은 치수가 되도록 달림선을 그리고 뒤 중심선 곡선으로 마무리한다",
+      dims: dims, labels: labels, inputs: inputs, results: results };
+  }
+
   // ── 교재 T(P.69 하단): 플랫 칼라 — 어깨선을 3.5 겹쳐 한 장으로, 달림선은 0.5 올려 재작도 ──
   function tRecipe(cd, bodice) {
     var tp = (cd.parameters && cd.parameters.flatOverlap) || {};
@@ -647,6 +701,7 @@
     "bunka-frill-collar-a-v1": frillRecipe,
     "bunka-frill-collar-b-v1": frillRecipe,
     "bunka-frill-collar-c-v1": frillRecipe,
+    "bunka-hood-d-v1": hoodRecipe,
     "bunka-stand-collar-A-P146-v1": standaloneRecipe,
     "bunka-stand-collar-B-P146-v1": standaloneRecipe,
     "bunka-stand-collar-C-P146-v1": standaloneRecipe,
@@ -664,6 +719,7 @@
     var sailor = collarDraft.type === "sailor-collar";
     var bow = collarDraft.type === "bow-collar";
     var frill = collarDraft.type === "frill-collar";
+    var hood = collarDraft.type === "hood";
     if (onePiece ? !(collarDraft.onePiece && collarDraft.onePiece.geometry)
       : openCollar ? !(collarDraft.openCollar && collarDraft.openCollar.geometry)
         : wing ? !(collarDraft.standGeometry && collarDraft.tip && collarDraft.tip.geometry)
@@ -672,6 +728,7 @@
               : sailor ? !(collarDraft.sailor && collarDraft.sailor.geometry)
                 : bow ? !(collarDraft.bow && collarDraft.bow.geometry)
                   : frill ? !(collarDraft.frill && collarDraft.frill.geometry)
+                    : hood ? !(collarDraft.hood && collarDraft.hood.geometry)
             : standalone ? !(collarDraft.standalone && collarDraft.standalone.geometry) : !collarDraft.standGeometry) return null;
     var fn = RECIPES[collarDraft.baseMethod];
     return fn ? fn(collarDraft, bodiceResult || null) : null;

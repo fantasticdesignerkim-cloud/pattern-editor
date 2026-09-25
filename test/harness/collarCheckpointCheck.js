@@ -700,5 +700,83 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   BODICE = bodice("BH1");
 }
 
+// 17. 후드 d(P.74 · 제도 방법 P.151) — 달림선 = 앞목+뒤목 · 폭·길이 파생 · 안내선 · 뒤 중심 봉제
+{
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  const frontNeck = cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline");
+  const dense = (s2) => { let t = 0, pr = s2.from; for (let i = 1; i <= 4000; i++) {
+    const u = 1 - i / 4000, tt = i / 4000;
+    const p = { x: u*u*u*s2.from.x + 3*u*u*tt*s2.c1.x + 3*u*tt*tt*s2.c2.x + tt*tt*tt*s2.to.x,
+                y: u*u*u*s2.from.y + 3*u*u*tt*s2.c1.y + 3*u*tt*tt*s2.c2.y + tt*tt*tt*s2.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const FL = dense(frontNeck), BL = 8.5;
+  const hoodBodice = (hash) => ({ hash: hash, sourceVersion: 1,
+    necklineLengths: { back: BL, front: FL, half: BL + FL, finished: 2 * (BL + FL) },
+    front: { outline: [ln([40, 4], [40, 40], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } });
+  BODICE = hoodBodice("BHD1");
+  const HP = { styleCode: 0, headCircumferenceCm: 56, hoodMeasureCm: 39, widthOffsetCm: -3, lengthOffsetCm: 5,
+    topStraightCm: 8, cornerCurveCm: 6.5, snpRadiusCm: 4 };
+  const mk = () => {
+    const hd = DC.computeHood(hoodBodice("BHD1"), HP);
+    return { sourceBodiceHash: "BHD1", type: "hood", baseMethod: "bunka-hood-d-v1", presetId: "bunka-hood-d",
+      parameters: { hood: Object.assign({}, HP) },
+      hood: { geometry: hd.geometry, measure: hd.measure, anchors: hd.anchors } };
+  };
+  const proj = (cd) => ({ sourceBlock: { id: "block-1", version: 1, canonicalHash: "CH1" }, working: { collarDraft: cd, patternLines: [], collarResult: null } });
+  PROJECT = proj(mk());
+  ok(CC.check(PROJECT).ok, "17: d 초안이 완료 게이트 통과(" + CC.check(PROJECT).fails.join(",") + ")");
+  const r = CC.complete(PROJECT);
+  ok(r.ok && r.result.type === "hood" && Object.isFrozen(r.result.hood)
+    && JSON.stringify(r.result.hood.parameters) === JSON.stringify(HP), "17: d 완료 스냅샷");
+  // ★ 후드는 "중심에서 이어준다" — 접어 재단(half-cb-fold)이 아니라 뒤 중심 봉제다
+  ok(r.result.symmetry === "half-cb-seam", "17: 뒤 중심 **봉제**(접어 재단 아님)");
+  ok(!("stand" in r.result) && !("body" in r.result) && !("frill" in r.result) && !("bow" in r.result),
+    "17: 다른 family 섹션을 만들지 않는다");
+  ok(CC.isCurrentCollarChanged(PROJECT) === false, "17: 완료 직후 미변경");
+  const again = CC.complete(PROJECT);
+  ok(again.ok && again.idempotent === true && again.result === r.result, "17: 재완료 idempotent(같은 참조)");
+
+  // 게이트 — 길이 책임
+  const badFront = mk(); badFront.hood.measure.frontAttachLenCm += 0.2;
+  ok(CC.check(proj(badFront)).fails.indexOf("front-attach-mismatch") >= 0, "17: 앞 달림선 ≠ 몸판 앞목 차단");
+  const badBack = mk(); badBack.hood.measure.backAttachLenCm += 0.2;
+  ok(CC.check(proj(badBack)).fails.indexOf("back-attach-mismatch") >= 0, "17: 뒤 달림선 ≠ 몸판 뒤목 차단");
+  const badSum = mk(); badSum.hood.measure.attachLenCm += 0.3;
+  ok(CC.check(proj(badSum)).fails.indexOf("attach-length-mismatch") >= 0, "17: 달림선 합계 불일치 차단");
+  // 게이트 — 파생 공식
+  const badW = mk(); badW.hood.measure.hoodWidthCm += 0.5;
+  ok(CC.check(proj(badW)).fails.indexOf("hood-width-mismatch") >= 0, "17: 후드 폭이 머리 둘레 파생값과 다르면 차단");
+  const badLn = mk(); badLn.hood.measure.hoodLengthCm += 0.5;
+  ok(CC.check(proj(badLn)).fails.indexOf("hood-length-mismatch") >= 0, "17: 후드 길이가 후드 치수 파생값과 다르면 차단");
+  const badTop = mk(); badTop.hood.measure.topStraightLenCm += 0.5;
+  ok(CC.check(proj(badTop)).fails.indexOf("top-straight-mismatch") >= 0, "17: 윗변 직선 불일치 차단");
+  const badR = mk(); badR.hood.measure.snpRadiusLenCm += 0.5;
+  ok(CC.check(proj(badR)).fails.indexOf("snp-radius-mismatch") >= 0, "17: SNP 반원 반지름 불일치 차단");
+  // 게이트 — 형상·안내선·재계산
+  const noHd = mk(); delete noHd.hood;
+  ok(CC.check(proj(noHd)).fails.indexOf("no-hood") >= 0, "17: 형상 없음 차단");
+  const noGuide = mk(); noGuide.hood.geometry = Object.assign({}, noGuide.hood.geometry, { construction: [] });
+  ok(CC.check(proj(noGuide)).fails.indexOf("hood-guide-missing") >= 0, "17: 안내선 없음 차단");
+  const badParams = mk(); badParams.parameters.hood.styleCode = 2;
+  ok(CC.check(proj(badParams)).fails.indexOf("hood-recompute") >= 0, "17: 미구현 도해 파라미터 차단");
+
+  // 편집값이 형상 identity 에 들어간다 · 종류 분리
+  {
+    const alt = mk(); alt.parameters.hood.hoodMeasureCm = 42;
+    const re = DC.computeHood(hoodBodice("BHD1"), alt.parameters.hood);
+    alt.hood.geometry = re.geometry; alt.hood.measure = re.measure;
+    const rAlt = CC.complete(proj(alt));
+    ok(rAlt.ok && rAlt.result.hash !== r.result.hash, "17: 후드 치수가 다르면 hash 분리");
+  }
+  {
+    const pj = proj(mk()); const done = CC.complete(pj);
+    pj.working.collarResult = Object.assign({}, pj.working.collarResult, { type: "flat-collar" });
+    ok(done.ok && CC.isCurrentCollarChanged(pj) === true, "17: 완료본 종류가 다르면 변경됨");
+  }
+  BODICE = bodice("BH1");
+}
+
 console.log(`collarCheckpointCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

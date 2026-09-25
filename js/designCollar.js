@@ -1712,6 +1712,191 @@
         outerLenCm: outerLen, cbWidthLenCm: W, frontWidthLenCm: W }, anchors: anchors };
   }
 
+  // ── 후드(교재 d, P.74 · 제도 방법 P.151) ──
+  // 판독 근거(PDF 직접 판독):
+  //   P.74 본문 "앞 몸판 중심의 목둘레에서 위로 후드 길이를 잡고, 거기서 뒤로 후드 폭을 잡는다.
+  //     다음에 앞뒤 몸판의 목둘레와 **같은 치수가 되도록** 후드 달림선을 그린다. 뒤 중심선의 곡선을 그리면 완성."
+  //   P.151 머리말 "이 제도의 포인트는 앞뒤 몸판의 목둘레와 같은 치수가 되도록 후드 달림선을 그리는 것."
+  //   ※ 괄호 안 치수는 **후드 치수 39 · 머리 둘레 56** 인 경우 — d: 폭 25 = 머리둘레/2−3, 길이 44 = 후드치수+5.
+  //   1 ❶ 앞 끝선을 긋고 후드 길이를 잡는다(FNP에서 곧게 올린다) ❷ 직각으로 후드 폭 ❸ 직각으로 뒤 중심 안내선
+  //   2 ❶ (앞)목둘레를 2등분 → Ⓐ  ❷ SNP를 기준점으로 반원  ❸ 완만한 곡선으로 앞 달림선(Ⓐ~SNP와 같은 치수로 Ⓑ)
+  //     ❹ 뒤 달림선의 안내선(Ⓑ에서 수평으로 연장)
+  //   3 ❶ 뒤 목둘레 치수를 잡는다 ❷ 뒤 중심 안내선을 2등분 ❸ 안내선(❶·❷의 2등분점 연결)
+  //     ❹ 뒤 달림선(❸에 직각, 완만한 곡선으로 앞 달림선에 연결) ❺ 뒤 중심선(각 포인트를 잇는 완만한 곡선)
+  //   도해 수치: 윗변 직선 8(앞 위 모서리에서) · 모서리 6.5(뒤 위 모서리 대각) · 뒤 달림선 처짐 0.6.
+  //   도해의 1(SNP 올림)·1(앞 목점 내림)·1.5(여밈)는 **몸판 셔츠 목선·앞여밈 수치**이고 후드 수치가 아니다.
+  // ★ Ⓑ는 SNP에서 반지름 `snpRadiusCm`(도해 4) 위에 있다. 원 위 **어느 각도인지**는 교재가 수치로 주지 않으므로,
+  //   교재가 "이 제도의 포인트"라고 못박은 길이 책임으로 푼다 — 앞 달림선 실측 = 몸판 앞 목둘레가 되는 각도.
+  //   같은 이유로 C(뒤 달림선 끝)는 뒤 달림선 실측 = 몸판 뒤 목둘레가 되는 지점으로 푼다.
+  //   **이분 탐색으로 길이를 맞추는 방식은 밴드 칼라 ⑭(solveCbCorrection)와 같은 구현 관례**이고 교재 수치가 아니다.
+  // ★ 몸판은 바꾸지 않는다 — 앞 목둘레선·FNP·SNP를 읽기만 한다.
+  // 로컬 프레임: FNP = 원점, +x = 뒤(앞 중심선에서 몸판 안쪽), +y = 아래(앞 중심선 방향). 위 = −y.
+  var HOOD_METHOD = { pages: [74], methodPage: 151, piece: "half-cb-seam", bodyLinked: true,
+    widthFormula: "head/2 + widthOffset", lengthFormula: "hoodMeasure + lengthOffset",
+    attachLengthRule: "front = body front neck, back = body back neck",
+    solve: "snp-angle + cb-bottom by bisection", smoothing: "tangent-continuous-cubic",
+    handleFraction: SEAM_HANDLE_FRACTION };
+  // 교재 순서(d·e·f·g)의 자리. e(1)·f(2)·g(3)는 **제도 구조가 d와 달라** 여기서 만들지 않는다:
+  //   e = 중심에 덧천(별도 조각) · f = 앞 끝 윤곽선이 큰 곡선(앞 중심 7 세움) · g = 턱~정수리 대각 이음선.
+  var HOOD_STYLE = { d: 0 };
+  var HOOD_SOLVE_STEPS = 60;         // 이분 탐색 반복(길이 1e-9cm 수렴)
+
+  // 세 점을 지나는 완만한 곡선(중점에서 접선 연속, 핸들 = 각 반현 × 1/3). bowedGuide 와 같은 관례.
+  function smoothVia(P0, M, P1, part) {
+    var chord = sub(P1, P0), cl = Math.hypot(chord.x, chord.y);
+    if (!(cl > 1e-9)) return null;
+    var u = { x: chord.x / cl, y: chord.y / cl };
+    var h1 = lineLen(P0, M) * SEAM_HANDLE_FRACTION, h2 = lineLen(M, P1) * SEAM_HANDLE_FRACTION;
+    if (!(h1 > 1e-12) || !(h2 > 1e-12)) return null;
+    var u0 = unit(sub(M, P0)), u1 = unit(sub(P1, M));
+    return [
+      { kind: "cubic", from: cp(P0), c1: add(P0, u0, h1), c2: add(M, u, -h1), to: cp(M), part: part },
+      { kind: "cubic", from: cp(M), c1: add(M, u, h2), c2: add(P1, u1, -h2), to: cp(P1), part: part }
+    ];
+  }
+  // 시작 접선을 지정한 단일 cubic(끝 접선은 현). ❹ "❸에 직각으로 출발" 용.
+  function tangentCurve(P0, dir0, P1, part) {
+    var chord = sub(P1, P0), cl = Math.hypot(chord.x, chord.y);
+    if (!(cl > 1e-9)) return null;
+    var h = cl * SEAM_HANDLE_FRACTION, u = { x: chord.x / cl, y: chord.y / cl };
+    return { kind: "cubic", from: cp(P0), c1: add(P0, dir0, h), c2: add(P1, u, -h), to: cp(P1), part: part };
+  }
+
+  // params: { styleCode, headCircumferenceCm, hoodMeasureCm, widthOffsetCm, lengthOffsetCm,
+  //           topStraightCm, cornerCurveCm, snpRadiusCm }
+  //   실패: no-bodice / no-neckline / 몸판 의미 모서리 실패 / invalid-hood-style / invalid-head-circumference /
+  //     invalid-hood-measure / invalid-hood-width / invalid-hood-length / invalid-top-straight /
+  //     invalid-corner-curve / invalid-snp-radius / attach-angle-unreachable /
+  //     back-attach-unreachable / self-intersection.
+  function computeHood(bodiceResult, params) {
+    var b = readBodice(bodiceResult); if (!b.ok) return b;
+    var P = params || {}, style = P.styleCode;
+    var HC = P.headCircumferenceCm, HM = P.hoodMeasureCm;
+    var WO = P.widthOffsetCm, LO = P.lengthOffsetCm;
+    var TS = P.topStraightCm, CCv = P.cornerCurveCm, SR = P.snpRadiusCm;
+    if (style !== HOOD_STYLE.d) return { ok: false, reason: "invalid-hood-style" };
+    if (!num(HC) || HC <= 0) return { ok: false, reason: "invalid-head-circumference" };
+    if (!num(HM) || HM <= 0) return { ok: false, reason: "invalid-hood-measure" };
+    if (!num(WO) || !num(LO)) return { ok: false, reason: "invalid-hood-width" };
+    if (!num(TS) || TS <= 0) return { ok: false, reason: "invalid-top-straight" };
+    if (!num(CCv) || CCv <= 0) return { ok: false, reason: "invalid-corner-curve" };
+    if (!num(SR) || SR <= 0) return { ok: false, reason: "invalid-snp-radius" };
+    var W = HC / 2 + WO, Lh = HM + LO;
+    if (!(W > 0)) return { ok: false, reason: "invalid-hood-width" };
+    if (!(Lh > 0)) return { ok: false, reason: "invalid-hood-length" };
+    if (!(TS < W)) return { ok: false, reason: "invalid-top-straight" };
+    if (!(CCv * Math.SQRT1_2 < W && CCv * Math.SQRT1_2 < Lh)) return { ok: false, reason: "invalid-corner-curve" };
+
+    var fr = bodiceSeamFrame(bodiceResult, "front"); if (!fr.ok) return fr;
+    // 프레임: FNP 원점, +x = 뒤(앞 중심선에서 몸판 안쪽), +y = 아래(앞 중심선 방향).
+    var down = fr.centerDir, nPerp = { x: down.y, y: -down.x };
+    var back = (nPerp.x * (fr.snp.x - fr.neckPoint.x) + nPerp.y * (fr.snp.y - fr.neckPoint.y)) >= 0
+      ? nPerp : { x: -nPerp.x, y: -nPerp.y };
+    var toFrame = function (p) {
+      var dx = p.x - fr.neckPoint.x, dy = p.y - fr.neckPoint.y;
+      return { x: dx * back.x + dy * back.y, y: dx * down.x + dy * down.y };
+    };
+    var mapSeg = function (s) {
+      return s.kind === "line" ? { kind: "line", from: toFrame(s.from), to: toFrame(s.to) }
+        : { kind: "cubic", from: toFrame(s.from), c1: toFrame(s.c1), c2: toFrame(s.c2), to: toFrame(s.to) };
+    };
+    var neckChain = fr.chain.map(mapSeg);                 // FNP → SNP (프레임)
+    var neckLen = sumMeasure(neckChain);
+    if (!(neckLen > 0)) return { ok: false, reason: "no-body-neckline" };
+    var SNP = toFrame(fr.snp);
+    if (!(SNP.x > 0)) return { ok: false, reason: "no-body-neckline" };
+    // 2-❶ 앞 목둘레 2등분점 Ⓐ
+    var halfPath = subpathByLength(neckChain, neckLen / 2);
+    var A = cp(halfPath[halfPath.length - 1].to);
+
+    var FNP = { x: 0, y: 0 };                             // ❶ 앞 끝선은 FNP 에서 곧게 올린다
+    var frontTop = { x: 0, y: -Lh }, topBack = { x: W, y: -Lh };
+
+    // 2-❷❸ Ⓑ: SNP 중심 반지름 SR 위. 각도 φ(+x=뒤 → +y=아래)는 **앞 달림선 실측 = 몸판 앞 목둘레**로 푼다.
+    var bAt = function (phi) { return { x: SNP.x + SR * Math.cos(phi), y: SNP.y + SR * Math.sin(phi) }; };
+    var frontAt = function (phi) { return smoothVia(FNP, A, bAt(phi), "neck-seam"); };
+    var frontLenAt = function (phi) { var s = frontAt(phi); return s ? sumMeasure(s) : NaN; };
+    var lo = 0, hi = Math.PI / 2, fLo = frontLenAt(lo), fHi = frontLenAt(hi);
+    // φ 가 커질수록 Ⓑ 가 Ⓐ 쪽으로 내려와 앞 달림선이 짧아진다(단조).
+    if (!(num(fLo) && num(fHi) && fHi <= b.frontCm && b.frontCm <= fLo)) return { ok: false, reason: "attach-angle-unreachable" };
+    for (var i = 0; i < HOOD_SOLVE_STEPS; i++) {
+      var mPhi = (lo + hi) / 2;
+      if (frontLenAt(mPhi) > b.frontCm) lo = mPhi; else hi = mPhi;
+    }
+    var phi = (lo + hi) / 2, B = bAt(phi), frontAttach = frontAt(phi);
+    if (!frontAttach) return { ok: false, reason: "attach-angle-unreachable" };
+
+    // 2-❹ Ⓑ에서 수평(=프레임 x 축)으로 뒤 달림선 안내선 → 뒤 중심 안내선의 아래 끝이 정해진다.
+    var cbGuideBottom = { x: W, y: B.y };
+    var guideMid2 = { x: W, y: (-Lh + B.y) / 2 };         // 3-❷ 뒤 중심 안내선 2등분점
+    // 3-❶❸❹ C: Ⓑ에서 뒤로 t. ❸(❶·❷ 2등분점 연결)에 직각으로 출발하는 완만한 곡선의 실측 = 몸판 뒤 목둘레.
+    var backAt = function (t) {
+      var C = { x: B.x + t, y: B.y };
+      var m1 = { x: B.x + t / 2, y: B.y };                // 3-❶ 뒤 목둘레 구간의 2등분점
+      var g = sub(guideMid2, m1), gl = Math.hypot(g.x, g.y);
+      if (!(gl > 1e-9)) return null;
+      var perp = { x: -g.y / gl, y: g.x / gl };           // ❸에 직각
+      if (perp.y > 0) perp = { x: -perp.x, y: -perp.y };  // 뒤 중심선 쪽(위)으로 출발
+      var seg = tangentCurve(C, { x: -perp.x, y: -perp.y }, B, "neck-seam");   // C → Ⓑ
+      return seg ? { C: C, m1: m1, seg: seg } : null;
+    };
+    var backLenAt = function (t) { var r = backAt(t); return r ? segMeasure(r.seg) : NaN; };
+    var tLo = 1e-6, tHi = b.backCm * 2 + W + Lh;
+    if (!(num(backLenAt(tLo)) && num(backLenAt(tHi)) && backLenAt(tLo) <= b.backCm && b.backCm <= backLenAt(tHi)))
+      return { ok: false, reason: "back-attach-unreachable" };
+    for (var j = 0; j < HOOD_SOLVE_STEPS; j++) {
+      var mT = (tLo + tHi) / 2;
+      if (backLenAt(mT) < b.backCm) tLo = mT; else tHi = mT;
+    }
+    var back0 = backAt((tLo + tHi) / 2);
+    if (!back0) return { ok: false, reason: "back-attach-unreachable" };
+    var C0 = back0.C;
+
+    // 1-❷ 윗변 직선 8 → 3-❺ 뒤 중심선(윗변 끝 · 뒤 위 모서리 대각 6.5 · C 를 잇는 완만한 곡선)
+    var topEnd = { x: TS, y: -Lh };
+    var corner = { x: W - CCv * Math.SQRT1_2, y: -Lh + CCv * Math.SQRT1_2 };
+    var cbLine = smoothVia(topEnd, corner, C0, "cb-seam");
+    if (!cbLine) return { ok: false, reason: "invalid-corner-curve" };
+
+    var outline = [];
+    outline.push(L(FNP, frontTop, "front-edge"));                     // ❶ 앞 끝선(얼굴 쪽)
+    outline.push(L(frontTop, topEnd, "top-straight"));                // 윗변 직선 8
+    cbLine.forEach(function (s) { outline.push(s); });                // 뒤 중심선
+    outline.push(back0.seg);                                          // 뒤 달림선 C → Ⓑ
+    frontAttach.slice().reverse().forEach(function (s) { outline.push(reverseCubic(s, "neck-seam")); });   // Ⓑ → Ⓐ → 앞 끝
+    var closed = validateClosedOutline(outline);
+    if (!closed.ok) return { ok: false, reason: closed.reason };
+
+    var construction = [
+      L(cbGuideBottom, topBack, "cb-guide"),              // 1-❸ 뒤 중심 안내선
+      L(back0.m1, guideMid2, "mid-guide")                 // 3-❸ 2등분점을 잇는 안내선
+    ];
+    var by = function (part) { return outline.filter(function (s) { return s.part === part; }); };
+    var frontLen = sumMeasure(by("neck-seam")) - segMeasure(back0.seg);
+    var backLen = segMeasure(back0.seg);
+    // 뒤 달림선 처짐(도해 0.6): 현에서 가장 멀어진 거리 — 입력이 아니라 **파생 실측**이다.
+    var bow = 0, fl = flattenSeg(back0.seg);
+    for (var k = 0; k < fl.length; k++) bow = Math.max(bow, distPtLine(fl[k], C0, B));
+    return { ok: true,
+      geometry: { outline: outline, construction: construction },
+      measure: {
+        styleCode: style, headCircumferenceCm: HC, hoodMeasureCm: HM,
+        widthOffsetCm: WO, lengthOffsetCm: LO, topStraightCm: TS, cornerCurveCm: CCv,
+        snpRadiusCm: SR,
+        hoodWidthCm: W, hoodLengthCm: Lh,
+        backNeckLenCm: b.backCm, bodyFrontNeckLenCm: b.frontCm, bodyNeckChainLenCm: neckLen,
+        neckTargetCm: b.backCm + b.frontCm,
+        frontAttachLenCm: frontLen, backAttachLenCm: backLen, attachLenCm: frontLen + backLen,
+        snpRadiusLenCm: lineLen(SNP, B), snpAngleDeg: phi * 180 / Math.PI,
+        backSeamBowCm: bow,
+        frontEdgeLenCm: sumMeasure(by("front-edge")),
+        topStraightLenCm: sumMeasure(by("top-straight")), cbLenCm: sumMeasure(by("cb-seam"))
+      },
+      anchors: { fnp: cp(FNP), frontTop: cp(frontTop), topBack: cp(topBack),
+        topStraightEnd: cp(topEnd), corner: cp(corner), cbBottom: cp(C0), attachJoin: cp(B),
+        frontMid: cp(A), snp: cp(SNP), cbGuideBottom: cp(cbGuideBottom), guideMid1: cp(back0.m1), guideMid2: cp(guideMid2) } };
+  }
+
   function validateClosedOutline(outline) {
     if (!Array.isArray(outline) || outline.length < 3) return { ok: false, reason: "empty" };
     for (var i = 0; i < outline.length; i++) { var nx = outline[(i + 1) % outline.length]; if (!nx.from || !outline[i].to || lineLen(outline[i].to, nx.from) > 1e-4) return { ok: false, reason: "not-closed" }; }
@@ -1739,6 +1924,9 @@
     BOW_COLLAR_METHOD: BOW_COLLAR_METHOD,
     computeFrillCollar: computeFrillCollar,       // family 7(프릴 칼라 a·b·c, P.72–73)
     FRILL_COLLAR_METHOD: FRILL_COLLAR_METHOD,
+    computeHood: computeHood,                     // family 8(후드 d, P.74 · 제도 방법 P.151)
+    HOOD_METHOD: HOOD_METHOD,
+    HOOD_STYLE: HOOD_STYLE,
     FLAT_COLLAR_T_METHOD: FLAT_COLLAR_T_METHOD,
     FLAT_COLLAR_S_METHOD: FLAT_COLLAR_S_METHOD,
     BAND_ONE_PIECE_METHOD: BAND_ONE_PIECE_METHOD,

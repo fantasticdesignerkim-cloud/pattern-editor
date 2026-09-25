@@ -956,5 +956,120 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   }
 }
 
+// 19. 교재 d(P.74 · 제도 방법 P.151) 후드 — 앞 몸판 FNP 위에 직접 제도한 한 조각.
+//   판독 근거: P.74 "앞 몸판 중심의 목둘레에서 위로 후드 길이를 잡고, 거기서 뒤로 후드 폭을 잡는다.
+//   다음에 앞뒤 몸판의 목둘레와 **같은 치수가 되도록** 후드 달림선을 그린다."
+//   ※ 괄호 치수는 후드 치수 39 · 머리 둘레 56 인 경우 — 폭 25 = 56/2−3, 길이 44 = 39+5.
+{
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  // 앞 중심 x=40(아래로 +y) · FNP(40,4) · SNP(32,−4) · 어깨 SNP→(22,0)
+  const frontNeck = cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline");
+  const backNeck = cub([0, 0], [3, 0], [6, -1], [8, -2], "neckline");
+  const BACK_LEN = denseLen(backNeck), FRONT_LEN = denseLen(frontNeck);
+  const body = () => ({ hash: "BHOOD", sourceVersion: 1,
+    necklineLengths: { back: BACK_LEN, front: FRONT_LEN, half: BACK_LEN + FRONT_LEN, finished: 2 * (BACK_LEN + FRONT_LEN) },
+    back: { outline: [ln([0, 0], [0, 40], "center"), backNeck, ln([8, -2], [18, 2], "shoulder")], construction: [] },
+    front: { outline: [ln([40, 4], [40, 40], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } });
+  const DP = { styleCode: 0, headCircumferenceCm: 56, hoodMeasureCm: 39, widthOffsetCm: -3, lengthOffsetCm: 5,
+    topStraightCm: 8, cornerCurveCm: 6.5, snpRadiusCm: 4 };
+  const B = body(), h = C.computeHood(B, DP);
+
+  ok(typeof C.computeHood === "function" && C.HOOD_METHOD.methodPage === 151 && C.HOOD_METHOD.pages[0] === 74
+    && C.HOOD_METHOD.piece === "half-cb-seam" && C.HOOD_STYLE.d === 0, "19: API·제도법 메타(P.74 · 제도 방법 P.151)");
+  ok(h.ok && C.validateClosedOutline(h.geometry.outline).ok, "19: 한 조각 폐곡선(" + (h.reason || "") + ")");
+  if (!h.ok) { console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`); if (FAIL) process.exit(1); }
+  const m = h.measure, a = h.anchors;
+  ok(J(h.geometry.outline.map(s => s.part)) === J(["front-edge", "top-straight", "cb-seam", "cb-seam", "neck-seam", "neck-seam", "neck-seam"]),
+    "19: 구성 = 앞 끝선 · 윗변 직선 · 뒤 중심선 · 달림선(뒤+앞)");
+
+  // ① 교재 공식: 폭 = 머리둘레/2 + 보정 · 길이 = 후드 치수 + 보정 (예시 25 · 44)
+  ok(near(m.hoodWidthCm, 25, 1e-12) && near(m.hoodLengthCm, 44, 1e-12), "19: 폭 25 = 56/2−3 · 길이 44 = 39+5");
+  ok(near(a.fnp.x, 0, 1e-12) && near(a.fnp.y, 0, 1e-12) && near(a.frontTop.x, 0, 1e-12) && near(a.frontTop.y, -44, 1e-12)
+    && near(a.topBack.x, 25, 1e-12) && near(a.topBack.y, -44, 1e-12), "19: ❶ FNP에서 곧게 올린 앞 끝선 → ❷ 직각으로 후드 폭");
+  ok(near(partLen(h.geometry, "front-edge"), 44, 1e-9) && near(m.frontEdgeLenCm, 44, 1e-9), "19: 앞 끝선 실측 = 후드 길이");
+
+  // ② 길이 책임(교재가 "이 제도의 포인트"라고 못박은 것): 앞·뒤 달림선 = 몸판 앞목·뒤목
+  ok(near(m.frontAttachLenCm, FRONT_LEN, 1e-6) && near(m.backAttachLenCm, BACK_LEN, 1e-6),
+    "19: 앞·뒤 달림선 실측 = 몸판 앞목·뒤목");
+  ok(near(m.attachLenCm, m.neckTargetCm, 1e-6) && near(m.neckTargetCm, BACK_LEN + FRONT_LEN, 1e-12),
+    "19: 달림선 합계 = 앞뒤 몸판 목둘레(늘려 박는 분 없음)");
+  ok(near(partLen(h.geometry, "neck-seam"), BACK_LEN + FRONT_LEN, 1e-3), "19: 달림선 독립 측정도 목둘레와 일치");
+
+  // ③ 2-❷ Ⓑ 는 SNP 중심 반지름 4 위 · 2-❶ Ⓐ 는 앞 목둘레 2등분점
+  ok(near(m.snpRadiusLenCm, 4, 1e-9) && near(Math.hypot(a.attachJoin.x - a.snp.x, a.attachJoin.y - a.snp.y), 4, 1e-9),
+    "19: Ⓑ = SNP 기준 반원(반지름 4) 위");
+  ok(m.snpAngleDeg > 0 && m.snpAngleDeg < 90, "19: Ⓑ 방향각은 뒤·아래 사분면(" + m.snpAngleDeg.toFixed(2) + "°)");
+  {
+    // Ⓐ 가 실제로 앞 목둘레의 2등분점인지 — 프레임 밖에서 독립 확인(FNP→Ⓐ 호길이 = 전체/2)
+    const half = FRONT_LEN / 2;
+    const dFnpA = Math.hypot(a.frontMid.x - a.fnp.x, a.frontMid.y - a.fnp.y);
+    ok(dFnpA > 0 && dFnpA < half + 1e-6, "19: Ⓐ 는 FNP 와 2등분 호길이 사이(현 ≤ 호)");
+  }
+
+  // ④ 1-❷ 윗변 직선 8(앞 위 모서리에서) · 3-❺ 뒤 위 모서리 대각 6.5
+  ok(near(m.topStraightLenCm, 8, 1e-9) && near(a.topStraightEnd.x, 8, 1e-12) && near(a.topStraightEnd.y, -44, 1e-12),
+    "19: 윗변 직선 8 은 앞 위 모서리에서");
+  ok(near(Math.hypot(a.corner.x - a.topBack.x, a.corner.y - a.topBack.y), 6.5, 1e-9)
+    && near(a.corner.x, 25 - 6.5 * Math.SQRT1_2, 1e-9) && near(a.corner.y, -44 + 6.5 * Math.SQRT1_2, 1e-9),
+    "19: 뒤 위 모서리에서 대각 6.5 지점을 지난다");
+
+  // ⑤ 2-❹ Ⓑ 에서 수평 → 뒤 중심 안내선의 아래 끝 · 3-❸ 2등분점 안내선
+  ok(near(a.cbGuideBottom.x, 25, 1e-12) && near(a.cbGuideBottom.y, a.attachJoin.y, 1e-12),
+    "19: 뒤 중심 안내선 아래 끝 = Ⓑ 수평선 위");
+  ok(near(a.guideMid2.x, 25, 1e-12) && near(a.guideMid2.y, (-44 + a.attachJoin.y) / 2, 1e-9),
+    "19: 3-❷ 뒤 중심 안내선 2등분점");
+  ok(near(a.guideMid1.y, a.attachJoin.y, 1e-12) && near(a.guideMid1.x, (a.attachJoin.x + a.cbBottom.x) / 2, 1e-9),
+    "19: 3-❶ 뒤 목둘레 구간의 2등분점");
+  ok(J(h.geometry.construction.map(s => s.part)) === J(["cb-guide", "mid-guide"]), "19: 안내선 두 개(❸·❸)");
+
+  // ⑥ 뒤 달림선은 ❸ 안내선에 직각으로 출발한다(3-❹)
+  {
+    const seg = h.geometry.outline.filter(s => s.part === "neck-seam")[0];   // C → Ⓑ
+    const t0 = sub(seg.c1, seg.from), g = sub(a.guideMid2, a.guideMid1);
+    ok(near(dot(t0, g) / (norm(t0) * norm(g)), 0, 1e-9), "19: 뒤 달림선은 ❸ 안내선에 직각으로 출발");
+  }
+  // ⑦ 뒤 달림선 처짐은 입력이 아니라 파생 실측 — 교재 도해 표기 0.6 근처여야 구성이 맞다
+  ok(m.backSeamBowCm > 0.3 && m.backSeamBowCm < 0.9, "19: 뒤 달림선 처짐 " + m.backSeamBowCm.toFixed(3) + "cm (교재 도해 0.6)");
+  // ⑧ C(뒤 달림선 끝)는 뒤 중심 안내선 **안쪽**(도해와 같은 자리)
+  ok(a.cbBottom.x < 25 && a.cbBottom.x > a.attachJoin.x && near(a.cbBottom.y, a.attachJoin.y, 1e-12),
+    "19: C 는 Ⓑ 수평선 위 · 뒤 중심 안내선 안쪽");
+
+  // ⑨ 몸판 치수가 바뀌면 달림선만 따라가고 폭·길이·윗변은 그대로(몸판을 바꾸지 않는 파생)
+  {
+    const wide = C.computeHood(body(), Object.assign({}, DP, { headCircumferenceCm: 60, hoodMeasureCm: 42 }));
+    ok(wide.ok && near(wide.measure.hoodWidthCm, 27, 1e-12) && near(wide.measure.hoodLengthCm, 47, 1e-12)
+      && near(wide.measure.attachLenCm, wide.measure.neckTargetCm, 1e-6), "19: 머리 둘레·후드 치수만 바꿔도 길이 책임 유지");
+  }
+
+  // ⑩ 결정론·입력 비변형
+  {
+    const snapB = J(B), snapP = J(DP);
+    ok(J(C.computeHood(B, DP)) === J(h) && J(B) === snapB && J(DP) === snapP, "19: 결정론·몸판/파라미터 비변형");
+  }
+
+  // ⑪ 실패 계약(형상 없음) — e·f·g 도해는 제도 구조가 달라 거부한다
+  {
+    const bad = (P) => C.computeHood(B, Object.assign({}, DP, P));
+    ok(bad({ styleCode: 1 }).reason === "invalid-hood-style" && bad({ styleCode: 2 }).reason === "invalid-hood-style"
+      && bad({ styleCode: 3 }).reason === "invalid-hood-style", "19: e·f·g 도해는 거부(제도 구조가 다르다)");
+    ok(bad({ headCircumferenceCm: 0 }).reason === "invalid-head-circumference"
+      && bad({ hoodMeasureCm: 0 }).reason === "invalid-hood-measure"
+      && bad({ snpRadiusCm: 0 }).reason === "invalid-snp-radius"
+      && bad({ topStraightCm: 0 }).reason === "invalid-top-straight", "19: 범위 밖 거부");
+    ok(bad({ widthOffsetCm: -30 }).reason === "invalid-hood-width" && bad({ lengthOffsetCm: -50 }).reason === "invalid-hood-length"
+      && bad({ topStraightCm: 40 }).reason === "invalid-top-straight" && bad({ cornerCurveCm: 60 }).reason === "invalid-corner-curve",
+      "19: 파생 폭·길이·윗변·모서리 모순 거부");
+    ok([bad({ styleCode: 2 }), bad({ headCircumferenceCm: 0 }), bad({ snpRadiusCm: -1 })].every(r => !("geometry" in r)),
+      "19: 실패 시 형상 없음");
+    ok(C.computeHood(null, DP).reason === "no-bodice" && C.computeHood({}, DP).reason === "no-neckline"
+      && C.computeHood({ necklineLengths: { back: 8, front: 11 } }, DP).reason === "no-body-neckline",
+      "19: 몸판·목둘레·의미 모서리 없음");
+    // 반지름이 과대하면 앞 달림선 길이를 맞출 각도가 없다 → 정직하게 차단
+    ok(bad({ snpRadiusCm: 40 }).reason === "attach-angle-unreachable", "19: 각도 해가 없으면 차단");
+  }
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

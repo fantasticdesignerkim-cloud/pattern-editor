@@ -616,5 +616,64 @@ ok(typeof CA.buildModel === "function" && Object.isFrozen(CA), "0: API·frozen")
   ok(CA.buildModel({ type: "frill-collar", baseMethod: "bunka-frill-collar-a-v1" }, FB) === null, "19: 형상 없으면 표시 모델 없음");
 }
 
+// 20. 후드 d(P.74 · 제도 방법 P.151) — 표시 모델은 parameters·anchors·measures 만 소비한다
+{
+  const ln = (a, b, edge) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] }, edge: edge });
+  const cub = (a, b, c, d, edge) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] },
+    c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] }, edge: edge });
+  const frontNeck = cub([40, 4], [37, 2], [34, -2], [32, -4], "neckline");
+  const dense = (s2) => { let t = 0, pr = s2.from; for (let i = 1; i <= 4000; i++) {
+    const u = 1 - i / 4000, tt = i / 4000;
+    const p = { x: u*u*u*s2.from.x + 3*u*u*tt*s2.c1.x + 3*u*tt*tt*s2.c2.x + tt*tt*tt*s2.to.x,
+                y: u*u*u*s2.from.y + 3*u*u*tt*s2.c1.y + 3*u*tt*tt*s2.c2.y + tt*tt*tt*s2.to.y };
+    t += Math.hypot(p.x - pr.x, p.y - pr.y); pr = p; } return t; };
+  const FL = dense(frontNeck), BL = 8.5;
+  const HB = { hash: "BHD", sourceVersion: 1,
+    necklineLengths: { back: BL, front: FL, half: BL + FL, finished: 2 * (BL + FL) },
+    front: { outline: [ln([40, 4], [40, 40], "center"), frontNeck, ln([32, -4], [22, 0], "shoulder")], construction: [] } };
+  const HP = { styleCode: 0, headCircumferenceCm: 56, hoodMeasureCm: 39, widthOffsetCm: -3, lengthOffsetCm: 5,
+    topStraightCm: 8, cornerCurveCm: 6.5, snpRadiusCm: 4 };
+  const hd = DC.computeHood(HB, HP);
+  const cd = { sourceBodiceHash: "BHD", type: "hood", baseMethod: "bunka-hood-d-v1",
+    parameters: { hood: HP }, hood: { geometry: hd.geometry, measure: hd.measure, anchors: hd.anchors } };
+  const model = CA.buildModel(cd, HB), inputs = {}, results = {}, dims = {}, labels = {};
+  model.inputs.forEach(r => { inputs[r.key] = r.value; });
+  model.results.forEach(r => { results[r.key] = r; });
+  model.dims.forEach(d => { dims[d.id] = d; });
+  model.labels.forEach(l => { labels[l.id] = l; });
+
+  ok(model.recipe === "bunka-hood-d-v1" && CA.recipes().indexOf("bunka-hood-d-v1") >= 0, "20: d 전용 recipe 등록");
+  ok(inputs.headCircumferenceCm === 56 && inputs.hoodMeasureCm === 39 && inputs.widthOffsetCm === -3
+    && inputs.lengthOffsetCm === 5 && inputs.topStraightCm === 8 && inputs.cornerCurveCm === 6.5
+    && inputs.snpRadiusCm === 4, "20: 제도 입력값 7개(전부 parameters 값)");
+  // ★ 폭·길이는 입력이 아니라 **파생 결과**로만 보고한다(교재 공식)
+  ok(!("hoodWidthCm" in inputs) && !("hoodLengthCm" in inputs)
+    && results.hoodWidth.value === 25 && results.hoodLength.value === 44, "20: 폭 25·길이 44 는 파생 결과로 보고");
+  ok(dims["hood-length"].text === 44 && dims["hood-width"].text === 25 && dims["top-straight"].text === 8
+    && dims["snp-radius"].text === 4, "20: 길이·폭·윗변·반원 치수선");
+  ok(Math.abs(dims["hood-length"].from.x - dims["hood-length"].to.x) < 1e-9
+    && Math.abs(dims["hood-width"].from.y - dims["hood-width"].to.y) < 1e-9,
+    "20: 앞 끝선은 수직 · 후드 폭은 그에 직각(수평)");
+  ok(dims["cb-guide"].kind === "ref" && dims["mid-guide"].kind === "ref" && dims["corner-curve"].kind === "ref",
+    "20: 안내선·모서리 대각은 참조선");
+  ok(labels.fnp && labels.snp && labels["mid-front"] && labels["attach-join"], "20: FNP·SNP·Ⓐ·Ⓑ 라벨");
+
+  ok(results.neckBack.value === BL && results.neckFront.value === FL, "20: 몸판 목둘레를 그대로 보고");
+  ok(Math.abs(results.frontAttach.value - FL) < 1e-6 && Math.abs(results.backAttach.value - BL) < 1e-6
+    && results.attachDiff.status === "match", "20: 앞·뒤 달림선 = 몸판 앞목·뒤목 정합 보고");
+  // ★ Ⓑ 각도·뒤 달림선 처짐은 입력이 아니라 길이 책임을 맞춘 **결과**다
+  ok(!("snpAngleDeg" in inputs) && !("backSeamBowCm" in inputs)
+    && results.snpAngle.value > 0 && results.snpAngle.value < 90
+    && results.backBow.value > 0.3 && results.backBow.value < 0.9, "20: Ⓑ 각도·처짐(교재 도해 0.6)은 파생 결과");
+  ok(/목둘레와 같은 치수/.test(model.note) && /뒤 중심선/.test(model.note), "20: 길이 책임·뒤 중심선 안내");
+
+  ok(CA.buildModel({ type: "hood", baseMethod: "bunka-hood-d-v1" }, HB) === null, "20: 형상 없으면 표시 모델 없음");
+  ok(CA.buildModel({ type: "hood", baseMethod: "bunka-hood-f-v1",
+    parameters: { hood: HP }, hood: { geometry: {}, measure: {}, anchors: {} } }, HB) === null,
+    "20: 미구현 도해(f) recipe 는 표시 없음");
+  ok(CA.recipes().indexOf("bunka-frill-collar-a-v1") >= 0 && CA.recipes().indexOf("bunka-bow-collar-X-v1") >= 0,
+    "20: 기존 recipe 등록 유지");
+}
+
 console.log(`collarAnnotationCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }
