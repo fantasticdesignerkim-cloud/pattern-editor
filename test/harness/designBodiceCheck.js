@@ -620,6 +620,107 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
 }
 
 // ── 결과 ──
+// 4i. 허리 다트 재배분(waistDartTotalCm) — 봉제 다트 a·b·d·e 만. 옆선 c(locked)·뒤중심 f(onFold) 제외.
+//   기존 STATES 픽스처의 construction 은 **메타데이터 없는 더미 다리**라, 여기서는 실제 원형과 같은
+//   dart 선언(boundary/apexAt/locked/onFold)을 붙인 전용 픽스처를 쓴다.
+{
+  const dleg = (mx, my, ax, ay, id, extra) => Object.assign(line(mx, my, ax, ay),
+    { dart: Object.assign({ id: id, boundary: "waist", apexAt: "to" }, extra || {}) });
+  function dartPiece(Cx, sign, W, darts) {
+    const Sx = Cx + sign * W;
+    return {
+      outline: [
+        line(Cx, 28, Cx, 38, "center"),
+        line(Cx, 38, Sx, 38, "waist"),
+        line(Sx, 30, Sx, 38, "side-seam")
+      ],
+      construction: darts
+    };
+  }
+  // 앞: a(입 2) · b(입 2) · c(옆선 조임 0.7, locked) / 뒤: d(4.5) · e(2.2) · f(접어재단 반쪽 0.5) · c(0.7)
+  const mkRef = () => ({
+    front: dartPiece(47.5, -1, 24.45, [
+      dleg(37.5, 38, 38.5, 22, "a"), dleg(39.5, 38, 38.5, 22, "a"),
+      dleg(29, 38, 30, 15, "b"), dleg(31, 38, 30, 15, "b"),
+      dleg(23.05, 38, 23.05, 20.6, "c-front", { locked: true }), dleg(23.75, 38, 23.05, 20.6, "c-front", { locked: true })
+    ]),
+    back: dartPiece(0, +1, 23.05, [
+      dleg(14.5, 38, 16.75, 14.8, "d"), dleg(19, 38, 16.75, 14.8, "d"),
+      dleg(8.2, 38, 9.3, 18.6, "e"), dleg(10.4, 38, 9.3, 18.6, "e"),
+      dleg(0.5, 38, 0, 12.2, "f", { onFold: true }),
+      dleg(22.35, 38, 23.05, 20.6, "c-back", { locked: true }), dleg(23.05, 38, 23.05, 20.6, "c-back", { locked: true })
+    ]),
+    shared: { outline: [], construction: [] },
+    sleeve: { outline: [], construction: [] }
+  });
+  const ref = mkRef(), REF_JSON = JSON.stringify(ref);
+
+  const groupsOf = (piece, pred) => {
+    const m = {};
+    (piece.construction || []).filter(x => x.dart && (!pred || pred(x))).forEach(x => { (m[x.dart.id] = m[x.dart.id] || []).push(x); });
+    return m;
+  };
+  const isSewn = (x) => !x.dart.locked && !x.dart.onFold;
+  const mouth = (x) => (x.dart.apexAt === "to" ? x.from : x.to);
+  const apexOf = (x) => (x.dart.apexAt === "to" ? x.to : x.from);
+  const intake = (segs) => segs.length === 2 ? Math.hypot(mouth(segs[0]).x - mouth(segs[1]).x, mouth(segs[0]).y - mouth(segs[1]).y) : 0;
+  const sewnTotal = (g) => ["front", "back"].reduce((t, k) => {
+    const m = groupsOf(g[k], isSewn);
+    return t + Object.keys(m).reduce((u, id) => u + intake(m[id]), 0);
+  }, 0);
+
+  const base = sewnTotal(ref);   // 2 + 2 + 4.5 + 2.2 = 10.7
+  ok(near(base, 10.7), "4i: 봉제 허리다트 합 10.7(c·f 제외)");
+  ok(near(DB.sewnWaistDartTotal(ref.front) + DB.sewnWaistDartTotal(ref.back), base),
+    "4i: export sewnWaistDartTotal 이 같은 값");
+
+  // 미지정 = 원형 그대로
+  ok(eq(DB.computeGeometry(ref, { body: {} }), DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: 0 } })), "4i: 미지정은 no-op");
+  // 0·음수·비수치 거부 — 0 은 다트를 없애는 퇴화라 받지 않는다
+  throws(() => DB.computeGeometry(ref, { body: { waistDartTotalCm: 0 } }), "invalid-waist-dart-total", "4i: 0 거부");
+  throws(() => DB.computeGeometry(ref, { body: { waistDartTotalCm: -1 } }), "invalid-waist-dart-total", "4i: 음수 거부");
+  throws(() => DB.computeGeometry(ref, { body: { waistDartTotalCm: NaN } }), "invalid-waist-dart-total", "4i: NaN 거부");
+
+  // 총량 절반 → 봉제 다트가 같은 배율로 줄고 합이 목표와 일치
+  {
+    const target = base / 2;
+    const r = DB.computeGeometry(ref, { body: { waistDartTotalCm: target } });
+    ok(near(sewnTotal(r), target, 1e-9), "4i: 합이 목표 총량과 일치");
+    ["front", "back"].forEach(k => {
+      const before = groupsOf(ref[k], isSewn), after = groupsOf(r[k], isSewn);
+      Object.keys(before).forEach(id => {
+        ok(near(intake(after[id]) / intake(before[id]), 0.5, 1e-9), "4i: " + id + " 원형 비율 유지(균일 배율)");
+        ok(near(apexOf(after[id][0]).x, apexOf(before[id][0]).x) && near(apexOf(after[id][0]).y, apexOf(before[id][0]).y), "4i: " + id + " apex 불변");
+        const mb = (mouth(before[id][0]).x + mouth(before[id][1]).x) / 2;
+        const ma = (mouth(after[id][0]).x + mouth(after[id][1]).x) / 2;
+        ok(near(mb, ma, 1e-9), "4i: " + id + " 입 중점 불변(벌리기만)");
+      });
+    });
+    // ★ c(옆선 조임)·f(뒤중심 접어재단)는 손대지 않는다
+    ok(eq(groupsOf(ref.front, x => x.dart.locked), groupsOf(r.front, x => x.dart.locked)), "4i: 옆선 조임 c 불변(locked)");
+    ok(eq(groupsOf(ref.back, x => x.dart.onFold), groupsOf(r.back, x => x.dart.onFold)), "4i: 뒤중심 접어재단 f 불변(onFold)");
+    // 외곽선 불변 — 다트는 외곽 위에서 접는 것이라 허리 외곽 길이는 안 변한다(완성 둘레만 바뀐다)
+    ok(eq(r.front.outline, ref.front.outline) && eq(r.back.outline, ref.back.outline), "4i: 외곽선 불변");
+    ok(!sharesRef(r, ref), "4i: 참조 공유 0");
+  }
+
+  // 과도하게 키우면 겹치거나 허리선을 벗어난다 → 원자적 실패
+  {
+    let reason = null;
+    try { DB.computeGeometry(ref, { body: { waistDartTotalCm: 39 } }); } catch (e) { reason = e.reason; }
+    ok(reason === "waist-dart-overlap" || reason === "waist-dart-out-of-range", "4i: 과대 다트량 거부(" + reason + ")");
+  }
+  ok(JSON.stringify(ref) === REF_JSON, "4i: 성공·실패 어느 경우에도 입력 불변");
+
+  // 길이 연장과 결합 — hem 을 적용하면 waist 가 construction 으로 옮겨간다. 그 뒤에도 허리선 범위를
+  //   찾아 검사·배분이 되어야 한다(옆선 이동과의 조합은 실제 도안으로 브라우저에서 확인한다 —
+  //   이 픽스처는 c 다리 한쪽만 옆선에 붙어 있어 실제 기하를 대표하지 못한다).
+  {
+    const r = DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: 10, waistDartTotalCm: base * 0.8 } });
+    ok(near(sewnTotal(r), base * 0.8, 1e-9), "4i: 길이 연장(waist→construction)과 결합해도 총량 유지");
+  }
+}
+
 console.log("══════════════════════════════════════════════");
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);

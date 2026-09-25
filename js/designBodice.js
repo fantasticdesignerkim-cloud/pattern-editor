@@ -548,6 +548,82 @@
   //   앞중심 FNP 1cm 내림)는 UI 프리셋이 기본값으로 채운다 — 타입은 셔츠 목선 identity/프리셋용.
   var NECK_TYPES = { round: 1, v: 1, square: 1, boat: 1, shirt: 1, "stand-f": 1 };
 
+  // ── 허리 다트 재배분 ── 봉제 다트 a·b·d·e 만 대상.
+  //   ★ 옆선 조임 c(locked)와 뒤중심 접어재단 f(onFold)는 **제외**한다.
+  //     c 를 여기서 또 움직이면 `waistSideOffsetCm`(옆선 도구)과 손잡이가 둘이 되어 과결정이고,
+  //     f 는 접힘선 위라 뒤중심 재단과 얽힌다. 실측으로 c 는 옆선과 함께 이동함을 확인했다.
+  //   원형 비율(a:b:d:e)은 **균일 배율**로 유지한다 — 총량만 바꾸고 배분은 원형을 따른다.
+  var DART_GAP = 0.05;   // 인접 다트 입 사이 최소 간격(cm)
+  function isSewnWaistDart(seg) {
+    var d = seg && seg.dart;
+    return !!(d && d.boundary === "waist" && !d.locked && !d.onFold);
+  }
+  function dartMouthPt(seg) { return seg.dart.apexAt === "to" ? seg.from : seg.to; }
+  function dartApexPt(seg) { return seg.dart.apexAt === "to" ? seg.to : seg.from; }
+  // 같은 dartId 의 다리 2개를 묶는다(다리가 2개가 아닌 것은 대상에서 제외).
+  function sewnWaistDartGroups(piece) {
+    var m = {}, order = [];
+    (piece.construction || []).forEach(function (seg) {
+      if (!isSewnWaistDart(seg) || !seg.from || !seg.to) return;
+      var id = seg.dart.id; if (!m[id]) { m[id] = []; order.push(id); }
+      m[id].push(seg);
+    });
+    return order.map(function (id) { return { id: id, segs: m[id] }; })
+      .filter(function (g) { return g.segs.length === 2; });
+  }
+  function sewnWaistDartTotal(piece) {
+    return sewnWaistDartGroups(piece).reduce(function (t, g) {
+      var a = dartMouthPt(g.segs[0]), b = dartMouthPt(g.segs[1]);
+      return t + Math.hypot(b.x - a.x, b.y - a.y);
+    }, 0);
+  }
+  // 허리선 위 **모든** 다트(봉제 + c + f)의 입 구간 [x0,x1] — 겹침 검사용.
+  function waistMouthIntervals(piece) {
+    var m = {}, order = [];
+    (piece.construction || []).concat(piece.outline || []).forEach(function (seg) {
+      var d = seg && seg.dart;
+      if (!d || d.boundary !== "waist" || !seg.from || !seg.to) return;
+      var id = d.id; if (!m[id]) { m[id] = []; order.push(id); }
+      m[id].push(seg);
+    });
+    return order.map(function (id) {
+      var segs = m[id], xs = [];
+      segs.forEach(function (seg) { xs.push(dartMouthPt(seg).x); });
+      if (segs.length === 1) xs.push(dartApexPt(segs[0]).x);   // 접어재단 반쪽: 접힘선까지가 입
+      return { id: id, lo: Math.min.apply(null, xs), hi: Math.max.apply(null, xs) };
+    });
+  }
+  // 허리선이 놓인 x 범위(중심↔옆선). hem 적용 후 waist 는 construction 에 있으므로 둘 다 본다.
+  function waistSpanX(piece) {
+    var xs = [];
+    (piece.outline || []).concat(piece.construction || []).forEach(function (seg) {
+      if (!seg || seg.edge !== "waist" || !seg.from || !seg.to) return;
+      xs.push(seg.from.x, seg.to.x);
+    });
+    if (!xs.length) return null;
+    return { lo: Math.min.apply(null, xs), hi: Math.max.apply(null, xs) };
+  }
+  // 입 중점을 고정하고 두 다리 끝점을 배율 s 로 벌린다/좁힌다. apex 는 불변.
+  function scaleSewnWaistDarts(piece, s) {
+    sewnWaistDartGroups(piece).forEach(function (g) {
+      var a = dartMouthPt(g.segs[0]), b = dartMouthPt(g.segs[1]);
+      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      g.segs.forEach(function (seg) {
+        var q = dartMouthPt(seg);
+        q.x = mx + (q.x - mx) * s;
+        q.y = my + (q.y - my) * s;
+      });
+    });
+  }
+  function checkWaistDarts(piece, who) {
+    var span = waistSpanX(piece);
+    var iv = waistMouthIntervals(piece).slice().sort(function (p, q) { return p.lo - q.lo; });
+    for (var i = 0; i < iv.length; i++) {
+      if (span && (iv[i].lo < span.lo - EPS || iv[i].hi > span.hi + EPS)) fail("waist-dart-out-of-range", who + "." + iv[i].id);
+      if (i > 0 && iv[i].lo < iv[i - 1].hi + DART_GAP) fail("waist-dart-overlap", who + "." + iv[i - 1].id + "|" + iv[i].id);
+    }
+  }
+
   function computeGeometry(referenceGeometry, opts) {
     if (!validGeometry(referenceGeometry)) fail("invalid-geometry");
     var body = (opts && opts.body) || {};
@@ -556,12 +632,16 @@
     var wOff = body.waistSideOffsetCm; if (wOff == null) wOff = 0;     // 허리 옆선 이동(음수=안쪽)
     var hOff = body.hemSideOffsetCm; if (hOff == null) hOff = 0;       // 밑단 옆선 이동(양수=바깥)
     var curve = body.sideSeamCurve; if (curve == null) curve = 0;     // 옆선 곡선화(0=직선, 0–1)
+    var dartTot = body.waistDartTotalCm;                               // 봉제 허리다트(a·b·d·e) 합. 미지정=원형 그대로
     // 입력 정규화 경계: 정확한 0(전부) 만 no-op. 길이·여유량 음수 실패. 옆선 오프셋은 부호 허용(안/밖).
     if (typeof L !== "number" || !isFinite(L) || L < 0) fail("invalid-body-length", L);
     if (typeof E !== "number" || !isFinite(E) || E < 0) fail("invalid-body-ease", E);
     if (typeof wOff !== "number" || !isFinite(wOff)) fail("invalid-body-side-offset", wOff);
     if (typeof hOff !== "number" || !isFinite(hOff)) fail("invalid-body-side-offset", hOff);
     if (typeof curve !== "number" || !isFinite(curve) || curve < 0 || curve > 1) fail("invalid-body-curve", curve);
+    // 다트 총량은 **미지정(null/undefined)이 "원형 그대로"** 다 — 0 은 다트를 없애는 퇴화라 받지 않는다.
+    var applyDarts = (dartTot != null);
+    if (applyDarts && (typeof dartTot !== "number" || !isFinite(dartTot) || dartTot <= 0)) fail("invalid-waist-dart-total", dartTot);
     // 네크라인(parametric). mode==="manual" / type==="original" / 없음이면 미적용(원본 목선 유지).
     var neckline = (opts && opts.neckline) || null;
     var applyNeck = !!(neckline && neckline.mode === "parametric" && NECK_TYPES[neckline.type]);
@@ -569,7 +649,7 @@
       var np = neckline.parameters || {};
       ["neckWidthCm", "frontDepthCm", "backDepthCm", "vPointDepthCm", "squareWidthCm", "cornerRadiusCm", "curveAmountNorm"].forEach(function (k) { var v = np[k]; if (v != null && (typeof v !== "number" || !isFinite(v))) fail("invalid-neckline-param", k); });
     }
-    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck) return deepClone(referenceGeometry);
+    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck && !applyDarts) return deepClone(referenceGeometry);
     // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
     var delta = E / 4;   // 전체 가슴둘레 여유량 → 각 옆선 E/4 (앞반쪽 + 뒤반쪽, ×2측 = E)
     var src = deepClone(referenceGeometry);
@@ -584,6 +664,15 @@
     var bPiece = shapePiece(back, delta, wOff, L, hOff, curve);
     if (fLen != null) fPiece.necklineLenCm = fLen;
     if (bLen != null) bPiece.necklineLenCm = bLen;
+    // 허리 다트 재배분은 **마지막**. a·b·d·e 는 앞선 변환에서 움직이지 않으므로 순서 무관하지만,
+    // 겹침·범위 검사를 최종 허리선(옆선 이동 반영) 위에서 해야 정확하다.
+    if (applyDarts) {
+      var blockTotal = sewnWaistDartTotal(fPiece) + sewnWaistDartTotal(bPiece);
+      if (!(blockTotal > EPS)) fail("no-sewn-waist-dart");
+      var sD = dartTot / blockTotal;
+      scaleSewnWaistDarts(fPiece, sD); scaleSewnWaistDarts(bPiece, sD);
+      checkWaistDarts(fPiece, "front"); checkWaistDarts(bPiece, "back");
+    }
     return {
       front: fPiece, back: bPiece,
       shared: src.shared,   // 값·순서 유지(비대상)
@@ -591,5 +680,5 @@
     };
   }
 
-  window.designBodice = Object.freeze({ computeGeometry: computeGeometry, measureNeckline: measureNeckline, necklineSegments: necklineSegments });
+  window.designBodice = Object.freeze({ computeGeometry: computeGeometry, sewnWaistDartTotal: sewnWaistDartTotal, measureNeckline: measureNeckline, necklineSegments: necklineSegments });
 })();

@@ -328,7 +328,9 @@
   function committedBody(project) {
     const b = project && project.working && project.working.parameters && project.working.parameters.body;
     const num = (k) => (b && typeof b[k] === "number") ? b[k] : 0;
-    return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm"), Cv: num("sideSeamCurve") };
+    // ★ 다트 총량만 "미지정 = 원형 그대로" 라 0 으로 뭉개지 않고 null 로 남긴다.
+    const dt = (b && typeof b.waistDartTotalCm === "number") ? b.waistDartTotalCm : null;
+    return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm"), Cv: num("sideSeamCurve"), Dt: dt };
   }
   // 프리미티브(line/path) 호 길이(cubic 은 평탄화 합).
   function primArcLen(pr) {
@@ -448,13 +450,14 @@
   function setBodyNote(txt) { const n = document.getElementById("designBodyNote"); if (n) n.textContent = txt; }
   // 적용 중 상태 문구(여유량·길이·허리/밑단 옆선). 전부 0이면 기본 안내. 옆선은 부호 표시(안/밖).
   function offStr(v, inLabel, outLabel) { return (v < 0 ? inLabel + " " + fmtL(-v) : outLabel + " " + fmtL(v)) + "cm"; }
-  function bodyStatusNote(E, L, W, H, Cv, neckType) {
+  function bodyStatusNote(E, L, W, H, Cv, neckType, Dt) {
     const parts = [];
     if (E > 0) parts.push("여유량 " + fmtL(E) + "cm");
     if (L > 0) parts.push("길이 " + fmtL(L) + "cm");
     if (W !== 0) parts.push("허리 " + offStr(W, "안쪽", "바깥"));
     if (H !== 0) parts.push("밑단 " + offStr(H, "안쪽", "바깥"));
     if (Cv > 0) parts.push("옆선 곡선 " + fmtL(Cv));
+    if (Dt != null) parts.push("허리 다트 " + fmtL(Dt) + "cm");
     const NECK_LABEL = { shirt: "셔츠 목선", "stand-f": "스탠드 F 목선", round: "라운드넥", v: "V넥", square: "스퀘어넥", boat: "보트넥" };
     if (NECK_LABEL[neckType]) parts.push(NECK_LABEL[neckType]);
     return parts.length ? parts.join(" · ") + " · 세션 전용" : "여유량·길이·옆선 실루엣·네크라인으로 몸판을 조정합니다";
@@ -465,6 +468,10 @@
     if (reason === "invalid-body-length" || reason === "invalid-body-ease") return "여유량·길이는 0–100 사이여야 합니다";
     if (reason === "invalid-body-side-offset") return "옆선 이동은 −30–30 사이여야 합니다";
     if (reason === "invalid-body-curve") return "옆선 곡선화는 0–1 사이여야 합니다";
+    if (reason === "invalid-waist-dart-total") return "허리 다트량은 0.1–40 사이여야 합니다(비우면 원형 그대로)";
+    if (reason === "waist-dart-overlap") return "허리 다트가 서로 겹칩니다 · 다트량을 줄이세요";
+    if (reason === "waist-dart-out-of-range") return "허리 다트가 허리선을 벗어납니다 · 다트량을 줄이세요";
+    if (reason === "no-sewn-waist-dart") return "재배분할 봉제 허리다트가 없습니다";
     if (reason === "invalid-neckline-param") return "네크라인 입력값을 확인하세요";
     if (reason === "neckline-not-found" || reason === "shoulder-not-found") return "이 형태로는 네크라인을 계산할 수 없습니다";
     return "적용할 수 없습니다 · 값을 조정하세요";
@@ -489,14 +496,19 @@
     const ease = readNum("inpBodyBustEase", 0, 100), len = readNum("inpBodyHemExtension", 0, 100);
     const waist = readNum("inpBodyWaistOffset", -30, 30), hem = readNum("inpBodyHemOffset", -30, 30);
     const curve = readNum("inpBodySideCurve", 0, 1);
+    // 허리 다트량: **빈 값 = 원형 그대로**(0 이 아니다). 범위는 0.1–40.
+    const dartEl = document.getElementById("inpBodyWaistDartTotal");
+    const dartRaw = dartEl ? String(dartEl.value).trim() : "";
+    const dartNum = dartRaw === "" ? null : Number(dartRaw);
+    const dart = { input: dartEl, v: dartNum, valid: dartRaw === "" || (isFinite(dartNum) && dartNum >= 0.1 && dartNum <= 40) };
     const neckType = currentNeckType();
     const nW = readNum("inpNeckWidth", -15, 15), nF = readNum("inpNeckFrontDepth", -10, 20), nB = readNum("inpNeckBackDepth", -10, 20);
     // 형태별: 곡선정도 빈 값=형태 기본(round 1 / boat 0.5), V끝점·가로폭·모서리 빈 값=0
     const nCA = readNumD("inpNeckCurveAmount", 0, 1, neckType === "boat" ? 0.5 : 1);
     const nVD = readNum("inpNeckVDepth", 0, 20), nSW = readNum("inpNeckSquareWidth", 0, 20), nCR = readNum("inpNeckCornerRadius", 0, 10);
     return {
-      ease, len, waist, hem, curve, neckType, nW, nF, nB, nCA, nVD, nSW, nCR,
-      valid: ease.valid && len.valid && waist.valid && hem.valid && curve.valid &&
+      ease, len, waist, hem, curve, dart, neckType, nW, nF, nB, nCA, nVD, nSW, nCR,
+      valid: ease.valid && len.valid && waist.valid && hem.valid && curve.valid && dart.valid &&
         nW.valid && nF.valid && nB.valid && nCA.valid && nVD.valid && nSW.valid && nCR.valid
     };
   }
@@ -2011,13 +2023,15 @@
     const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
     setIf("inpBodyBustEase", cb.E); setIf("inpBodyHemExtension", cb.L);
     setIf("inpBodyWaistOffset", cb.W); setIf("inpBodyHemOffset", cb.H); setIf("inpBodySideCurve", cb.Cv);
+    { const el = document.getElementById("inpBodyWaistDartTotal");
+      if (el && document.activeElement !== el) el.value = (cb.Dt == null) ? "" : fmtL(cb.Dt); }
     // 네크라인 형태(카드)·입력 복원(포커스 중 안 덮음)
     const cn = committedNeckline(project);
     setNeckType(cn.type);
     setIf("inpNeckWidth", cn.W); setIf("inpNeckFrontDepth", cn.F); setIf("inpNeckBackDepth", cn.B);
     setIf("inpNeckCurveAmount", cn.CA); setIf("inpNeckVDepth", cn.VD);
     setIf("inpNeckSquareWidth", cn.SW); setIf("inpNeckCornerRadius", cn.CR);
-    setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv, cn.type));
+    setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv, cn.type, cb.Dt));
     girthNote(project); sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
@@ -2036,8 +2050,11 @@
     const st = readBodyInputs();
     if (!st.valid) { setBodyNote("입력값 범위를 확인하세요(여유량·길이 0–100, 옆선 −30–30)"); syncBodyButtons(); return; }
     const E = st.ease.v, L = st.len.v, W = st.waist.v, H = st.hem.v, Cv = st.curve.v;
+    const Dt = st.dart.v;   // null = 원형 다트 그대로
     const nextParameters = structuredClone(project.working.parameters);
     nextParameters.body = Object.assign({}, nextParameters.body || {}, { bustEaseCm: E, hemExtensionBelowWaistCm: L, waistSideOffsetCm: W, hemSideOffsetCm: H, sideSeamCurve: Cv });
+    // 미지정(빈 칸)은 키 자체를 지워 "원형 그대로" 를 유지한다(0 으로 넣으면 퇴화 다트가 된다).
+    if (Dt == null) delete nextParameters.body.waistDartTotalCm; else nextParameters.body.waistDartTotalCm = Dt;
     // 네크라인: manual(세부 수정) 이면 기존 manual 네크라인 보존(입력 잠금 — 인풋에서 재구성하지
     // 않는다). parametric 이면 카드·입력에서 재구성. manual 은 아래에서 designOutline 재합성.
     const committedNk = committedNeckline(project);
@@ -2070,7 +2087,7 @@
     setBack(st.nW, st.nW.v); setBack(st.nF, st.nF.v); setBack(st.nB, st.nB.v);
     setBack(st.nCA, st.nCA.v); setBack(st.nVD, st.nVD.v); setBack(st.nSW, st.nSW.v); setBack(st.nCR, st.nCR.v);
     const necked = st.neckType !== "original";
-    setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0 && !necked) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv, st.neckType));
+    setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0 && Dt == null && !necked) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv, st.neckType, Dt));
     girthNote(project); sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
@@ -2080,6 +2097,8 @@
     ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve",
       "inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth", "inpNeckCurveAmount", "inpNeckVDepth", "inpNeckSquareWidth", "inpNeckCornerRadius"]
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
+    // ★ 허리 다트량만 **빈 값**으로 비운다 — 0 은 다트를 없애는 무효값이고, 빈 값이 "원형 그대로" 다.
+    { const el = document.getElementById("inpBodyWaistDartTotal"); if (el) el.value = ""; }
     setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }
@@ -2162,7 +2181,7 @@
     const resetBody = document.getElementById("btnResetBodyLength");
     if (resetBody) resetBody.addEventListener("click", () => { if (!resetBody.disabled) onResetBodyLength(); });
     // 몸판 입력 넷 모두(여유량·길이·허리/밑단 옆선): 입력 중엔 버튼 활성만 갱신, Enter 로 적용.
-    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve",
+    ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve", "inpBodyWaistDartTotal",
       "inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth", "inpNeckCurveAmount", "inpNeckVDepth", "inpNeckSquareWidth", "inpNeckCornerRadius"].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
