@@ -72,10 +72,36 @@ const r = F.closeDartSpread(fx.piece);
 }
 
 // 2. ★ 면적 — 강체 회전이라 조각 면적은 보존되고 **쐐기만** 더해진다
+//    해석값 ½·r²·sinθ 는 **직선 이음**의 값이다. 곡선 이음(기본)은 부푼 만큼 달라지므로
+//    해석 검산은 직선 모드에 걸고, 곡선은 그 차이가 작다는 것만 확인한다.
 {
   const rH = r.slashLenCm, theory = 0.5 * rH * rH * Math.abs(Math.sin(r.dartAngleRad));
-  ok(near(r.wedgeAreaCm2, theory, 1e-6), "2: 추가 면적 = ½·r²·sinθ(해석값과 일치)");
+  const rs = F.closeDartSpread(fixture().piece, { hemFairing: "straight" });
+  ok(near(rs.wedgeAreaCm2, theory, 1e-6), "2: 직선 이음 추가 면적 = ½·r²·sinθ(해석값과 일치)");
+  ok(near(rs.areaBeforeCm2, r.areaBeforeCm2, 1e-9), "2: 원본 면적은 이음 방식과 무관");
   ok(r.areaBeforeCm2 > 0 && r.wedgeAreaCm2 > 0, "2: 원본 면적·쐐기 둘 다 양수");
+  const gapRatio = Math.abs(r.wedgeAreaCm2 - theory) / theory;
+  ok(gapRatio < 0.12, "2: 곡선 이음 면적이 해석값에서 크게 벗어나지 않는다(" + (gapRatio * 100).toFixed(2) + "%)");
+}
+
+// 2b. 밑단 이음이 **각지지 않는다** — 양 접합부 접선 연속(G1)
+{
+  ok(r.hemFairing === "smooth", "2b: 기본은 곡선 이음");
+  const bridge = r.outline.find(s => s.kind === "cubic" && !s.edge);
+  ok(!!bridge, "2b: 이음이 cubic 으로 들어간다");
+  const iA = r.outline.indexOf(bridge);
+  const prev = r.outline[iA - 1], next = r.outline[iA + 1];
+  const dot = (u, v) => u.x * v.x + u.y * v.y;
+  const tPrev = F.tangentAtEnd(prev), tIn = F.tangentAtStart(bridge);
+  const tOut = F.tangentAtEnd(bridge), tNext = F.tangentAtStart(next);
+  ok(near(dot(tPrev, tIn), 1, 1e-9), "2b: 들어오는 접선 연속(각 0°)");
+  ok(near(dot(tOut, tNext), 1, 1e-9), "2b: 나가는 접선 연속(각 0°)");
+  // 직선 이음은 꺾인다 — 곡선이 실제로 고치는 것이 맞는지 대조
+  const rs2 = F.closeDartSpread(fixture().piece, { hemFairing: "straight" });
+  const bi = rs2.outline.findIndex(s => s.kind === "line" && !s.edge);
+  const kink = dot(F.tangentAtEnd(rs2.outline[bi - 1]), F.tangentAtStart(rs2.outline[bi]));
+  ok(kink < 0.999, "2b: 직선 이음은 실제로 꺾여 있다(대조군)");
+  throwsReason(() => F.closeDartSpread(fixture().piece, { hemFairing: "arc" }), "invalid-hem-fairing", "2b: 모르는 이음 방식 거부");
 }
 
 // 3. 결과가 물리적으로 성립하는 폐곡선인가 (제1법칙)

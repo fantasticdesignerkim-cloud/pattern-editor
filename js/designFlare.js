@@ -91,6 +91,43 @@
     return out;
   }
   var line = function (a, b) { return { kind: "line", from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } }; };
+  var sub = function (a, b) { return { x: a.x - b.x, y: a.y - b.y }; };
+  function unit(v) { var L = Math.hypot(v.x, v.y); return L > 1e-12 ? { x: v.x / L, y: v.y / L } : null; }
+  function onCurve(seg) {
+    // {kind:"cubic"} 과 {kind:"path", commands:[M,C…]} 둘 다에서 제어점을 순서대로 꺼낸다.
+    if (seg.kind === "cubic") return [seg.from, seg.c1, seg.c2, seg.to];
+    if (seg.commands) {
+      var pts = [];
+      seg.commands.forEach(function (c) { c.points.forEach(function (p) { pts.push(p); }); });
+      return pts;
+    }
+    return [seg.from, seg.to];
+  }
+  // 세그먼트 끝/시작의 진행 방향. 퇴화 제어점은 건너뛴다.
+  function tangentAtEnd(seg) {
+    var p = onCurve(seg), last = p[p.length - 1];
+    for (var i = p.length - 2; i >= 0; i--) { var u = unit(sub(last, p[i])); if (u) return u; }
+    return null;
+  }
+  function tangentAtStart(seg) {
+    var p = onCurve(seg), first = p[0];
+    for (var i = 1; i < p.length; i++) { var u = unit(sub(p[i], first)); if (u) return u; }
+    return null;
+  }
+  // ★ 벌어진 접합부를 **접선 연속(G1) cubic** 으로 잇는다 — 교재 P.157 의 전 연산 공통 불변식
+  //   «처리한 곳이 각지지 않게 완만한 곡선으로 수정한다». 밑단 전체를 다시 그리지 않는다:
+  //   원래 밑단 형상을 지우지 않고 **처리한 곳만** 매끄럽게 한다(교재 문장 그대로).
+  //   핸들 = 현(chord) 길이의 1/3 — 옆선 곡선화·칼라 외곽 휨과 같은 관례(overshoot 방지).
+  function fairBridge(a, b, tanA, tanB) {
+    var L = Math.hypot(b.x - a.x, b.y - a.y);
+    if (!(L > 0) || !tanA || !tanB) return line(a, b);
+    var h = L / 3;
+    return { kind: "cubic",
+      from: { x: a.x, y: a.y },
+      c1: { x: a.x + tanA.x * h, y: a.y + tanA.y * h },
+      c2: { x: b.x - tanB.x * h, y: b.y - tanB.y * h },
+      to: { x: b.x, y: b.y } };
+  }
 
   // ── 본 연산 ────────────────────────────────────────────────────────────────
   // closeDartSpread(piece, opts) — piece = {outline, construction} (geometry 포맷)
@@ -169,7 +206,13 @@
     var spread = Math.hypot(hA.x - hB.x, hA.y - hB.y);
     if (!(spread > 0)) fail("no-spread");
 
-    var outline = kA.concat([line(hA, hB)], kB);
+    // 밑단 이음: 기본은 «완만한 곡선»(교재). "straight" 를 주면 직선(검증·비교용).
+    var fairing = opts.hemFairing || "smooth";
+    if (fairing !== "smooth" && fairing !== "straight") fail("invalid-hem-fairing", fairing);
+    var bridge = (fairing === "smooth")
+      ? fairBridge(hA, hB, tangentAtEnd(kA[kA.length - 1]), tangentAtStart(kB[0]))
+      : line(hA, hB);
+    var outline = kA.concat([bridge], kB);
     if (sliver > SLIVER_EPS) outline = outline.concat([line(joinFrom, joinTo)]);
 
     // 검증 — 하나라도 어긋나면 부분 결과를 반환하지 않는다.
@@ -194,6 +237,7 @@
       dartAngleRad: th,
       slashLenCm: Math.hypot(pjH.point.x - apex.x, pjH.point.y - apex.y),
       spreadCm: spread,
+      hemFairing: fairing,
       residualSliverCm: sliver,
       areaBeforeCm2: areaBefore,
       wedgeAreaCm2: areaAfter - areaBefore,
@@ -216,5 +260,8 @@
     return rotateB ? isB : !isB;
   }
 
-  window.designFlare = Object.freeze({ closeDartSpread: closeDartSpread });
+  window.designFlare = Object.freeze({
+    closeDartSpread: closeDartSpread,
+    tangentAtEnd: tangentAtEnd, tangentAtStart: tangentAtStart, fairBridge: fairBridge
+  });
 })();
