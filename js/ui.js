@@ -332,7 +332,8 @@
     const dt = (b && typeof b.waistDartTotalCm === "number") ? b.waistDartTotalCm : null;
     const wt = (b && typeof b.targetFinishedWaistCm === "number") ? b.targetFinishedWaistCm : null;
     const ds = (b && b.waistDartScales && typeof b.waistDartScales === "object") ? b.waistDartScales : null;
-    return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm"), Cv: num("sideSeamCurve"), Dt: dt, Wt: wt, Ds: ds };
+    const fl = (b && b.flare === true) ? true : null;
+    return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm"), Cv: num("sideSeamCurve"), Dt: dt, Wt: wt, Ds: ds, Fl: fl };
   }
   // 프리미티브(line/path) 호 길이(cubic 은 평탄화 합).
   function primArcLen(pr) {
@@ -426,6 +427,7 @@
   //   값을 고치면 더 이상 그 라인이 아니므로, 선택 상태를 형상에 저장하지 않는다(칼라와 같은 원칙).
   //   예외는 **다트 배분**(waistDartScales) — 입력칸이 없어 parameters 에만 산다.
   let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
+  let pendingFlare;        // 〃 (true = 다트를 닫아 밑단 벌리기)
   function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
   function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
   function rebuildBodiceFamilyOptions() {
@@ -488,6 +490,7 @@
     // 라인은 다트 "배분"을 정하고 "총량·목표"는 정하지 않는다 → 그 둘은 비운다(원형 크기 유지).
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     pendingDartScales = body.waistDartScales ? structuredClone(body.waistDartScales) : null;
+    pendingFlare = body.flare === true ? true : null;
     onApplyBodyLength();
   }
   function bodiceSelectionStr(reason) {
@@ -499,18 +502,29 @@
   function dartScaleNote(project) {
     const el = document.getElementById("designDartScaleNote"); if (!el) return;
     const ds = committedBody(project).Ds;
-    if (!ds) { el.textContent = ""; return; }
+    const fn = flareNote(project);
+    if (!ds) { el.textContent = fn; return; }
     const used = ["a", "b", "d", "e"].map(k => {
       const v = (typeof ds[k] === "number") ? ds[k] : 1;
       return v === 0 ? k + " 미사용" : (v === 1 ? k : k + " ×" + fmtL(v));
     });
-    el.textContent = "허리 다트 배분: " + used.join(" · ");
+    el.textContent = ["허리 다트 배분: " + used.join(" · "), fn].filter(Boolean).join(" / ");
   }
 
   // 완성 가슴(BL)·허리(WL) 둘레와 실측 대비 여유. **읽기 전용 계측** — 형상·게이트를 건드리지 않는다.
   //   외곽 = 다트 전 폭, 완성 = 그 높이를 지나는 다트를 뺀 실제 둘레. 여유가 음수면 못 입는 패턴이라 경고.
   function girthNote(project) {
     const el = document.getElementById("designGirthNote"); if (!el) return;
+    // ★ 플레어를 적용하면 조각이 부채꼴로 펼쳐져 **수평 폭이 더 이상 착용 둘레가 아니다**
+    //   (회전한 쪽은 허리선 자체가 기울어 있다). 실측: 허리 70.9 → 119.6cm 로 뛴다.
+    //   틀린 수치를 여유값처럼 내놓지 않고 **왜 못 재는지** 말한다(가짜 수치 금지).
+    const gg = project && project.working && project.working.geometry;
+    if (gg && ((gg.front && gg.front.flareCm) || (gg.back && gg.back.flareCm))) {
+      el.textContent = "플레어 적용 — 가슴·허리 수평 계측이 유효하지 않습니다"
+        + "(조각이 부채꼴로 펼쳐져 수평 폭이 착용 둘레가 아닙니다)";
+      el.setAttribute("data-ok", "0");
+      return;
+    }
     const m = (project && window.bodiceCheckpoint) ? window.bodiceCheckpoint.girthMeasure(project) : null;
     if (!m || !m.bust || !m.waist) { el.textContent = ""; el.removeAttribute("data-ok"); return; }
     const one = (label, g, ease, body) => label + " 완성 " + fmtL(g.finishedCm) + "cm"
@@ -545,6 +559,24 @@
     const t = window.designBodice.sewnWaistDartTotal(g.front) + window.designBodice.sewnWaistDartTotal(g.back);
     return isFinite(t) ? t : null;
   }
+  // designFlare 의 거부 사유를 사람 말로. **어느 조각에서 왜 막혔는지** 감추지 않는다.
+  function flareReasonStr(detail) {
+    const d = String(detail || "");
+    if (d.indexOf("waist-darts-present") >= 0) return "허리 다트를 먼저 없애야 합니다(플레어가 그 조임을 대신합니다)";
+    if (d.indexOf("no-hem-edge") >= 0) return "밑단이 없습니다 · 엉덩이 길이를 먼저 주세요";
+    if (d.indexOf("self-intersection") >= 0) return "벌린 결과가 겹칩니다";
+    if (d.indexOf("unsupported-dart-legs") >= 0) return "닫을 다트를 찾지 못했습니다";
+    return d;
+  }
+  // 플레어 결과(벌어진 폭·추가된 분량) — piece 에 실린 스칼라를 읽기만 한다.
+  function flareNote(project) {
+    const g = project && project.working && project.working.geometry;
+    const f = g && g.front && g.front.flareCm, b = g && g.back && g.back.flareCm;
+    if (!f && !b) return "";
+    const one = (x, k) => x ? `${k} 벌어짐 ${fmtL(x.spread)}cm` : "";
+    const sliver = (b && b.residualSliverCm > 0.001) ? ` · 뒤 어깨 잔여 ${fmtL(b.residualSliverCm)}cm(패턴선 확정에서 정리)` : "";
+    return "플레어 · " + [one(f, "앞"), one(b, "뒤")].filter(Boolean).join(" · ") + sliver;
+  }
   function bodyStatusNote(E, L, W, H, Cv, neckType, Dt, Wt, DtActual) {
     const parts = [];
     if (E > 0) parts.push("여유량 " + fmtL(E) + "cm");
@@ -559,12 +591,15 @@
     if (NECK_LABEL[neckType]) parts.push(NECK_LABEL[neckType]);
     return parts.length ? parts.join(" · ") + " · 세션 전용" : "여유량·길이·옆선 실루엣·네크라인으로 몸판을 조정합니다";
   }
-  function noteForReason(reason) {
+  function noteForReason(reason, detail) {
     if (reason === "extension-intersection") return "연장선이 기존 패턴과 겹칩니다 · 값을 조정하세요";
     if (reason === "invalid-side-extension") return "이 길이로는 옆선을 연장할 수 없습니다";
     if (reason === "invalid-body-length" || reason === "invalid-body-ease") return "여유량·길이는 0–100 사이여야 합니다";
     if (reason === "invalid-body-side-offset") return "옆선 이동은 −30–30 사이여야 합니다";
     if (reason === "invalid-body-curve") return "옆선 곡선화는 0–1 사이여야 합니다";
+    if (reason === "designFlare-missing") return "플레어 연산 모듈을 불러오지 못했습니다";
+    if (reason === "invalid-body-flare") return "플레어 설정이 올바르지 않습니다";
+    if (reason && reason.indexOf("flare-failed") === 0) return "플레어를 적용할 수 없습니다 · " + flareReasonStr(detail);
     if (reason === "invalid-waist-target") return "목표 완성 허리는 30–200 사이여야 합니다";
     if (reason === "waist-overdetermined") return "목표 완성 허리와 허리 다트량은 함께 쓸 수 없습니다";
     if (reason === "target-waist-unreachable") return "이 목표는 다트를 없애도 닿지 않습니다 · 옆선을 조이거나 목표를 줄이세요";
@@ -2168,6 +2203,11 @@
     if (Wt == null) delete nextParameters.body.targetFinishedWaistCm; else nextParameters.body.targetFinishedWaistCm = Wt;
     // 다트 배분은 입력칸이 아니라 **라인 프리셋이 정하는 값**이라, 적용 때 기존 값을 그대로 보존한다
     // (프리셋 적용·라인 초기화에서만 바뀐다).
+    // 플레어도 입력칸이 아니라 **라인 프리셋이 정하는 값**이라 같은 방식으로 실어 나른다.
+    if (pendingFlare !== undefined) {
+      if (pendingFlare) nextParameters.body.flare = true; else delete nextParameters.body.flare;
+      pendingFlare = undefined;
+    }
     if (pendingDartScales !== undefined) {
       if (pendingDartScales === null) delete nextParameters.body.waistDartScales;
       else nextParameters.body.waistDartScales = structuredClone(pendingDartScales);
@@ -2182,10 +2222,10 @@
       neckWidthCm: st.nW.v, frontDepthCm: st.nF.v, backDepthCm: st.nB.v,
       curveAmountNorm: st.nCA.v, vPointDepthCm: st.nVD.v, squareWidthCm: st.nSW.v, cornerRadiusCm: st.nCR.v
     } };
-    let nextGeometry = null, reason = null;
+    let nextGeometry = null, reason = null, detail;
     try { nextGeometry = window.designBodice.computeGeometry(project.referenceGeometry, nextParameters); }
-    catch (e) { reason = (e && e.reason) || "compute-failed"; }
-    if (reason) { setBodyNote(noteForReason(reason)); syncBodyButtons(); return; }  // 불변
+    catch (e) { reason = (e && e.reason) || "compute-failed"; detail = e && e.detail; }
+    if (reason) { setBodyNote(noteForReason(reason, detail)); syncBodyButtons(); return; }  // 불변
     // ── 유일한 commit 지점 ──
     project.working.parameters = nextParameters;
     project.working.geometry = nextGeometry;
@@ -2218,6 +2258,7 @@
     // ★ 허리 다트량만 **빈 값**으로 비운다 — 0 은 다트를 없애는 무효값이고, 빈 값이 "원형 그대로" 다.
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     pendingDartScales = null;   // 원형 다트 배분으로 복귀
+    pendingFlare = null;        // 플레어 해제
     setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }

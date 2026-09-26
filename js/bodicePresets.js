@@ -45,7 +45,8 @@
     { key: "waistSideOffsetCm", label: "허리 옆선 이동", unit: "cm" },
     { key: "hemSideOffsetCm", label: "밑단 옆선 이동", unit: "cm" },
     { key: "sideSeamCurve", label: "옆선 곡선화", unit: "" },
-    { key: "waistDartScales", label: "허리 다트 배분", unit: "" }
+    { key: "waistDartScales", label: "허리 다트 배분", unit: "" },
+    { key: "flare", label: "다트를 닫아 밑단 벌리기", unit: "" }
   ];
   var BODY_KEYS = BODY_FIELDS.map(function (f) { return f.key; });
   var DART_SYMBOLS = ["a", "b", "d", "e"];   // [패턴학교]가 쓰는 봉제 허리다트 넷
@@ -88,14 +89,13 @@
           "E 와 같은 이유(미판독 — E 착수 시 함께 읽는다).")
       ] },
     { id: "flare-line", order: 4, label: "플레어 라인", symbol: "G", page: 20,
-      availability: "pending-op", note: PENDING_NOTE,
-      familyNote: "다트를 닫아 그 반동으로 밑단을 벌린다.",
+      availability: "available", note: null,
+      familyNote: "다트를 닫아 그 반동으로 밑단을 벌린다(처리 방법 161).",
       variants: [
-        pendingVariant("bunka-bodice-G", "G", "G · 밑단 폭 3cm 추가 · 다트를 닫아 밑단을 벌린다", 20,
-          "앞 AH 다트와 뒤 어깨 다트를 닫아 밑단을 벌린다. 꼬리말: 닫는다·벌린다 P.161",
-          "**처리 방법 161(닫는다·벌린다)** 이 필요하다. 엔진(dartMove)은 있지만 **원형 단계에만** 연결돼 있고 디자인 단계에서 호출할 경로가 없다."),
-        pendingVariant("bunka-bodice-H", "H", "H · 플레어 분량을 더 넣는다", 21, null,
-          "G 와 같은 이유(미판독 — G 착수 시 함께 읽는다).")
+        availVariant("bunka-bodice-G", "G", "G · 밑단 폭 3cm 추가 · 다트를 닫아 밑단을 벌린다", 20),
+        pendingVariant("bunka-bodice-H", "H", "H · 플레어 분량을 더 넣는다", 21,
+          "Ⓖ 의 꼬리말이 «플레어를 더 넣고 싶은 경우 Ⓗ 를 참조» 라고 가리킨다",
+          "다트를 닫아 얻는 분량에는 상한이 있다(다트각 만큼). 그 이상은 **처리 방법 162(평행으로 잘라서 벌린다)** 로 넣는데 그 연산이 아직 없다. P.21 미판독.")
       ] },
     { id: "neck-tuck", order: 5, label: "목둘레에 턱을 넣는다", symbol: "I", page: 22,
       availability: "pending-op", note: PENDING_NOTE,
@@ -164,7 +164,11 @@
       // ※ 교재 Ⓐ 는 다트 a·b·d·e 만 쓰지만(82%), 우리 원형은 [학교책] 기준이라 c(옆선)·f(뒤중심)까지
       //   포함한다. 그래서 **우리 Ⓐ 는 교재보다 허리가 조금 더 조인다**(완성 70.9 vs 교재 74.5).
       //   원형 형상을 바꾸지 않기로 한 결정에 따라 그대로 두고, 차이는 문서로만 남긴다.
-      body: {}
+      // ★ [패턴학교] P.14 Ⓐ: "허리선에서 **엉덩이 길이**를 더한 엉덩이선의 위치가 밑단선".
+      // P.13 기본 체형(키 160·등 길이 38)의 엉덩이 길이가 **20cm** 다. 이게 없으면 `hemSideOffsetCm`
+      // 이 **조용히 무시된다**(밑단이 없으니 옮길 것도 없다) — 실제로 Ⓑ·Ⓒ·Ⓓ 의 "밑단 +1" 이
+      // 그렇게 사라지고 있었다.
+      body: { hemExtensionBelowWaistCm: 20 }
     },
     {
       id: "bunka-bodice-B", label: "교재 B 밑단 추가", familyId: "boxy-line", symbol: "B", page: 15,
@@ -172,7 +176,18 @@
       source: "[패턴학교] 박시 라인 Ⓑ(P.15)",
       baseMethod: "bunka-bodice-B-v1",
       // 교재: "오버 블라우스의 경우 엉덩이선에 8cm 이상의 여유분이 들어가 있는지 확인하자"
-      body: { hemSideOffsetCm: 1 }
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1 }
+    },
+    {
+      id: "bunka-bodice-G", label: "교재 G 플레어", familyId: "flare-line", symbol: "G", page: 20,
+      description: "허리 다트를 없애고 앞 AH·뒤 어깨 다트를 닫아 밑단을 벌린다 · 밑단 폭 3cm 추가",
+      source: "[패턴학교] 플레어 라인 Ⓖ(P.20)",
+      baseMethod: "bunka-bodice-G-v1",
+      // ★ 허리 다트 배분 0 이 **필수**다 — 플레어가 그 조임을 대신하고(교재 도해에도 허리 다트가
+      //   없다), 절개선이 앞판 다트 a 를 관통한다(a 의 apex 가 BP 바로 아래). designFlare 는
+      //   봉제 허리다트가 남아 있으면 거부하므로 여기서 함께 지정한다.
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 3,
+              waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, flare: true }
     },
     {
       id: "bunka-bodice-C", label: "교재 C 셰이프트(다트 2개)", familyId: "shaped-line", symbol: "C", page: 16,
@@ -180,7 +195,7 @@
       source: "[패턴학교] 셰이프트 라인 Ⓒ(P.16)",
       baseMethod: "bunka-bodice-C-v1",
       // 교재 인쇄값: 허리둘레 여유분 17cm(기본 체형). 우리 계산과 차이가 있다 — docs/book/P016.md 참고.
-      body: { waistSideOffsetCm: -1, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 0, d: 0, e: 1 } }
+      body: { hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 0, d: 0, e: 1 } }
     },
     {
       id: "bunka-bodice-D", label: "교재 D 셰이프트(다트 4개)", familyId: "shaped-line", symbol: "D", page: 17,
@@ -188,7 +203,7 @@
       source: "[패턴학교] 셰이프트 라인 Ⓓ(P.17)",
       baseMethod: "bunka-bodice-D-v1",
       // 교재 인쇄값: 허리둘레 여유분 7.8cm(기본 체형).
-      body: { waistSideOffsetCm: -1.5, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 1, d: 0.5, e: 1 } }
+      body: { hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1.5, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 1, d: 0.5, e: 1 } }
     }
   ];
 
@@ -207,6 +222,7 @@
         });
         return;
       }
+      if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
       if (!isNum(v)) fail("invalid-body", id + "." + k);
     });
   }

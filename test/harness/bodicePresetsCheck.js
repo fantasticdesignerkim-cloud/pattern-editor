@@ -43,13 +43,13 @@ const BP = sandbox.window.bodicePresets, DB = sandbox.window.designBodice;
 {
   const F = BP.families();
   const avail = F.flatMap(f => f.variants).filter(v => v.availability === "available");
-  ok(J(avail.map(v => v.symbol)) === J(["A", "B", "C", "D"]), "2: 실행 가능 = 박시 A·B + 셰이프트 C·D");
+  ok(J(avail.map(v => v.symbol)) === J(["A", "B", "C", "D", "G"]), "2: 실행 가능 = 박시 A·B + 셰이프트 C·D + 플레어 G");
   ok(avail.every(v => v.presetId === v.id && BP.get(v.presetId)), "2: 실행 슬롯은 레코드를 가리킨다");
   const pend = F.flatMap(f => f.variants).filter(v => v.availability !== "available");
-  ok(pend.length === 18 && pend.every(v => v.presetId === null), "2: 보류 18개는 레코드 없음");
+  ok(pend.length === 17 && pend.every(v => v.presetId === null), "2: 보류 17개는 레코드 없음");
   // ★ 보류는 **왜 못 그리는지**를 반드시 들고 있다 — 없으면 "그냥 아직 안 함"과 구별이 안 된다
   ok(pend.every(v => typeof v.blockedBy === "string" && v.blockedBy.length > 0), "2: 보류 전부 blockedBy 기록");
-  ok(BP.familyOptions().filter(o => !o.available).length === 8, "2: 비활성 라인 8개");
+  ok(BP.familyOptions().filter(o => !o.available).length === 7, "2: 비활성 라인 7개(플레어 해제)");
   ok(BP.resolve("princess-line", "bunka-bodice-E").reason === "bodice-preset-unavailable", "2: 보류는 명시적 거부");
   ok(BP.resolve("nope", "x").reason === "unknown-bodice-family" && BP.get("nope") === null, "2: 알 수 없는 선택 거부");
   // 절대 다른 프리셋으로 대체하지 않는다
@@ -58,10 +58,10 @@ const BP = sandbox.window.bodicePresets, DB = sandbox.window.designBodice;
 
 // ── 3. 레코드 = body 파라미터 묶음(형상 데이터 없음) ──
 {
-  ok(J(BP.bodyParams("bunka-bodice-A")) === J({}), "3: A = 변형 없음(빈 body)");
-  ok(J(BP.bodyParams("bunka-bodice-B")) === J({ hemSideOffsetCm: 1 }), "3: B = 밑단 +1");
-  ok(J(BP.bodyParams("bunka-bodice-C")) === J({ waistSideOffsetCm: -1, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 0, d: 0, e: 1 } }), "3: C = 다트 a·e · 옆선 −1 · 밑단 +1");
-  ok(J(BP.bodyParams("bunka-bodice-D")) === J({ waistSideOffsetCm: -1.5, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 1, d: 0.5, e: 1 } }), "3: D = d 만 ½ · 옆선 −1.5 · 밑단 +1");
+  ok(J(BP.bodyParams("bunka-bodice-A")) === J({ hemExtensionBelowWaistCm: 20 }), "3: A = 밑단(엉덩이 길이 20)만");
+  ok(J(BP.bodyParams("bunka-bodice-B")) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1 }), "3: B = 밑단 +1(밑단이 있어야 유효)");
+  ok(J(BP.bodyParams("bunka-bodice-C")) === J({ hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 0, d: 0, e: 1 } }), "3: C = 다트 a·e · 옆선 −1 · 밑단 +1");
+  ok(J(BP.bodyParams("bunka-bodice-D")) === J({ hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1.5, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 1, d: 0.5, e: 1 } }), "3: D = d 만 ½ · 옆선 −1.5 · 밑단 +1");
   ok(BP.bodyParams("bunka-bodice-A") !== BP.bodyParams("bunka-bodice-A"), "3: 매번 새 복사본");
   // ★ 미지정 키는 넣지 않는다 — 호출부의 "미지정 = 기본값" 계약을 깨지 않기 위해
   ok(!("waistDartTotalCm" in BP.bodyParams("bunka-bodice-C")) && !("targetFinishedWaistCm" in BP.bodyParams("bunka-bodice-C")),
@@ -73,6 +73,14 @@ const BP = sandbox.window.bodicePresets, DB = sandbox.window.designBodice;
   throwsReason(() => BP.validateRecord(bad({ id: "x", body: { waistDartScales: { c: 1 } } })), "unknown-dart-symbol", "3: c·f 는 배분 대상이 아니다");
   throwsReason(() => BP.validateRecord(bad({ id: "x", body: { waistDartScales: { a: -1 } } })), "invalid-body", "3: 음수 배율 거부");
   throwsReason(() => BP.validateRecord(bad({ id: "x", geometry: {} })), "record-shape-data", "3: 형상 데이터 거부");
+  // 플레어 Ⓖ — 다트 배분 0 이 **함께** 들어 있어야 한다(designFlare 가 봉제 허리다트를 거부한다)
+  {
+    const G = BP.bodyParams("bunka-bodice-G");
+    ok(G.flare === true, "3: G = flare");
+    ok(J(G.waistDartScales) === J({ a: 0, b: 0, d: 0, e: 0 }), "3: G 는 허리 다트를 0 으로 함께 지정");
+    ok(G.hemExtensionBelowWaistCm === 20 && G.hemSideOffsetCm === 3, "3: G = 밑단 20 · 밑단 폭 +3");
+    throwsReason(() => BP.validateRecord(bad({ id: "x", body: { flare: 1 } })), "invalid-body", "3: flare 는 true 만");
+  }
 }
 
 // ── 4. designBodice 연동: 배분이 실제 형상에 반영되는가 ──
@@ -122,7 +130,12 @@ const BP = sandbox.window.bodicePresets, DB = sandbox.window.designBodice;
     ok(near(width(r, "front", "front-waist-a"), 2) && near(width(r, "front", "front-waist-b"), 2) && near(width(r, "back", "back-waist-e"), 2.2), "4: D — a·b·e 는 원형");
   }
   // A: 변형 없음 = no-op
-  ok(J(DB.computeGeometry(R, { body: BP.bodyParams("bunka-bodice-A") })) === J(DB.computeGeometry(R, { body: {} })), "4: A — 변형 없음");
+  // Ⓐ 는 밑단(엉덩이 길이 20)을 만든다 — 픽스처는 hem edge 가 없어 이 검사는 프리셋 내용으로만 한다.
+  ok(BP.bodyParams("bunka-bodice-A").hemExtensionBelowWaistCm === 20
+     && Object.keys(BP.bodyParams("bunka-bodice-A")).length === 1, "4: A — 밑단 생성뿐, 다른 변형 없음");
+  // ★ 밑단 오프셋은 밑단이 있어야 효과가 있다 — 밑단 없는 Ⓑ 는 Ⓐ 와 구별되지 않는다(회귀로 못 박는다)
+  ok(J(DB.computeGeometry(R, { body: { hemSideOffsetCm: 1 } })) === J(DB.computeGeometry(R, { body: {} })),
+    "4: 밑단 없이 준 밑단 오프셋은 무시된다(프리셋이 반드시 밑단을 함께 준다)");
   // ★ 배분과 총량은 다른 축이라 함께 써도 과결정이 아니다(배분 유지 + 크기만 맞춤)
   {
     const r = DB.computeGeometry(R, { body: Object.assign(BP.bodyParams("bunka-bodice-D"), { waistDartTotalCm: 4 }) });
