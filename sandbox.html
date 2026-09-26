@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DOROBO sandbox — 실험 영역</title>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     sandbox.html — 계약 밖 실험 페이지.  규칙: docs/SANDBOX.md
+
+     · index.html 은 이 파일을 모른다. 여기서 뭘 해도 본체는 영향 없다.
+     · js/ 는 **읽기만** 한다(본체와 같은 파일·같은 캐시 버전).
+     · ★ 루트에 둔다 — testSeed 의 `./armhole_data_….json` 처럼 **문서 기준 상대경로**가
+       본체와 똑같이 풀려야 "sandbox 에선 되는데 본체에선 안 되는" 함정이 안 생긴다.
+     · 골든·하네스 없음. 저장 금지 — **격리 origin(127.0.0.1:8420)에서만** 연다.
+     · 실험 코드는 sandbox/scratch.js 에만 쓴다.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<link rel="stylesheet" href="css/style.css?v=2026092540">
+<style>
+  #sbxBar{position:fixed;left:0;right:0;bottom:0;z-index:9999;display:flex;gap:6px;
+    align-items:center;flex-wrap:wrap;padding:8px 10px;background:#1f2937;color:#e5e7eb;
+    font:12px/1.4 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
+    box-shadow:0 -2px 12px rgba(0,0,0,.25)}
+  #sbxBar b{color:#fbbf24;letter-spacing:.04em;margin-right:4px}
+  #sbxBar button{font:inherit;padding:5px 10px;border-radius:7px;border:1px solid #4b5563;
+    background:#374151;color:#e5e7eb;cursor:pointer}
+  #sbxBar button:hover{background:#4b5563}
+  #sbxOut{flex:1 1 100%;max-height:26vh;overflow:auto;white-space:pre-wrap;margin:0;
+    font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#a7f3d0}
+  #sbxOut.err{color:#fca5a5}
+  body{padding-bottom:120px}
+</style>
+</head>
+<body>
+
+
+<header class="app-header">
+  <div class="brand-block">
+    <span class="brand">DOROBO</span>
+    <span class="brand-sub">문화식 원형</span>
+  </div>
+
+  <nav class="stage-bar" aria-label="작업 단계" role="tablist">
+    <button type="button" class="stage" role="tab" data-stage="draft"  aria-selected="true"  title="원형">원형</button>
+    <button type="button" class="stage" role="tab" data-stage="design" aria-selected="false" disabled aria-disabled="true" title="원형 완료 후 디자인 시작 준비">디자인</button>
+    <button type="button" class="stage" disabled aria-disabled="true" title="준비 중">재단</button>
+    <button type="button" class="stage" disabled aria-disabled="true" title="준비 중">출력</button>
+  </nav>
+
+  <div class="header-actions">
+    <!-- undo/redo 의 실제 범위는 곡선 핸들 편집이다(pushUndoSnapshot 이 편집모드에서만 호출됨).
+         .edit-history 클래스는 design stage 에서 그룹 숨김용 선택자다(기능·onclick 무변경). -->
+    <button class="btn edit-history" onclick="undoEdit()" aria-label="곡선 편집 실행취소" title="곡선 편집 실행취소">실행취소</button>
+    <button class="btn edit-history" onclick="redoEdit()" aria-label="곡선 편집 다시실행" title="곡선 편집 다시실행">다시실행</button>
+    <!-- 화면 초기화(뷰 리셋)를 좌측 rail·캔버스 툴바가 아니라 header 우측으로 이동(복제 아님, resetView onclick 보존) -->
+    <button class="btn" onclick="resetView()" title="화면 초기화">화면 초기화</button>
+
+    <details class="pop pop-right" data-menu="view">
+      <summary aria-label="보기 메뉴" title="보기">보기</summary>
+      <div class="pop-body">
+        <!-- 실측상 동작하지 않는 3개(chkDartWaist/chkPattern/chkDep)는 wrapper 에 hidden 을
+             주어 시각·키보드 접근에서 제거한다. render.js 가 layer-pattern / layer-dep 그룹을
+             만들지 않아 toggleLayer 가 대상 없이 끝나는 **기존 결함**이며, 이번 UI 작업에서
+             엔진을 고치지 않는다. input 의 id·onchange·checked 는 그대로 보존한다
+             (DOM id 계약 유지 + 렌더 결함이 고쳐지면 hidden 만 떼면 된다). -->
+        <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="toggleLayer('layer-base',this.checked)"></div>
+        <div class="row" hidden><label>허리다트</label><input type="checkbox" id="chkDartWaist" checked onchange="applyLayerVisibility()"></div>
+        <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="toggleLayer('layer-dim',this.checked)"></div>
+        <div class="row" hidden><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
+        <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" checked onchange="toggleLayer('layer-points',this.checked)"></div>
+        <div class="row" hidden><label>종속선</label><input type="checkbox" id="chkDep" checked onchange="toggleLayer('layer-dep',this.checked)"></div>
+      </div>
+    </details>
+
+    <details class="pop pop-right" data-menu="file">
+      <summary aria-label="파일 메뉴" title="파일">파일</summary>
+      <div class="pop-body">
+        <div class="row"><label>곡선 저장</label><button class="btn" onclick="saveCurveData()">저장</button></div>
+        <div class="row"><label>마지막 저장선</label><button class="btn" onclick="loadSavedCurveForCurrentMeasurements(true)">불러오기</button></div>
+        <div class="row note" id="saveCount">저장 0건</div>
+        <div class="row"><label>데이터 내보내기</label><button class="btn" onclick="exportData()">JSON 다운로드</button></div>
+        <div class="row"><label>데이터 가져오기</label><input type="file" id="inpImportData" accept="application/json,.json" style="display:none" onchange="importDataFromFile(this)"><button class="btn" onclick="document.getElementById('inpImportData').click()">JSON 불러오기</button></div>
+        <div class="row"><label>패턴 내보내기</label><button class="btn" onclick="exportDXF()">DXF 다운로드</button></div>
+      </div>
+    </details>
+  </div>
+</header>
+
+<div class="workspace">
+
+  <main class="canvas-wrap">
+    <!-- 1행 primary bar: 도구(다트이동/곡선편집) ‖ 모드(전체/몸판/소매). SVG 를 덮지 않고 형제. -->
+    <div class="canvas-toolbar">
+      <div class="seg">
+        <button class="mode-btn active" id="modeAll" onclick="setWorkMode('all')">전체</button>
+        <button class="mode-btn" id="modeBody" onclick="setWorkMode('body')">몸판</button>
+        <button class="mode-btn" id="modeSleeve" onclick="setWorkMode('sleeve')">소매</button>
+      </div>
+      <div class="bar-divider"></div>
+      <div class="seg">
+        <!-- 좌측 rail 에서 이동. 기능은 기존 onclick 이 담당. btnDartMove 는 JS(setBtn)가
+             textContent/inline background 를 덮으므로 자식 <svg> 대신 ::before 아이콘.
+             idle 은 아이콘만(가시 텍스트 없음), busy 는 CSS ::after 가 "종료" 를 표시한다 —
+             실제 textContent="취소" 는 busy 판정 계약이라 그대로 둔다. -->
+        <button class="tool tool-dart" id="btnDartMove" data-tool="dart" onclick="toggleDartMove()" aria-pressed="false" aria-label="다트 이동 시작" title="다트 이동 시작">다트이동 시작</button>
+        <button type="button" class="tool" data-tool="curves" aria-pressed="false" aria-label="곡선 편집" title="곡선 편집">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><title>곡선 편집</title><path d="M3 18c4 0 6-12 10-12s5 6 8 6"/><circle cx="3" cy="18" r="1.5"/><circle cx="21" cy="12" r="1.5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2행 context host: 선택 도구가 있을 때만 표시. 비면 CSS :has 로 display:none(높이 0).
+         내부 두 context 는 최초부터 존재하고 hidden 으로만 전환(innerHTML·재생성 없음). -->
+    <div class="context-host">
+      <details class="insp" open data-panel="curves" hidden>
+        <summary>곡선 편집</summary>
+        <div class="insp-body">
+          <div class="row"><label>진동선</label><button class="btn" id="btnArmEdit" onclick="toggleArmEdit()">편집 시작</button></div>
+          <div class="row"><label>네크라인</label><button class="btn" id="btnNeckEdit" onclick="toggleNeckEdit()">편집 시작</button></div>
+          <div class="row"><label>소매산</label><button class="btn" id="btnSleeveEdit" onclick="toggleSleeveEdit()">편집 시작</button></div>
+          <div class="row"><label>소매산 리셋</label><button class="btn" id="btnSleeveReset" onclick="resetSleeveAnchors()">소매산 리셋</button></div>
+          <div class="row"><label>곡선핸들 전체리셋</label><button class="btn" onclick="resetCurveHandles();render()">리셋</button></div>
+        </div>
+      </details>
+
+      <!-- 다트 도구 선택 시 표시. idle/busy 는 ui.js 가 실제 DOM 에서 파생해 hidden 으로만
+           전환한다. 앞/뒤 행은 기존 setSideRowVisible 의 display "" / "none" 계약 유지. -->
+      <section class="context-strip" aria-label="다트 이동" data-panel="dart" hidden>
+        <div class="insp-title">다트 이동</div>
+        <p class="note" data-dart-idle>다트 이동 도구를 눌러 작업을 시작하세요.</p>
+        <div class="dart-busy" data-dart-busy hidden>
+          <div class="row" id="dartSideRow" style="display:none;gap:4px">
+            <button class="btn" id="btnDartSideFront" onclick="selectDartSide('front')">앞판</button>
+            <button class="btn" id="btnDartSideBack"  onclick="selectDartSide('back')">뒤판</button>
+          </div>
+
+          <!-- 가시 항목: 이동 가능각 · 회전량 · 전체 다트각 · hint · 리셋 | 적용(최우측) -->
+          <div class="row"><label>이동 가능각</label><span class="prop-val" id="dartPropRange">—</span></div>
+          <div class="row"><label>회전량</label><span class="prop-val" id="dartPropRotation">—</span></div>
+          <div class="row"><label>전체 다트각</label><span class="prop-val" id="dartPropBudget">—</span></div>
+          <div class="row note" id="dartMoveHint"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn" onclick="resetDartMove()">리셋</button>
+            <button class="btn action-primary" id="btnDartApply" onclick="applyDartMove()" disabled>적용</button>
+          </div>
+
+          <!-- DOM 계약 보존용 숨김 보관: ui.js updateDartInspector 가 이 id 들을 계속 채우지만
+               화면에는 중복 표시하지 않는다(대상 / 현재 단계 / 소스 다트각). 바깥 wrapper 가
+               hidden 이라 ui.js 의 setShown(dartPropNewNote/dartPropSourceRow) 토글과 무관하게
+               항상 숨겨진다. id·값 계약은 그대로 유지된다. -->
+          <div class="dart-store" hidden aria-hidden="true">
+            <div class="row"><label>대상</label><span class="prop-val" id="dartPropSide">—</span></div>
+            <div class="row"><label>현재 단계</label><span class="prop-val" id="dartPropStep">—</span></div>
+            <p class="note" id="dartPropNewNote" hidden>새 다트 생성</p>
+            <div class="row" id="dartPropSourceRow" hidden><label>소스 다트각</label><span class="prop-val" id="dartPropSource">—</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <svg id="cv" xmlns="http://www.w3.org/2000/svg"></svg>
+  </main>
+
+  <!-- 원형 stage 전용 치수 inspector. design stage 에서는 ui.js 가 hidden 처리하고
+       CSS :has 가 280px column 도 함께 제거한다. -->
+  <aside class="inspector" aria-label="속성">
+    <details class="insp" open data-panel="measurements">
+      <summary>원형 · 치수</summary>
+      <div class="insp-body">
+        <div class="row"><label>B 가슴둘레</label><input type="number" id="inpB" value="83" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>W 허리둘레</label><input type="number" id="inpW" value="64" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>BL 등길이</label><input type="number" id="inpBL" value="38" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>소매길이</label><input type="number" id="inpSL" value="52" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>소매단둘레</label><input type="number" id="inpHem" value="30" step="0.5" oninput="markDirty(event)"></div>
+        <div class="row"><label>소매산 공식</label><select id="selCapFormula" onchange="if(!isMeasureDirty) render()"><option value="culture" selected>문화식</option><option value="recommended">추천식</option></select></div>
+        <div class="row"><label>소매산 보정</label><input type="range" id="inpCapAdj" min="-3" max="3" step="0.1" value="3" oninput="if(!isMeasureDirty) render()"><span class="slv" id="capAdjVal">0.0</span></div>
+        <div class="row"><label>다트 총량 (cm)</label><input type="number" id="inpDart" value="12.5" step="0.5" oninput="render()"></div>
+        <div class="row note" id="dirtyState">패턴 생성 버튼을 누르세요</div>
+        <div class="row"><button class="btn action-primary" id="btnGenerate" onclick="generatePattern()">패턴 생성 / 다시 계산</button></div>
+        <!-- 원형 완료(세션 전용). design 은 계속 disabled — 완료본이 있어도 활성화하지 않는다.
+             버튼은 addEventListener 로만 연결(inline handler 없음). 문구는 aria-live. -->
+        <div class="row note completion-note" id="blockStatusNote" aria-live="polite">원형 미완료 · 세션 전용</div>
+        <div class="row completion-row"><button class="btn" id="btnCompleteDraft" title="현재 원형을 세션 완료본으로 기록합니다">원형 완료</button></div>
+        <!-- 디자인 시작/계속(D3b-1). 완료본을 명시적으로 복사해 designProject 로 진입한다.
+             enabled = hasCompleted() && !busyTool(). inline handler 없이 bind()에서 연결.
+             현재 draft(dirty)가 아니라 blockWorkflow.latest() 완료본을 쓴다(재캡처·자동 complete 없음). -->
+        <div class="row completion-row"><button class="btn" id="btnStartDesign" disabled aria-disabled="true" title="원형을 완료한 뒤 디자인을 시작할 수 있습니다">디자인 시작</button></div>
+      </div>
+    </details>
+
+    <!-- design stage 전용 몸판 디자인 패널(DB1b). ui.js 가 stage 로 measurements 와 상호배타로
+         표시한다(동시 노출 금지). 버튼은 inline handler 없이 bind()에서 연결(inline 37 유지). -->
+    <details class="insp" data-panel="design-body" open hidden>
+      <summary>디자인</summary>
+      <div class="insp-body">
+        <!-- 몸판/소매 서브탭: 형태 컨트롤 분리. 소매 탭은 몸판 완료(bodiceResult·비스테일) 후 활성. -->
+        <div class="subtabs" id="designSubtabs" role="tablist">
+          <button type="button" class="subtab" data-subtab-btn="body" aria-selected="true">몸판</button>
+          <button type="button" class="subtab" data-subtab-btn="sleeve" aria-selected="false" disabled title="몸판 완료 후 활성">소매</button>
+          <button type="button" class="subtab" data-subtab-btn="collar" aria-selected="false" disabled title="소매 완료 후 활성">카라</button>
+        </div>
+        <div class="subtab-panel" data-subtab="body">
+        <!-- 몸판 라인 카탈로그([패턴학교] P.14–35). 프리셋 = 아래 입력들의 묶음 — 적용하면 입력을 채운다. -->
+        <div class="row"><label for="selBodiceFamily">몸판 라인</label><select id="selBodiceFamily"></select></div>
+        <div class="row"><label for="selBodicePreset">세부 제도</label><select id="selBodicePreset"></select></div>
+        <div class="row"><button type="button" class="btn" id="btnApplyBodicePreset">라인 적용</button></div>
+        <div class="row note" id="designBodiceLineNote" aria-live="polite"></div>
+        <!-- 품·여유량: 전체 가슴둘레 여유량 → 각 옆선 E/4 바깥 평행 이동(원본 블록 불변, 파생 geometry). -->
+        <div class="row"><label for="inpBodyBustEase">품·여유량 (cm)</label><input id="inpBodyBustEase" type="number" min="0" max="100" step="0.1"></div>
+        <div class="row"><label for="inpBodyHemExtension">엉덩이 길이 (cm)</label><input id="inpBodyHemExtension" type="number" min="0" max="100" step="0.1"></div>
+        <!-- 옆선 실루엣: underarm 고정, 허리·밑단 옆선만 이동(음수=안쪽/허리 들어감, 양수=바깥/A라인). -->
+        <div class="row"><label for="inpBodyWaistOffset">허리 옆선 이동 (cm)</label><input id="inpBodyWaistOffset" type="number" min="-30" max="30" step="0.1"></div>
+        <div class="row"><label for="inpBodyHemOffset">밑단 옆선 이동 (cm)</label><input id="inpBodyHemOffset" type="number" min="-30" max="30" step="0.1"></div>
+        <!-- 옆선 곡선화: 진동밑→허리→밑단 꺾임을 두 cubic 으로 부드럽게(0=직선, 1=자동 곡률). hem 있을 때만. -->
+        <div class="row"><label for="inpBodySideCurve">옆선 곡선화 (0–1)</label><input id="inpBodySideCurve" type="number" min="0" max="1" step="0.05"></div>
+        <div class="row"><label for="inpBodyWaistDartTotal">허리 다트량 (cm · 봉제 a·b·d·e)</label><input id="inpBodyWaistDartTotal" type="number" min="0.1" max="40" step="0.25"></div>
+        <div class="row"><label for="inpBodyWaistTarget">목표 완성 허리 (cm)</label><input id="inpBodyWaistTarget" type="number" min="30" max="200" step="0.5"></div>
+        <div class="row note" id="designDartScaleNote" aria-live="polite"></div>
+        <!-- 네크라인(parametric): 기본형 카드 선택 + 공통 입력(목너비·앞목·뒤목 깊이) + 형태별 입력.
+             원본 reference 에서 비누적 재계산. 형태: 원형유지/라운드/V넥/스퀘어/보트. 직접편집은 증분 3. -->
+        <div class="row" style="margin-top:8px"><label>네크라인</label></div>
+        <div class="neck-cards" id="necklineCards" role="radiogroup" aria-label="네크라인 형태">
+          <button type="button" class="neck-card" data-neck="original" aria-pressed="true">원형 유지</button>
+          <button type="button" class="neck-card" data-neck="shirt" aria-pressed="false">셔츠 목선</button>
+          <button type="button" class="neck-card" data-neck="stand-f" aria-pressed="false">스탠드 F 목선</button>
+          <button type="button" class="neck-card" data-neck="round" aria-pressed="false">라운드</button>
+          <button type="button" class="neck-card" data-neck="v" aria-pressed="false">V넥</button>
+          <button type="button" class="neck-card" data-neck="square" aria-pressed="false">스퀘어</button>
+          <button type="button" class="neck-card" data-neck="boat" aria-pressed="false">보트</button>
+        </div>
+        <div class="row" data-neck-for="common" hidden><label for="inpNeckWidth">목너비 (cm)</label><input id="inpNeckWidth" type="number" min="-15" max="15" step="0.1"></div>
+        <div class="row" data-neck-for="common" hidden><label for="inpNeckFrontDepth">앞목 깊이 (cm)</label><input id="inpNeckFrontDepth" type="number" min="-10" max="20" step="0.1"></div>
+        <div class="row" data-neck-for="common" hidden><label for="inpNeckBackDepth">뒤목 깊이 (cm)</label><input id="inpNeckBackDepth" type="number" min="-10" max="20" step="0.1"></div>
+        <div class="row" data-neck-for="round boat shirt stand-f" hidden><label for="inpNeckCurveAmount">곡선 정도 (0–1)</label><input id="inpNeckCurveAmount" type="number" min="0" max="1" step="0.05"></div>
+        <div class="row" data-neck-for="v" hidden><label for="inpNeckVDepth">V끝점 깊이 (cm)</label><input id="inpNeckVDepth" type="number" min="0" max="20" step="0.1"></div>
+        <div class="row" data-neck-for="square" hidden><label for="inpNeckSquareWidth">가로폭 (cm)</label><input id="inpNeckSquareWidth" type="number" min="0" max="20" step="0.1"></div>
+        <div class="row" data-neck-for="square" hidden><label for="inpNeckCornerRadius">모서리 둥글기 (cm)</label><input id="inpNeckCornerRadius" type="number" min="0" max="10" step="0.1"></div>
+        <!-- 세부 수정: parametric 네크라인을 boundary patternLine 으로 변환(manual). 기본형으로 돌아가기:
+             자동 네크라인 boundary 만 제거하고 parametric 복귀. 둘은 상호배타로만 활성. -->
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnNeckManual" disabled>세부 수정</button>
+          <button class="btn" id="btnNeckRevert" hidden>기본형으로 돌아가기</button>
+        </div>
+        <div class="row note" id="designNeckModeNote" aria-live="polite"></div>
+        <div class="row" style="gap:4px">
+          <button class="btn action-primary" id="btnApplyBodyLength">적용</button>
+          <button class="btn" id="btnResetBodyLength">0으로 초기화</button>
+        </div>
+        <div class="row note" id="designBodyNote" aria-live="polite">허리선에서 엉덩이선까지 · 중심선 기준</div>
+        <!-- 앞·뒤 옆선 봉제 길이 + 차이(봉제 정합 검증). 곡선화 반영 실측. -->
+        <div class="row note" id="designGirthNote" aria-live="polite"></div>
+        <div class="row note" id="designSideLenNote" aria-live="polite"></div>
+        <!-- 앞·뒤 목둘레 길이 + 합계(카라 단계 기준). parametric 네크라인 실측. -->
+        <div class="row note" id="designNeckLenNote" aria-live="polite"></div>
+        <!-- 앞중심 여밈(컷온 안단): computeGeometry 밖의 별도 파생. 현재 유효 앞판 외곽(designOutline
+             또는 working.geometry.front)에서 파생 → working.frontPlacket. 목둘레 길이엔 미포함. -->
+        <div class="row" style="margin-top:8px"><label>앞중심 여밈</label></div>
+        <div class="row"><label for="inpPlacketOverlap">여밈분 (cm)</label><input id="inpPlacketOverlap" type="number" min="0" max="10" step="0.05"></div>
+        <div class="row"><label for="inpPlacketFacing">안단 폭 (cm)</label><input id="inpPlacketFacing" type="number" min="0" max="15" step="0.1"></div>
+        <div class="row" style="gap:4px">
+          <button class="btn action-primary" id="btnApplyPlacket">여밈 적용</button>
+          <button class="btn" id="btnClearPlacket">여밈 제거</button>
+        </div>
+        <div class="row note" id="designPlacketNote" aria-live="polite"></div>
+        <!-- 몸판 모양 완료(bodiceCheckpoint): 검사 통과 시 working.bodiceResult 세션 스냅샷.
+             소매 단계가 확정 진동선을 참조. 아직 시접·너치·재단선 아님. -->
+        <div class="row" style="margin-top:8px"><label>몸판 완료</label></div>
+        <div class="row note" id="designBodiceCheckNote" aria-live="polite"></div>
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnCompleteBodice">몸판 모양 완료</button>
+        </div>
+        <div class="row note" id="designBodiceStatusNote" aria-live="polite">몸판 미완료 · 세션 전용</div>
+        </div><!-- /subtab body -->
+
+        <!-- 소매 모양(S1: 기본 긴팔 하부 실루엣). cap·진동밑 고정, 아래쪽(옆선·밑단)만 변형 →
+             소매산·앞뒤 이세 관계 불변. 기준값 = 완료 원형 소매(referenceGeometry.sleeve). 몸판 stale 이면
+             편집 차단. 결과는 working.geometry.sleeve 로 덮어씀(파생, body apply 후 재파생). -->
+        <div class="subtab-panel" data-subtab="sleeve" hidden>
+          <div class="row"><label for="inpSleeveLength">소매길이 (cm)</label><input id="inpSleeveLength" type="number" min="10" max="90" step="0.1"></div>
+          <div class="row"><label for="inpSleeveCuff">소매부리 완성둘레 (cm)</label><input id="inpSleeveCuff" type="number" min="8" max="60" step="0.1"></div>
+          <div class="row"><label for="selSleeveSide">옆선</label>
+            <select id="selSleeveSide"><option value="straight">직선</option><option value="gentle">완만 곡선</option></select></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnApplySleeve">소매 적용</button>
+            <button class="btn" id="btnResetSleeve">원형 소매로</button>
+          </div>
+          <!-- 소매산(S2): 위팔 완성둘레 + 소매산 높이 → 원형 cap 을 SP-local 스케일 변환(앞/뒤 비율 보존).
+               위팔품·소매산은 독립 입력이 아니라 함께 원자적 재계산. 출력 = 이세(사실값). -->
+          <div class="row" style="margin-top:8px"><label>소매산</label></div>
+          <div class="row"><label for="inpSleeveBicep">위팔 완성둘레 (cm)</label><input id="inpSleeveBicep" type="number" min="10" max="80" step="0.1"></div>
+          <div class="row"><label for="inpSleeveCapHeight">소매산 높이 (cm)</label><input id="inpSleeveCapHeight" type="number" min="3" max="30" step="0.1"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnApplyCap">소매산 적용</button>
+          </div>
+          <!-- 소매산 직접 수정(S3): parametric cap → 관리형 patternLine(managedBy sleeve-cap). 진동밑 고정,
+               SP·중간 anchor·핸들 편집 → 소매 재합성. 기본 소매산으로 돌아가기로만 제거. -->
+          <div class="row" style="gap:4px">
+            <button class="btn" id="btnSleeveCapManual" disabled>소매산 직접 수정</button>
+            <button class="btn" id="btnSleeveCapRevert" hidden>기본 소매산으로 돌아가기</button>
+          </div>
+          <div class="row note" id="designSleeveNote" aria-live="polite"></div>
+          <!-- 소매산 봉제선 정합(읽기 전용): 완료 몸판 진동 ↔ 소매산(파생 cap) ↔ 이세. 수치만. -->
+          <div class="row note" id="designSleeveEaseNote" aria-live="polite"></div>
+          <!-- 소매 모양 완료(S5, sleeveCheckpoint): 게이트 통과 시 working.sleeveResult 세션 스냅샷.
+               sourceBodiceHash 고정. 아직 시접·너치·커프스·트임·재단선 아님. -->
+          <div class="row" style="margin-top:8px"><label>소매 완료</label></div>
+          <div class="row note" id="designSleeveCheckNote" aria-live="polite"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn" id="btnCompleteSleeve">소매 모양 완료</button>
+          </div>
+          <div class="row note" id="designSleeveStatusNote" aria-live="polite">소매 미완료 · 세션 전용</div>
+        </div><!-- /subtab sleeve -->
+        <!-- 카라 모양. 단독 스탠드 칼라(A)는 computeStandaloneStand 가 P.146으로, 칼라 밴드 달린 셔츠 칼라(M·N·P)는
+             computeStand/computeBody 가 P.148로, 한 장 셔츠 칼라(G·H·I·J·K)는 computeOnePiece 가 P.147로 만든다. 소매 완료·비스테일일 때만 활성.
+             몸판 hash 변경 시 geometry 를 숨기고 stale 표시(파라미터 보존, 명시적 재적용 필요). -->
+        <div class="subtab-panel" data-subtab="collar" hidden>
+          <!-- 선택 제도형으로 초기화: 밴드·위 칼라를 그 preset 기준값으로 정확히 적용(M: 밴드 3·올림 1·앞 끝선 0.5·
+               gap 3·CB폭 4·돌출 1.5·사선 6→앞폭 √33.75·외곽휨 0). '수치형으로 돌아가기'(직접 편집 전 사용자 값 복귀)와 다름. -->
+          <div class="row row-stack"><label for="selCollarFamily">카라 종류</label><select id="selCollarFamily"></select></div>
+          <div class="row row-stack"><label for="selCollarPreset">세부 제도</label><select id="selCollarPreset"></select></div>
+          <div class="row note" id="designCollarCatalogNote" aria-live="polite"></div>
+          <div class="row" style="margin-bottom:6px"><button class="btn" id="btnCollarBaseM">교재 M 기본형으로 초기화</button></div>
+          <div class="row" data-collar-kind="hood"><label for="inpHoodHead">머리 둘레 (cm)</label><input id="inpHoodHead" type="number" min="30" max="80" step="0.5"></div>
+          <div class="row" data-collar-kind="hood"><label for="inpHoodMeasure">후드 치수 (cm)</label><input id="inpHoodMeasure" type="number" min="20" max="70" step="0.5"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarStandHeight">밴드 폭 (cm)</label><input id="inpCollarStandHeight" type="number" min="1" max="8" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarFrontRise">앞 중심 올림 (cm)</label><input id="inpCollarFrontRise" type="number" min="0" max="10" step="0.1"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnApplyCollar">카라 적용</button>
+            <button class="btn" id="btnResetCollar">초기화</button>
+          </div>
+          <div class="row note" id="designCollarNote" aria-live="polite"></div>
+          <!-- 위 칼라(P.148 step 2·3): 밴드 윗선 ⒸⒹ 에 이음(앞 끝선 연장 미포함). 이음선 길이 = 밴드 윗선 전체이고
+               차이는 위칼라 뒤 중심 수평 이동으로 맞춘다. 밴드 적용 후에만 활성, 밴드 파라미터가 바뀌면 재생성. -->
+          <div class="row" data-collar-kind="two-piece" style="margin-top:8px"><label>칼라 본체</label></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyWidth">CB 칼라 폭 (cm)</label><input id="inpCollarBodyWidth" type="number" min="1" max="15" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyFrontWidth">칼라 끝 사선 길이 (cm)</label><input id="inpCollarBodyFrontWidth" type="number" min="1" max="15" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyProjection">칼라 앞끝 돌출 (cm)</label><input id="inpCollarBodyProjection" type="number" min="0" max="15" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyBow">외곽 휨 (cm)</label><input id="inpCollarBodyBow" type="number" min="-2" max="2" step="0.1"></div>
+          <div class="row" data-collar-kind="two-piece" style="gap:4px">
+            <button class="btn action-primary" id="btnApplyCollarBody">본체 적용</button>
+            <button class="btn" id="btnResetCollarBody">본체 초기화</button>
+          </div>
+          <!-- C3 직접 편집(관리형 선): parametric → manual 변환. 선택·편집 도구로 외곽·포인트 anchor/핸들 편집.
+               endpoint(cbOuter·attachFront) 고정, 무효 시 빨강 점선. 기본형으로 돌아가기로만 관리선 제거. -->
+          <div class="row" data-collar-kind="two-piece" style="gap:4px">
+            <button class="btn" id="btnCollarBodyManual" disabled>본체 직접 수정</button>
+            <button class="btn" id="btnCollarBodyRevert" hidden>수치형으로 돌아가기</button>
+          </div>
+          <div class="row note" data-collar-kind="two-piece" id="designCollarBodyNote" aria-live="polite"></div>
+          <!-- 제도 보조수치(표시 전용): collarAnnotation 표시 모델. 형상·hash·완료 게이트와 무관. -->
+          <div class="row" style="margin-top:8px"><label><input type="checkbox" id="chkCollarDraftDims" checked> 제도 치수 표시</label></div>
+          <div class="row note" id="collarDraftModeNote" aria-live="polite"></div>
+          <div class="collar-draft-summary">
+            <div class="cds-title">제도 입력값</div><dl class="cds-list" id="collarDraftInputs"></dl>
+            <div class="cds-title">계산·정합 결과</div><dl class="cds-list" id="collarDraftResults"></dl>
+          </div>
+          <!-- 카라 모양 완료(collarCheckpoint): 게이트 통과 시 working.collarResult 세션 스냅샷.
+               형상 source=bodiceResult(sourceBodiceHash 고정), 소매는 작업 순서 게이트만. 시접·너치·심지·재단 미포함. -->
+          <div class="row" style="margin-top:8px"><label>카라 완료</label></div>
+          <div class="row note" id="designCollarCheckNote" aria-live="polite"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn" id="btnCompleteCollar">카라 모양 완료</button>
+          </div>
+          <div class="row note" id="designCollarStatusNote" aria-live="polite">카라 미완료 · 세션 전용</div>
+          <!-- Design 형상 통합(designResult): 몸판+소매+카라 형상 패키지 + 유효 cut(structuralLines).
+               재단 패턴 아님. 세 완료본 일치 + 유효 cut 재검증 시에만 활성. hash 에 structuralLines 포함. -->
+          <div class="row" style="margin-top:8px"><label>Design 형상 완료</label></div>
+          <div class="row note" id="designResultCheckNote" aria-live="polite"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnCompleteDesign">Design 형상 완료</button>
+          </div>
+          <div class="row note" id="designResultStatusNote" aria-live="polite">Design 미완료 · 세션 전용</div>
+        </div><!-- /subtab collar -->
+        <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
+        <div class="row" style="margin-top:8px"><label>배치</label></div>
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnLayoutCenterBody">몸판 중앙</button>
+          <button class="btn" id="btnLayoutSleeveRight">소매 오른쪽</button>
+          <button class="btn" id="btnLayoutReset">배치 초기화</button>
+        </div>
+        <div class="row note">몸판과 소매를 드래그해 이동할 수 있습니다</div>
+        <!-- 패턴선(연속선). designLineTool. 클릭 누적 · 더블클릭/Enter 완료 · Backspace/Esc.
+             offset 역변환해 형상 cm 로 working.patternLines 에 저장(geometry 와 분리). -->
+        <div class="row" style="margin-top:8px"><label>패턴선</label></div>
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnDesignLine" aria-pressed="false" onclick="designLineTool.toggle()">선·곡선 그리기</button>
+          <button class="btn" id="btnDesignSelect" aria-pressed="false" onclick="designLineTool.toggleSelect()">선택·편집</button>
+        </div>
+        <!-- 선택한 선의 역할 지정(표시 구분까지). 선택 시에만 활성. 실제 outline 분할은 다음 단계. -->
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnRoleCut" aria-pressed="false" onclick="designLineTool.setRole('cut')" disabled>절개선</button>
+          <button class="btn" id="btnRoleBoundary" aria-pressed="false" onclick="designLineTool.setRole('boundary')" disabled>외곽</button>
+          <button class="btn" id="btnRoleGuide" aria-pressed="false" onclick="designLineTool.setRole('guide')" disabled>보조선</button>
+        </div>
+        <!-- 절개선 유효성(분리 가능/실패 이유). geometry 무변경 UI 상태만. -->
+        <div class="row note" id="designCutStatus" aria-live="polite"></div>
+        <!-- 파트 분리: 유효 절개선 1개로 두 폐곡선 생성(원본 무변경, working.parts 저장). front/back 만. -->
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnDesignSplit" onclick="designLineTool.doSplit()" disabled>파트 분리</button>
+        </div>
+        <div class="row note" id="designSplitNote" aria-live="polite"></div>
+        <!-- 외곽 대체선: boundary 선으로 짧은 arc(네크라인·옆선·밑단)를 교체한 파생 외곽선 미리보기.
+             원본 무변경, working.boundaryPreview 저장. front/back·유효 대체선 1개. -->
+        <div class="row note" id="designBoundaryStatus" aria-live="polite"></div>
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnDesignBoundary" onclick="designLineTool.doBoundaryPreview()" disabled>외곽 대체 미리보기</button>
+        </div>
+        <div class="row note" id="designBoundaryNote" aria-live="polite"></div>
+        <!-- 여러 외곽 대체선을 합성해 디자인 외곽선(working.designOutline) 생성. cut 은 이 외곽 기준.
+             대체 구간이 겹치면 거부. 순서 무관. front/back·원본 geometry 불변. -->
+        <div class="row" style="gap:4px">
+          <button class="btn" id="btnDesignCompose" onclick="designLineTool.doComposeDesignOutline()" disabled>디자인 외곽 합성</button>
+        </div>
+        <div class="row note" id="designComposeNote" aria-live="polite"></div>
+        <div class="row note" id="designLineNote" aria-live="polite"></div>
+      </div>
+    </details>
+  </aside>
+</div>
+
+<footer class="statusbar">
+  <div class="sb" id="sb"></div>
+</footer>
+
+<!-- JS 파일 순서 중요: 의존성 순서대로 로드 -->
+<script src="js/state.js?v=2026070731"></script>
+<script src="js/layer.js?v=2026070731"></script>
+<script src="js/draft.js?v=2026091910"></script>
+<script src="js/handles.js?v=2026070731"></script>
+<script src="js/render.js?v=2026092520"></script>
+<script src="js/sleeve.js?v=2026080911"></script>
+<script src="js/storage.js?v=2026071603"></script>
+<script>const DEBUG_DART_MOVE = false;</script>
+<!-- 테스트 전용 read-only 곡선 fixture. 서비스 시작 전 이 줄과 js/testSeed.js 를 삭제한다.
+     storage.js 이후(자동 복원·전역 함수 정의 뒤)·init.js 이전(generatePattern 전) 배치. -->
+<script src="js/testSeed.js?v=2026072306"></script>
+<script src="js/dartMove.js?v=2026092401"></script>
+<!-- 블록마스터(원형) 데이터 캡처 1단계: captureBlockSnapshot() 만 공개. -->
+<script src="js/blockMaster.js?v=2026092501"></script>
+<!-- 원형 완료 수명주기(세션 메모리): window.blockWorkflow. UI 는 아직 연결하지 않는다. -->
+<script src="js/blockWorkflow.js?v=2026072804"></script>
+<!-- 디자인 프로젝트 D1(세션 데이터): window.designWorkflow. UI·renderer·design 활성화 없음. -->
+<script src="js/designProject.js?v=2026092402"></script>
+<!-- 디자인 geometry renderer D2(builder만): window.designRenderer. render.js hook·append 없음. -->
+<script src="js/designRenderer.js?v=2026092402"></script>
+<!-- DB1a 몸판 grain-기준 길이 연장 순수 변환: window.designBodice.computeGeometry. UI·render hook·working 대입 없음. -->
+<script src="js/designBodice.js?v=2026092630"></script>
+<script src="js/bodicePresets.js?v=2026092630"></script>
+<!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
+<script src="js/designPlacket.js?v=2026082001"></script>
+<!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
+<script src="js/designSleeve.js?v=2026082041"></script>
+<!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
+<script src="js/designLayout.js?v=2026092520"></script>
+<!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
+<script src="js/designLineTool.js?v=2026091620"></script>
+<!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
+<script src="js/bodiceCheckpoint.js?v=2026092630"></script>
+<!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
+<script src="js/sleeveMeasure.js?v=2026082011"></script>
+<!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
+<script src="js/sleeveCheckpoint.js?v=2026082041"></script>
+<!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
+<script src="js/designCollar.js?v=2026092520"></script>
+<!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
+<script src="js/collarPresets.js?v=2026092530"></script>
+<!-- 카라 모양 완료 체크포인트: window.collarCheckpoint. 게이트 + working.collarResult 세션 스냅샷(형상 source=bodice, 소매=순서 게이트). -->
+<script src="js/collarCheckpoint.js?v=2026092520"></script>
+<!-- 카라 제도 보조수치 표시 모델(순수·표시 전용): window.collarAnnotation. 형상·hash 무관. -->
+<script src="js/collarAnnotation.js?v=2026092520"></script>
+<!-- Design 형상 통합: window.designResult. 세 완료본 + structuralLines(유효 cut) 묶음. 재단 아님. -->
+<script src="js/designResult.js?v=2026082701"></script>
+<!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
+<script src="js/draftLayout.js?v=2026080911"></script>
+<script src="js/init.js?v=2026080610"></script>
+<!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
+<script src="js/ui.js?v=2026092630"></script>
+
+
+<div id="sbxBar">
+  <b>SANDBOX</b>
+  <span id="sbxBtns"></span>
+  <button type="button" id="sbxClear">지우기</button>
+  <button type="button" id="sbxHelp">SB 도움말</button>
+  <pre id="sbxOut">실험 버튼을 누르거나 콘솔에서 <code>SB.help()</code>.  실험 코드는 sandbox/scratch.js.</pre>
+</div>
+<script src="sandbox/boot.js"></script>
+<script>
+// SBX — scratch.js 가 등록한 실험을 버튼으로 띄우는 최소 러너(본체 무관)
+(function () {
+  const out = document.getElementById("sbxOut");
+  const btns = document.getElementById("sbxBtns");
+  function show(v, isErr) {
+    out.className = isErr ? "err" : "";
+    out.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+  }
+  window.SBX = {
+    add(name, fn) {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = name;
+      b.addEventListener("click", async () => {
+        show("실행 중 — " + name + " …");
+        try { show(await fn()); }
+        catch (e) { show(name + " 실패\n" + (e && e.stack || e), true); }
+      });
+      btns.appendChild(b);
+    },
+    show
+  };
+  document.getElementById("sbxClear").addEventListener("click", () => show(""));
+  document.getElementById("sbxHelp").addEventListener("click", () => {
+    SB.help();
+    show("SB.toDraft / toDesign / toBodice(body) / toSleeve / toCollar / all\n"
+       + "SB.applyBody({bustEaseCm:8}) · SB.line(familyId, variantId)\n"
+       + "SB.girth() · SB.darts() · SB.p · SB.storageKeys()\n"
+       + "자세한 건 콘솔.");
+  });
+})();
+</script>
+<script src="sandbox/scratch.js"></script>
+</body>
+</html>
