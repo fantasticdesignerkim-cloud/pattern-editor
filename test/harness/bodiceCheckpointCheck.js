@@ -569,6 +569,21 @@ function fakeProject(backSideTopY, opts) {
   ["front", "back"].forEach(k => { Pw.working.geometry[k].outline = Pw.working.geometry[k].outline.filter(s => s.edge !== "waist"); });
   const mw = BC.girthMeasure(Pw);
   ok(mw.waist === null && mw.waistLineY === null && mw.bust !== null, "13: 허리 측정 불가는 null(가슴은 계속 측정)");
+  // ★ 경계 회귀: 다트 다리 y 가 허리선 y 보다 **미세하게 큰**(변환 누적 오차) 실제 상황.
+  //   엄격한 t>1 판정이면 다트가 통째로 0 이 되어 완성 둘레가 외곽과 같아진다(실측으로 겪은 결함).
+  {
+    const Pd = mk();
+    ["front", "back"].forEach(k => {
+      (Pd.working.geometry[k].construction || []).forEach(sg => {
+        if (sg.dart && sg.from.y === 30) sg.from.y = 30.00000000000001;
+        if (sg.dart && sg.to.y === 30) sg.to.y = 30.00000000000001;
+      });
+    });
+    const md = BC.girthMeasure(Pd);
+    ok(near(md.waist.suppressionCm, 5), "13: 다리 y 가 1e-14 만큼 커도 다트가 잡힌다");
+    ok(md.waist.finishedCm < md.waist.outlineCm, "13: 완성 둘레가 외곽과 같아지지 않는다");
+  }
+
   // 인자 없이 부르면 현재 project 로 떨어진다(다른 getter 와 같은 관례) — 현재도 없으면 null
   { const keep = PROJECT; PROJECT = null;
     ok(BC.girthMeasure(null) === null && BC.girthMeasure() === null, "13: project 가 아예 없으면 null");

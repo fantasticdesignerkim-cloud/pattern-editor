@@ -42,6 +42,8 @@ const suites = [
   { file: "designRenderBranchCheck.js", golden: false },
   // DB1a: 몸판 grain-기준 길이 연장 순수 변환. 실제 designBodice.js(+designRenderer 왕복) vm 실행.
   { file: "designBodiceCheck.js",       golden: false },
+  // 몸판 라인 카탈로그([패턴학교] P.14–35): 22 변형 슬롯·보류 사유·레코드 → designBodice 배분 연동.
+  { file: "bodicePresetsCheck.js",      golden: false },
   // 앞중심 여밈 파생(designPlacket): 현재 유효 앞판 외곽 → 여밈 스트립 순수 변환.
   { file: "designPlacketCheck.js",      golden: false },
   // 몸판 모양 완료 체크포인트: 검사·완료 게이트·불변 스냅샷·스테일 판정(스텁 project).

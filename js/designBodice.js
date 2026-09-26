@@ -603,9 +603,19 @@
     if (!xs.length) return null;
     return { lo: Math.min.apply(null, xs), hi: Math.max.apply(null, xs) };
   }
-  // 입 중점을 고정하고 두 다리 끝점을 배율 s 로 벌린다/좁힌다. apex 는 불변.
-  function scaleSewnWaistDarts(piece, s) {
+  // 다트 id 끝의 기호(front-waist-**a** → "a"). 교재가 쓰는 a·b·d·e 표식과 맞춘다.
+  function dartSymbol(id) {
+    var m = /(?:^|-)([a-z])$/.exec(String(id || ""));
+    return m ? m[1] : null;
+  }
+  // 입 중점을 고정하고 두 다리 끝점을 배율로 벌린다/좁힌다. apex 는 불변.
+  //   scaleOf(group) 가 다트마다 배율을 준다. **0 이면 그 다트를 아예 제거**한다 —
+  //   폭 0 다트를 남기면 다리 두 개가 겹친 잔선이 되므로(교재 C 처럼 "없는" 다트는 없어야 한다).
+  function scaleSewnWaistDarts(piece, scaleOf) {
+    var drop = [];
     sewnWaistDartGroups(piece).forEach(function (g) {
+      var s = scaleOf(g);
+      if (!(s > 0)) { drop.push(g); return; }
       var a = dartMouthPt(g.segs[0]), b = dartMouthPt(g.segs[1]);
       var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       g.segs.forEach(function (seg) {
@@ -614,6 +624,13 @@
         q.y = my + (q.y - my) * s;
       });
     });
+    if (drop.length) {
+      var gone = {};
+      drop.forEach(function (g) { g.segs.forEach(function (seg) { gone[seg.dart.id] = true; }); });
+      piece.construction = (piece.construction || []).filter(function (seg) {
+        return !(seg && seg.dart && gone[seg.dart.id]);
+      });
+    }
   }
   // 허리선이 차지하는 가로 폭(중심↔옆선). 허리선은 수평이라 x 범위 = 폭이고,
   //   이는 bodiceCheckpoint.girthMeasure 가 y=WL 에서 재는 외곽 폭과 같은 값이다(회귀로 잠금).
@@ -658,6 +675,7 @@
     var curve = body.sideSeamCurve; if (curve == null) curve = 0;     // 옆선 곡선화(0=직선, 0–1)
     var dartTot = body.waistDartTotalCm;                               // 봉제 허리다트(a·b·d·e) 합. 미지정=원형 그대로
     var waistTarget = body.targetFinishedWaistCm;                      // 목표 완성 허리(전체 둘레). 미지정=미사용
+    var dartScales = body.waistDartScales;                             // 다트별 배분 {a,b,d,e} (1=원형, 0=미사용). 미지정=전부 1
     // 입력 정규화 경계: 정확한 0(전부) 만 no-op. 길이·여유량 음수 실패. 옆선 오프셋은 부호 허용(안/밖).
     if (typeof L !== "number" || !isFinite(L) || L < 0) fail("invalid-body-length", L);
     if (typeof E !== "number" || !isFinite(E) || E < 0) fail("invalid-body-ease", E);
@@ -671,6 +689,18 @@
     var applyTarget = (waistTarget != null);
     if (applyTarget && (typeof waistTarget !== "number" || !isFinite(waistTarget) || waistTarget <= 0)) fail("invalid-waist-target", waistTarget);
     if (applyTarget && applyDarts) fail("waist-overdetermined");
+    // ★ 배분(waistDartScales)과 크기(총량/목표)는 **다른 축**이라 함께 써도 과결정이 아니다.
+    //   scales 가 "어느 다트를 얼마나 쓰는가"(교재 C = a·e 만, D = d 만 ½)를 정하고,
+    //   총량/목표는 그 배분을 유지한 채 전체 크기를 맞춘다.
+    var applyScales = (dartScales != null);
+    if (applyScales) {
+      if (typeof dartScales !== "object" || Array.isArray(dartScales)) fail("invalid-waist-dart-scales", dartScales);
+      Object.keys(dartScales).forEach(function (k) {
+        if (!/^[a-z]$/.test(k)) fail("invalid-waist-dart-scales", k);
+        var v = dartScales[k];
+        if (typeof v !== "number" || !isFinite(v) || v < 0) fail("invalid-waist-dart-scales", k);
+      });
+    }
     // 네크라인(parametric). mode==="manual" / type==="original" / 없음이면 미적용(원본 목선 유지).
     var neckline = (opts && opts.neckline) || null;
     var applyNeck = !!(neckline && neckline.mode === "parametric" && NECK_TYPES[neckline.type]);
@@ -678,7 +708,7 @@
       var np = neckline.parameters || {};
       ["neckWidthCm", "frontDepthCm", "backDepthCm", "vPointDepthCm", "squareWidthCm", "cornerRadiusCm", "curveAmountNorm"].forEach(function (k) { var v = np[k]; if (v != null && (typeof v !== "number" || !isFinite(v))) fail("invalid-neckline-param", k); });
     }
-    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck && !applyDarts && !applyTarget) return deepClone(referenceGeometry);
+    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck && !applyDarts && !applyTarget && !applyScales) return deepClone(referenceGeometry);
     // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
     var delta = E / 4;   // 전체 가슴둘레 여유량 → 각 옆선 E/4 (앞반쪽 + 뒤반쪽, ×2측 = E)
     var src = deepClone(referenceGeometry);
@@ -695,6 +725,16 @@
     if (bLen != null) bPiece.necklineLenCm = bLen;
     // 허리 다트 재배분은 **마지막**. a·b·d·e 는 앞선 변환에서 움직이지 않으므로 순서 무관하지만,
     // 겹침·범위 검사를 최종 허리선(옆선 이동 반영) 위에서 해야 정확하다.
+    // ① 배분: 다트마다 원형 대비 배율(0 이면 제거). 크기 조정보다 **먼저** 한다.
+    if (applyScales) {
+      var scaleOf = function (g) {
+        var sym = dartSymbol(g.id);
+        var v = (sym != null && Object.prototype.hasOwnProperty.call(dartScales, sym)) ? dartScales[sym] : 1;
+        return v;
+      };
+      scaleSewnWaistDarts(fPiece, scaleOf); scaleSewnWaistDarts(bPiece, scaleOf);
+    }
+    // ② 크기: 남은 다트의 합을 총량/목표에 맞춘다(배분 비율은 유지).
     if (applyDarts || applyTarget) {
       var blockTotal = sewnWaistDartTotal(fPiece) + sewnWaistDartTotal(bPiece);
       if (!(blockTotal > EPS)) fail("no-sewn-waist-dart");
@@ -709,7 +749,10 @@
         if (!(wantSewn > EPS)) fail("target-waist-unreachable", waistTarget);
       }
       var sD = wantSewn / blockTotal;
-      scaleSewnWaistDarts(fPiece, sD); scaleSewnWaistDarts(bPiece, sD);
+      var uniform = function () { return sD; };
+      scaleSewnWaistDarts(fPiece, uniform); scaleSewnWaistDarts(bPiece, uniform);
+    }
+    if (applyScales || applyDarts || applyTarget) {
       checkWaistDarts(fPiece, "front"); checkWaistDarts(bPiece, "back");
     }
     return {

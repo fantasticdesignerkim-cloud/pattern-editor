@@ -642,13 +642,13 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
     front: dartPiece(47.5, -1, 24.45, [
       dleg(37.5, 38, 38.5, 22, "a"), dleg(39.5, 38, 38.5, 22, "a"),
       dleg(29, 38, 30, 15, "b"), dleg(31, 38, 30, 15, "b"),
-      dleg(23.05, 38, 23.05, 20.6, "c-front", { locked: true }), dleg(23.75, 38, 23.05, 20.6, "c-front", { locked: true })
+      dleg(23.05, 38, 23.05, 20.6, "c-front", { locked: true, group: "side-waist-c" }), dleg(23.75, 38, 23.05, 20.6, "c-front", { locked: true, group: "side-waist-c" })
     ]),
     back: dartPiece(0, +1, 23.05, [
       dleg(14.5, 38, 16.75, 14.8, "d"), dleg(19, 38, 16.75, 14.8, "d"),
       dleg(8.2, 38, 9.3, 18.6, "e"), dleg(10.4, 38, 9.3, 18.6, "e"),
       dleg(0.5, 38, 0, 12.2, "f", { onFold: true }),
-      dleg(22.35, 38, 23.05, 20.6, "c-back", { locked: true }), dleg(23.05, 38, 23.05, 20.6, "c-back", { locked: true })
+      dleg(22.35, 38, 23.05, 20.6, "c-back", { locked: true, group: "side-waist-c" }), dleg(23.05, 38, 23.05, 20.6, "c-back", { locked: true, group: "side-waist-c" })
     ]),
     shared: { outline: [], construction: [] },
     sleeve: { outline: [], construction: [] }
@@ -749,12 +749,20 @@ function primAt(prims, pt) { return prims.find(p => (near(p.from.x, pt.x) && nea
     ok(JSON.stringify(ref) === REF_JSON, "4i: 목표 역산 전 구간 입력 불변");
   }
 
-  // 길이 연장과 결합 — hem 을 적용하면 waist 가 construction 으로 옮겨간다. 그 뒤에도 허리선 범위를
-  //   찾아 검사·배분이 되어야 한다(옆선 이동과의 조합은 실제 도안으로 브라우저에서 확인한다 —
-  //   이 픽스처는 c 다리 한쪽만 옆선에 붙어 있어 실제 기하를 대표하지 못한다).
+  // 다른 변환과 결합해도 총량이 유지되는가.
+  //   ※ c 는 group:"side-waist-c" 로 식별돼 전용 경로(moveSideWaistC)가 두 다리를 함께 옮긴다.
+  //     이 표식이 빠진 픽스처는 한쪽 다리만 따라와 허리선을 벗어난다 — 실제 도안과 같게 표식을 둔다.
   {
     const r = DB.computeGeometry(ref, { body: { hemExtensionBelowWaistCm: 10, waistDartTotalCm: base * 0.8 } });
     ok(near(sewnTotal(r), base * 0.8, 1e-9), "4i: 길이 연장(waist→construction)과 결합해도 총량 유지");
+  }
+  {
+    const r = DB.computeGeometry(ref, { body: { bustEaseCm: 8, waistSideOffsetCm: -3, waistDartTotalCm: base * 0.8 } });
+    ok(near(sewnTotal(r), base * 0.8, 1e-9), "4i: 여유량·허리 옆선과 결합해도 총량 유지");
+    const cSegs = (r.front.construction || []).filter(x => x.dart && x.dart.id === "c-front");
+    const m = x => (x.dart.apexAt === "to" ? x.from : x.to);
+    ok(cSegs.length === 2 && near(Math.abs(m(cSegs[0]).x - m(cSegs[1]).x), 0.7, 1e-9),
+      "4i: 옆선이 움직여도 c 의 폭은 보존된다(두 다리가 함께 이동)");
   }
 }
 

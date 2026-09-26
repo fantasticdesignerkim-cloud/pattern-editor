@@ -331,7 +331,8 @@
     // ★ 다트 총량만 "미지정 = 원형 그대로" 라 0 으로 뭉개지 않고 null 로 남긴다.
     const dt = (b && typeof b.waistDartTotalCm === "number") ? b.waistDartTotalCm : null;
     const wt = (b && typeof b.targetFinishedWaistCm === "number") ? b.targetFinishedWaistCm : null;
-    return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm"), Cv: num("sideSeamCurve"), Dt: dt, Wt: wt };
+    const ds = (b && b.waistDartScales && typeof b.waistDartScales === "object") ? b.waistDartScales : null;
+    return { L: num("hemExtensionBelowWaistCm"), E: num("bustEaseCm"), W: num("waistSideOffsetCm"), H: num("hemSideOffsetCm"), Cv: num("sideSeamCurve"), Dt: dt, Wt: wt, Ds: ds };
   }
   // 프리미티브(line/path) 호 길이(cubic 은 평탄화 합).
   function primArcLen(pr) {
@@ -420,6 +421,92 @@
       }
     });
   }
+  // ── 몸판 라인 카탈로그([패턴학교] P.14–35) ──
+  //   프리셋은 **입력칸 묶음**이다. 적용하면 아래 입력들을 채우고 그대로 적용한다 — 그 뒤 사용자가
+  //   값을 고치면 더 이상 그 라인이 아니므로, 선택 상태를 형상에 저장하지 않는다(칼라와 같은 원칙).
+  //   예외는 **다트 배분**(waistDartScales) — 입력칸이 없어 parameters 에만 산다.
+  let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
+  function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
+  function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
+  function rebuildBodiceFamilyOptions() {
+    const sel = document.getElementById("selBodiceFamily"); if (!sel || !window.bodicePresets) return;
+    if (sel.options.length) return;                       // 한 번만 만든다(innerHTML 재생성 금지 원칙)
+    window.bodicePresets.familyOptions().forEach(o => {
+      const el = document.createElement("option");
+      el.value = o.value; el.textContent = o.label + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
+      sel.appendChild(el);
+    });
+    sel.value = window.bodicePresets.DEFAULT_FAMILY_ID;
+  }
+  function rebuildBodiceVariantOptions() {
+    const sel = document.getElementById("selBodicePreset"); if (!sel || !window.bodicePresets) return;
+    const opts = window.bodicePresets.variantOptions(selectedBodiceFamilyId());
+    const keep = sel.value;
+    sel.replaceChildren.apply(sel, opts.map(o => {
+      const el = document.createElement("option");
+      el.value = o.value; el.textContent = o.label + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
+      return el;
+    }));
+    const found = opts.some(o => o.value === keep);
+    const first = opts.filter(o => o.available)[0] || opts[0];
+    sel.value = found ? keep : (first ? first.value : "");
+  }
+  function bodiceLineNote() {
+    const el = document.getElementById("designBodiceLineNote"); if (!el || !window.bodicePresets) return;
+    const BP = window.bodicePresets;
+    const fid = selectedBodiceFamilyId(), vid = selectedBodiceVariantId();
+    const t = BP.displayTitle(fid, vid), v = BP.variant(fid, vid);
+    const parts = [];
+    if (t) parts.push(t.familyLabel + " " + t.symbol + " (교재 P" + t.page + ")");
+    if (v && v.availability !== "available") {
+      // 보류 사유는 **슬롯이 들고 있는 blockedBy** 를 그대로 보여 준다 — "준비 중"으로 뭉개지 않는다.
+      if (v.referenceNote) parts.push("참고: " + v.referenceNote);
+      if (v.blockedBy) parts.push("보류 사유: " + v.blockedBy);
+    } else {
+      const f = BP.family(fid);
+      if (f && f.familyNote) parts.push(f.familyNote);
+    }
+    el.textContent = parts.join(" · ");
+    el.setAttribute("data-ok", (v && v.availability === "available") ? "1" : "0");
+  }
+  function syncBodiceLineUI() {
+    rebuildBodiceFamilyOptions(); rebuildBodiceVariantOptions(); bodiceLineNote();
+    const btn = document.getElementById("btnApplyBodicePreset");
+    const r = window.bodicePresets ? window.bodicePresets.resolve(selectedBodiceFamilyId(), selectedBodiceVariantId()) : { ok: false };
+    if (btn) btn.disabled = !(designProjectNow() && r.ok);
+  }
+  // 프리셋 적용: 입력칸을 프리셋 값으로 채우고(미지정 키는 0/빈 값) 바로 적용한다.
+  function onApplyBodicePreset() {
+    const project = designProjectNow(); if (!project || !window.bodicePresets) return;
+    const r = window.bodicePresets.resolve(selectedBodiceFamilyId(), selectedBodiceVariantId());
+    if (!r.ok) { setBodyNote(bodiceSelectionStr(r.reason)); return; }
+    const body = window.bodicePresets.bodyParams(r.presetId) || {};
+    const put = (id, key) => { const el = document.getElementById(id); if (el) el.value = fmtL(typeof body[key] === "number" ? body[key] : 0); };
+    put("inpBodyBustEase", "bustEaseCm"); put("inpBodyHemExtension", "hemExtensionBelowWaistCm");
+    put("inpBodyWaistOffset", "waistSideOffsetCm"); put("inpBodyHemOffset", "hemSideOffsetCm");
+    put("inpBodySideCurve", "sideSeamCurve");
+    // 라인은 다트 "배분"을 정하고 "총량·목표"는 정하지 않는다 → 그 둘은 비운다(원형 크기 유지).
+    ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    pendingDartScales = body.waistDartScales ? structuredClone(body.waistDartScales) : null;
+    onApplyBodyLength();
+  }
+  function bodiceSelectionStr(reason) {
+    const m = { "unknown-bodice-family": "몸판 라인을 선택하세요", "unknown-bodice-variant": "세부 제도를 선택하세요",
+      "bodice-preset-unavailable": (window.bodicePresets ? window.bodicePresets.PENDING_NOTE : "") };
+    return m[reason] != null ? m[reason] : "";
+  }
+  // 현재 다트 배분 표시(읽기 전용). 원형 그대로면 아무것도 쓰지 않는다.
+  function dartScaleNote(project) {
+    const el = document.getElementById("designDartScaleNote"); if (!el) return;
+    const ds = committedBody(project).Ds;
+    if (!ds) { el.textContent = ""; return; }
+    const used = ["a", "b", "d", "e"].map(k => {
+      const v = (typeof ds[k] === "number") ? ds[k] : 1;
+      return v === 0 ? k + " 미사용" : (v === 1 ? k : k + " ×" + fmtL(v));
+    });
+    el.textContent = "허리 다트 배분: " + used.join(" · ");
+  }
+
   // 완성 가슴(BL)·허리(WL) 둘레와 실측 대비 여유. **읽기 전용 계측** — 형상·게이트를 건드리지 않는다.
   //   외곽 = 다트 전 폭, 완성 = 그 높이를 지나는 다트를 뺀 실제 둘레. 여유가 음수면 못 입는 패턴이라 경고.
   function girthNote(project) {
@@ -2053,7 +2140,7 @@
     setIf("inpNeckCurveAmount", cn.CA); setIf("inpNeckVDepth", cn.VD);
     setIf("inpNeckSquareWidth", cn.SW); setIf("inpNeckCornerRadius", cn.CR);
     setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv, cn.type, cb.Dt, cb.Wt, sewnDartTotal(project)));
-    girthNote(project); sideLenNote(project); neckLenNote(project);
+    syncBodiceLineUI(); dartScaleNote(project); girthNote(project); sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
     // 앞중심 여밈 입력·상태 복원(포커스 중 안 덮음)
@@ -2079,6 +2166,13 @@
     // 미지정(빈 칸)은 키 자체를 지워 "원형 그대로" 를 유지한다(0 으로 넣으면 퇴화 다트가 된다).
     if (Dt == null) delete nextParameters.body.waistDartTotalCm; else nextParameters.body.waistDartTotalCm = Dt;
     if (Wt == null) delete nextParameters.body.targetFinishedWaistCm; else nextParameters.body.targetFinishedWaistCm = Wt;
+    // 다트 배분은 입력칸이 아니라 **라인 프리셋이 정하는 값**이라, 적용 때 기존 값을 그대로 보존한다
+    // (프리셋 적용·라인 초기화에서만 바뀐다).
+    if (pendingDartScales !== undefined) {
+      if (pendingDartScales === null) delete nextParameters.body.waistDartScales;
+      else nextParameters.body.waistDartScales = structuredClone(pendingDartScales);
+      pendingDartScales = undefined;
+    }
     // 네크라인: manual(세부 수정) 이면 기존 manual 네크라인 보존(입력 잠금 — 인풋에서 재구성하지
     // 않는다). parametric 이면 카드·입력에서 재구성. manual 은 아래에서 designOutline 재합성.
     const committedNk = committedNeckline(project);
@@ -2112,7 +2206,7 @@
     setBack(st.nCA, st.nCA.v); setBack(st.nVD, st.nVD.v); setBack(st.nSW, st.nSW.v); setBack(st.nCR, st.nCR.v);
     const necked = st.neckType !== "original";
     setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0 && Dt == null && Wt == null && !necked) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv, st.neckType, Dt, Wt, sewnDartTotal(project)));
-    girthNote(project); sideLenNote(project); neckLenNote(project);
+    syncBodiceLineUI(); dartScaleNote(project); girthNote(project); sideLenNote(project); neckLenNote(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
     updateBodiceCheckpointUI(project);   // 몸판 변경 → 검사 요약·완료 상태(변경됨) 갱신
@@ -2123,6 +2217,7 @@
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
     // ★ 허리 다트량만 **빈 값**으로 비운다 — 0 은 다트를 없애는 무효값이고, 빈 값이 "원형 그대로" 다.
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    pendingDartScales = null;   // 원형 다트 배분으로 복귀
     setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }
@@ -2204,6 +2299,13 @@
     if (applyBody) applyBody.addEventListener("click", () => { if (!applyBody.disabled) onApplyBodyLength(); });
     const resetBody = document.getElementById("btnResetBodyLength");
     if (resetBody) resetBody.addEventListener("click", () => { if (!resetBody.disabled) onResetBodyLength(); });
+    // 몸판 라인 카탈로그(P.14–35): 종류·세부 선택 → 라인 적용.
+    const bodiceFamSel = document.getElementById("selBodiceFamily");
+    if (bodiceFamSel) bodiceFamSel.addEventListener("change", () => { rebuildBodiceVariantOptions(); syncBodiceLineUI(); });
+    const bodiceVarSel = document.getElementById("selBodicePreset");
+    if (bodiceVarSel) bodiceVarSel.addEventListener("change", syncBodiceLineUI);
+    const applyLine = document.getElementById("btnApplyBodicePreset");
+    if (applyLine) applyLine.addEventListener("click", () => { if (!applyLine.disabled) onApplyBodicePreset(); });
     // 몸판 입력 넷 모두(여유량·길이·허리/밑단 옆선): 입력 중엔 버튼 활성만 갱신, Enter 로 적용.
     ["inpBodyBustEase", "inpBodyHemExtension", "inpBodyWaistOffset", "inpBodyHemOffset", "inpBodySideCurve", "inpBodyWaistDartTotal", "inpBodyWaistTarget",
       "inpNeckWidth", "inpNeckFrontDepth", "inpNeckBackDepth", "inpNeckCurveAmount", "inpNeckVDepth", "inpNeckSquareWidth", "inpNeckCornerRadius"].forEach(id => {

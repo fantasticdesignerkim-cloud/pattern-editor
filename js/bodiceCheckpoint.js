@@ -373,6 +373,10 @@
   }
   // 다트가 그 높이에서 잡아먹는 폭. 다리는 apex 에서 경계까지의 직선이라 선형 보간.
   //   apex 바깥(다트가 존재하지 않는 높이)이면 0. 다리 1개(접어재단)는 접힘선(apex.x)까지의 거리.
+  // ★ 경계 허용오차: 다트 다리 끝은 허리선 **위**에 있지만, 좌표가 미세하게 어긋난다
+  //   (다리 y=38.00000000000001 vs 허리선 y=38 — 변환 누적 오차 + dartRecords 의 1e-4 반올림).
+  //   엄격히 t>1 을 버리면 **허리선에서 다트가 통째로 0 으로 계산된다**(실측으로 확인한 결함).
+  var GIRTH_T_EPS = 1e-6;
   function dartWidthAtY(rec, y) {
     if (!rec || !rec.apex || !Array.isArray(rec.legs) || !rec.legs.length) return 0;
     var xs = [];
@@ -380,7 +384,8 @@
       var leg = rec.legs[i], dy = leg.y - rec.apex.y;
       if (Math.abs(dy) < GIRTH_EPS) return 0;
       var t = (y - rec.apex.y) / dy;
-      if (t < 0 || t > 1) return 0;
+      if (t < -GIRTH_T_EPS || t > 1 + GIRTH_T_EPS) return 0;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
       xs.push(rec.apex.x + t * (leg.x - rec.apex.x));
     }
     if (xs.length >= 2) return Math.abs(xs[0] - xs[1]);
