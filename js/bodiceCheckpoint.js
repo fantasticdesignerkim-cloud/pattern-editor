@@ -97,6 +97,15 @@
   function armholeLen(geometry, piece) {
     var b = geometry && geometry[piece]; if (!b || !Array.isArray(b.outline)) return { ok: false, len: 0, segs: [] };
     var top = centerTop(geometry, piece); if (!top) return { ok: false, len: 0, segs: [] };
+    // ★ 1순위: semantic 표식 `edge:"armhole"`. 원형이 이미 붙여 주고 있으며 조각을 잘라
+    //   붙이는 디자인(플레어 등)에도 살아남는다.
+    var tagged = b.outline.filter(function (s) { return s.edge === "armhole"; });
+    if (tagged.length) return { ok: true, len: tagged.reduce(function (t, s) { return t + segLen(s); }, 0), segs: tagged };
+
+    // 2순위(표식 없는 구형 형상): "목점에 닿지 않는 edge 없는 곡선" 휴리스틱.
+    //   ⚠ 이 휴리스틱은 **다중 C 경로가 쪼개지면 깨진다** — 네크라인이 두 조각이 되면 목점에
+    //   안 닿는 쪽이 진동으로 오인된다(플레어 적용 시 실측: 20.63 → 26.34, 차이 5.715 =
+    //   네크라인 한 조각). 그래서 표식을 먼저 본다.
     var touchesTop = function (s) { return endpointsOf(s).some(function (p) { return dist(p, top) < 0.05; }); };
     var arcs = b.outline.filter(function (s) {
       if (isStructEdge(s)) return false;                // center/waist/side-seam/hem 제외

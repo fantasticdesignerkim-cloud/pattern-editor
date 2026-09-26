@@ -92,6 +92,20 @@
   }
   var line = function (a, b) { return { kind: "line", from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } }; };
   var sub = function (a, b) { return { x: a.x - b.x, y: a.y - b.y }; };
+  // ★★ 포맷 경계 — geometry 는 `{kind:"path", commands:[M,C…]}` 만 받는다. `{kind:"cubic"}` 은
+  //   **패턴선(designLineTool) 포맷**이라 designRenderer·designLayout.pointsOfPrim 이 못 읽고
+  //   `invalid-primitive` 로 깨진다(CLAUDE.md 가 두 번 기록한 함정 — 여기서 한 번 더 걸렸다).
+  //   ring 작업은 패턴선 포맷으로 하고, **내보낼 때 반드시 geometry 포맷으로 되돌린다.**
+  function toGeomPrim(seg) {
+    if (!seg) return seg;
+    if (seg.kind !== "cubic") return clone(seg);
+    var out = { kind: "path", commands: [
+      { type: "M", points: [{ x: seg.from.x, y: seg.from.y }] },
+      { type: "C", points: [{ x: seg.c1.x, y: seg.c1.y }, { x: seg.c2.x, y: seg.c2.y }, { x: seg.to.x, y: seg.to.y }] }
+    ] };
+    ["edge", "boundary", "dart"].forEach(function (k) { if (seg[k] !== undefined) out[k] = clone(seg[k]); });
+    return out;
+  }
   function unit(v) { var L = Math.hypot(v.x, v.y); return L > 1e-12 ? { x: v.x / L, y: v.y / L } : null; }
   function onCurve(seg) {
     // {kind:"cubic"} 과 {kind:"path", commands:[M,C…]} 둘 다에서 제어점을 순서대로 꺼낸다.
@@ -212,7 +226,9 @@
     var bridge = (fairing === "smooth")
       ? fairBridge(hA, hB, tangentAtEnd(kA[kA.length - 1]), tangentAtStart(kB[0]))
       : line(hA, hB);
+    bridge.edge = hemEdge;                 // 이 이음은 밑단의 일부다(의미를 잃지 않게)
     var outline = kA.concat([bridge], kB);
+    // 잔여 sliver 이음은 다트를 닫고 남은 자리를 잇는 truing 선이라 의미 모서리를 주지 않는다.
     if (sliver > SLIVER_EPS) outline = outline.concat([line(joinFrom, joinTo)]);
 
     // 검증 — 하나라도 어긋나면 부분 결과를 반환하지 않는다.
@@ -227,11 +243,11 @@
 
     // construction 은 회전 조각에 실린 것만 함께 돈다(안 그러면 다트가 외곽에서 떨어진다).
     var construction = (piece.construction || []).map(function (s) {
-      return inRotatedPart(s, apex, pjH.point, rotateB, ring, dIdx) ? rotSeg(s, apex, rt) : clone(s);
+      return toGeomPrim(inRotatedPart(s, apex, pjH.point, rotateB, ring, dIdx) ? rotSeg(s, apex, rt) : clone(s));
     });
 
     return {
-      outline: outline,
+      outline: outline.map(toGeomPrim),
       construction: construction,
       apex: { x: apex.x, y: apex.y },
       dartAngleRad: th,

@@ -19,6 +19,14 @@ function throwsReason(fn, want, name) {
 }
 const near = (a, b, e = 1e-9) => Math.abs(a - b) < e;
 const J = JSON.stringify;
+// geometry 포맷은 {kind:"path", commands} 라 from/to 가 없다 — 양쪽 공용 끝점 헬퍼.
+function ends(sg) {
+  if (sg.kind === "path") {
+    const pts = []; sg.commands.forEach(c => c.points.forEach(p => pts.push(p)));
+    return { from: pts[0], to: pts[pts.length - 1] };
+  }
+  return { from: sg.from, to: sg.to };
+}
 
 const sandbox = { window: {}, document: {}, console: { log() {}, warn() {} }, Math, JSON, Object, Array, isFinite, structuredClone };
 sandbox.globalThis = sandbox;
@@ -87,8 +95,8 @@ const r = F.closeDartSpread(fx.piece);
 // 2b. 밑단 이음이 **각지지 않는다** — 양 접합부 접선 연속(G1)
 {
   ok(r.hemFairing === "smooth", "2b: 기본은 곡선 이음");
-  const bridge = r.outline.find(s => s.kind === "cubic" && !s.edge);
-  ok(!!bridge, "2b: 이음이 cubic 으로 들어간다");
+  const bridge = r.outline.find(s => s.kind === "path" && s.edge === "hem");
+  ok(!!bridge, "2b: 이음이 곡선(path)으로 들어가고 밑단 의미를 갖는다");
   const iA = r.outline.indexOf(bridge);
   const prev = r.outline[iA - 1], next = r.outline[iA + 1];
   const dot = (u, v) => u.x * v.x + u.y * v.y;
@@ -98,7 +106,7 @@ const r = F.closeDartSpread(fx.piece);
   ok(near(dot(tOut, tNext), 1, 1e-9), "2b: 나가는 접선 연속(각 0°)");
   // 직선 이음은 꺾인다 — 곡선이 실제로 고치는 것이 맞는지 대조
   const rs2 = F.closeDartSpread(fixture().piece, { hemFairing: "straight" });
-  const bi = rs2.outline.findIndex(s => s.kind === "line" && !s.edge);
+  const bi = rs2.outline.findIndex((s, i) => s.kind === "line" && s.edge === "hem" && i > 0 && rs2.outline[i-1].edge === "hem");
   const kink = dot(F.tangentAtEnd(rs2.outline[bi - 1]), F.tangentAtStart(rs2.outline[bi]));
   ok(kink < 0.999, "2b: 직선 이음은 실제로 꺾여 있다(대조군)");
   throwsReason(() => F.closeDartSpread(fixture().piece, { hemFairing: "arc" }), "invalid-hem-fairing", "2b: 모르는 이음 방식 거부");
@@ -108,11 +116,11 @@ const r = F.closeDartSpread(fx.piece);
 {
   let maxGap = 0;
   for (let i = 0; i < r.outline.length; i++) {
-    const a = r.outline[i], b = r.outline[(i + 1) % r.outline.length];
+    const a = ends(r.outline[i]), b = ends(r.outline[(i + 1) % r.outline.length]);
     maxGap = Math.max(maxGap, Math.hypot(a.to.x - b.from.x, a.to.y - b.from.y));
   }
   ok(maxGap < 1e-9, "3: 폐곡선 연결 오차 0");
-  const flat = []; r.outline.forEach(s => T.flattenLine([s]).forEach(ab => flat.push(ab)));
+  const flat = []; T.outlinePrimsToSegs(r.outline).forEach(s => T.flattenLine([s]).forEach(ab => flat.push(ab)));
   let x = 0;
   for (let i = 0; i < flat.length; i++) for (let j = i + 2; j < flat.length; j++) {
     if (i === 0 && j === flat.length - 1) continue;
@@ -122,7 +130,10 @@ const r = F.closeDartSpread(fx.piece);
     if (!(nr(flat[i][1], flat[j][0]) || nr(flat[j][1], flat[i][0]) || nr(flat[i][0], flat[j][0]) || nr(flat[i][1], flat[j][1]))) x++;
   }
   ok(x === 0, "3: 자기교차 0");
-  ok(r.outline.every(s => s.kind === "line" || s.kind === "cubic" || s.kind === "path"), "3: 세그먼트 종류 유지");
+  // ★ geometry 포맷으로 내보내야 한다 — {kind:"cubic"} 은 패턴선 포맷이라 renderer 가 깨진다
+  ok(r.outline.every(s => s.kind === "line" || s.kind === "path"), "3: geometry 포맷만(cubic 금지)");
+  ok(r.outline.filter(s => s.kind === "path").every(s => Array.isArray(s.commands)
+      && s.commands[0].type === "M" && s.commands.slice(1).every(c => c.type === "C")), "3: path 는 M + C 들");
 }
 
 // 4. 비이등변(뒤 어깨다트형) — 잔여 sliver 를 **감추지 않고 기록**한다
@@ -133,7 +144,7 @@ const r = F.closeDartSpread(fx.piece);
   ok(near(ra.residualSliverCm, Math.abs(9.083 - 8.980), 1e-9), "4: sliver = 두 다리 반지름 차");
   let g = 0;
   for (let i = 0; i < ra.outline.length; i++) {
-    const a = ra.outline[i], b = ra.outline[(i + 1) % ra.outline.length];
+    const a = ends(ra.outline[i]), b = ends(ra.outline[(i + 1) % ra.outline.length]);
     g = Math.max(g, Math.hypot(a.to.x - b.from.x, a.to.y - b.from.y));
   }
   ok(g < 1e-9, "4: sliver 를 명시 세그먼트로 이어 폐곡선은 여전히 닫힌다");
@@ -184,7 +195,7 @@ const r = F.closeDartSpread(fx.piece);
     L([18, 30], [19, 34])     // 옆선 쪽 = 회전
   ] });
   const rc = F.closeDartSpread(withC.piece);
-  const same = (a, b) => near(a.from.x, b.from.x, 1e-12) && near(a.from.y, b.from.y, 1e-12);
+  const same = (a, b) => near(ends(a).from.x, ends(b).from.x, 1e-12) && near(ends(a).from.y, ends(b).from.y, 1e-12);
   ok(same(rc.construction[2], withC.piece.construction[2]), "7: 고정 조각의 참고선은 그대로");
   ok(!same(rc.construction[3], withC.piece.construction[3]), "7: 회전 조각의 참고선은 함께 회전");
   ok(rc.construction.length === 4, "7: 참고선 개수 보존(다트 다리 2 + 추가 2)");
