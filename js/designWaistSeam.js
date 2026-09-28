@@ -168,6 +168,41 @@
     return { waist: W, waistSeg: t.outlinePrimsToSegs([W])[0], Yw: Yw, above: above, below: below };
   }
 
+  // ── 원래 path 프리미티브 복원 ─────────────────────────────────────────────────
+  // (여러 C 뿐 아니라 하나뿐인 path 도 링 방향에 따라 뒤집혀 나오므로 같은 방식으로 되돌린다.)
+  // outlinePrimsToSegs 는 여러 C 를 가진 path(예: 앞 목선 2 커브)를 **커브마다 별개 세그먼트**로 쪼갠다.
+  // 그대로 내보내면 원래 하나였던 프리미티브가 둘이 돼, "중심 상단에 닿는 단일 네크라인 세그먼트"를
+  // 재는 소비자(bodiceCheckpoint.necklineHalf — 목선 길이가 앞 11.1 → 5.4cm 로 절반)와 소매·카라가
+  // 깨진다. **회전·절단으로 바뀌지 않은 구간은 원래 프리미티브 그대로** 되돌린다(좌표·boundary·edge 동일).
+  var SAME_EPS = 1e-6;
+  function sameCubic(a, b) {
+    if (a.kind !== "cubic" || b.kind !== "cubic") return false;
+    return ["from", "c1", "c2", "to"].every(function (k) { return near(a[k], b[k], SAME_EPS); });
+  }
+  function restorePaths(segs, originals) {
+    var t = T(), Jn = J();
+    var multi = originals.filter(function (pr) {
+      return pr && pr.kind === "path" && pr.commands.some(function (c) { return c.type === "C"; });
+    }).map(function (pr) { return { prim: pr, cubics: t.outlinePrimsToSegs([pr]) }; });
+    var out = [];
+    for (var i = 0; i < segs.length;) {
+      var hit = null;
+      for (var m = 0; m < multi.length && !hit; m++) {
+        var cs = multi[m].cubics, k = cs.length;
+        if (i + k > segs.length) continue;
+        var fwd = true, rev = true;
+        for (var q = 0; q < k; q++) {
+          if (!sameCubic(segs[i + q], cs[q])) fwd = false;
+          if (!sameCubic(segs[i + q], t.reverseSeg(cs[k - 1 - q]))) rev = false;
+        }
+        if (fwd || rev) hit = { prim: multi[m].prim, k: k };
+      }
+      if (hit) { out.push(deepClone(hit.prim)); i += hit.k; }
+      else { out.push(Jn.toGeomPrim(segs[i])); i++; }
+    }
+    return out;
+  }
+
   // ══ upper: b/d 를 닫는다 ═════════════════════════════════════════════════════
   function buildUpper(piece, which, cls) {
     var t = T(), Jn = J();
@@ -179,7 +214,7 @@
 
     if (!group) {
       // 닫을 다트가 없다(배율 0 등) — 허리 위 조각을 그대로 잘라 낸다.
-      var rawOut = upperSegs.map(Jn.toGeomPrim);
+      var rawOut = restorePaths(upperSegs, piece.outline);
       return { outline: rawOut, construction: deepClone(construction), closed: null };
     }
 
@@ -273,7 +308,7 @@
 
     var waistPieces = outlineSegs.filter(function (s) { return s.edge === "waist"; });
     return {
-      outline: outlineSegs.map(Jn.toGeomPrim),
+      outline: restorePaths(outlineSegs, piece.outline),
       construction: outConstruction,
       closed: {
         dartId: group.id,

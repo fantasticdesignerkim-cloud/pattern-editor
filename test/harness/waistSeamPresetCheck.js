@@ -217,5 +217,28 @@ ok(J(REF) === SNAP, "2: reference 불변");
   ok(BC.latest(PROJECT).hash !== h1, "6: Ⓜ 와 A 의 hash 가 다르다");
 }
 
+// ── 7. 목선 보존 — M 적용 전후 앞·뒤 목선 길이가 같다(소매·카라 소비자 보존 계약) ──
+{
+  const mk = (body) => ({ sourceBlock: { version: 2, schemaVersion: 8 }, referenceGeometry: REF,
+    working: { geometry: DB.computeGeometry(REF, { body }), parameters: { neckline: { mode: "parametric", type: "original", parameters: {} }, body },
+      patternLines: [], designOutline: null, frontPlacket: null } });
+  const nk = (body) => { PROJECT = mk(body); return BC.check(PROJECT).neckline; };
+  const a = nk(BP.bodyParams("bunka-bodice-A")), m = nk(M_BODY);
+  ok(a.front > 11 && a.front < 11.2 && a.back > 7.6 && a.back < 7.8, "7: A 목선 = 앞 11.1 · 뒤 7.7cm: " + a.front.toFixed(3) + "/" + a.back.toFixed(3));
+  ok(near(m.front, a.front, 1e-9) && near(m.back, a.back, 1e-9), "7: M 적용 뒤 앞·뒤 목선 길이 = A 와 같다(앞이 절반으로 줄던 결함 회귀)");
+  ok(near(m.half, a.half, 1e-9) && near(m.finished, a.finished, 1e-9) && near(m.finished, 37.6, 0.1) && near(m.half, 18.8, 0.05), "7: 합계 18.8 · 완성 37.6cm");
+  // 의미·형상: 목선 프리미티브가 원래 그대로(쪼개지지 않음)
+  const necks = (g, k) => g[k].outline.filter(s => s.edge === "neckline");
+  ["front", "back"].forEach(k => {
+    const gA = DB.computeGeometry(REF, { body: BP.bodyParams("bunka-bodice-A") }), gM = DB.computeGeometry(REF, { body: M_BODY });
+    ok(necks(gM, k).length === necks(REF, k).length && necks(gM, k).length === 1, "7: " + k + " 목선은 하나의 프리미티브(edge·boundary 유지)");
+    ok(J(necks(gM, k)[0].boundary) === J(necks(gA, k)[0].boundary) && J(necks(gM, k)[0].commands) === J(necks(gA, k)[0].commands), "7: " + k + " 목선 geometry·boundary 가 A 와 동일");
+  });
+  // 목선 파라미터(necklineLenCm)가 있는 경우도 upper 로 실린다
+  const g2 = DB.computeGeometry(REF, { body: M_BODY, neckline: { mode: "parametric", type: "round", parameters: { neckWidthCm: 1, frontDepthCm: 1, backDepthCm: 0 } } });
+  const g2A = DB.computeGeometry(REF, { body: BP.bodyParams("bunka-bodice-A"), neckline: { mode: "parametric", type: "round", parameters: { neckWidthCm: 1, frontDepthCm: 1, backDepthCm: 0 } } });
+  ok(typeof g2.front.necklineLenCm === "number" && g2.front.necklineLenCm === g2A.front.necklineLenCm && g2.back.necklineLenCm === g2A.back.necklineLenCm, "7: necklineLenCm 이 upper 에 그대로 실린다");
+}
+
 console.log(`waistSeamPresetCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { fails.forEach(f => console.log("  ✗ " + f)); process.exit(1); }
