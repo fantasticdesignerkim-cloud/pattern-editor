@@ -46,7 +46,8 @@
     { key: "hemSideOffsetCm", label: "밑단 옆선 이동", unit: "cm" },
     { key: "sideSeamCurve", label: "옆선 곡선화", unit: "" },
     { key: "waistDartScales", label: "허리 다트 배분", unit: "" },
-    { key: "flare", label: "다트를 닫아 밑단 벌리기", unit: "" }
+    { key: "flare", label: "다트를 닫아 밑단 벌리기", unit: "" },
+    { key: "waistSeam", label: "허리 이음선(상·하 조각 분리)", unit: "" }
   ];
   var BODY_KEYS = BODY_FIELDS.map(function (f) { return f.key; });
   var DART_SYMBOLS = ["a", "b", "d", "e"];   // [패턴학교]가 쓰는 봉제 허리다트 넷
@@ -115,17 +116,15 @@
         pendingVariant("bunka-bodice-L", "L", "L · 목둘레 개더 변형", 25, null, "K 와 같은 이유(미판독).")
       ] },
     { id: "waist-seam", order: 7, label: "허리 이음선", symbol: "M", page: 26,
-      availability: "pending-op", note: PENDING_NOTE,
-      familyNote: "허리에서 잘라 페플럼을 붙인다. 처리 방법 세 가지가 한꺼번에 쓰인다.",
+      availability: "available", note: null,
+      familyNote: "허리에서 잘라 페플럼을 붙인다. 몸판(상)과 페플럼(하)은 **별개의 조각**이다.",
       variants: [
-        pendingVariant("bunka-bodice-M", "M", "M · 옆선 −1.5 · 밑단 +1 · 다트 b·d 를 닫고 페플럼은 맞댄다", 26,
-          "몸판은 a·e 를 다트로, b·d 는 닫아 진동 둘레 여유분으로. 페플럼은 a·b·d·e 를 같은 분량으로 잡은 뒤 맞댄다. 꼬리말: 닫는다 P.160 · 닫는다·벌린다 P.161 · **맞댄다 P.157**",
-          "**맞댄다(157)** 가 없다 — 지금 코드에는 조각을 **나누는** 연산만 있고 표시 위치에서 **한 장으로 잇는** 연산이 없다. 허리 분리(파트 확정)도 필요하다."),
+        availVariant("bunka-bodice-M", "M", "M · 옆선 −1.5 · 밑단 +1 · 다트 b·d 를 닫고 페플럼은 맞댄다", 26),
         pendingVariant("bunka-bodice-N", "N", "N · 페플럼에 플레어를 넣는다", 27,
           "처리 방법 P.158「맞대면서 벌린다」의 워크 예시가 이 몸판 Ⓝ 페플럼이다",
-          "**맞댄다(157) + 맞대면서 벌린다(158)** 가 필요하다."),
-        pendingVariant("bunka-bodice-O", "O", "O · 허리 이음선 변형", 28, null, "M 과 같은 이유(미판독)."),
-        pendingVariant("bunka-bodice-P", "P", "P · 허리 이음선 변형", 29, null, "M 과 같은 이유(미판독).")
+          "**맞댄다(157)** 는 Ⓜ 로 열렸다. 남은 것은 **맞대면서 벌린다(158)** — 페플럼 조각을 맞대는 동시에 밑단을 벌리는 연산이 없다."),
+        pendingVariant("bunka-bodice-O", "O", "O · 허리 이음선 변형", 28, null, "미판독 — 착수 시 P.28 을 읽고 Ⓜ·Ⓝ 조합으로 되는지 확인한다."),
+        pendingVariant("bunka-bodice-P", "P", "P · 허리 이음선 변형", 29, null, "미판독 — 착수 시 P.29 를 읽고 Ⓜ·Ⓝ 조합으로 되는지 확인한다.")
       ] },
     { id: "yoke-seam-1", order: 8, label: "요크 이음선 ①", symbol: "Q", page: 30,
       availability: "pending-op", note: PENDING_NOTE,
@@ -190,6 +189,17 @@
               waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, flare: true }
     },
     {
+      id: "bunka-bodice-M", label: "교재 M 허리 이음선", familyId: "waist-seam", symbol: "M", page: 26,
+      description: "허리에서 몸판/페플럼 분리 · 옆선 1.5cm 줄임 · 밑단 1cm 추가 · 몸판은 b·d 를 닫고 페플럼은 a·b·d·e 를 맞댄다",
+      source: "[패턴학교] 허리 이음선 Ⓜ(P.26)",
+      baseMethod: "bunka-bodice-M-v1",
+      // 조합 연산(js/designWaistSeam.js): 몸판 = a·e 유지, b(앞)·d(뒤) 닫아 그 반동을 진동 둘레 여유분으로.
+      //   페플럼 = a·b·d·e 를 몸판과 같은 분량으로 잡아 designJoin.buttJoin 으로 다트마다 맞댄다.
+      //   허리 다트 배분(waistDartScales)은 지정하지 않는다 — 원형 배율(1)이 곧 "몸판과 같은 분량"이다.
+      //   밑단(엉덩이 길이 20)이 있어야 페플럼이 생긴다.
+      body: { hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1.5, hemSideOffsetCm: 1, waistSeam: true }
+    },
+    {
       id: "bunka-bodice-C", label: "교재 C 셰이프트(다트 2개)", familyId: "shaped-line", symbol: "C", page: 16,
       description: "허리 다트 a·e 만 사용 · 옆선 1cm 줄임 · 밑단 1cm 추가",
       source: "[패턴학교] 셰이프트 라인 Ⓒ(P.16)",
@@ -223,6 +233,7 @@
         return;
       }
       if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
+      if (k === "waistSeam") { if (v !== true) fail("invalid-body", id + ".waistSeam"); return; }
       if (!isNum(v)) fail("invalid-body", id + "." + k);
     });
   }

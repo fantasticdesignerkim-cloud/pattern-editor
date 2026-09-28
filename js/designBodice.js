@@ -680,6 +680,9 @@
     //   `js/designFlare.js` 의 순수 연산에 위임한다. **호출 시점에 해석**하므로 로드 순서와 무관하고,
     //   미지정이면 그 모듈이 없어도 된다(이 파일 단독 하네스가 계속 돈다).
     var flare = body.flare;
+    // 허리 이음선 Ⓜ(P.26) — 허리에서 몸판(upper)과 페플럼을 **별개 조각**으로 가른다. 조합 연산은
+    //   `js/designWaistSeam.js`(순수)에 있고, 여기서는 **shape·다트 재배분이 끝난 뒤** 원자 호출만 한다.
+    var waistSeam = body.waistSeam;
     // 입력 정규화 경계: 정확한 0(전부) 만 no-op. 길이·여유량 음수 실패. 옆선 오프셋은 부호 허용(안/밖).
     if (typeof L !== "number" || !isFinite(L) || L < 0) fail("invalid-body-length", L);
     if (typeof E !== "number" || !isFinite(E) || E < 0) fail("invalid-body-ease", E);
@@ -698,6 +701,10 @@
     //   총량/목표는 그 배분을 유지한 채 전체 크기를 맞춘다.
     var applyFlare = (flare === true || (flare && typeof flare === "object"));
     if (flare != null && flare !== false && !applyFlare) fail("invalid-body-flare", flare);
+    var applySeam = (waistSeam === true);
+    if (waistSeam != null && waistSeam !== false && !applySeam) fail("invalid-body-waist-seam", waistSeam);
+    if (applySeam && applyFlare) fail("waist-seam-flare-conflict");
+    if (applySeam && !(L > 0)) fail("waist-seam-needs-hem");   // 밑단(엉덩이 길이)이 없으면 페플럼이 없다
     var applyScales = (dartScales != null);
     if (applyScales) {
       if (typeof dartScales !== "object" || Array.isArray(dartScales)) fail("invalid-waist-dart-scales", dartScales);
@@ -714,7 +721,7 @@
       var np = neckline.parameters || {};
       ["neckWidthCm", "frontDepthCm", "backDepthCm", "vPointDepthCm", "squareWidthCm", "cornerRadiusCm", "curveAmountNorm"].forEach(function (k) { var v = np[k]; if (v != null && (typeof v !== "number" || !isFinite(v))) fail("invalid-neckline-param", k); });
     }
-    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck && !applyDarts && !applyTarget && !applyScales && !applyFlare) return deepClone(referenceGeometry);
+    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck && !applyDarts && !applyTarget && !applyScales && !applyFlare && !applySeam) return deepClone(referenceGeometry);
     // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
     var delta = E / 4;   // 전체 가슴둘레 여유량 → 각 옆선 E/4 (앞반쪽 + 뒤반쪽, ×2측 = E)
     var src = deepClone(referenceGeometry);
@@ -779,11 +786,24 @@
                             dartAngleRad: res.dartAngleRad, residualSliverCm: res.residualSliverCm };
       });
     }
-    return {
+    var outGeom = {
       front: fPiece, back: bPiece,
       shared: src.shared,   // 값·순서 유지(비대상)
       sleeve: src.sleeve
     };
+    // ★ 허리 이음선은 **맨 마지막**: 여유량·길이·옆선·다트 배분이 끝난 형상을 허리에서 가른다.
+    //   front/back 은 upper 의미를 유지(소매·카라가 그대로 소비). 실패는 그대로 올린다(부분 결과 없음).
+    if (applySeam) {
+      var DW = (typeof window !== "undefined") && window.designWaistSeam;
+      if (!DW || typeof DW.split !== "function") fail("designWaistSeam-missing");
+      var sp;
+      try { sp = DW.split({ front: fPiece, back: bPiece }); }
+      catch (e) { fail("waist-seam-failed", (e.reason || e.message) + (e.detail !== undefined ? " " + JSON.stringify(e.detail) : "")); }
+      outGeom.front = sp.front; outGeom.back = sp.back;
+      outGeom.frontPeplum = sp.frontPeplum; outGeom.backPeplum = sp.backPeplum;
+      outGeom.waistSeam = sp.meta;
+    }
+    return outGeom;
   }
 
   window.designBodice = Object.freeze({ computeGeometry: computeGeometry, sewnWaistDartTotal: sewnWaistDartTotal, measureNeckline: measureNeckline, necklineSegments: necklineSegments });

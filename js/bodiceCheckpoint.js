@@ -667,6 +667,52 @@
     return { group: SIDE_WAIST_C_GROUP, front: f || null, back: b || null, totalCm: reason ? null : total, ok: !reason, reason: reason };
   }
 
+  // ── 허리 이음선 Ⓜ: 상·하 조각 분리 상태 ──
+  //   geometry.frontPeplum/backPeplum(있을 때만) + geometry.waistSeam(designWaistSeam.split 의 검산 메타).
+  //   페플럼은 별개 폐곡선 조각이라 **한 outline 으로 합치지 않고** 따로 검사한다.
+  var SEAM_LEN_EPS = 0.01;   // designWaistSeam 의 허리 이음 길이 정합 허용오차와 같다
+  function peplumClosed(outline) {
+    if (!Array.isArray(outline) || outline.length < 3) return false;
+    var pts = outline.map(function (s) { return endpointsOf(s); });
+    var used = pts.map(function () { return false; }); used[0] = true;
+    var cur = pts[0][1], start = pts[0][0], n = 1;
+    var near = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y) < 1e-3; };
+    for (var step = 1; step < pts.length; step++) {
+      var hit = -1, flip = false;
+      for (var j = 0; j < pts.length; j++) {
+        if (used[j]) continue;
+        if (near(pts[j][0], cur)) { hit = j; break; }
+        if (near(pts[j][1], cur)) { hit = j; flip = true; break; }
+      }
+      if (hit < 0) return false;
+      used[hit] = true; n++; cur = flip ? pts[hit][0] : pts[hit][1];
+    }
+    return n === pts.length && near(cur, start);
+  }
+  function waistSeamState(proj) {
+    var g = proj && proj.working && proj.working.geometry;
+    if (!g || !g.frontPeplum || !g.backPeplum) return null;
+    var m = g.waistSeam || {}, f = m.front || {}, b = m.back || {};
+    var row = function (pep, meta) {
+      return { peplumClosed: peplumClosed(pep.outline),
+        joins: (meta.joins || []).length,
+        upperSeamCm: typeof meta.upperWaistSeamCm === "number" ? round4(meta.upperWaistSeamCm) : null,
+        peplumSeamCm: typeof meta.peplumWaistSeamCm === "number" ? round4(meta.peplumWaistSeamCm) : null,
+        deltaCm: typeof meta.waistSeamDeltaCm === "number" ? meta.waistSeamDeltaCm : null,
+        closedDart: meta.closedDart ? meta.closedDart.dartId : null,
+        armholeEaseCm: meta.closedDart ? round4(meta.closedDart.armholeEaseCm) : null };
+    };
+    var F = row(g.frontPeplum, f), B = row(g.backPeplum, b);
+    var seamOk = function (r) { return r.deltaCm !== null && Math.abs(r.deltaCm) <= SEAM_LEN_EPS; };
+    return { front: F, back: B, ok: F.peplumClosed && B.peplumClosed && seamOk(F) && seamOk(B),
+      reason: !(F.peplumClosed && B.peplumClosed) ? "waist-seam-peplum-open" : (!(seamOk(F) && seamOk(B)) ? "waist-seam-mismatch" : null) };
+  }
+  function peplumCanon(proj) {
+    var g = proj && proj.working && proj.working.geometry;
+    if (!g || !g.frontPeplum || !g.backPeplum) return null;
+    return { f: canonOutline(g.frontPeplum.outline), b: canonOutline(g.backPeplum.outline) };
+  }
+
   // ── 검사 ──
   function check(proj) {
     proj = proj || project();
@@ -700,6 +746,9 @@
     var svSrc = proj.sourceBlock && proj.sourceBlock.schemaVersion;
     var sideWaistDart = sideWaistDartOf({ front: dartRecords(proj, "front"), back: dartRecords(proj, "back"), shared: dartRecords(proj, "shared") });
     if (svSrc === 8 && !sideWaistDart.ok) fails.push(sideWaistDart.reason);
+    // 허리 이음선 Ⓜ(있을 때만): 페플럼이 닫힌 한 장이고 상·하 허리 이음 길이가 맞아야 완료할 수 있다.
+    var waistSeam = waistSeamState(proj);
+    if (waistSeam && !waistSeam.ok) fails.push(waistSeam.reason);
 
     return {
       ok: fails.length === 0,
@@ -710,7 +759,8 @@
       neckline: { front: nkF, back: nkB, half: nkHalf, finished: 2 * nkHalf, ok: nkHalf > 0 },
       previews: { neckline: !manualBad, placket: !placketBad, ok: previewOk },
       semantics: evaluateSemantics(proj),         // 완료 차단 아님 — 증거만
-      sideWaistDart: sideWaistDart   // v8 에서는 ok=false 면 fails 에 reason(완료 차단)
+      sideWaistDart: sideWaistDart,   // v8 에서는 ok=false 면 fails 에 reason(완료 차단)
+      waistSeam: waistSeam            // null = 허리 이음선 미적용(기존 몸판)
     };
   }
 
@@ -734,7 +784,7 @@
     var ahF = armholeLen(g, "front"), ahB = armholeLen(g, "back");
     // 소매가 참조할 형상 hash(형상 전용: 유효 외곽·진동·목둘레·여밈. 배치·선택·guide 제외).
     var placketParams = proj.working.frontPlacket ? proj.working.frontPlacket.parameters : null;
-    var sig = signature(canonOutline(effF), canonOutline(effB), c.armhole, c.neckline, placketParams);
+    var sig = signature(canonOutline(effF), canonOutline(effB), c.armhole, c.neckline, placketParams, peplumCanon(proj));
     var result = deepFreeze({
       sourceVersion: proj.sourceBlock ? proj.sourceBlock.version : null,
       hash: hashStr(sig),                                     // 소매 결과의 sourceBodiceHash 앵커
@@ -747,6 +797,10 @@
       // 칼라 F 같은 몸판-종속 제도가 형상 수치와 함께 확인할 명시적 목선 출처(형상 hash 미포함).
       necklineProfile: necklineProfile ? clone(necklineProfile) : null,
       placket: proj.working.frontPlacket ? clone(proj.working.frontPlacket) : null,
+      // 허리 이음선 Ⓜ: 별개 조각으로 보존(없으면 null). front/back 은 upper 의미 그대로다.
+      frontPeplum: g.frontPeplum ? { outline: clone(g.frontPeplum.outline), construction: clone(g.frontPeplum.construction || []) } : null,
+      backPeplum: g.backPeplum ? { outline: clone(g.backPeplum.outline), construction: clone(g.backPeplum.construction || []) } : null,
+      waistSeam: g.waistSeam ? clone(g.waistSeam) : null,
       // 편집 후 봉제 의미 readiness(복수 원인 보존). **hash signature 에 미포함** — 형상 identity 불변.
       semantics: evaluateSemantics(proj),
       completedAt: Date.now()
@@ -756,23 +810,26 @@
   }
 
   // 현재 몸판 상태 signature(스테일 판정용): 유효 외곽 + 진동/목둘레 + 여밈 파라미터.
-  function signature(front, back, armhole, neckline, placketParams) {
-    return JSON.stringify({
+  function signature(front, back, armhole, neckline, placketParams, pep) {
+    var o = {
       f: front, b: back,
       ah: { f: round4(armhole.front), b: round4(armhole.back) },
       nk: { h: round4(neckline.half) },
       pk: placketParams
-    });
+    };
+    if (pep) o.pp = pep;   // 페플럼이 있을 때만 — 없으면 기존 hash 와 바이트 단위로 같다
+    return JSON.stringify(o);
   }
   function currentSignature(proj) {
     var c = check(proj);
     var placketParams = proj.working.frontPlacket ? proj.working.frontPlacket.parameters : null;
-    return signature(canonOutline(effectiveOutline(proj, "front")), canonOutline(effectiveOutline(proj, "back")), c.armhole, c.neckline, placketParams);
+    return signature(canonOutline(effectiveOutline(proj, "front")), canonOutline(effectiveOutline(proj, "back")), c.armhole, c.neckline, placketParams, peplumCanon(proj));
   }
   function snapshotSignature(res) {
     return signature(canonOutline(res.front.outline), canonOutline(res.back.outline),
       { front: res.armholeLengths.front, back: res.armholeLengths.back },
-      { half: res.necklineLengths.half }, res.placket ? res.placket.parameters : null);
+      { half: res.necklineLengths.half }, res.placket ? res.placket.parameters : null,
+      (res.frontPeplum && res.backPeplum) ? { f: canonOutline(res.frontPeplum.outline), b: canonOutline(res.backPeplum.outline) } : null);
   }
   function canonOutline(outline) {
     if (!outline) return null;
@@ -786,5 +843,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

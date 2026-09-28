@@ -47,6 +47,12 @@
     ["shared", "outline"], ["shared", "construction"],
     ["sleeve", "outline"], ["sleeve", "construction"]
   ];
+  // 허리 이음선 Ⓜ 의 페플럼 — **선택 조각**(있을 때만 검증·렌더). 앞/뒤판과 같은 edge 규칙을 따른다.
+  const EXTRA = { frontPeplum: "front", backPeplum: "back" };
+  const EXTRA_ORDER = [
+    ["frontPeplum", "outline"], ["frontPeplum", "construction"],
+    ["backPeplum", "outline"], ["backPeplum", "construction"]
+  ];
 
   function fail(reason, detail) {
     const e = new Error("designRenderer: " + reason);
@@ -104,13 +110,20 @@
     const edge = prim.edge;
     const placement = EDGE_PLACEMENT[edge];
     if (typeof edge !== "string" || !placement) fail("bad-edge", edge);
-    if (!((pc === "front" || pc === "back") && placement[rl])) fail("edge-placement", pc + "/" + rl);
+    const host = EXTRA[pc] || pc;   // 페플럼은 그 짝(앞/뒤)의 edge 규칙을 그대로 쓴다
+    if (!((host === "front" || host === "back") && placement[rl])) fail("edge-placement", pc + "/" + rl);
     return edge;
   }
 
   function validGeometry(geometry) {
     if (!geometry || typeof geometry !== "object") return false;
     for (const pc of PIECES) {
+      const bucket = geometry[pc];
+      if (!bucket || typeof bucket !== "object") return false;
+      for (const rl of ROLES) if (!Array.isArray(bucket[rl])) return false;
+    }
+    for (const pc of Object.keys(EXTRA)) {
+      if (!(pc in geometry)) continue;   // 선택 조각: 없으면 통과, 있으면 형식이 맞아야 한다
       const bucket = geometry[pc];
       if (!bucket || typeof bucket !== "object") return false;
       for (const rl of ROLES) if (!Array.isArray(bucket[rl])) return false;
@@ -123,7 +136,8 @@
   function buildGroup(geometry, cls, layer) {
     if (!validGeometry(geometry)) fail("invalid-geometry");
     const kids = [];
-    for (const [pc, rl] of ORDER) {
+    const order = ORDER.concat(EXTRA_ORDER.filter(([pc]) => geometry[pc]));
+    for (const [pc, rl] of order) {
       const arr = geometry[pc][rl];
       for (let i = 0; i < arr.length; i++) {
         const edge = validateEdge(arr[i], pc, rl); // 실패 시 group 미생성(부분 반환 0)

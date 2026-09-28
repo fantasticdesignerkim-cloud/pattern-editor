@@ -27,12 +27,16 @@
   const COLLAR_MIN_FIT_Z = 0.32; // 카라를 소매 오른쪽에 뒀을 때 union fit zoom 이 이보다 작으면 아래 행으로 reflow
   const PIECES = ["front", "back", "sleeve"];
   // 각 배치 피스가 포함하는 geometry 키. shared 는 앞판을 따른다.
+  //   허리 이음선 Ⓜ 의 페플럼(frontPeplum/backPeplum)은 **그 짝(앞/뒤판)의 offset 을 따른다** — 별도 드래그 조각이
+  //   아니라 한 벌로 움직이고, 겹치지 않도록 표시만 허리 아래로 내린다(아래 peplumDrop). 형상 좌표는 불변.
   const PIECE_KEYS = {
-    front: ["front", "shared"],
-    back: ["back"],
+    front: ["front", "shared", "frontPeplum"],
+    back: ["back", "backPeplum"],
     sleeve: ["sleeve"],
-    body: ["front", "back", "shared"]   // 하위호환(앞+뒤 묶음)
+    body: ["front", "back", "shared", "frontPeplum", "backPeplum"]   // 하위호환(앞+뒤 묶음)
   };
+  const PEPLUM_GAP = 3;        // 몸판(upper) 아래 끝과 페플럼 위 끝 사이 표시 간격(도안 cm)
+  const PEPLUM_OF = { frontPeplum: "front", backPeplum: "back" };   // 페플럼 → 짝 몸판
 
   // ── 순수 기하 ──
   function pointsOfPrim(p, out) {
@@ -40,10 +44,36 @@
     if (p.kind === "cubic") { out.push(p.from, p.c1, p.c2, p.to); return; }   // 카라 원호(cubic) bbox
     p.commands.forEach(c => c.points.forEach(q => out.push(q)));
   }
+  // ── 순수: 페플럼 표시 내림(dy). 허리 이음선 적용 시 upper(허리 위 몸판)의 아래 끝 + PEPLUM_GAP 아래에
+  //   페플럼 위 끝이 오도록 **표시만** 내린다(upper 는 허리 옆 끝이 회전으로 조금 내려가 페플럼과 겹칠 수
+  //   있다). geometry 좌표는 안 움직이고, 결정론(같은 geometry → 같은 dy)이다.
+  function peplumDrop(geometry, peplumKey) {
+    const host = PEPLUM_OF[peplumKey];
+    const up = geometry && geometry[host], pp = geometry && geometry[peplumKey];
+    if (!up || !pp || !Array.isArray(up.outline) || !Array.isArray(pp.outline)) return 0;
+    const u = [], q = [];
+    up.outline.forEach(p => pointsOfPrim(p, u)); pp.outline.forEach(p => pointsOfPrim(p, q));
+    if (!u.length || !q.length) return 0;
+    const upMaxY = Math.max.apply(null, u.map(t => t.y)), ppMinY = Math.min.apply(null, q.map(t => t.y));
+    return upMaxY + PEPLUM_GAP - ppMinY;
+  }
+  // 표시용 페플럼 사본(y 를 peplumDrop 만큼 내림). 입력 불변. 없으면 null.
+  function peplumDisplayPiece(geometry, peplumKey) {
+    const pp = geometry && geometry[peplumKey]; if (!pp) return null;
+    const dy = peplumDrop(geometry, peplumKey);
+    const mv = (pt) => ({ x: pt.x, y: pt.y + dy });
+    const sh = (prim) => {
+      const q = JSON.parse(JSON.stringify(prim));
+      ["from", "to", "c1", "c2"].forEach(k => { if (q[k]) q[k] = mv(q[k]); });
+      if (q.commands) q.commands.forEach(c => { c.points = c.points.map(mv); });
+      return q;
+    };
+    return { outline: (pp.outline || []).map(sh), construction: (pp.construction || []).map(sh) };
+  }
   function bboxFromKeys(geometry, keys, roles) {
     const pts = [];
     keys.forEach(pc => {
-      const b = geometry[pc]; if (!b) return;
+      const b = PEPLUM_OF[pc] ? peplumDisplayPiece(geometry, pc) : geometry[pc]; if (!b) return;
       roles.forEach(rl => (b[rl] || []).forEach(p => pointsOfPrim(p, pts)));
     });
     if (pts.length === 0) return null;
@@ -376,7 +406,7 @@
 
   window.designLayout = Object.freeze({
     // 순수(harness)
-    bboxOf, outlineBBoxOf, autoLayout, sideSeamUnderarm, ensureLayout, bboxOfStand, collarAutoOffset,
+    bboxOf, outlineBBoxOf, autoLayout, peplumDrop, peplumDisplayPiece, sideSeamUnderarm, ensureLayout, bboxOfStand, collarAutoOffset,
     // DOM 연동
     enterDesign, centerBody, placeSleeveRight, resetLayout, refreshAutoLayout, afterBodyLength, afterCollar, resetViewForDesign,
     cancelLayoutDrag   // 모드 전환 시 진행 중 배치 드래그 취소(designLineTool.setMode 에서 호출)

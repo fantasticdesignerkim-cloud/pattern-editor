@@ -428,6 +428,7 @@
   //   예외는 **다트 배분**(waistDartScales) — 입력칸이 없어 parameters 에만 산다.
   let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
   let pendingFlare;        // 〃 (true = 다트를 닫아 밑단 벌리기)
+  let pendingWaistSeam;    // 〃 (true = 허리 이음선 — 상·하 조각 분리, 프리셋 Ⓜ)
   function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
   function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
   function rebuildBodiceFamilyOptions() {
@@ -491,6 +492,7 @@
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     pendingDartScales = body.waistDartScales ? structuredClone(body.waistDartScales) : null;
     pendingFlare = body.flare === true ? true : null;
+    pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     onApplyBodyLength();
   }
   function bodiceSelectionStr(reason) {
@@ -523,6 +525,16 @@
       el.textContent = "플레어 적용 — 가슴·허리 수평 계측이 유효하지 않습니다"
         + "(조각이 부채꼴로 펼쳐져 수평 폭이 착용 둘레가 아닙니다)";
       el.setAttribute("data-ok", "0");
+      return;
+    }
+    // ★ 허리 이음선 Ⓜ: 조각이 상·하로 분리돼 허리가 **단일 outline 이 아니다** — 수평 폭 계측이 뜻을 잃는다.
+    //   수치를 지어내지 않고 분리 상태와 상·하 허리 이음 길이 검산을 정직하게 보여 준다.
+    const ws = (project && window.bodiceCheckpoint && window.bodiceCheckpoint.waistSeamState) ? window.bodiceCheckpoint.waistSeamState(project) : null;
+    if (ws) {
+      const one = (k, r) => `${k} ${fmtL(r.upperSeamCm)}cm = ${fmtL(r.peplumSeamCm)}cm`;
+      el.textContent = "허리 이음선 적용 — 상·하 조각 분리(몸판 2 · 페플럼 2, 가슴·허리 수평 계측 대신 표시) · 이음 길이 "
+        + (ws.ok ? "일치: " : "불일치: ") + one("앞", ws.front) + " · " + one("뒤", ws.back);
+      el.setAttribute("data-ok", ws.ok ? "1" : "0");
       return;
     }
     const m = (project && window.bodiceCheckpoint) ? window.bodiceCheckpoint.girthMeasure(project) : null;
@@ -599,6 +611,11 @@
     if (reason === "invalid-body-curve") return "옆선 곡선화는 0–1 사이여야 합니다";
     if (reason === "designFlare-missing") return "플레어 연산 모듈을 불러오지 못했습니다";
     if (reason === "invalid-body-flare") return "플레어 설정이 올바르지 않습니다";
+    if (reason === "waist-seam-needs-hem") return "허리 이음선은 밑단(엉덩이 길이)이 있어야 페플럼이 생깁니다";
+    if (reason === "waist-seam-flare-conflict") return "허리 이음선과 플레어는 함께 쓸 수 없습니다";
+    if (reason === "designWaistSeam-missing") return "허리 이음선 연산 모듈을 불러오지 못했습니다";
+    if (reason === "invalid-body-waist-seam") return "허리 이음선 설정이 올바르지 않습니다";
+    if (reason && reason.indexOf("waist-seam-failed") === 0) return "허리 이음선을 적용할 수 없습니다 · " + String(detail || "");
     if (reason && reason.indexOf("flare-failed") === 0) return "플레어를 적용할 수 없습니다 · " + flareReasonStr(detail);
     if (reason === "invalid-waist-target") return "목표 완성 허리는 30–200 사이여야 합니다";
     if (reason === "waist-overdetermined") return "목표 완성 허리와 허리 다트량은 함께 쓸 수 없습니다";
@@ -2208,6 +2225,10 @@
       if (pendingFlare) nextParameters.body.flare = true; else delete nextParameters.body.flare;
       pendingFlare = undefined;
     }
+    if (pendingWaistSeam !== undefined) {
+      if (pendingWaistSeam) nextParameters.body.waistSeam = true; else delete nextParameters.body.waistSeam;
+      pendingWaistSeam = undefined;
+    }
     if (pendingDartScales !== undefined) {
       if (pendingDartScales === null) delete nextParameters.body.waistDartScales;
       else nextParameters.body.waistDartScales = structuredClone(pendingDartScales);
@@ -2259,6 +2280,7 @@
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     pendingDartScales = null;   // 원형 다트 배분으로 복귀
     pendingFlare = null;        // 플레어 해제
+    pendingWaistSeam = null;    // 허리 이음선 해제(페플럼 제거)
     setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }

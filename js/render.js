@@ -482,8 +482,15 @@ function render(){
     const tf = (o) => "translate(" + (o.dx * scale) + "," + (o.dy * scale) + ")";
     const EMPTY = { outline: [], construction: [] };
     // shared(허리다트 c 다리)는 앞판 서브셋에 포함 → 앞판 offset 과 함께 이동.
-    const frontSub  = (g) => ({ front: g.front, back: EMPTY, shared: g.shared, sleeve: EMPTY });
-    const backSub   = (g) => ({ front: EMPTY, back: g.back, shared: EMPTY, sleeve: EMPTY });
+    // 허리 이음선 Ⓜ 의 페플럼은 그 짝(앞/뒤)의 offset 을 따르고, 표시만 허리 아래로 내려 겹치지 않게 한다
+    //   (designLayout.peplumDisplayPiece — 좌표 사본, geometry 불변). 없으면 키 자체를 넣지 않는다.
+    const withPep = (sub, g, key) => {
+      const pp = window.designLayout && g[key] ? window.designLayout.peplumDisplayPiece(g, key) : null;
+      if (pp) sub[key] = pp;
+      return sub;
+    };
+    const frontSub  = (g) => withPep({ front: g.front, back: EMPTY, shared: g.shared, sleeve: EMPTY }, g, "frontPeplum");
+    const backSub   = (g) => withPep({ front: EMPTY, back: g.back, shared: EMPTY, sleeve: EMPTY }, g, "backPeplum");
     const sleeveSub = (g) => ({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: g.sleeve });
     const SUBS = [["front", frontSub], ["back", backSub], ["sleeve", sleeveSub]];
     const piece = (buildFn, sub, off, pc) => {
