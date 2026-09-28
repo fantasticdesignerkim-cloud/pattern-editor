@@ -47,6 +47,8 @@ const suites = [
   // 앞중심 여밈 파생(designPlacket): 현재 유효 앞판 외곽 → 여밈 스트립 순수 변환.
   // 처리 방법 161「닫는다·벌린다」(플레어): 면적 보존·다트 닫힘·잔여 sliver 기록·원자적 거부.
   { file: "designFlareCheck.js",        golden: false },
+  // 처리 방법 157「맞댄다」: 강체 역방향 일치·중복 맞댐선 제거·면적 합 보존·형상 불일치 거부.
+  { file: "designJoinCheck.js",         golden: false },
   { file: "designPlacketCheck.js",      golden: false },
   // 몸판 모양 완료 체크포인트: 검사·완료 게이트·불변 스냅샷·스테일 판정(스텁 project).
   { file: "bodiceCheckpointCheck.js",   golden: false },
