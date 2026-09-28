@@ -11,19 +11,27 @@
 //       frontPeplum / backPeplum = 허리 아래를 다트 자리에서 갈라 **맞댄 한 장**, 그리고 검산 메타.
 //       떨어진 두 조각을 한 outline 으로 속이지 않는다 — 조각은 네 장이다.
 //
+// ★★ 잠긴 설계 결정(2026-09-29, 사용자 확정 — 더 이상 미확정·우리 해석이 아니다) ★★
+//
 // ★ 몸판(upper) — a·e 는 그대로. **b(앞)·d(뒤)만 닫는다.**
-//   다트 apex A 를 축으로 옆쪽 조각(허리 mouth Ms 부터 옆선·진동 아래쪽 T 까지의 외곽 호)을
-//   Ms 가 중심쪽 mouth Mc 에 얹히는 각만큼 회전한다. 절개선은 **A 에서 옆쪽으로 수평**(grain 직각)
-//   으로 진동선과 만나는 점 T 까지다. 다트 wedge(Ms-A-Mc)는 접혀 사라지고, 회전 조각의 진동 쪽
-//   끝 T' 와 원래 T 사이가 벌어진다 — 그 벌어진 분량이 «진동 둘레 여유분»(`armholeEaseCm`)이다.
-//   T'→T 를 잇는 짧은 선을 진동선의 일부로 두고, **닫힌 다트의 다리는 어디에도 남기지 않는다**
-//   (지배 데이터 모델: 닫힌 다트 = 과거 흔적).
+//   [결정] **절개선은 다트 apex 에서 진동 쪽으로 수평이다.** 다트 apex A 를 축으로 옆쪽 조각
+//   (허리 mouth Ms 부터 옆선·진동 아래쪽 T 까지의 외곽 호)을 Ms 가 중심쪽 mouth Mc 에 얹히는
+//   각만큼 회전한다. 절개선은 **A 에서 옆쪽(진동 쪽)으로 수평**(grain 직각, y=A.y 고정 —
+//   `rayHit` 의 ray-cast 가 이 불변식을 강제한다)으로 진동선과 만나는 점 T 까지다. 다트
+//   wedge(Ms-A-Mc)는 접혀 사라지고, 회전 조각의 진동 쪽 끝 T' 와 원래 T 사이가 벌어진다 —
+//   그 벌어진 분량이 «진동 둘레 여유분»(`armholeEaseCm`)이다. T'→T 를 잇는 짧은 선을 진동선의
+//   일부로 두고, **닫힌 다트의 다리는 어디에도 남기지 않는다**(지배 데이터 모델: 닫힌 다트 =
+//   과거 흔적). 검증: `waistSeamPresetCheck.js` §8 — 절개선이 수평(dy≈0)이고 진동 쪽(옆선 쪽)을
+//   향함을 확정 고정.
 //
 // ★ 페플럼 — 몸판 다트 a,b,d,e 와 **같은 입 너비**를 허리선에 잡고, 각 다트 자리에서 **밑단까지**
-//   wedge 를 잘라내 조각을 나눈 뒤(다리 길이는 두 다리가 같다), 다트마다 semantic joinPairId
+//   wedge 를 잘라내 조각을 나눈다(다리 길이는 두 다리가 같다). [결정] **각 페플럼 다트는 밑단
+//   위의 한 점을 apex 로 삼아 맞댄다** — apex 는 다트 두 입점(mouth)의 중점을 허리축에 투영한
+//   x 를 밑단선 위로 그대로 내린 점(`hs`)이다. 그 뒤 다트마다 semantic joinPairId
 //   (`<front|back>-peplum-<기호>`)를 붙여 **designJoin.buttJoin 을 순차 호출**해 맞댄다. 좌표를
 //   호출부가 추측하지 않는다 — 다리 세그먼트에 새긴 edge 태그(`join:<id>:first|second`)에서 정확한
-//   끝점을 꺼낸다. 결과는 앞/뒤 각각 한 장.
+//   끝점을 꺼낸다. 결과는 앞/뒤 각각 한 장. 검증: `waistSeamPresetCheck.js` §8 — 각 페플럼 다트의
+//   apex 가 밑단선 위(y = 밑단 y)에 정확히 있음을 확정 고정.
 //
 // ★ 허리 이음 길이 정합 — upper 의 봉제 허리(허리 외곽 − 남은 다트 입) 와 peplum 의 허리(맞댄 뒤)는
 //   같은 값이어야 한다(둘 다 W − Σ(a·b 또는 d·e 입)). 어긋나면 **원자적 거부**.
@@ -443,7 +451,8 @@
     var waistEdge = fin.chain.filter(function (sg) { return sg.edge === "waist"; });
     var totalW = darts.reduce(function (sum, dd) { return sum + dd.widthCm; }, 0);
     return { outline: acc.outline, construction: [], joins: joins, areaCm2: finArea,
-      darts: darts.map(function (dd) { return { id: dd.id, pairId: dd.pairId, widthCm: dd.widthCm }; }),
+      // apex: 잠긴 설계(밑단점을 apex 로 삼아 맞댄다) 검증용 — 밑단선 위의 실제 좌표.
+      darts: darts.map(function (dd) { return { id: dd.id, pairId: dd.pairId, widthCm: dd.widthCm, apex: P(dd.apex) }; }),
       waistEdgeLenCm: segsLen(waistEdge), dartTotalCm: totalW };
   }
 

@@ -240,5 +240,85 @@ ok(J(REF) === SNAP, "2: reference 불변");
   ok(typeof g2.front.necklineLenCm === "number" && g2.front.necklineLenCm === g2A.front.necklineLenCm && g2.back.necklineLenCm === g2A.back.necklineLenCm, "7: necklineLenCm 이 upper 에 그대로 실린다");
 }
 
+// ── 8. 잠긴 설계 결정(2026-09-29, 사용자 확정) — 명시 불변식 ──
+//   (1) 페플럼 다트는 밑단점을 apex 로 삼아 맞댄다.
+//   (2) 몸판 b·d 는 다트 apex 에서 진동 쪽으로 수평 절개해 닫는다.
+//
+// ★ (1)의 올바른 판정 기준: **분할 직전(원본) 밑단선.** 순차 buttJoin 은 먼저 합친 다트의 조각을
+//   강체 회전시키므로, 두 번째 이후 join 을 거친 다트의 apex 는 **최종 합쳐진 페플럼 안에서는
+//   회전한 좌표**로 나타난다(그래도 그 조각의 밑단 변과는 정확히 맞물려 있다 — buttJoin 이 강체
+//   변환이라 "밑단 위에 있다"는 성질 자체는 보존된다). 따라서 "apex 가 밑단 위"라는 설계는 **자른
+//   시점**(아직 어느 join 도 거치지 않은, `designBodice.computeGeometry` 가 만드는 분할 전 조각)
+//   기준으로 검증해야 한다 — 그게 이 결정이 실제로 거는 제약이다. 최종 합쳐진 페플럼의 밑단은
+//   조각마다 회전 각도가 달라 더 이상 하나의 직선이 아니다(교재의 «완만한 곡선 재작도» 대상 —
+//   아직 미구현, docs/STATUS.md 기록).
+{
+  const shaped = DB.computeGeometry(REF, { body: { hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1.5, hemSideOffsetCm: 1 } });
+  const t = W.designLineTool;
+  const onHemChord = (p, hemSeg) => {
+    const vx = hemSeg.to.x - hemSeg.from.x, vy = hemSeg.to.y - hemSeg.from.y, L = Math.hypot(vx, vy);
+    const cross = Math.abs((p.x - hemSeg.from.x) * vy - (p.y - hemSeg.from.y) * vx) / L;
+    const u = ((p.x - hemSeg.from.x) * vx + (p.y - hemSeg.from.y) * vy) / (L * L);
+    return cross < 1e-6 && u > -1e-6 && u < 1 + 1e-6;
+  };
+  ["front", "back"].forEach(k => {
+    const meta = G.waistSeam[k];
+    const hemSegs = t.outlinePrimsToSegs(shaped[k].outline).filter(s => s.edge === "hem");
+    ok(hemSegs.length === 1 && hemSegs[0].kind === "line", "8: " + k + " 분할 전 밑단은 단일 직선(판정 기준)");
+    ok(meta.peplumDarts.length > 0, "8: " + k + " 페플럼 다트 존재");
+    meta.peplumDarts.forEach(d => {
+      ok(!!d.apex && onHemChord(d.apex, hemSegs[0]), "8: [결정1] " + k + " 페플럼 다트 " + d.id + " 의 apex 가 분할 전 밑단선 위에 있다(밑단점을 apex 로 맞댐)");
+    });
+    // 결정 1 을 최종 합쳐진 페플럼에서도 확인: 그 조각의 hem 변은 numDarts+1 개로 나뉘고, 각
+    // interior 이음점(=다트 apex 의 상)이 인접한 두 hem 세그먼트의 공유 끝점이어야 한다(강체
+    // 변환이 "apex 가 자기 조각의 밑단 위에 있다"를 보존한다는 사실 자체를 확인).
+    // hem 은 원본 outline 배열 순서로는 ring 끝-처음 wrap 때문에 끊겨 보일 수 있다(예: [7,0,1]) —
+    // 공유 끝점으로 다시 이어 붙여 실제 기하 체인 순서를 복원한 뒤 이음점을 검사한다.
+    const rawHem = t.outlinePrimsToSegs(G[k + "Peplum"].outline).filter(s => s.edge === "hem");
+    ok(rawHem.length === meta.peplumDarts.length + 1, "8: [결정1] " + k + " 최종 페플럼 밑단이 다트 수+1 개 변으로(각 이음점 = 다트 apex)");
+    const chainHem = (segs) => {
+      const pool = segs.slice(), near2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-4;
+      // 체인의 진짜 끝(다른 어느 세그먼트의 끝점과도 안 닿는 쪽)에서 시작한다 — filter 순서는 ring
+      // wrap 때문에 임의적이라, 중간 세그먼트에서 출발하면 진짜 체인이어도 헛되이 끊겨 보인다.
+      const touchesOther = (p, self) => pool.some(s => s !== self && (near2(s.from, p) || near2(s.to, p)));
+      let start = pool.find(s => !touchesOther(s.from, s));
+      let startReversed = false;
+      if (!start) { start = pool.find(s => !touchesOther(s.to, s)); startReversed = true; }
+      if (!start) return null;
+      pool.splice(pool.indexOf(start), 1);
+      const chain = [startReversed ? { from: start.to, to: start.from } : { from: start.from, to: start.to }];
+      while (pool.length) {
+        const tail = chain[chain.length - 1].to;
+        const i = pool.findIndex(s => near2(s.from, tail) || near2(s.to, tail));
+        if (i < 0) return null;
+        const s = pool.splice(i, 1)[0];
+        chain.push(near2(s.from, tail) ? { from: s.from, to: s.to } : { from: s.to, to: s.from });
+      }
+      return chain;
+    };
+    const finalHem = chainHem(rawHem);
+    ok(!!finalHem, "8: [결정1] " + k + " 최종 밑단이 하나의 연속 체인으로 이어진다");
+    if (finalHem) for (let i = 0; i < finalHem.length - 1; i++) {
+      ok(near(finalHem[i].to.x, finalHem[i + 1].from.x, 1e-6) && near(finalHem[i].to.y, finalHem[i + 1].from.y, 1e-6),
+        "8: [결정1] " + k + " 최종 밑단 이음점 " + i + " 이 정확히 맞물림(회전해도 apex-on-hem 보존)");
+    }
+
+    // (2) 몸판 b/d — 절개선(apex→T)이 수평이고, T 는 apex 에서 진동(옆선) 쪽으로 나아간 점이다.
+    //   T 는 곡선(진동) 경계에 스냅되므로(projectOntoRing) 최대 0.05cm 슬랙 안에서 곡선을 따라
+    //   미세 이탈할 수 있다 — 그래도 봉제 정밀도(≪1mm)로는 "수평"이다. 1e-3cm 로 판정한다.
+    const cd = meta.closedDart;
+    ok(!!cd, "8: " + k + " 닫힌 다트(b/d) 메타 존재");
+    ok(Math.abs(cd.apex.y - cd.slashEnd.y) < 1e-3, "8: [결정2] " + k + " 절개선(apex→T)이 수평(Δy<0.001cm): " + Math.abs(cd.apex.y - cd.slashEnd.y).toExponential(2));
+    const armSegs = t.outlinePrimsToSegs(G[k].outline).filter(s => s.edge === "armhole" || s.edge === "side-seam");
+    ok(armSegs.some(s => t.projectOntoSeg(cd.slashEnd, s).dist < 0.05), "8: [결정2] " + k + " 절개선이 진동/옆선 경계에서 끝난다(중심 쪽이 아니다)");
+    const centerSeg = t.outlinePrimsToSegs(G[k].outline).find(s => s.edge === "center");
+    ok(near(centerSeg.from.x, centerSeg.to.x, 1e-6), "8: " + k + " 중심선은 수직(단일 x)");
+    const cx = centerSeg.from.x;
+    ok(Math.abs(cd.slashEnd.x - cx) > Math.abs(cd.apex.x - cx), "8: [결정2] " + k + " 절개가 중심에서 멀어지는(진동 쪽) 방향");
+  });
+  // 결정이 두 조각(앞·뒤) 모두에 같은 규칙으로 적용됨(대칭적 잠긴 규칙, 조각마다 다르게 하지 않는다)
+  ok(J(Object.keys(G.waistSeam.front.closedDart).sort()) === J(Object.keys(G.waistSeam.back.closedDart).sort()), "8: 앞·뒤 closedDart 메타 형태 동일(같은 규칙)");
+}
+
 console.log(`waistSeamPresetCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { fails.forEach(f => console.log("  ✗ " + f)); process.exit(1); }
