@@ -429,6 +429,7 @@
   let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
   let pendingFlare;        // 〃 (true = 다트를 닫아 밑단 벌리기)
   let pendingWaistSeam;    // 〃 (true = 허리 이음선 — 상·하 조각 분리, 프리셋 Ⓜ)
+  let pendingPeplumFlare;  // 〃 (true = 페플럼을 맞대면서 플레어 벌리기, 프리셋 Ⓝ — waistSeam 전제)
   function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
   function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
   function rebuildBodiceFamilyOptions() {
@@ -493,6 +494,7 @@
     pendingDartScales = body.waistDartScales ? structuredClone(body.waistDartScales) : null;
     pendingFlare = body.flare === true ? true : null;
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
+    pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
     onApplyBodyLength();
   }
   function bodiceSelectionStr(reason) {
@@ -532,8 +534,10 @@
     const ws = (project && window.bodiceCheckpoint && window.bodiceCheckpoint.waistSeamState) ? window.bodiceCheckpoint.waistSeamState(project) : null;
     if (ws) {
       const one = (k, r) => `${k} ${fmtL(r.upperSeamCm)}cm = ${fmtL(r.peplumSeamCm)}cm`;
+      const fl = (r) => r.flare ? ` 플레어 ${fmtL(r.flare.totalCm)}cm(절개 ${r.flare.cuts}곳 각 ${fmtL(r.flare.perCutCm)})` : "";
+      const flareTxt = (ws.front.flare || ws.back.flare) ? " · 페플럼 플레어(완성 허리×0.9−1):" + "앞" + fl(ws.front) + " 뒤" + fl(ws.back) : "";
       el.textContent = "허리 이음선 적용 — 상·하 조각 분리(몸판 2 · 페플럼 2, 가슴·허리 수평 계측 대신 표시) · 이음 길이 "
-        + (ws.ok ? "일치: " : "불일치: ") + one("앞", ws.front) + " · " + one("뒤", ws.back);
+        + (ws.ok ? "일치: " : "불일치: ") + one("앞", ws.front) + " · " + one("뒤", ws.back) + flareTxt;
       el.setAttribute("data-ok", ws.ok ? "1" : "0");
       return;
     }
@@ -2229,6 +2233,10 @@
       if (pendingWaistSeam) nextParameters.body.waistSeam = true; else delete nextParameters.body.waistSeam;
       pendingWaistSeam = undefined;
     }
+    if (pendingPeplumFlare !== undefined) {
+      if (pendingPeplumFlare) nextParameters.body.peplumFlare = true; else delete nextParameters.body.peplumFlare;
+      pendingPeplumFlare = undefined;
+    }
     if (pendingDartScales !== undefined) {
       if (pendingDartScales === null) delete nextParameters.body.waistDartScales;
       else nextParameters.body.waistDartScales = structuredClone(pendingDartScales);
@@ -2281,6 +2289,7 @@
     pendingDartScales = null;   // 원형 다트 배분으로 복귀
     pendingFlare = null;        // 플레어 해제
     pendingWaistSeam = null;    // 허리 이음선 해제(페플럼 제거)
+    pendingPeplumFlare = null;  // 페플럼 플레어 해제
     setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }
