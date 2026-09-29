@@ -48,7 +48,8 @@
     { key: "waistDartScales", label: "허리 다트 배분", unit: "" },
     { key: "flare", label: "다트를 닫아 밑단 벌리기", unit: "" },
     { key: "waistSeam", label: "허리 이음선(상·하 조각 분리)", unit: "" },
-    { key: "peplumFlare", label: "페플럼 맞대면서 플레어 벌리기", unit: "" }
+    { key: "peplumFlare", label: "페플럼 맞대면서 플레어 벌리기", unit: "" },
+    { key: "peplumCut", label: "페플럼 WL 등분 수직 절개로 벌리기", unit: "" }
   ];
   var BODY_KEYS = BODY_FIELDS.map(function (f) { return f.key; });
   var DART_SYMBOLS = ["a", "b", "d", "e"];   // [패턴학교]가 쓰는 봉제 허리다트 넷
@@ -122,7 +123,7 @@
       variants: [
         availVariant("bunka-bodice-M", "M", "M · 옆선 −1.5 · 밑단 +1 · 다트 b·d 를 닫고 페플럼은 맞댄다", 26),
         availVariant("bunka-bodice-N", "N", "N · Ⓜ 방법 + 페플럼은 맞대면서 플레어 분량을 벌린다", 27),
-        pendingVariant("bunka-bodice-O", "O", "O · 허리 이음선 변형", 28, null, "미판독 — 착수 시 P.28 을 읽고 Ⓜ·Ⓝ 조합으로 되는지 확인한다."),
+        availVariant("bunka-bodice-O", "O", "O · 박시 몸판 + 페플럼 절개 3조각 벌림(허리 이음선 · 밑단 +2)", 28),
         pendingVariant("bunka-bodice-P", "P", "P · 허리 이음선 변형", 29, null, "미판독 — 착수 시 P.29 를 읽고 Ⓜ·Ⓝ 조합으로 되는지 확인한다.")
       ] },
     { id: "yoke-seam-1", order: 8, label: "요크 이음선 ①", symbol: "Q", page: 30,
@@ -209,6 +210,16 @@
       body: { hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1.5, hemSideOffsetCm: 1, waistSeam: true, peplumFlare: true }
     },
     {
+      id: "bunka-bodice-O", label: "교재 O 허리 이음선 + 페플럼 절개 벌림", familyId: "waist-seam", symbol: "O", page: 28,
+      description: "박시 몸판(허리 다트 없음 · 옆선 수직) + 페플럼은 WL 3등분 수직 절개 2곳을 벌린다(플레어 = 허리 완성치수 × 0.4 − 2 · 밑단 +2)",
+      source: "[패턴학교] 허리 이음선 Ⓞ(P.28) · 처리 방법 기준점을 잡고 잘라서 벌린다(P.163)",
+      baseMethod: "bunka-bodice-O-v1",
+      // 몸판 = 박시 Ⓐ: 허리 다트 a·b·d·e 는 없고(배율 0) 옆선은 WL 까지 수직(−1.5 조정 없음). 앞 AH·뒤 어깨 다트는 원형 그대로다.
+      //   페플럼: WL 을 3등분한 점에서 수직 절개 2곳 → 중심 조각 고정 · 중간·옆 조각을 바깥으로 순차 회전 ·
+      //   각 절개는 WL 점 고정, 밑단 끝 chord ∅/2 · ∅ = 완성 허리 × 0.4 − 2 · 옆 밑단 +2 · 허리선·밑단 fairing.
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 2, waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, waistSeam: true, peplumCut: true }
+    },
+    {
       id: "bunka-bodice-C", label: "교재 C 셰이프트(다트 2개)", familyId: "shaped-line", symbol: "C", page: 16,
       description: "허리 다트 a·e 만 사용 · 옆선 1cm 줄임 · 밑단 1cm 추가",
       source: "[패턴학교] 셰이프트 라인 Ⓒ(P.16)",
@@ -243,6 +254,12 @@
       }
       if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
       if (k === "waistSeam") { if (v !== true) fail("invalid-body", id + ".waistSeam"); return; }
+      if (k === "peplumCut") {
+        if (v !== true) fail("invalid-body", id + ".peplumCut");
+        if (body.waistSeam !== true) fail("peplum-cut-needs-waist-seam", id);
+        if (body.peplumFlare === true) fail("peplum-cut-flare-conflict", id);
+        return;
+      }
       if (k === "peplumFlare") {
         if (v !== true) fail("invalid-body", id + ".peplumFlare");
         if (body.waistSeam !== true) fail("peplum-flare-needs-waist-seam", id);

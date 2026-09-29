@@ -700,7 +700,8 @@
     if (!fl) return null;
     var joins = meta.joins || [];
     var sum = joins.reduce(function (a, j) { return a + (j.spread ? j.spread.chordCm : NaN); }, 0);
-    var want = fl.ratio * meta.peplumWaistSeamCm - fl.subtractCm;
+    // Ⓞ: 허리 fairing 이 줄인 만큼(meta.waistFair.shortfallCm)을 되돌려야 "완성 허리"(그린 허리 길이)가 된다.
+    var want = fl.ratio * (meta.peplumWaistSeamCm + (meta.waistFair ? meta.waistFair.shortfallCm : 0)) - fl.subtractCm;
     var even = joins.length > 0 && joins.every(function (j) { return j.spread && Math.abs(j.spread.chordCm - want / joins.length) < 1e-9; });
     return { totalCm: round4(sum), expectedCm: round4(want), perCutCm: joins.length ? round4(want / joins.length) : null, cuts: joins.length,
       ok: isFinite(sum) && Math.abs(sum - want) < 1e-6 && even && want > 0 };
@@ -717,10 +718,11 @@
         deltaCm: typeof meta.waistSeamDeltaCm === "number" ? meta.waistSeamDeltaCm : null,
         closedDart: meta.closedDart ? meta.closedDart.dartId : null,
         armholeEaseCm: meta.closedDart ? round4(meta.closedDart.armholeEaseCm) : null,
+        fairCm: meta.waistFair ? meta.waistFair.shortfallCm : 0,
         flare: flareRow(meta) };
     };
     var F = row(g.frontPeplum, f), B = row(g.backPeplum, b);
-    var seamOk = function (r) { return r.deltaCm !== null && Math.abs(r.deltaCm) <= SEAM_LEN_EPS; };
+    var seamOk = function (r) { return r.deltaCm !== null && Math.abs(r.deltaCm - r.fairCm) <= SEAM_LEN_EPS; };
     var flareOk = function (r) { return r.flare === null || r.flare.ok; };
     var flareBad = !(flareOk(F) && flareOk(B));
     return { front: F, back: B, ok: F.peplumClosed && B.peplumClosed && seamOk(F) && seamOk(B) && !flareBad,

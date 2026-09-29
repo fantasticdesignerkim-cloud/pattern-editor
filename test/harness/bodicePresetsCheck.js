@@ -43,10 +43,10 @@ const BP = sandbox.window.bodicePresets, DB = sandbox.window.designBodice;
 {
   const F = BP.families();
   const avail = F.flatMap(f => f.variants).filter(v => v.availability === "available");
-  ok(J(avail.map(v => v.symbol)) === J(["A", "B", "C", "D", "G", "M", "N"]), "2: 실행 가능 = 박시 A·B + 셰이프트 C·D + 플레어 G + 허리 이음선 M·N");
+  ok(J(avail.map(v => v.symbol)) === J(["A", "B", "C", "D", "G", "M", "N", "O"]), "2: 실행 가능 = 박시 A·B + 셰이프트 C·D + 플레어 G + 허리 이음선 M·N·O");
   ok(avail.every(v => v.presetId === v.id && BP.get(v.presetId)), "2: 실행 슬롯은 레코드를 가리킨다");
   const pend = F.flatMap(f => f.variants).filter(v => v.availability !== "available");
-  ok(pend.length === 15 && pend.every(v => v.presetId === null), "2: 보류 15개는 레코드 없음");
+  ok(pend.length === 14 && pend.every(v => v.presetId === null), "2: 보류 14개는 레코드 없음");
   // ★ 보류는 **왜 못 그리는지**를 반드시 들고 있다 — 없으면 "그냥 아직 안 함"과 구별이 안 된다
   ok(pend.every(v => typeof v.blockedBy === "string" && v.blockedBy.length > 0), "2: 보류 전부 blockedBy 기록");
   ok(BP.familyOptions().filter(o => !o.available).length === 6, "2: 비활성 라인 6개(플레어·허리 이음선 해제)");
