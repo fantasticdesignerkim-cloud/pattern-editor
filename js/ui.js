@@ -2431,6 +2431,9 @@
     // 카라 제도 치수 표시 토글(세션 UI): 오버레이만 다시 그린다.
     const chkDims = document.getElementById("chkCollarDraftDims");
     if (chkDims) chkDims.addEventListener("change", () => { if (typeof render === "function") render(); });
+    // 페플럼 제작 정보 표시 토글(세션 UI, 표시 전용): 오버레이만 다시 그린다.
+    const chkPep = document.getElementById("chkPeplumInfo");
+    if (chkPep) chkPep.addEventListener("change", () => { if (typeof render === "function") render(); });
     // 소매 모양(S1): 입력 중엔 버튼 활성만 갱신·Enter 로 적용, 적용/원형복원 버튼.
     ["inpSleeveLength", "inpSleeveCuff"].forEach(id => {
       const el = document.getElementById(id); if (!el) return;

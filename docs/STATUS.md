@@ -82,6 +82,9 @@ body = Ⓜ + `peplumFlare:true`(waistSeam 전제). 몸판(upper)은 Ⓜ 과 **�
 - 벌림은 밑단 끝점 사이 **직선거리(chord)** 기준이다(호 길이가 아니라).
 - 허리선은 회전으로 꺾인다(부채꼴 — 길이는 그대로, 상·하 허리 이음 정합 유지). **허리 곡선 정리는 미구현**(패턴선 확정 몫).
 - 체크포인트가 플레어 합·균등을 **다시 계산해 대조**하고 어긋나면 완료를 막는다(`waist-seam-flare-mismatch`).
+- **제작 정보 표시(표시 전용, `js/peplumAnnotation.js` → `render.js`)**: 조각명·앞/뒤중심·옆선·허리선·밑단선·절개(①②+원래 다트 기호)
+  안내선·쐐기·절개별 벌림량·총 플레어와 산식·Ⓐ/Ⓑ/Ⓒ 조각. Ⓝ 에만 있고 토글(`chkPeplumInfo`)로 끈다.
+  geometry·계측·체크포인트·hash·hit 에 영향 없음(peplumAnnotationCheck 44).
 - 검증: designJoinSpreadCheck 40 · peplumFlarePresetCheck 109 · 실제 UI 에서 Ⓝ 적용 → 몸판·소매·카라 완료 →
   Design 형상 완료까지 밟았다(콘솔 오류 0, storage 0키).
 

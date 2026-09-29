@@ -130,6 +130,17 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .collar-anno-tick{fill:none;stroke:#475569;stroke-width:0.8}
 .collar-anno-text{font-size:10px;fill:#1E293B;font-weight:600;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px;stroke-linejoin:round}
 .collar-anno-label{font-size:9px;fill:#475569;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px}
+
+/* 페플럼 제작 정보(표시 전용): 외곽선보다 가늘고 옅게, 글자는 흰 후광 */
+.peplum-anno{pointer-events:none}
+.peplum-anno-wedge{fill:rgba(37,99,235,.07);stroke:none}
+.peplum-anno-leg{fill:none;stroke:#64748B;stroke-width:0.7;stroke-dasharray:4 3}
+.peplum-anno-notch{fill:#fff;stroke:#475569;stroke-width:0.9}
+.peplum-anno-text{font-size:9px;fill:#475569;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px;stroke-linejoin:round}
+.peplum-anno-title{font-size:12px;font-weight:700;fill:#1E293B}
+.peplum-anno-strip{font-size:13px;fill:#2563EB;font-weight:600}
+.peplum-anno-amount{font-size:10px;fill:#1D4ED8;font-weight:700}
+.peplum-anno-cut{font-size:9px;fill:#334155}
 .collar-draft-summary{display:flex;flex-direction:column;gap:2px;font-size:11px}
 .cds-title{font-weight:600;color:var(--navy);margin-top:4px}
 .cds-list{display:grid;grid-template-columns:1fr auto;gap:1px 8px;margin:0}

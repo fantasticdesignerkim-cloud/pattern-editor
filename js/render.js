@@ -415,6 +415,31 @@ function _appendCollarAnnotation(root, model, off, scale){
   root.appendChild(g);
 }
 
+// 페플럼 제작 정보 오버레이(표시 전용): peplumAnnotation 표시 모델(geometry 좌표)을 피스 그룹에 동승시켜 그린다.
+//   페플럼은 표시만 허리 아래로 내려 그리므로(peplumDrop) 같은 dy 를 더한다. geometry·hit·계측·hash 무관.
+//   선 굵기·글자 크기는 px 고정(줌 무관). 외곽선보다 가늘고 옅게, 글자는 흰 후광으로 읽히게 한다.
+function _appendPeplumAnnotation(grp, model, dy){
+  if(!model) return;
+  const g=E("g",{ "data-design-peplum":"annotation", "data-anno-piece":model.key, class:"peplum-anno" });
+  const pt=(p)=>c2p(p.x,p.y+dy);
+  model.wedges.forEach(w=>{
+    g.appendChild(E("polygon",{ points:w.pts.map(p=>pt(p).join(",")).join(" "), class:"peplum-anno-wedge", "data-anno":"wedge-"+w.id }));
+  });
+  model.legs.forEach(l=>{
+    const [x1,y1]=pt(l.from), [x2,y2]=pt(l.to);
+    g.appendChild(E("line",{ x1,y1,x2,y2, class:"peplum-anno-leg", "data-anno":"leg-"+l.id }));
+  });
+  model.notches.forEach(n=>{
+    const [x,y]=pt(n.at);
+    g.appendChild(E("circle",{ cx:x, cy:y, r:2.6, class:"peplum-anno-notch", "data-anno":"notch-"+n.id }));
+  });
+  model.lines.forEach(t=>{
+    const [x,y]=pt(t.at);
+    g.appendChild(E("text",{ x:x+t.px.dx, y:y+t.px.dy, class:"peplum-anno-text peplum-anno-"+t.cls, "text-anchor":t.anchor, "data-anno-text":t.id }, t.text));
+  });
+  grp.appendChild(g);
+}
+
 // 카라 hit rect(collar-body manual 편집 시에만): designLineTool.pieceAt 이 "collar" 를 해석하도록.
 // 레이아웃 드래그는 designLayout 이 collar 를 PIECES 에서 제외해 무시한다(=편집 전용 hit).
 function _appendCollarHitRect(root, collarDraft, off, scale){
@@ -508,9 +533,15 @@ function render(){
     const _draft = (_dlt && _dlt.getDraft) ? _dlt.getDraft() : null;
     const _overlay = (_dlt && _dlt.getSelectionOverlay) ? _dlt.getSelectionOverlay() : null;
     const _snap = (_dlt && _dlt.getSnapHint) ? _dlt.getSnapHint() : null;
+    // 페플럼 제작 정보(Ⓝ 에만 모델 존재, 토글 OFF 면 없음). 토글 행은 모델이 있을 때만 보인다.
+    const _pepChk = document.getElementById("chkPeplumInfo"), _pepRow = document.getElementById("rowPeplumInfo");
+    const _pepAll = (window.peplumAnnotation && dp.working.geometry) ? window.peplumAnnotation.buildModel(dp.working.geometry) : null;
+    if(_pepRow) _pepRow.hidden = !(_pepAll && (_pepAll.front || _pepAll.back));
+    const _pepOn = _pepAll && (!_pepChk || _pepChk.checked);
     SUBS.forEach(([pc, sub]) => {
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
       _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
+      if (_pepOn && _pepAll[pc]) _appendPeplumAnnotation(grp, _pepAll[pc], window.designLayout.peplumDrop(dp.working.geometry, pc + "Peplum"));
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
       if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay
       if (_snap && _snap.piece === pc) _appendSnapHint(grp, _snap.point);              // 흡착 표시(cyan)
