@@ -239,7 +239,7 @@
   //   opts.onTol    기본 0.02cm — 끝점이 경계 위에 있다고 볼 허용거리
   //   opts.lenTol   기본 0.01cm — 봉제선 길이·형상·이음 틈 허용오차
   // 반환: 맞댄 한 장 + 검산 수치. 하나라도 어긋나면 **부분 결과를 반환하지 않는다**(throw).
-  function buttJoin(spec, opts) {
+  function alignSeams(spec, opts) {
     opts = opts || {};
     var t = T();
     if (!spec || typeof spec !== "object") fail("invalid-spec");
@@ -276,6 +276,16 @@
     }
     if (maxDev > lenTol) fail("seam-shape-mismatch", { maxDeviationCm: maxDev, tolCm: lenTol });
 
+    return { joinPairId: joinPairId, t: t, sa: sa, sb: sb, A: A, B: B, X: X, rad: rad, aS: aS, aE: aE, bS: bS, bE: bE,
+      lenDelta: lenDelta, maxDev: maxDev, onTol: onTol, lenTol: lenTol };
+  }
+
+  function buttJoin(spec, opts) {
+    opts = opts || {};
+    var c = alignSeams(spec, opts);
+    var joinPairId = c.joinPairId, sa = c.sa, sb = c.sb, A = c.A, B = c.B, X = c.X, rad = c.rad;
+    var bS = c.bS, lenDelta = c.lenDelta, maxDev = c.maxDev, lenTol = c.lenTol;
+    var aE = c.aE;
     // 4) 중복 맞댐선 제거 후 재조립 — A 의 나머지(a.end→a.start) + 변환된 B 의 나머지
     //    (b.end→b.start). 두 맞댐 호는 **둘 다** 외곽에서 빠진다(그게 "1장으로 잇는다").
     var keepA = A.rest.map(function (s) { return cloneSeg(s); });
@@ -336,8 +346,127 @@
     };
   }
 
+  // ══ 158「맞대면서 벌린다」 ══════════════════════════════════════════════════
+  // 교재(P.158): *"패턴을 맞대는 위치에 분량을 추가하는 방법 — 맞대어 완성한 패턴을 다시
+  // 잘라서 벌리는 것."* 절차: ① 맞댄다(157) ② **한 점(WL 포인트)을 고정**하고 종이를 회전시켜
+  // 지정 치수를 벌린다 ③ **처리한 곳을 각지지 않게 완만한 곡선으로 수정**한다.
+  //
+  // buttSpread(spec, opts) — spec 은 buttJoin 과 같고 `spread` 가 더 붙는다.
+  //   spec.spread = { pivot:{x,y}, chordCm }
+  //     pivot    A 좌표계의 고정점. 맞댐 봉제선(A 구간)의 **한쪽 끝점**이어야 한다(아니면 거부).
+  //     chordCm  반대쪽 끝(far)에서 A·B 두 봉제선 끝 사이의 **직선 거리** — 교재 도해의 ∅/2 표기.
+  //   opts.bridge      "smooth"(기본, 접선 연속 cubic) | "line"(검증·비교용)
+  //   opts.bridgeEdge  벌어진 자리를 잇는 이음선에 줄 의미 모서리(예: "hem")
+  // 벌어지는 방향은 결정적이다 — B 몸판이 놓인 쪽으로 봉제선이 돌아 나가, 두 조각 사이에 쐐기가
+  // 생긴다(반대로 돌면 겹친다). 쐐기 면적만큼 분량이 늘고, 조각 면적은 각각 보존된다.
+  function buttSpread(spec, opts) {
+    opts = opts || {};
+    var c = alignSeams(spec, opts);
+    var sa = c.sa, sb = c.sb, A = c.A, B = c.B, X = c.X, rad = c.rad;
+    var aS = c.aS, aE = c.aE, bS = c.bS, lenDelta = c.lenDelta, maxDev = c.maxDev, lenTol = c.lenTol, onTol = c.onTol;
+    var sp = spec.spread;
+    if (!sp || typeof sp !== "object") fail("invalid-spread");
+    var pv = sp.pivot;
+    if (!pv || typeof pv.x !== "number" || typeof pv.y !== "number" || !isFinite(pv.x) || !isFinite(pv.y)) fail("invalid-spread-pivot");
+    if (typeof sp.chordCm !== "number" || !isFinite(sp.chordCm) || !(sp.chordCm > 0)) fail("invalid-spread-amount", sp.chordCm);
+    var bridgeKind = opts.bridge || "smooth";
+    if (bridgeKind !== "smooth" && bridgeKind !== "line") fail("invalid-bridge", bridgeKind);
+
+    var pivotAt = dist(pv, aS) <= onTol ? "start" : (dist(pv, aE) <= onTol ? "end" : null);
+    if (!pivotAt) fail("pivot-off-seam-end", { toStartCm: dist(pv, aS), toEndCm: dist(pv, aE), tolCm: onTol });
+    var pivot = pivotAt === "start" ? aS : aE, far = pivotAt === "start" ? aE : aS;
+    var Lc = dist(pivot, far);
+    if (!(Lc > DEG_EPS)) fail("degenerate-interval", { reason: "zero-chord" });
+    if (!(sp.chordCm < 2 * Lc * 0.999)) fail("spread-too-large", { chordCm: sp.chordCm, maxCm: 2 * Lc });
+    var phi = 2 * Math.asin(sp.chordCm / (2 * Lc));
+    if (pivotAt === "start") phi = -phi;
+
+    var ca = Math.cos(phi), sn = Math.sin(phi);
+    var rp = function (q) { return { x: pivot.x + (q.x - pivot.x) * ca - (q.y - pivot.y) * sn, y: pivot.y + (q.x - pivot.x) * sn + (q.y - pivot.y) * ca }; };
+    var X2 = makeXform(bS, rp(aE), rad + phi);
+    var sampA = samplePolyline(A.butt, SEAM_SAMPLES);
+    var sampB = samplePolyline(B.butt, SEAM_SAMPLES).map(function (q) { return xformPt(q, X2); });
+    var keepA = A.rest.map(function (q) { return cloneSeg(q); });
+    var keepB = B.rest.map(function (q) { return xformSeg(q, X2); });
+    if (!keepA.length || !keepB.length) fail("join-failed", "empty-remainder");
+
+    // 고정점 쪽 이음 틈은 0 이어야 한다(회전 중심이므로). 허용오차 이상이면 거부.
+    var pGap = pivotAt === "start" ? dist(keepA[keepA.length - 1].to, keepB[0].from) : dist(keepB[keepB.length - 1].to, keepA[0].from);
+    if (pGap > lenTol) fail("seam-endpoint-gap", { gapCm: pGap, tolCm: lenTol });
+    if (pivotAt === "start") keepB[0].from = P(keepA[keepA.length - 1].to);
+    else keepB[keepB.length - 1].to = P(keepA[0].from);
+
+    // 벌어진 쪽 이음 — 두 조각 외곽 사이를 잇는 선(직선 또는 접선 연속 cubic).
+    var prev, next;
+    if (pivotAt === "start") { prev = keepB[keepB.length - 1]; next = keepA[0]; }
+    else { prev = keepA[keepA.length - 1]; next = keepB[0]; }
+    var bp = P(prev.to), bq = P(next.from);
+    var bridgeChord = dist(bp, bq);
+    if (!(bridgeChord > DEG_EPS)) fail("no-spread");
+    var mkBridge = function (kind) {
+      var seg = { kind: "line", from: bp, to: bq };
+      if (kind === "smooth") {
+        var FL = (typeof window !== "undefined") && window.designFlare;
+        if (!FL || typeof FL.fairBridge !== "function") fail("designFlare-missing");
+        seg = FL.fairBridge(bp, bq, FL.tangentAtEnd(prev), FL.tangentAtStart(next));
+      }
+      if (opts.bridgeEdge) seg.edge = opts.bridgeEdge;
+      return seg;
+    };
+    var assemble = function (bridge) {
+      return pivotAt === "start" ? keepA.concat(keepB, [bridge]) : keepA.concat([bridge], keepB);
+    };
+    var lineOutline = assemble(mkBridge("line"));
+    var bridgeSeg = mkBridge(bridgeKind);
+    var outline = bridgeKind === "line" ? lineOutline : assemble(bridgeSeg);
+
+    for (var i = 0; i < outline.length; i++) {
+      var u = outline[i], v = outline[(i + 1) % outline.length];
+      if (dist(u.to, v.from) > CLOSE_EPS) fail("join-discontinuous", { at: i, gapCm: dist(u.to, v.from) });
+    }
+    if (selfIntersects(outline)) fail("self-intersection");
+    var areaJoined = Math.abs(signedArea(outline));
+    if (!(areaJoined > MIN_AREA)) fail("zero-area", { side: "joined", areaCm2: areaJoined });
+
+    // 면적 검산: (선으로 이은 한 장) = A + B + **두 봉제선 사이 쐐기**. 겹치면 이보다 작아진다.
+    var wedgePts = (pivotAt === "start" ? sampA : sampA.slice().reverse())
+      .concat((pivotAt === "start" ? sampB : sampB.slice().reverse()));
+    var wA = 0;
+    for (var k = 0; k < wedgePts.length; k++) { var pa = wedgePts[k], pb = wedgePts[(k + 1) % wedgePts.length]; wA += pa.x * pb.y - pb.x * pa.y; }
+    var wedgeArea = Math.abs(wA / 2);
+    var areaLine = Math.abs(signedArea(lineOutline));
+    var areaSum = A.area + B.area;
+    var areaTol = Math.max(2e-3, 1e-6 * areaSum, A.buttLenCm * (pGap + Math.abs(lenDelta)));
+    if (Math.abs(areaLine - areaSum - wedgeArea) > areaTol) {
+      fail("area-not-conserved", { lineCm2: areaLine, sumCm2: areaSum, wedgeCm2: wedgeArea, tolCm2: areaTol });
+    }
+    if (!(wedgeArea > MIN_AREA)) fail("no-spread");
+
+    var construction = (sa.piece.construction || []).map(toGeomPrim)
+      .concat((sb.piece.construction || []).map(function (q) { return toGeomPrim(xformSeg(q, X2)); }));
+    var bridgeLen = segsLen([bridgeSeg]);
+
+    return {
+      joinPairId: c.joinPairId,
+      outline: outline.map(toGeomPrim),
+      construction: construction,
+      joinSeam: A.butt.map(function (q) { return toGeomPrim(cloneSeg(q)); }),
+      transform: { rotationRad: rad + phi, rotationDeg: (rad + phi) * 180 / Math.PI, mapFrom: P(bS), mapTo: rp(aE) },
+      seamLenACm: A.buttLenCm, seamLenBCm: B.buttLenCm, seamLenDeltaCm: lenDelta,
+      maxSeamDeviationCm: maxDev, residualGapCm: pGap,
+      areaACm2: A.area, areaBCm2: B.area, areaJoinedCm2: areaJoined,
+      areaDeltaCm2: areaJoined - areaSum,
+      spread: {
+        pivotAt: pivotAt, pivot: P(pivot), far: P(far), chordCm: sp.chordCm, seamChordCm: Lc,
+        angleRad: phi, angleDeg: phi * 180 / Math.PI, bridgeKind: bridgeKind, bridgeChordCm: bridgeChord,
+        bridgeLenCm: bridgeLen, wedgeAreaCm2: wedgeArea, bridgeAreaCm2: areaJoined - areaLine
+      }
+    };
+  }
+
   window.designJoin = Object.freeze({
     buttJoin: buttJoin,
+    buttSpread: buttSpread,
     // 순수 헬퍼(하네스·후속 158/159 가 쓴다 — 베끼지 않게 노출한다)
     buildClosedRing: buildClosedRing,
     canonicalRing: canonicalRing,

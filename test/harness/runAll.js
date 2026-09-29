@@ -49,6 +49,7 @@ const suites = [
   { file: "designFlareCheck.js",        golden: false },
   // 처리 방법 157「맞댄다」: 강체 역방향 일치·중복 맞댐선 제거·면적 합 보존·형상 불일치 거부.
   { file: "designJoinCheck.js",         golden: false },
+  { file: "designJoinSpreadCheck.js",   golden: false },
   { file: "designWaistSeamCheck.js",    golden: false },
   { file: "waistSeamPresetCheck.js",    golden: false },
   { file: "designPlacketCheck.js",      golden: false },
