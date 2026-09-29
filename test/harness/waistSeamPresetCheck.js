@@ -320,5 +320,42 @@ ok(J(REF) === SNAP, "2: reference 불변");
   ok(J(Object.keys(G.waistSeam.front.closedDart).sort()) === J(Object.keys(G.waistSeam.back.closedDart).sort()), "8: 앞·뒤 closedDart 메타 형태 동일(같은 규칙)");
 }
 
+// ── 9. 회전된 세그먼트의 stale boundary 수정(2026-09-29) — semantics.issues 가 A 와 같은 빈 배열 ──
+//   원인: b/d 를 닫으며 옆쪽 조각을 강체 회전할 때, 회전된 세그먼트가 **회전 전 원본 좌표계의
+//   boundary root+t 선언을 그대로** 들고 나가 bodiceCheckpoint 의 dart-attachment 판정이 깨졌다
+//   (front-bust 의 mouth 가 우연히 dart-b 의 절개 끝점 T 와 같은 자리라 재현됨). 고정:
+//   (a) armhole/side-seam 역할로 회전된 세그먼트는 "<piece>/armhole-splice" 같은 새 identity 로
+//       재선언(edge 는 그대로 — armholeLen 등 edge 태그 계측 보존), (b) T'→T 이음선(chord)이
+//   원래 root 의 t=trueT 를 그대로 承繼해 그 지점에 닿는 다른 다트(front-bust)의 attach 가 유효하게.
+{
+  const mk = (body) => ({ sourceBlock: { version: 2, schemaVersion: 8 }, referenceGeometry: REF,
+    working: { geometry: DB.computeGeometry(REF, { body }), parameters: { neckline: { mode: "parametric", type: "original", parameters: {} }, body },
+      patternLines: [], designOutline: null, frontPlacket: null } });
+  const projA = mk(BP.bodyParams("bunka-bodice-A")), projM = mk(M_BODY);
+  const semA = BC.check(projA).semantics, semM = BC.check(projM).semantics;
+  ok(J(semA.issues) === J([]), "9: A 기준선 자체가 issues 없음(비교 기준 확인)");
+  ok(J(semM.issues) === J([]), "9: [수정] M 적용 후 semantics.issues 가 A 와 같은 빈 배열(dart-attachment-misaligned·boundary-identity-missing 모두 사라짐)");
+  ok(semM.darts.front.find(d => d.id === "front-bust").attachment === "complete", "9: front-bust attachment complete(회전 안 한 다트가 계속 armhole-lower/upper 에 정확히 닿는다)");
+  ok(semM.darts.front.find(d => d.id === "front-waist-a").attachment === "complete"
+    && semM.darts.back.find(d => d.id === "back-waist-e").attachment === "complete", "9: 유지된 봉제 허리다트(a·e) attachment 도 complete");
+  ok(semM.darts.front.find(d => d.id === "front-side-waist-c").attachment === "complete"
+    && semM.darts.back.find(d => d.id === "back-side-waist-c").attachment === "complete", "9: 회전된 옆 다트 c(같은 회전으로 함께 옮겨감) attachment 계속 complete — waist 계열은 relabel 대상 아님");
+  // 회전된 armhole 조각은 원래 root 를 더 이상 주장하지 않는다(정직한 새 identity).
+  ["front", "back"].forEach(k => {
+    const armPrims = projM.working.geometry[k].outline.filter(s => s.edge === "armhole");
+    const spliced = armPrims.filter(s => s.boundary && /-splice$/.test(s.boundary.root));
+    ok(spliced.length > 0, "9: " + k + " 회전된 armhole 조각이 splice identity 를 받는다");
+    ok(spliced.every(s => s.boundary.root === k + "/armhole-splice"), "9: " + k + " splice root 이름이 일관됨");
+  });
+  // 측정값 보존(목선·허리 이음·진동) — 이번 수정으로 바뀌면 안 된다.
+  const cA = BC.check(projA), cM = BC.check(projM);
+  ok(near(cM.neckline.front, cA.neckline.front, 1e-6) && near(cM.neckline.back, cA.neckline.back, 1e-6), "9: 목선 보존");
+  ok(cM.waistSeam.ok && cM.waistSeam.front.joins === 2 && cM.waistSeam.back.joins === 2
+    && Math.abs(cM.waistSeam.front.deltaCm) < 0.01 && Math.abs(cM.waistSeam.back.deltaCm) < 0.01, "9: 허리 이음·페플럼 보존");
+  ok(cM.armhole.ok, "9: 진동 계측 보존");
+  const done = BC.complete(projM);
+  ok(done.ok, "9: 수정 후에도 몸판 완료 정상");
+}
+
 console.log(`waistSeamPresetCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { fails.forEach(f => console.log("  ✗ " + f)); process.exit(1); }

@@ -52,6 +52,14 @@
   var SEAM_TOL = 0.01;       // 허리 이음 길이 정합 허용오차(cm)
   var Y_EPS = 1e-6;
   var CLOSE_DARTS = { front: "front-waist-b", back: "back-waist-d" };   // 몸판에서 닫는 다트
+  // js/bodiceCheckpoint.js 의 BOUNDARY_ROOT_EDGE 와 같은 계약(root 접미사 → edge 역할)의 읽기 전용
+  // 부분집합 — designWaistSeam 은 순수 모듈이라 bodiceCheckpoint 를 참조하지 않는다(로드 순서 무관).
+  // 여기서는 **회전 전** 원본 boundary root 가 chord 의 edge 와 같은 역할인지 확인하는 데만 쓴다.
+  var BOUNDARY_EDGE_OF = function (root) {
+    var slash = root.indexOf("/"), suf = slash < 0 ? root : root.slice(slash + 1);
+    var MAP = { armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole", "side-seam": "side-seam" };
+    return MAP[suf] || null;
+  };
 
   function fail(reason, detail) {
     var e = new Error("designWaistSeam: " + reason);
@@ -278,7 +286,23 @@
     var th = Math.atan2(Mc.y - A.y, Mc.x - A.x) - Math.atan2(Ms.y - A.y, Ms.x - A.x);
     if (!isFinite(th) || Math.abs(th) < 1e-9) fail("degenerate-dart", { which: which, th: th });
 
-    var sideR = sideArc.map(function (o) { return rotObj(o.seg, A, th); });
+    // ★ 회전은 강체 변환이라 조각의 모양은 보존하지만, **회전 전 boundary(root+t) 선언을 그대로
+    //   들고 가면 좌표만 옮겨간 것을 "그 root의 그 t 지점"이라고 계속 주장하는 거짓 선언**이 된다
+    //   (원인: 좌표는 강체 회전됐는데 원본 좌표계의 identity 만 복사됨). 회전된 조각은 옆선/진동
+    //   경계에서 다트 닫음으로 새로 생긴 이음(splice)이라는 **새 identity**로 다시 선언한다 —
+    //   경계 없음(missing)이 아니라 정직한 새 이름을 준다(edge 는 원래 값 그대로 유지해
+    //   armholeLen 등 edge 태그 기반 계측을 보존한다).
+    // ★ "waist" edge 는 relabel 대상이 아니다 — 그 구간에 의존하는 다트(옆허리 다트 c 등)는 **같은
+    //   회전으로 함께 옮겨진 waist 다트만**이라(outConstruction 의 "u(mo) >= uMs" 이동 규칙과 정확히
+    //   같은 조각), 회전 전 root 를 그대로 유지해도 boundary 와 다리가 서로 일관되게 함께 움직여
+    //   stale 이 아니다. armhole·side-seam 은 **회전하지 않는 다른 다트(front-bust 등)** 가 참조할
+    //   수 있는 root 라 회전 후에도 옛 root 를 주장하면 그 참조가 깨진다 — 이 둘만 relabel 한다.
+    var SPLICE_EDGES = { armhole: 1, "side-seam": 1 };
+    var sideR = sideArc.map(function (o) {
+      var r = rotObj(o.seg, A, th);
+      if (r.boundary && SPLICE_EDGES[r.edge]) r.boundary = { root: which + "/" + r.edge + "-splice", ranges: [[0, 1]] };
+      return r;
+    });
     var Tp = rotPt(Tpt, A, th), Msp = rotPt(Ms, A, th);
     var waistGap = dist(Msp, Mc);
     if (waistGap > SNAP_EPS) fail("dart-legs-unequal", { which: which, gapCm: waistGap });
@@ -287,6 +311,20 @@
 
     // 조립: 옆 조각' + T'→T 이음(진동선) + 중심 호. junction 은 정확 공유로 snap.
     var chord = line(Tp, Tpt, { edge: "armhole" });
+    // ★ T(=Tpt, chord.to)는 **회전 전** 원래 경계의 실제 t 지점이다(rayHit 이 회전 전에 계산한 값).
+    //   그 root 가 회전으로 끊어져도 Tpt 자체는 그 root 의 원래 t 를 여전히 정확히 가리키므로,
+    //   이 이음선에 "그 root 는 t=trueT 에서 (chord.to=)Tpt 로 끝난다"는 선언을 실어
+    //   front-bust 같은(우연히 같은 t 에 닿는) 다른 다트의 attach 가 계속 유효하게 한다.
+    var tSrc = ring[pT.i].seg;
+    if (tSrc.boundary && typeof tSrc.boundary.root === "string" && Array.isArray(tSrc.boundary.ranges) && tSrc.boundary.ranges.length === 1
+      && BOUNDARY_EDGE_OF(tSrc.boundary.root) === chord.edge) {
+      var r0 = tSrc.boundary.ranges[0][0], r1 = tSrc.boundary.ranges[0][1];
+      var trueT = r0 + pT.t * (r1 - r0);
+      var farT = (trueT === 0) ? 1 : 0;
+      chord.boundary = { root: tSrc.boundary.root, ranges: [[farT, trueT]] };
+    } else {
+      chord.boundary = { root: which + "/" + chord.edge + "-splice", ranges: [[0, 1]] };
+    }
     var chain = sideR.concat([chord]).concat(centerArc.map(function (o) { return o.seg; }));
     var isLeg = sideR.map(function () { return false; }).concat([false]).concat(centerArc.map(function (o) { return o.source === "dartleg"; }));
     chain[0].from = P(Mc);

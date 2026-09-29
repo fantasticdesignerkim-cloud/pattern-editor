@@ -456,7 +456,11 @@
     neckline: "neckline", shoulder: "shoulder",
     "shoulder-neck": "shoulder", "shoulder-armhole": "shoulder",
     armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole",
-    hem: "hem", "center-extension": "center", "side-seam-extension": "side-seam"
+    hem: "hem", "center-extension": "center", "side-seam-extension": "side-seam",
+    // 허리 이음선(designWaistSeam) 이 다트를 닫으며 회전한 조각에 붙이는 새 identity — 회전 전
+    // root(t)를 그대로 들고 가는 대신(강체 변환으로 좌표만 옮겨간 stale 선언을 막기 위해) 정직한
+    // 새 이름으로 선언한다. root 값은 designWaistSeam.js 가 만든다(이 파일은 역할 매핑만 안다).
+    "armhole-splice": "armhole", "side-seam-splice": "side-seam"
   };
   // root 파라미터 계약은 [0,1]. 부동소수 오차만 흡수하는 명시적 허용치 — 그 밖은 정렬 실패로 본다.
   var BOUNDARY_RANGE_EPS = 1e-6;
