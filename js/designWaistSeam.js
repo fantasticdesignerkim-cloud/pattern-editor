@@ -33,6 +33,12 @@
 //   끝점을 꺼낸다. 결과는 앞/뒤 각각 한 장. 검증: `waistSeamPresetCheck.js` §8 — 각 페플럼 다트의
 //   apex 가 밑단선 위(y = 밑단 y)에 정확히 있음을 확정 고정.
 //
+// ★ Ⓝ(P.27·P.158, 사용자 확정 2026-09-29) — `split(geometry, {peplumFlare:{ratio:0.9, subtractCm:1}})`.
+//   몸판(upper)은 Ⓜ 과 **바이트 동일**하고 페플럼만 달라진다: 다트마다 `buttJoin` 대신 `buttSpread` 를 부른다.
+//   ●+■ = 맞댄 뒤 페플럼의 **완성 허리길이**, 총 플레어 ∅ = ●+■ × 0.9 − 1, 절개 수(n)로 **균등** 분배(교재 2곳 각 ∅/2).
+//   각 절개는 **허리선의 입 점(WL 포인트)을 고정**하고 밑단 끝을 ∅/n 만큼 벌린다. «약 5cm» 는 참고 결과지 고정값이 아니다.
+//   벌어진 밑단은 접선 연속 cubic 으로 잇는다(fairing). 허리선은 회전으로 꺾이지만 길이(허리 이음 정합)는 그대로다.
+//
 // ★ 허리 이음 길이 정합 — upper 의 봉제 허리(허리 외곽 − 남은 다트 입) 와 peplum 의 허리(맞댄 뒤)는
 //   같은 값이어야 한다(둘 다 W − Σ(a·b 또는 d·e 입)). 어긋나면 **원자적 거부**.
 //
@@ -60,6 +66,9 @@
     var MAP = { armhole: "armhole", "armhole-upper": "armhole", "armhole-lower": "armhole", "side-seam": "side-seam" };
     return MAP[suf] || null;
   };
+
+  // Ⓝ(P.27): 플레어 분량 ∅ = (●+■)×0.9 − 1. ●+■ 는 맞댄 뒤 페플럼 각각의 **완성 허리길이**.
+  var PEPLUM_FLARE = { ratio: 0.9, subtractCm: 1 };
 
   function fail(reason, detail) {
     var e = new Error("designWaistSeam: " + reason);
@@ -392,7 +401,7 @@
   }
 
   // ══ peplum: a,b,d,e 자리에서 갈라 buttJoin 으로 맞댄다 ═══════════════════════
-  function buildPeplum(piece, which, cls) {
+  function buildPeplum(piece, which, cls, flare) {
     var t = T(), Jn = J();
     var groups = sewnGroups(piece.construction);
     var below = cls.below.map(function (s) { return t.subSegment(s, 0, 1); });
@@ -438,6 +447,7 @@
       var rr = Jn.buildClosedRing(whole);
       if (!rr.ok) fail(rr.reason, which);
       checkClosed(rr.chain, which + ".peplum");
+      if (flare) fail("flare-needs-darts", which);
       return { outline: toPrims(rr.chain), construction: [], joins: [], darts: [], waistEdgeLenCm: wl };
     }
 
@@ -468,20 +478,47 @@
       return { start: P(hit[0].from), end: P(hit[0].to) };
     };
     var acc = strips[0], joins = [];
+    // ★ Ⓝ(P.27) 플레어: 맞댄 뒤 허리 완성길이(●+■)의 0.9배 − 1cm 를 절개 수(n)로 **균등 분배**해 벌린다
+    //   (교재 도해는 절개 2곳 각 ∅/2). 각 절개는 **허리선의 입 점을 고정**하고 밑단 끝을 chord 만큼 벌린다.
+    var flareInfo = null;
+    if (flare) {
+      var finished = 0;
+      for (var q = 0; q <= n; q++) {
+        var qa = q === 0 ? 0 : darts[q - 1].tb, qb = q === n ? 1 : darts[q].ta;
+        finished += segsLen([sub(waist, qa, qb)]);
+      }
+      var total = flare.ratio * finished - flare.subtractCm;
+      if (!(total > 0)) fail("flare-not-positive", { which: which, finishedWaistCm: finished, totalCm: total });
+      flareInfo = { finishedWaistCm: finished, ratio: flare.ratio, subtractCm: flare.subtractCm, totalCm: total, perCutChordCm: total / n, cuts: n };
+    }
+    // 고정점(입) — acc 외곽에서 허리 모서리와 만나는 다리 끝. 좌표를 추측하지 않는다.
+    var mouthOf = function (pc, ends, tagName) {
+      var segsW = t.outlinePrimsToSegs(pc.outline).filter(function (sg) { return sg.edge === "waist"; });
+      var onWaist = function (pt) { return segsW.some(function (sg) { return near(sg.from, pt, 1e-6) || near(sg.to, pt, 1e-6); }); };
+      var a0 = onWaist(ends.start), a1 = onWaist(ends.end);
+      if (a0 === a1) fail("flare-pivot-not-found", { tag: tagName });
+      return a0 ? ends.start : ends.end;
+    };
     for (var j = 0; j < n; j++) {
       var d = darts[j], ea = legEnds(acc, tag(d.pairId, "first")), eb = legEnds(strips[j + 1], tag(d.pairId, "second"));
       var res;
       try {
-        res = Jn.buttJoin({ joinPairId: d.pairId,
+        var jspec = { joinPairId: d.pairId,
           a: { piece: acc, pairId: d.pairId, start: ea.start, end: ea.end },
-          b: { piece: strips[j + 1], pairId: d.pairId, start: eb.start, end: eb.end } });
+          b: { piece: strips[j + 1], pairId: d.pairId, start: eb.start, end: eb.end } };
+        if (flareInfo) {
+          jspec.spread = { pivot: mouthOf(acc, ea, tag(d.pairId, "first")), chordCm: flareInfo.perCutChordCm };
+          res = Jn.buttSpread(jspec, { bridge: "smooth", bridgeEdge: "hem" });
+        } else res = Jn.buttJoin(jspec);
       } catch (e) { fail("join-failed", { which: which, pairId: d.pairId, reason: e.reason || e.message }); }
       acc = { outline: res.outline, construction: [] };
       joins.push({ joinPairId: d.pairId, dartId: d.id, widthCm: d.widthCm,
         seamLenACm: res.seamLenACm, seamLenBCm: res.seamLenBCm, seamLenDeltaCm: res.seamLenDeltaCm,
         maxSeamDeviationCm: res.maxSeamDeviationCm, residualGapCm: res.residualGapCm,
         areaACm2: res.areaACm2, areaBCm2: res.areaBCm2, areaJoinedCm2: res.areaJoinedCm2, areaDeltaCm2: res.areaDeltaCm2,
-        rotationDeg: res.transform.rotationDeg });
+        rotationDeg: res.transform.rotationDeg,
+        spread: res.spread ? { chordCm: res.spread.chordCm, angleDeg: res.spread.angleDeg, wedgeAreaCm2: res.spread.wedgeAreaCm2,
+          bridgeChordCm: res.spread.bridgeChordCm, bridgeLenCm: res.spread.bridgeLenCm, bridgeAreaCm2: res.spread.bridgeAreaCm2, pivot: res.spread.pivot } : null });
     }
     var fin = Jn.buildClosedRing(t.outlinePrimsToSegs(acc.outline));
     if (!fin.ok) fail(fin.reason, which);
@@ -491,14 +528,14 @@
     return { outline: acc.outline, construction: [], joins: joins, areaCm2: finArea,
       // apex: 잠긴 설계(밑단점을 apex 로 삼아 맞댄다) 검증용 — 밑단선 위의 실제 좌표.
       darts: darts.map(function (dd) { return { id: dd.id, pairId: dd.pairId, widthCm: dd.widthCm, apex: P(dd.apex) }; }),
-      waistEdgeLenCm: segsLen(waistEdge), dartTotalCm: totalW };
+      waistEdgeLenCm: segsLen(waistEdge), dartTotalCm: totalW, flare: flareInfo };
   }
 
   // ══ 공개: 앞/뒤 한 벌 ═════════════════════════════════════════════════════════
-  function splitSide(piece, which) {
+  function splitSide(piece, which, opts) {
     var cls = classify(piece, which);
     var upper = buildUpper(piece, which, cls);
-    var peplum = buildPeplum(piece, which, cls);
+    var peplum = buildPeplum(piece, which, cls, opts && opts.peplumFlare);
 
     // 허리 이음 길이 정합: upper 봉제 허리(허리 외곽 − 남은 a/e 입) == peplum 허리(맞댄 뒤)
     var openSewn = sewnGroups(upper.construction).reduce(function (sum, g) {
@@ -521,20 +558,24 @@
         peplumDarts: peplum.darts, joins: peplum.joins,
         upperWaistEdgeCm: upper.waistEdgeLenCm, upperOpenDartCm: openSewn,
         upperWaistSeamCm: upperSeam, peplumWaistSeamCm: peplum.waistEdgeLenCm, waistSeamDeltaCm: delta,
-        peplumAreaCm2: peplum.areaCm2 != null ? peplum.areaCm2 : null
+        peplumAreaCm2: peplum.areaCm2 != null ? peplum.areaCm2 : null,
+        peplumFlare: peplum.flare || null
       }
     };
   }
 
   // split({front, back}) → { front, back, frontPeplum, backPeplum, meta:{front, back} }
   // 원자적: 앞·뒤 중 하나라도 실패하면 아무것도 반환하지 않는다. 입력은 변형하지 않는다.
-  function split(geometry) {
+  function split(geometry, opts) {
+    var pf = opts && opts.peplumFlare;
+    if (pf != null && (typeof pf !== "object" || !(pf.ratio > 0) || !isFinite(pf.ratio) || typeof pf.subtractCm !== "number" || !isFinite(pf.subtractCm) || pf.subtractCm < 0)) fail("invalid-peplum-flare", pf);
     if (!geometry || typeof geometry !== "object" || !geometry.front || !geometry.back) fail("invalid-geometry");
-    var f = splitSide(deepClone(geometry.front), "front");
-    var b = splitSide(deepClone(geometry.back), "back");
+    var f = splitSide(deepClone(geometry.front), "front", opts);
+    var b = splitSide(deepClone(geometry.back), "back", opts);
     return { front: f.upper, back: b.upper, frontPeplum: f.peplum, backPeplum: b.peplum,
       meta: { front: f.meta, back: b.meta } };
   }
 
-  window.designWaistSeam = Object.freeze({ split: split, splitSide: splitSide, CLOSE_DARTS: Object.freeze(deepClone(CLOSE_DARTS)) });
+  window.designWaistSeam = Object.freeze({ split: split, splitSide: splitSide, CLOSE_DARTS: Object.freeze(deepClone(CLOSE_DARTS)),
+    PEPLUM_FLARE: Object.freeze({ ratio: PEPLUM_FLARE.ratio, subtractCm: PEPLUM_FLARE.subtractCm }) });
 })();

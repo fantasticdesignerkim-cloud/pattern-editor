@@ -702,8 +702,12 @@
     var applyFlare = (flare === true || (flare && typeof flare === "object"));
     if (flare != null && flare !== false && !applyFlare) fail("invalid-body-flare", flare);
     var applySeam = (waistSeam === true);
+    var peplumFlare = body.peplumFlare;   // Ⓝ(P.27) — 페플럼을 맞대면서 플레어 분량을 벌린다(158). waistSeam 이 전제.
     if (waistSeam != null && waistSeam !== false && !applySeam) fail("invalid-body-waist-seam", waistSeam);
     if (applySeam && applyFlare) fail("waist-seam-flare-conflict");
+    var applyPeplumFlare = (peplumFlare === true);
+    if (peplumFlare != null && peplumFlare !== false && !applyPeplumFlare) fail("invalid-body-peplum-flare", peplumFlare);
+    if (applyPeplumFlare && !applySeam) fail("peplum-flare-needs-waist-seam");
     if (applySeam && !(L > 0)) fail("waist-seam-needs-hem");   // 밑단(엉덩이 길이)이 없으면 페플럼이 없다
     var applyScales = (dartScales != null);
     if (applyScales) {
@@ -797,7 +801,7 @@
       var DW = (typeof window !== "undefined") && window.designWaistSeam;
       if (!DW || typeof DW.split !== "function") fail("designWaistSeam-missing");
       var sp;
-      try { sp = DW.split({ front: fPiece, back: bPiece }); }
+      try { sp = DW.split({ front: fPiece, back: bPiece }, applyPeplumFlare ? { peplumFlare: DW.PEPLUM_FLARE } : undefined); }
       catch (e) { fail("waist-seam-failed", (e.reason || e.message) + (e.detail !== undefined ? " " + JSON.stringify(e.detail) : "")); }
       outGeom.front = sp.front; outGeom.back = sp.back;
       outGeom.frontPeplum = sp.frontPeplum; outGeom.backPeplum = sp.backPeplum;

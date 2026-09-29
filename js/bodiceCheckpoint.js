@@ -693,6 +693,18 @@
     }
     return n === pts.length && near(cur, start);
   }
+  // Ⓝ(P.27): 페플럼 플레어 검산 — 벌린 분량 합 = 허리 완성길이 × 0.9 − 1 이고 절개마다 균등.
+  //   메타(designWaistSeam)는 값을 들고 있을 뿐이고, 여기서 **다시 계산해 대조**한다(메타를 믿지 않는다).
+  function flareRow(meta) {
+    var fl = meta && meta.peplumFlare;
+    if (!fl) return null;
+    var joins = meta.joins || [];
+    var sum = joins.reduce(function (a, j) { return a + (j.spread ? j.spread.chordCm : NaN); }, 0);
+    var want = fl.ratio * meta.peplumWaistSeamCm - fl.subtractCm;
+    var even = joins.length > 0 && joins.every(function (j) { return j.spread && Math.abs(j.spread.chordCm - want / joins.length) < 1e-9; });
+    return { totalCm: round4(sum), expectedCm: round4(want), perCutCm: joins.length ? round4(want / joins.length) : null, cuts: joins.length,
+      ok: isFinite(sum) && Math.abs(sum - want) < 1e-6 && even && want > 0 };
+  }
   function waistSeamState(proj) {
     var g = proj && proj.working && proj.working.geometry;
     if (!g || !g.frontPeplum || !g.backPeplum) return null;
@@ -704,12 +716,15 @@
         peplumSeamCm: typeof meta.peplumWaistSeamCm === "number" ? round4(meta.peplumWaistSeamCm) : null,
         deltaCm: typeof meta.waistSeamDeltaCm === "number" ? meta.waistSeamDeltaCm : null,
         closedDart: meta.closedDart ? meta.closedDart.dartId : null,
-        armholeEaseCm: meta.closedDart ? round4(meta.closedDart.armholeEaseCm) : null };
+        armholeEaseCm: meta.closedDart ? round4(meta.closedDart.armholeEaseCm) : null,
+        flare: flareRow(meta) };
     };
     var F = row(g.frontPeplum, f), B = row(g.backPeplum, b);
     var seamOk = function (r) { return r.deltaCm !== null && Math.abs(r.deltaCm) <= SEAM_LEN_EPS; };
-    return { front: F, back: B, ok: F.peplumClosed && B.peplumClosed && seamOk(F) && seamOk(B),
-      reason: !(F.peplumClosed && B.peplumClosed) ? "waist-seam-peplum-open" : (!(seamOk(F) && seamOk(B)) ? "waist-seam-mismatch" : null) };
+    var flareOk = function (r) { return r.flare === null || r.flare.ok; };
+    var flareBad = !(flareOk(F) && flareOk(B));
+    return { front: F, back: B, ok: F.peplumClosed && B.peplumClosed && seamOk(F) && seamOk(B) && !flareBad,
+      reason: !(F.peplumClosed && B.peplumClosed) ? "waist-seam-peplum-open" : (!(seamOk(F) && seamOk(B)) ? "waist-seam-mismatch" : (flareBad ? "waist-seam-flare-mismatch" : null)) };
   }
   function peplumCanon(proj) {
     var g = proj && proj.working && proj.working.geometry;
