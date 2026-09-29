@@ -73,6 +73,9 @@
   //   **수직 절개** cuts 곳 → 중심 조각 고정, 나머지를 바깥으로 순차 회전(각 절개는 WL 점 고정, 밑단 끝 chord ∅/cuts).
   //   ∅ = 완성 허리 × 0.4 − 2. 벌린 뒤 **허리선·밑단 모두 fairing**(밑단 = 절개마다 G1 cubic, 허리 = 꺾인 점 G1 블렌드).
   var PEPLUM_CUT = { ratio: 0.4, subtractCm: 2, cuts: 2 };
+  // Ⓟ(P.29, 사용자 확정 2026-09-30): Ⓞ 와 같은 구조 + 이음선이 **WL 에서 5cm 아래**, ∅ = ● × 0.3 − 1.5, 밑단 옆 +1.5.
+  //   ● = 이음선의 완성 둘레. 몸판 옆선은 WL~이음선 수직, +1.5 는 이음선 아래 페플럼 구간에만.
+  var PEPLUM_CUT_P = { ratio: 0.3, subtractCm: 1.5, cuts: 2, seamBelowWaistCm: 5, hemSideCm: 1.5 };
   var FAIR_SHORTFALL_MAX = 0.5;   // 허리 fairing 이 줄이는 길이의 상한(cm) — 넘으면 거부
 
   function fail(reason, detail) {
@@ -175,6 +178,58 @@
   }
   function sewnGroups(construction) {
     return waistDartGroups(construction).filter(function (g) { return !g.locked && !g.onFold && g.segs.length === 2; });
+  }
+
+
+  // ══ Ⓟ 이음선 이동(seamBelowWaistCm) ═══════════════════════════════════════════
+  // classify/buildUpper/buildPeplum 은 "waist 참고선 = 이음선" 을 전제한다. 그래서 이음선을 WL 아래 d cm 로 옮길 때는
+  // 입력 조각을 **먼저 고쳐 쓴다**: 중심·옆선(직선) 아래 구간을 이음선 y 에서 둘로 나누고, waist 참고선을 그 y 로 옮기며,
+  // (옵션) 밑단 옆 모서리만 바깥으로 hemSideCm 이동한다. d=0 이면 이 함수를 부르지 않는다(Ⓜ·Ⓝ·Ⓞ 바이트 동일).
+  function liftSeam(piece, which, d, hemSideCm) {
+    var t = T();
+    var waists = piece.construction.filter(function (s) { return s && s.edge === "waist" && !s.dart; });
+    if (waists.length !== 1 || waists[0].kind !== "line") fail("no-waist-edge", which);
+    var W = waists[0];
+    if (Math.abs(W.from.y - W.to.y) > Y_EPS) fail("waist-not-horizontal", which);
+    var Yw = W.from.y, Ys = Yw + d;
+    var cut = {}, out = [];
+    piece.outline.forEach(function (pr) {
+      var below = pr && pr.kind === "line" && Math.max(pr.from.y, pr.to.y) > Yw + Y_EPS;
+      if (!below || (pr.edge !== "center" && pr.edge !== "side-seam")) { out.push(deepClone(pr)); return; }
+      var lo = Math.min(pr.from.y, pr.to.y), hi = Math.max(pr.from.y, pr.to.y);
+      if (Math.abs(lo - Yw) > Y_EPS) fail("outline-crosses-waist", which);
+      if (!(hi > Ys + Y_EPS)) fail("seam-below-outline", { which: which, edge: pr.edge });
+      var ta = (Ys - pr.from.y) / (pr.to.y - pr.from.y);      // from→to 진행 방향 기준 이음선 위치
+      var seg = t.outlinePrimsToSegs([pr])[0];
+      var first = t.subSegment(seg, 0, ta), second = t.subSegment(seg, ta, 1);
+      out.push(first, second);
+      cut[pr.edge] = P(first.to);
+    });
+    if (!cut.center || !cut["side-seam"]) fail("center-or-side-missing", which);
+    var Cs = cut.center, Ss = cut["side-seam"];
+    var axisLen = Math.hypot(Ss.x - Cs.x, Ss.y - Cs.y);
+    if (!(axisLen > 1e-9)) fail("seam-axis-degenerate", which);
+    if (hemSideCm) {
+      // 밑단 옆 모서리 = 이음선 아래 옆선의 아래 끝. 그 점을 쓰는 옆선·밑단 끝만 옮긴다(중심→옆 방향).
+      var sideLow = out.filter(function (pr) { return pr && pr.edge === "side-seam" && pr.kind === "line" && Math.max(pr.from.y, pr.to.y) > Ys + Y_EPS; })[0];
+      if (!sideLow) fail("seam-side-missing", which);
+      var H0 = P(sideLow.from.y > sideLow.to.y ? sideLow.from : sideLow.to);
+      var H1 = { x: H0.x + (Ss.x - Cs.x) / axisLen * hemSideCm, y: H0.y + (Ss.y - Cs.y) / axisLen * hemSideCm };
+      out.forEach(function (pr) {
+        if (!pr || pr.kind !== "line") return;
+        if (near(pr.from, H0, 1e-9)) pr.from = P(H1);
+        if (near(pr.to, H0, 1e-9)) pr.to = P(H1);
+      });
+    }
+    var seam = deepClone(W);
+    seam.from = P(Cs); seam.to = P(Ss);
+    seam.boundary = { root: which + "/waist-seam", ranges: [[0, 1]] };
+    var con = piece.construction.filter(function (s) { return !(s && s.edge === "waist" && !s.dart); }).map(deepClone);
+    con.push(seam);
+    var lifted = deepClone(piece);
+    lifted.outline = out; lifted.construction = con;
+    lifted._wlRef = deepClone(W);    // 원래 WL 참고선 — upper 결과에 그대로 되돌려 준다(옆허리 다트 c 의 attach root 가 이 선을 본다)
+    return lifted;
   }
 
   // ── 조각을 허리에서 위/아래로 나눈다 ─────────────────────────────────────────
@@ -604,6 +659,8 @@
 
   // ══ 공개: 앞/뒤 한 벌 ═════════════════════════════════════════════════════════
   function splitSide(piece, which, opts) {
+    var pcOpt = opts && opts.peplumCut;
+    if (pcOpt && pcOpt.seamBelowWaistCm > 0) piece = liftSeam(piece, which, pcOpt.seamBelowWaistCm, pcOpt.hemSideCm || 0);
     var cls = classify(piece, which);
     var upper = buildUpper(piece, which, cls);
     var peplum = buildPeplum(piece, which, cls, opts && opts.peplumFlare, opts && opts.peplumCut);
@@ -622,6 +679,7 @@
     var upperPiece = deepClone(piece);
     upperPiece.outline = upper.outline;
     upperPiece.construction = upper.construction;
+    if (piece._wlRef) { upperPiece.construction.push(piece._wlRef); delete upperPiece._wlRef; }
     var peplumPiece = { outline: peplum.outline, construction: peplum.construction };
     return {
       upper: upperPiece, peplum: peplumPiece,
@@ -632,7 +690,7 @@
         upperWaistEdgeCm: upper.waistEdgeLenCm, upperOpenDartCm: openSewn,
         upperWaistSeamCm: upperSeam, peplumWaistSeamCm: peplum.waistEdgeLenCm, waistSeamDeltaCm: delta,
         peplumAreaCm2: peplum.areaCm2 != null ? peplum.areaCm2 : null,
-        peplumFlare: peplum.flare || null,
+        peplumFlare: peplum.flare ? (piece._wlRef ? Object.assign({}, peplum.flare, { seamBelowWaistCm: pcOpt.seamBelowWaistCm }) : peplum.flare) : null,
         waistFair: peplum.waistFair || null
       }
     };
@@ -645,6 +703,8 @@
     if (pf != null && (typeof pf !== "object" || !(pf.ratio > 0) || !isFinite(pf.ratio) || typeof pf.subtractCm !== "number" || !isFinite(pf.subtractCm) || pf.subtractCm < 0)) fail("invalid-peplum-flare", pf);
     var pc = opts && opts.peplumCut;
     if (pc != null && (typeof pc !== "object" || !(pc.ratio > 0) || !isFinite(pc.ratio) || typeof pc.subtractCm !== "number" || !isFinite(pc.subtractCm) || !(pc.cuts >= 1) || pc.cuts !== Math.floor(pc.cuts))) fail("invalid-peplum-cut");
+    if (pc != null && ((pc.seamBelowWaistCm != null && !(typeof pc.seamBelowWaistCm === "number" && isFinite(pc.seamBelowWaistCm) && pc.seamBelowWaistCm >= 0))
+      || (pc.hemSideCm != null && !(typeof pc.hemSideCm === "number" && isFinite(pc.hemSideCm) && pc.hemSideCm >= 0)))) fail("invalid-peplum-cut", pc);
     if (pc != null && pf != null) fail("peplum-cut-flare-conflict");
     if (!geometry || typeof geometry !== "object" || !geometry.front || !geometry.back) fail("invalid-geometry");
     var f = splitSide(deepClone(geometry.front), "front", opts);
@@ -655,5 +715,6 @@
 
   window.designWaistSeam = Object.freeze({ split: split, splitSide: splitSide, CLOSE_DARTS: Object.freeze(deepClone(CLOSE_DARTS)),
     PEPLUM_FLARE: Object.freeze({ ratio: PEPLUM_FLARE.ratio, subtractCm: PEPLUM_FLARE.subtractCm }),
-    PEPLUM_CUT: Object.freeze({ ratio: PEPLUM_CUT.ratio, subtractCm: PEPLUM_CUT.subtractCm, cuts: PEPLUM_CUT.cuts }) });
+    PEPLUM_CUT: Object.freeze({ ratio: PEPLUM_CUT.ratio, subtractCm: PEPLUM_CUT.subtractCm, cuts: PEPLUM_CUT.cuts }),
+    PEPLUM_CUT_P: Object.freeze({ ratio: PEPLUM_CUT_P.ratio, subtractCm: PEPLUM_CUT_P.subtractCm, cuts: PEPLUM_CUT_P.cuts, seamBelowWaistCm: PEPLUM_CUT_P.seamBelowWaistCm, hemSideCm: PEPLUM_CUT_P.hemSideCm }) });
 })();

@@ -54,6 +54,7 @@ const suites = [
   { file: "waistSeamPresetCheck.js",    golden: false },
   { file: "peplumFlarePresetCheck.js",  golden: false },
   { file: "peplumCutPresetCheck.js",    golden: false },
+  { file: "peplumSeamLowPresetCheck.js", golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "designPlacketCheck.js",      golden: false },
   // 몸판 모양 완료 체크포인트: 검사·완료 게이트·불변 스냅샷·스테일 판정(스텁 project).

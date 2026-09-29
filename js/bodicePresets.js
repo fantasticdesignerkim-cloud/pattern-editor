@@ -124,7 +124,7 @@
         availVariant("bunka-bodice-M", "M", "M · 옆선 −1.5 · 밑단 +1 · 다트 b·d 를 닫고 페플럼은 맞댄다", 26),
         availVariant("bunka-bodice-N", "N", "N · Ⓜ 방법 + 페플럼은 맞대면서 플레어 분량을 벌린다", 27),
         availVariant("bunka-bodice-O", "O", "O · 박시 몸판 + 페플럼 절개 3조각 벌림(허리 이음선 · 밑단 +2)", 28),
-        pendingVariant("bunka-bodice-P", "P", "P · 허리 이음선 변형", 29, null, "미판독 — 착수 시 P.29 를 읽고 Ⓜ·Ⓝ 조합으로 되는지 확인한다.")
+        availVariant("bunka-bodice-P", "P", "P · 박시 몸판 + 이음선 WL−5cm · 페플럼 절개 벌림(밑단 +1.5)", 29)
       ] },
     { id: "yoke-seam-1", order: 8, label: "요크 이음선 ①", symbol: "Q", page: 30,
       availability: "pending-op", note: PENDING_NOTE,
@@ -220,6 +220,15 @@
       body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 2, waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, waistSeam: true, peplumCut: true }
     },
     {
+      id: "bunka-bodice-P", label: "교재 P 허리 이음선(WL 아래 5cm) + 페플럼 절개 벌림", familyId: "waist-seam", symbol: "P", page: 29,
+      description: "박시 몸판 · 이음선은 WL 에서 5cm 아래 · 페플럼(15cm)은 수직 절개 2곳을 벌린다(플레어 = 이음선 완성 둘레 × 0.3 − 1.5 · 밑단 +1.5)",
+      source: "[패턴학교] 허리 이음선 Ⓟ(P.29) · 처리 방법 기준점을 잡고 잘라서 벌린다(P.163)",
+      baseMethod: "bunka-bodice-P-v1",
+      // 사용자 확정(2026-09-30): 몸판 옆선은 WL~이음선 수직 · +1.5 는 이음선 아래 페플럼에만 · ● = 이음선 완성 둘레 ·
+      //   전체 길이 WL 아래 20cm(페플럼 15cm) · 이음선·밑단 fairing. hemSideOffsetCm 은 쓰지 않는다(옆선 전체 기울기 아님).
+      body: { hemExtensionBelowWaistCm: 20, waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, waistSeam: true, peplumCut: "P" }
+    },
+    {
       id: "bunka-bodice-C", label: "교재 C 셰이프트(다트 2개)", familyId: "shaped-line", symbol: "C", page: 16,
       description: "허리 다트 a·e 만 사용 · 옆선 1cm 줄임 · 밑단 1cm 추가",
       source: "[패턴학교] 셰이프트 라인 Ⓒ(P.16)",
@@ -255,7 +264,7 @@
       if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
       if (k === "waistSeam") { if (v !== true) fail("invalid-body", id + ".waistSeam"); return; }
       if (k === "peplumCut") {
-        if (v !== true) fail("invalid-body", id + ".peplumCut");
+        if (v !== true && v !== "P") fail("invalid-body", id + ".peplumCut");
         if (body.waistSeam !== true) fail("peplum-cut-needs-waist-seam", id);
         if (body.peplumFlare === true) fail("peplum-cut-flare-conflict", id);
         return;

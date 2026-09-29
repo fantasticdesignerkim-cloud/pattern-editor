@@ -496,7 +496,7 @@
     pendingFlare = body.flare === true ? true : null;
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
-    pendingPeplumCut = body.peplumCut === true ? true : null;
+    pendingPeplumCut = (body.peplumCut === true || body.peplumCut === "P") ? body.peplumCut : null;
     onApplyBodyLength();
   }
   function bodiceSelectionStr(reason) {
@@ -2236,7 +2236,7 @@
       pendingWaistSeam = undefined;
     }
     if (pendingPeplumCut !== undefined) {
-      if (pendingPeplumCut) nextParameters.body.peplumCut = true; else delete nextParameters.body.peplumCut;
+      if (pendingPeplumCut) nextParameters.body.peplumCut = pendingPeplumCut; else delete nextParameters.body.peplumCut;
       pendingPeplumCut = undefined;
     }
     if (pendingPeplumFlare !== undefined) {

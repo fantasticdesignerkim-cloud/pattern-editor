@@ -709,7 +709,7 @@
     if (peplumFlare != null && peplumFlare !== false && !applyPeplumFlare) fail("invalid-body-peplum-flare", peplumFlare);
     if (applyPeplumFlare && !applySeam) fail("peplum-flare-needs-waist-seam");
     var peplumCut = body.peplumCut;   // Ⓞ(P.28·P.163) — 다트 없는 몸판의 페플럼을 WL 등분 수직 절개로 벌린다. waistSeam 이 전제.
-    var applyPeplumCut = (peplumCut === true);
+    var applyPeplumCut = (peplumCut === true || peplumCut === "P");   // true = Ⓞ · "P" = Ⓟ(P.29, 이음선 WL−5)
     if (peplumCut != null && peplumCut !== false && !applyPeplumCut) fail("invalid-body-peplum-cut", peplumCut);
     if (applyPeplumCut && !applySeam) fail("peplum-cut-needs-waist-seam");
     if (applyPeplumCut && applyPeplumFlare) fail("peplum-cut-flare-conflict");
@@ -806,7 +806,7 @@
       var DW = (typeof window !== "undefined") && window.designWaistSeam;
       if (!DW || typeof DW.split !== "function") fail("designWaistSeam-missing");
       var sp;
-      try { sp = DW.split({ front: fPiece, back: bPiece }, applyPeplumFlare ? { peplumFlare: DW.PEPLUM_FLARE } : (applyPeplumCut ? { peplumCut: DW.PEPLUM_CUT } : undefined)); }
+      try { sp = DW.split({ front: fPiece, back: bPiece }, applyPeplumFlare ? { peplumFlare: DW.PEPLUM_FLARE } : (applyPeplumCut ? { peplumCut: peplumCut === "P" ? DW.PEPLUM_CUT_P : DW.PEPLUM_CUT } : undefined)); }
       catch (e) { fail("waist-seam-failed", (e.reason || e.message) + (e.detail !== undefined ? " " + JSON.stringify(e.detail) : "")); }
       outGeom.front = sp.front; outGeom.back = sp.back;
       outGeom.frontPeplum = sp.frontPeplum; outGeom.backPeplum = sp.backPeplum;
