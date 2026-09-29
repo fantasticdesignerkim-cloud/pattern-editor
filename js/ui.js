@@ -429,6 +429,7 @@
   let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
   let pendingFlare;        // 〃 (true = 다트를 닫아 밑단 벌리기)
   let pendingWaistSeam;    // 〃 (true = 허리 이음선 — 상·하 조각 분리, 프리셋 Ⓜ)
+  let pendingPeplumCut;    // 〃 (true = 페플럼 WL 등분 수직 절개 벌림, 프리셋 Ⓞ — waistSeam 전제)
   let pendingPeplumFlare;  // 〃 (true = 페플럼을 맞대면서 플레어 벌리기, 프리셋 Ⓝ — waistSeam 전제)
   function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
   function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
@@ -495,6 +496,7 @@
     pendingFlare = body.flare === true ? true : null;
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
+    pendingPeplumCut = body.peplumCut === true ? true : null;
     onApplyBodyLength();
   }
   function bodiceSelectionStr(reason) {
@@ -2233,6 +2235,10 @@
       if (pendingWaistSeam) nextParameters.body.waistSeam = true; else delete nextParameters.body.waistSeam;
       pendingWaistSeam = undefined;
     }
+    if (pendingPeplumCut !== undefined) {
+      if (pendingPeplumCut) nextParameters.body.peplumCut = true; else delete nextParameters.body.peplumCut;
+      pendingPeplumCut = undefined;
+    }
     if (pendingPeplumFlare !== undefined) {
       if (pendingPeplumFlare) nextParameters.body.peplumFlare = true; else delete nextParameters.body.peplumFlare;
       pendingPeplumFlare = undefined;
@@ -2290,6 +2296,7 @@
     pendingFlare = null;        // 플레어 해제
     pendingWaistSeam = null;    // 허리 이음선 해제(페플럼 제거)
     pendingPeplumFlare = null;  // 페플럼 플레어 해제
+    pendingPeplumCut = null;    // 페플럼 절개 벌림 해제
     setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }

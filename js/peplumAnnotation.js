@@ -67,10 +67,12 @@
     var below = { x: (minX + maxX) / 2, y: maxY };
     var chordList = joins.map(function (j) { return fmt1(j.spread.chordCm); }).join("·");
     add("title", below, 0, 40, "middle", label, "title");
-    add("flare", below, 0, 54, "middle", "플레어 ∅ " + fmt1(fl.totalCm) + "cm = 완성 허리 " + fmt1(fl.finishedWaistCm) + " × 0.9 − 1", "note");
+    var isCut = fl.mode === "cut", rr = num(fl.ratio) ? fl.ratio : 0.9, ss = num(fl.subtractCm) ? fl.subtractCm : 1;
+    add("flare", below, 0, 54, "middle", "플레어 ∅ " + fmt1(fl.totalCm) + "cm = 완성 허리 " + fmt1(fl.finishedWaistCm) + " × " + rr + " − " + ss, "note");
     add("cuts", below, 0, 67, "middle", "절개 " + joins.length + "곳 각 " + chordList + "cm · 각도 " +
       joins.map(function (j) { return num(j.spread.angleDeg) ? fmt1(Math.abs(j.spread.angleDeg)) + "°" : "—"; }).join("·"), "note");
-    add("strips", below, 0, 80, "middle", "Ⓐ 중심쪽 · Ⓑ 중간 · Ⓒ 옆쪽 (교재 P.158 조각 순서)", "note");
+    add("strips", below, 0, 80, "middle", "Ⓐ 중심쪽 · Ⓑ 중간 · Ⓒ 옆쪽 (교재 " + (isCut ? "P.163 · Ⓐ 고정, Ⓑ→Ⓒ 순차 회전" : "P.158") + " 조각 순서)", "note");
+    if (isCut) add("cutrule", below, 0, 93, "middle", "절개: WL " + (joins.length + 1) + "등분점에서 수직 · 고정점 = WL 점 · 허리선·밑단 fairing", "note");
 
     // ② 중심·옆선 방향 표지  ③ 허리선·밑단선 명칭
     // 중심·옆선 표지는 조각 **바깥**에 둔다 — 중심→옆 축(u)의 반대/같은 방향(앞판은 중심이 오른쪽이라 축이 왼쪽을 향한다).
@@ -81,7 +83,17 @@
 
     // ⑥ A/B/C 조각 — 중심에서 옆 방향 순서. 허리·밑단 직선 변의 중점 평균에 둔다.
     var letters = ["Ⓐ", "Ⓑ", "Ⓒ", "Ⓓ", "Ⓔ"];
-    if (waists.length === straight.length && waists.length <= letters.length) {
+    if (isCut && straight.length === joins.length + 1 && straight.length <= letters.length) {
+      // Ⓞ: 허리선은 fairing 으로 조각 수와 세그먼트 수가 다르다 → 허리 쪽 기준은 [중심 끝, 고정점들, 옆 끝].
+      var wEnds = []; waists.forEach(function (w) { var e = ends(w); if (e) wEnds.push(e.from, e.to); });
+      wEnds.sort(function (a, b) { return along(a) - along(b); });
+      var pvs = joins.map(function (j) { return j.spread.pivot; }).sort(function (a, b) { return along(a) - along(b); });
+      var wRef = [wEnds[0]].concat(pvs, [wEnds[wEnds.length - 1]]);
+      straight.forEach(function (h, i) {
+        var a = { x: (wRef[i].x + wRef[i + 1].x) / 2, y: (wRef[i].y + wRef[i + 1].y) / 2 }, b = mid(h);
+        add("strip-" + i, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, 0, 4, "middle", letters[i], "strip");
+      });
+    } else if (waists.length === straight.length && waists.length <= letters.length) {
       waists.forEach(function (w, i) {
         var a = mid(w), b = mid(straight[i]);
         add("strip-" + i, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, 0, 4, "middle", letters[i], "strip");
