@@ -713,6 +713,13 @@
     if (peplumCut != null && peplumCut !== false && !applyPeplumCut) fail("invalid-body-peplum-cut", peplumCut);
     if (applyPeplumCut && !applySeam) fail("peplum-cut-needs-waist-seam");
     if (applyPeplumCut && applyPeplumFlare) fail("peplum-cut-flare-conflict");
+    // 요크 이음선 ① Ⓠ(P.30) — 다트 끝을 지나는 수평선으로 요크·몸판을 **별개 조각**으로 가른다(순수 연산은
+    //   `js/designYokeSeam.js`). front/back 은 전체 몸판 그대로 두고 네 슬롯만 **추가**한다(소매·카라·체크포인트 무영향).
+    var yokeSeam = body.yokeSeam;
+    var applyYoke = (yokeSeam === true);
+    if (yokeSeam != null && yokeSeam !== false && !applyYoke) fail("invalid-body-yoke-seam", yokeSeam);
+    if (applyYoke && applySeam) fail("yoke-seam-waist-seam-conflict");
+    if (applyYoke && applyFlare) fail("yoke-seam-flare-conflict");
     if (applySeam && !(L > 0)) fail("waist-seam-needs-hem");   // 밑단(엉덩이 길이)이 없으면 페플럼이 없다
     var applyScales = (dartScales != null);
     if (applyScales) {
@@ -811,6 +818,18 @@
       outGeom.front = sp.front; outGeom.back = sp.back;
       outGeom.frontPeplum = sp.frontPeplum; outGeom.backPeplum = sp.backPeplum;
       outGeom.waistSeam = sp.meta;
+    }
+    // ★ 요크 이음선도 맨 마지막(형상 확정 뒤). front/back 은 바이트 불변, 네 슬롯과 검산 메타만 추가한다.
+    //   실패는 그대로 올린다(부분 결과 없음).
+    if (applyYoke) {
+      var DY = (typeof window !== "undefined") && window.designYokeSeam;
+      if (!DY || typeof DY.split !== "function") fail("designYokeSeam-missing");
+      var yk;
+      try { yk = DY.split({ front: fPiece, back: bPiece }); }
+      catch (e) { fail("yoke-seam-failed", (e.reason || e.message) + (e.detail !== undefined ? " " + JSON.stringify(e.detail) : "")); }
+      outGeom.frontYoke = yk.frontYoke; outGeom.frontBody = yk.frontBody;
+      outGeom.backYoke = yk.backYoke; outGeom.backBody = yk.backBody;
+      outGeom.yokeSeam = yk.meta;
     }
     return outGeom;
   }

@@ -208,5 +208,46 @@ ok(J(G) === GSNAP, "F: 실패·성공 호출 후에도 입력 불변");
   }
 }
 
+
+// ══ 커밋 1 배선: designBodice.computeGeometry body.yokeSeam ══
+{
+  const BP = W.bodicePresets;
+  const YB = { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1 };
+  const base = DB.computeGeometry(REF, { body: YB });
+  const on = DB.computeGeometry(REF, { body: Object.assign({ yokeSeam: true }, YB) });
+  const off = DB.computeGeometry(REF, { body: Object.assign({ yokeSeam: false }, YB) });
+  ok(J(off) === J(base), "W1: yokeSeam:false = 플래그 없음(바이트 동일)");
+  ok(J(on.front) === J(base.front) && J(on.back) === J(base.back), "W2: true 여도 front/back 은 플래그 없는 결과와 바이트 동일");
+  ok(J(on.shared) === J(base.shared) && J(on.sleeve) === J(base.sleeve), "W2: shared/sleeve 도 동일");
+  ok(["frontYoke", "frontBody", "backYoke", "backBody", "yokeSeam"].every(k => k in on), "W3: 네 슬롯 + geometry.yokeSeam 존재");
+  ok(!["frontYoke", "frontBody", "backYoke", "backBody", "yokeSeam"].some(k => k in base), "W3: 플래그 없으면 슬롯 없음");
+  const direct = DY.split({ front: base.front, back: base.back });
+  ok(J(on.frontYoke) === J(direct.frontYoke) && J(on.frontBody) === J(direct.frontBody) && J(on.backYoke) === J(direct.backYoke) && J(on.backBody) === J(direct.backBody) && J(on.yokeSeam) === J(direct.meta), "W4: 슬롯·메타 = designYokeSeam.split 결과(계약 그대로)");
+  ok(closedRing(on.frontYoke.outline) && closedRing(on.frontBody.outline) && closedRing(on.backYoke.outline) && closedRing(on.backBody.outline), "W5: 네 조각 폐곡선");
+  ok(on.yokeSeam.front.side === "front" && on.yokeSeam.back.side === "back" && on.yokeSeam.front.absorbedDarts[0].id === "front-bust", "W5: 메타 side·흡수 다트 id");
+  // 기존 A~Ⓟ 프리셋: 플래그 없음/false 가 바이트 동일, 새 키가 생기지 않는다
+  BP.families().forEach(f => f.variants.forEach(v => {
+    if (v.availability !== "available") return;
+    const bp = BP.bodyParams(v.id);
+    const g0 = DB.computeGeometry(REF, { body: bp }), g1 = DB.computeGeometry(REF, { body: Object.assign({}, bp, { yokeSeam: false }) });
+    ok(J(g0) === J(g1) && !("yokeSeam" in g0) && !("frontYoke" in g0), "W6: 프리셋 " + v.id + " yokeSeam:false 바이트 동일");
+  }));
+  // 원자 거부
+  [["true", "invalid-body-yoke-seam"], [1, "invalid-body-yoke-seam"], [{}, "invalid-body-yoke-seam"], [[], "invalid-body-yoke-seam"]].forEach(([v, r]) =>
+    throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({ yokeSeam: v }, YB) }), r, "W7: yokeSeam=" + J(v) + " 거부"));
+  throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({ yokeSeam: true, waistSeam: true }, YB) }), "yoke-seam-waist-seam-conflict", "W7: waistSeam 과 동시 거부");
+  throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({ yokeSeam: true, flare: true }, YB) }), "yoke-seam-flare-conflict", "W7: flare 와 동시 거부");
+  throwsReason(() => DB.computeGeometry(REF, { body: { hemExtensionBelowWaistCm: 20, yokeSeam: true } }), "yoke-seam-failed", "W7: 밑단 +1 이 아니면 엔진 실패를 그대로 올린다(부분 결과 없음)");
+  ok(J(REF) === SNAP, "W7: 실패 뒤 원형 참조 불변");
+  // 프리셋 레코드 검증: yokeSeam boolean(true)만, 충돌 거부. Ⓠ 프리셋은 아직 등록하지 않는다.
+  const rec = (body) => ({ id: "x", label: "x", familyId: "boxy-line", symbol: "X", baseMethod: "m", page: 30, body });
+  ok(BP.validateRecord(rec({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: true })) === true, "W8: yokeSeam:true 레코드 허용");
+  throwsReason(() => BP.validateRecord(rec({ yokeSeam: false })), "invalid-body", "W8: yokeSeam:false 레코드 거부(true 만)");
+  throwsReason(() => BP.validateRecord(rec({ yokeSeam: "true" })), "invalid-body", "W8: yokeSeam 문자열 거부");
+  throwsReason(() => BP.validateRecord(rec({ yokeSeam: true, waistSeam: true })), "yoke-seam-waist-seam-conflict", "W8: waistSeam 충돌");
+  ok(BP.fields().some(f => f.key === "yokeSeam"), "W8: fields 에 yokeSeam");
+  ok(!BP.variant("bunka-bodice-Q") || BP.variant("bunka-bodice-Q").availability !== "available", "W9: Ⓠ 프리셋은 아직 미등록(보류 유지)");
+}
+
 console.log("yokeSeamCheck: " + PASS + " PASS / " + FAIL + " FAIL");
 if (FAIL) { fails.forEach(f => console.log("  ✗ " + f)); process.exit(1); }

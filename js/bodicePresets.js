@@ -49,7 +49,8 @@
     { key: "flare", label: "다트를 닫아 밑단 벌리기", unit: "" },
     { key: "waistSeam", label: "허리 이음선(상·하 조각 분리)", unit: "" },
     { key: "peplumFlare", label: "페플럼 맞대면서 플레어 벌리기", unit: "" },
-    { key: "peplumCut", label: "페플럼 WL 등분 수직 절개로 벌리기", unit: "" }
+    { key: "peplumCut", label: "페플럼 WL 등분 수직 절개로 벌리기", unit: "" },
+    { key: "yokeSeam", label: "요크 이음선(요크·몸판 조각 분리)", unit: "" }
   ];
   var BODY_KEYS = BODY_FIELDS.map(function (f) { return f.key; });
   var DART_SYMBOLS = ["a", "b", "d", "e"];   // [패턴학교]가 쓰는 봉제 허리다트 넷
@@ -263,6 +264,12 @@
       }
       if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
       if (k === "waistSeam") { if (v !== true) fail("invalid-body", id + ".waistSeam"); return; }
+      if (k === "yokeSeam") {
+        if (v !== true) fail("invalid-body", id + ".yokeSeam");
+        if (body.waistSeam === true) fail("yoke-seam-waist-seam-conflict", id);
+        if (body.flare != null) fail("yoke-seam-flare-conflict", id);
+        return;
+      }
       if (k === "peplumCut") {
         if (v !== true && v !== "P") fail("invalid-body", id + ".peplumCut");
         if (body.waistSeam !== true) fail("peplum-cut-needs-waist-seam", id);
