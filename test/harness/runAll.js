@@ -55,6 +55,8 @@ const suites = [
   { file: "peplumFlarePresetCheck.js",  golden: false },
   { file: "peplumCutPresetCheck.js",    golden: false },
   { file: "peplumSeamLowPresetCheck.js", golden: false },
+  // 요크 이음선 ① Ⓠ(P.30) 순수 geometry 연산(엔진만 — 프리셋·UI 미연결).
+  { file: "yokeSeamCheck.js",           golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },
