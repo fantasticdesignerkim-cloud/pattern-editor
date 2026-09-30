@@ -471,6 +471,8 @@
       const f = BP.family(fid);
       if (f && f.familyNote) parts.push(f.familyNote);
     }
+    // 박시 Ⓐ·Ⓑ: 우리 원형은 [학교책] 기준이라 교재(a·b·d·e)와 달리 c·f 다트까지 포함한다(캔버스가 아니라 여기에만 표시).
+    if (v && v.availability === "available" && (v.presetId === "bunka-bodice-A" || v.presetId === "bunka-bodice-B")) parts.push("※ 우리 원형은 c·f 다트까지 포함해 교재(a·b·d·e)보다 허리가 조금 더 조입니다");
     el.textContent = parts.join(" · ");
     el.setAttribute("data-ok", (v && v.availability === "available") ? "1" : "0");
   }

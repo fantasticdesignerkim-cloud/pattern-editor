@@ -6,7 +6,7 @@
 // ★ 의미는 좌표 추측이 아니라 **geometry 의 edge 태그(waist/hem/center/side-seam) + designWaistSeam 메타**
 //   (`waistSeam.<side>.joins[].spread.pivot`, `peplumFlare`)에서만 읽는다. 절개 다리 끝점은 밑단 이음(cubic)의
 //   두 끝점이며, 고정점과의 거리가 같은 쌍(이등변)이라는 **기하 항등식**으로 짝을 확인한다.
-// ★ Ⓝ(peplumFlare) 에만 모델이 있다. Ⓜ 등 다른 프리셋은 null — 화면·데이터 모두 그대로다.
+// ★ 모델이 있는 것: Ⓝ/Ⓞ/Ⓟ(페플럼) + 박시 Ⓐ·Ⓑ(buildModel 의 body 인자로 식별). Ⓜ 등 나머지는 null.
 //
 // buildModel(geometry) → { front: Model|null, back: Model|null }   (좌표 = geometry 좌표계, 표시 내림 전)
 //   Model = { key, title, lines:[{id,at,px:{dx,dy},anchor,text,cls}], legs:[{id,from,to}], wedges:[{id,pts}],
@@ -127,8 +127,76 @@
       totalCm: fl.totalCm, finishedWaistCm: fl.finishedWaistCm };
   }
 
-  function buildModel(geometry) {
+  // ── 박시 라인 Ⓐ·Ⓑ(다트 있는 기본 몸판) 표시 모델 ──
+  // 프리셋 identity 는 프로젝트에 저장되지 않으므로 **적용된 body 파라미터**로만 식별한다
+  // (hemExtensionBelowWaistCm=20 외에 다른 키가 없고 hemSideOffsetCm 이 0/미지정=Ⓐ, 1=Ⓑ). 다른 편집이 섞이면 null.
+  var BOXY = { A: "기본 박시", B: "밑단 +1cm" };
+  function identifyBoxy(body) {
+    if (!body || typeof body !== "object" || body.hemExtensionBelowWaistCm !== 20) return null;
+    var ok = Object.keys(body).every(function (k) {
+      var v = body[k];
+      return k === "hemExtensionBelowWaistCm" || ((k === "hemSideOffsetCm" || k === "waistSideOffsetCm" || k === "bustEaseCm" || k === "sideSeamCurve") && (v === 0 || (k === "hemSideOffsetCm" && v === 1)));
+    });
+    if (!ok) return null;
+    return body.hemSideOffsetCm === 1 ? "B" : "A";
+  }
+  // 다트 표시명: 허리 다트는 기호(a·b·c·d·e·f), 가슴·뒤어깨 다트는 이름
+  function dartName(id) {
+    var m = /-([a-f])$/.exec(id); if (m) return m[1];
+    return id === "front-bust" ? "가슴" : id === "back-shoulder" ? "뒤어깨" : id;
+  }
+  function buildBoxySide(key, label, cfName, piece, variant) {
+    if (!piece || !Array.isArray(piece.outline)) return null;
+    var out = piece.outline, cons = piece.construction || [];
+    var centers = by(out, "center"), sides = by(out, "side-seam"), hems = by(out, "hem"), waists = by(cons, "waist");
+    if (!centers.length || !sides.length || hems.length !== 1 || waists.length !== 1) return null;
+    var longest = function (arr) { return arr.slice().sort(function (a, b) { var ea = ends(a), eb = ends(b); return dist(eb.from, eb.to) - dist(ea.from, ea.to); })[0]; };
+    var cm = mid(longest(centers)), sm = mid(longest(sides)), hm = mid(hems[0]), we = ends(waists[0]);
+    var u = unit({ x: sm.x - cm.x, y: sm.y - cm.y }); if (!u) return null;
+    var along = function (p) { return (p.x - cm.x) * u.x + (p.y - cm.y) * u.y; };
+    var wSide = along(we.from) > along(we.to) ? we.from : we.to;
+    var wMid = mid(waists[0]);
+    var up = unit({ x: wMid.x - hm.x, y: wMid.y - hm.y }) || { x: 0, y: -1 };
+    var xs = [], ys = [];
+    out.forEach(function (s) { ctrl(s).forEach(function (p) { xs.push(p.x); ys.push(p.y); }); });
+    var below = { x: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2, y: Math.max.apply(null, ys) };
+    var lines = [];
+    var add = function (id, at, dx, dy, anchor, text, cls) { lines.push({ id: id, at: P(at), px: { dx: dx, dy: dy }, anchor: anchor, text: text, cls: cls }); };
+    add("title", below, 0, 40, "middle", label, "title");
+    add("variant", below, 0, 54, "middle", BOXY[variant], "note");
+    add("center", cm, -u.x * 8, 3, -u.x >= 0 ? "start" : "end", cfName, "edge");
+    add("side", sm, u.x * 8, 3, u.x >= 0 ? "start" : "end", "옆선", "edge");
+    add("waist", wSide, u.x * 8, 3, u.x >= 0 ? "start" : "end", "허리선(WL)", "edge");
+    add("hem", hm, -up.x * 13, -up.y * 13 + 4, "middle", "밑단선", "edge");
+    // 다트: id 별로 다리를 모아 입구(허리/외곽 쪽 끝) 두 점 사이 거리 = 다트 분량. 접어 재단(onFold)은 한쪽 다리뿐이라 접힘선까지 거리(반쪽).
+    var byId = {}, order = [];
+    cons.forEach(function (s) { if (s && s.dart && s.dart.id) { if (!byId[s.dart.id]) { byId[s.dart.id] = []; order.push(s.dart.id); } byId[s.dart.id].push(s); } });
+    var darts = [];
+    order.forEach(function (id) {
+      var legs = byId[id], mouths = legs.map(function (l) { return l.dart.apexAt === "to" ? l.from : l.to; });
+      var apex = legs[0].dart.apexAt === "to" ? legs[0].to : legs[0].from, amt, half = false;
+      if (legs.length === 2) amt = dist(mouths[0], mouths[1]);
+      else if (legs.length === 1 && legs[0].dart.onFold) { amt = Math.abs(mouths[0].x - apex.x); half = true; }
+      else return;
+      var at = legs.length === 2 ? { x: (mouths[0].x + mouths[1].x) / 2, y: (mouths[0].y + mouths[1].y) / 2 } : mouths[0];
+      var nm = dartName(id), boundary = legs[0].dart.boundary;
+      var txt = nm + " " + fmt1(amt) + "cm" + (half ? "(접힘 반쪽)" : "");
+      if (boundary === "waist") add("dart-" + id, at, 0, 12, "middle", txt, "cut");
+      else if (boundary === "shoulder") add("dart-" + id, at, 0, -8, "middle", txt, "cut");
+      else add("dart-" + id, at, u.x * 8, 3, u.x >= 0 ? "start" : "end", txt, "cut");
+      darts.push({ id: id, name: nm, amountCm: amt, half: half });
+    });
+    return { key: key, title: label, lines: lines, legs: [], wedges: [], notches: [], cuts: [], darts: darts,
+      totalCm: null, finishedWaistCm: null };
+  }
+
+  function buildModel(geometry, body) {
     var g = geometry, ws = g && g.waistSeam;
+    if (g && !ws) {
+      var v = identifyBoxy(body);
+      if (!v) return { front: null, back: null };
+      return { front: buildBoxySide("front", "앞몸판", "앞중심(CF)", g.front, v), back: buildBoxySide("back", "뒤몸판", "뒤중심(CB)", g.back, v) };
+    }
     if (!g || !ws) return { front: null, back: null };
     return {
       front: buildSide("frontPeplum", "앞 페플럼", "앞중심(CF)", g.frontPeplum, ws.front),

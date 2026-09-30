@@ -535,13 +535,13 @@ function render(){
     const _snap = (_dlt && _dlt.getSnapHint) ? _dlt.getSnapHint() : null;
     // 페플럼 제작 정보(Ⓝ 에만 모델 존재, 토글 OFF 면 없음). 토글 행은 모델이 있을 때만 보인다.
     const _pepChk = document.getElementById("chkPeplumInfo"), _pepRow = document.getElementById("rowPeplumInfo");
-    const _pepAll = (window.peplumAnnotation && dp.working.geometry) ? window.peplumAnnotation.buildModel(dp.working.geometry) : null;
+    const _pepAll = (window.peplumAnnotation && dp.working.geometry) ? window.peplumAnnotation.buildModel(dp.working.geometry, dp.working.parameters && dp.working.parameters.body) : null;
     if(_pepRow) _pepRow.hidden = !(_pepAll && (_pepAll.front || _pepAll.back));
     const _pepOn = _pepAll && (!_pepChk || _pepChk.checked);
     SUBS.forEach(([pc, sub]) => {
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
       _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
-      if (_pepOn && _pepAll[pc]) _appendPeplumAnnotation(grp, _pepAll[pc], window.designLayout.peplumDrop(dp.working.geometry, pc + "Peplum"));
+      if (_pepOn && _pepAll[pc]) _appendPeplumAnnotation(grp, _pepAll[pc], dp.working.geometry.waistSeam ? window.designLayout.peplumDrop(dp.working.geometry, pc + "Peplum") : 0);
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
       if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay
       if (_snap && _snap.piece === pc) _appendSnapHint(grp, _snap.point);              // 흡착 표시(cyan)
