@@ -91,9 +91,11 @@ for (const id of ["C", "D"]) { const b = Object.assign({ bustEaseCm: 0, sideSeam
 // M·N·O·P·G: 전용 하네스가 형상·문구를 보장한다. 여기서는 BL 이 새지 않았고 body 인자가 결과를 바꾸지 않는 최소 구조만 확인
 for (const id of ["M", "N", "O", "P", "G"]) {
   const g = geo(id), a = PA.buildModel(g), b = PA.buildModel(g, body(id));
-  ok(J(a) === J(b), id + ": body 인자 무관");
+  const isOP = id === "O" || id === "P";   // Ⓞ·Ⓟ 만 body 를 주면 상부 몸판 BL 합성(peplumAnnotationCheck §4)
+  ok(isOP ? J(a) !== J(b) : J(a) === J(b), id + (isOP ? ": body 인자 → BL 합성" : ": body 인자 무관"));
   ["front", "back"].forEach(k => {
-    if (id === "N" || id === "O" || id === "P") ok(b[k] && !b[k].lines.some(l => l.id === "bl") && !b[k].legs.some(l => l.id === "bl"), id + " " + k + ": 페플럼 모델에 BL 없음");
+    if (id === "N") ok(b[k] && !b[k].lines.some(l => l.id === "bl") && !b[k].legs.some(l => l.id === "bl"), id + " " + k + ": 페플럼 모델에 BL 없음");
+    else if (isOP) ok(b[k] && b[k].lines.filter(l => l.id === "bl").length === 1 && b[k].legs.filter(l => l.id === "bl").length === 1, id + " " + k + ": BL 정확히 1개");
     else ok(b[k] === null, id + " " + k + ": 모델 없음");
   });
 }

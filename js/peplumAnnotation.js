@@ -224,10 +224,36 @@
       return { front: buildBoxySide("front", "앞몸판", "앞중심(CF)", g.front, v), back: buildBoxySide("back", "뒤몸판", "뒤중심(CB)", g.back, v) };
     }
     if (!g || !ws) return { front: null, back: null };
-    return {
+    var m = {
       front: buildSide("frontPeplum", "앞 페플럼", "앞중심(CF)", g.frontPeplum, ws.front),
       back: buildSide("backPeplum", "뒤 페플럼", "뒤중심(CB)", g.backPeplum, ws.back)
     };
+    // Ⓞ(true)·Ⓟ("P") 만: 상부 몸판 가슴선(BL)을 같은 모델에 합성한다. Ⓝ 등은 불변.
+    if (body && (body.peplumCut === true || body.peplumCut === "P")) {
+      addUpperBL(m.front, g.front, "frontPeplum", g);
+      addUpperBL(m.back, g.back, "backPeplum", g);
+    }
+    return m;
+  }
+
+  // 모델 좌표는 렌더러가 페플럼 표시 내림(peplumDrop)을 더해 그린다. 상부 몸판의 BL 은 내리지 않으므로
+  // 그만큼 미리 뺀다(모델 y + drop = geometry y). designLayout 이 없으면 추가하지 않는다(추측 금지).
+  function addUpperBL(model, piece, peplumKey, g) {
+    if (!model || !piece || !Array.isArray(piece.outline)) return;
+    var DL = window.designLayout; if (!DL || typeof DL.peplumDrop !== "function") return;
+    var centers = by(piece.outline, "center"), sides = by(piece.outline, "side-seam");
+    if (!centers.length || !sides.length) return;
+    var longest = function (arr) { return arr.slice().sort(function (a, b) { var ea = ends(a), eb = ends(b); return dist(eb.from, eb.to) - dist(ea.from, ea.to); })[0]; };
+    var cm = mid(longest(centers)), sm = mid(longest(sides));
+    var u = unit({ x: sm.x - cm.x, y: sm.y - cm.y }); if (!u) return;
+    var sTop = null;
+    sides.forEach(function (sd) { var e = ends(sd); [e.from, e.to].forEach(function (q) { if (!sTop || q.y < sTop.y) sTop = q; }); });
+    var cSeg = centers.filter(function (c) { var e = ends(c); return !isCurved(c) && Math.abs(e.from.y - e.to.y) > 1e-9 && sTop && (sTop.y - e.from.y) * (sTop.y - e.to.y) <= 0; })[0];
+    if (!sTop || !cSeg) return;
+    var dy = DL.peplumDrop(g, peplumKey), ce = ends(cSeg), tt = (sTop.y - ce.from.y) / (ce.to.y - ce.from.y);
+    var cPt = { x: ce.from.x + (ce.to.x - ce.from.x) * tt, y: sTop.y - dy };
+    model.legs.push({ id: "bl", from: cPt, to: { x: sTop.x, y: sTop.y - dy } });
+    model.lines.push({ id: "bl", at: P(cPt), px: { dx: -u.x * 8, dy: -8 }, anchor: -u.x >= 0 ? "start" : "end", text: "가슴선(BL)", cls: "edge" });
   }
 
   window.peplumAnnotation = Object.freeze({ buildModel: buildModel });

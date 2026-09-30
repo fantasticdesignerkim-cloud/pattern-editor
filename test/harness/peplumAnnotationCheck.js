@@ -22,7 +22,7 @@ const sandbox = { window: {}, console: { log() {}, warn() {} }, Math, JSON, Obje
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 const load = (f) => vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "..", "js", f), "utf8"), sandbox, { filename: f });
-["designLineTool.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designBodice.js", "bodicePresets.js",
+["designLineTool.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designYokeSeam.js", "designBodice.js", "bodicePresets.js",
   "designLayout.js", "designRenderer.js", "bodiceCheckpoint.js", "peplumAnnotation.js"].forEach(load);
 sandbox.window.designWorkflow = { current: () => PROJECT };
 const W = sandbox.window, DB = W.designBodice, BP = W.bodicePresets, PA = W.peplumAnnotation, BC = W.bodiceCheckpoint, DL = W.designLayout;
@@ -97,6 +97,43 @@ ok(Object.isFrozen(PA) && typeof PA.buildModel === "function", "0: API·frozen")
   ok(c1 === c2 && h1 === BC.latest(PROJECT).hash, "3: 모델을 만들어도 체크포인트 검사·hash 동일");
   const src = fs.readFileSync(path.join(__dirname, "..", "..", "js", "peplumAnnotation.js"), "utf8");
   ok(!/document\.|localStorage|state\.|designWorkflow/.test(src), "3: DOM·저장·상태 미접근(순수)");
+}
+
+// ── 4. Ⓞ·Ⓟ 상부 몸판 가슴선(BL): 옆선 상단점 y 의 수평선, 중심 직선변 x 까지. 라벨 1개. Ⓝ·A~D·나머지는 BL 없음 ──
+{
+  const ENDS = (s) => { const p = s.points || (s.commands ? s.commands.flatMap(c => c.points) : [s.from, s.to]); return [p[0], p[p.length - 1]]; };
+  const blCount = (m) => (m.legs || []).filter(l => l.id === "bl").length + (m.lines || []).filter(l => l.id === "bl").length;
+  const sig = (m) => J({ lines: m.lines.filter(l => l.id !== "bl"), legs: m.legs.filter(l => l.id !== "bl"), w: m.wedges, n: m.notches, c: m.cuts });
+  ["O", "P"].forEach(id => {
+    const body = BP.bodyParams("bunka-bodice-" + id);
+    const g = DB.computeGeometry(REF, { body });
+    const withB = PA.buildModel(g, body), noBody = PA.buildModel(g);
+    ["front", "back"].forEach(k => {
+      const piece = g[k], key = k + "Peplum", drop = DL.peplumDrop(g, key), m = withB[k];
+      const sideYs = piece.outline.filter(s => s.edge === "side-seam").flatMap(s => ENDS(s).map(q => q.y));
+      const yBL = Math.min(...sideYs);
+      const sTop = piece.outline.filter(s => s.edge === "side-seam").flatMap(s => ENDS(s)).find(q => q.y === yBL);
+      const cx = ENDS(piece.outline.filter(s => s.edge === "center")[0])[0].x;
+      const legs = m.legs.filter(l => l.id === "bl"), lbl = m.lines.filter(l => l.id === "bl");
+      ok(legs.length === 1 && lbl.length === 1, id + " " + k + ": BL leg·라벨 각 1개");
+      const l = legs[0];
+      ok(near(l.from.y, l.to.y), id + " " + k + ": BL 수평");
+      ok(near(l.from.y + drop, yBL) && near(l.to.y + drop, yBL), id + " " + k + ": BL y(표시 내림 보정 후 = 옆선 상단 y)");
+      ok(near(l.to.x, sTop.x) && near(l.from.x, cx), id + " " + k + ": BL 끝점 = 옆선 상단점 · 중심변");
+      ok(lbl[0].text === "가슴선(BL)", id + " " + k + ": 라벨 문구");
+      // 기존 페플럼 정보는 BL 제외하고 body 미전달(BL 없음) 모델과 동일
+      ok(blCount(noBody[k]) === 0 && sig(m) === sig(noBody[k]), id + " " + k + ": 기존 페플럼 정보 개수·문구 유지");
+      ok(m.lines.length === noBody[k].lines.length + 1 && m.legs.length === noBody[k].legs.length + 1, id + " " + k + ": 정확히 BL 1쌍만 추가");
+    });
+    ok(J(g) === J(DB.computeGeometry(REF, { body })), id + ": geometry 불변");
+  });
+  // Ⓝ·A~D·Ⓜ·Ⓖ·Ⓠ 는 BL 없음 / Ⓝ 은 body 를 넘겨도 불변
+  const GNb = PA.buildModel(GN, BP.bodyParams("bunka-bodice-N"));
+  ok(J(GNb) === J(PA.buildModel(GN)) && blCount(GNb.front) + blCount(GNb.back) === 0, "4: Ⓝ BL 없음·불변");
+  ["M", "G", "Q"].forEach(s => {
+    const b = BP.bodyParams("bunka-bodice-" + s), g = DB.computeGeometry(REF, { body: b }), m = PA.buildModel(g, b);
+    ok(!m.front && !m.back || (blCount(m.front || { legs: [], lines: [] }) + blCount(m.back || { legs: [], lines: [] })) === 0, "4: " + s + " BL 없음");
+  });
 }
 
 console.log("══════════════════════════════════════════════");

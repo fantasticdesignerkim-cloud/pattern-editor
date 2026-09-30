@@ -64,8 +64,9 @@ nul({ hemExtensionBelowWaistCm: 10 }, "hem 확장 10: 없음");
 // 3. 페플럼 N/O/P(+M): body 인자와 무관하고 BL 이 새지 않는다(문구·형상은 전용 하네스가 보장)
 for (const id of ["M", "N", "O", "P"]) {
   const g = geo(id), a = PA.buildModel(g), c2 = PA.buildModel(g, body(id));
-  ok(J(a) === J(c2), id + ": body 인자 무관");
-  ["front", "back"].forEach(k => ok(id === "M" ? c2[k] === null : (c2[k] && !c2[k].legs.some(l => l.id === "bl") && !c2[k].lines.some(l => l.id === "bl")), id + " " + k + ": BL 없음/모델 규칙"));
+  const isOP = id === "O" || id === "P";   // Ⓞ·Ⓟ 만 body 를 주면 상부 몸판 BL 이 합성된다(peplumAnnotationCheck §4)
+  ok(isOP ? J(a) !== J(c2) : J(a) === J(c2), id + (isOP ? ": body 인자 → BL 합성" : ": body 인자 무관"));
+  ["front", "back"].forEach(k => ok(id === "M" ? c2[k] === null : (c2[k] && (isOP ? c2[k].legs.filter(l => l.id === "bl").length === 1 && c2[k].lines.filter(l => l.id === "bl").length === 1 : !c2[k].legs.some(l => l.id === "bl") && !c2[k].lines.some(l => l.id === "bl"))), id + " " + k + ": BL 규칙"));
 }
 ok(PA.buildModel(geo("P"), body("P")).front != null, "P: 모델 존재");
 
