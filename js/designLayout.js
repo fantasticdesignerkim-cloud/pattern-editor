@@ -30,13 +30,17 @@
   //   허리 이음선 Ⓜ 의 페플럼(frontPeplum/backPeplum)은 **그 짝(앞/뒤판)의 offset 을 따른다** — 별도 드래그 조각이
   //   아니라 한 벌로 움직이고, 겹치지 않도록 표시만 허리 아래로 내린다(아래 peplumDrop). 형상 좌표는 불변.
   const PIECE_KEYS = {
-    front: ["front", "shared", "frontPeplum"],
-    back: ["back", "backPeplum"],
+    front: ["front", "shared", "frontPeplum", "frontYoke", "frontBody"],
+    back: ["back", "backPeplum", "backYoke", "backBody"],
     sleeve: ["sleeve"],
-    body: ["front", "back", "shared", "frontPeplum", "backPeplum"]   // 하위호환(앞+뒤 묶음)
+    body: ["front", "back", "shared", "frontPeplum", "backPeplum", "frontYoke", "frontBody", "backYoke", "backBody"]   // 하위호환(앞+뒤 묶음)
   };
+  //   요크 이음선 Ⓠ: 요크가 있으면 **전체 앞/뒤판은 표시하지 않는다**(요크+몸판이 대신 그려진다) → bbox 에서도 뺀다.
+  //   hit rect 는 여전히 앞/뒤 피스 하나(요크 ∪ 내려 그린 몸판)이고 좌표(geometry)는 불변이다.
+  const YOKE_HOST_OF = { front: "frontYoke", shared: "frontYoke", back: "backYoke" };
   const PEPLUM_GAP = 3;        // 몸판(upper) 아래 끝과 페플럼 위 끝 사이 표시 간격(도안 cm)
-  const PEPLUM_OF = { frontPeplum: "front", backPeplum: "back" };   // 페플럼 → 짝 몸판
+  //   요크 모드에서는 **몸판이 요크 아래로** 내려간다(호스트 = 요크): 요크 아래 끝 + PEPLUM_GAP 아래에 몸판 위 끝.
+  const PEPLUM_OF = { frontPeplum: "front", backPeplum: "back", frontBody: "frontYoke", backBody: "backYoke" };   // 조각 → 위쪽 짝
 
   // ── 순수 기하 ──
   function pointsOfPrim(p, out) {
@@ -70,9 +74,27 @@
     };
     return { outline: (pp.outline || []).map(sh), construction: (pp.construction || []).map(sh) };
   }
+  // 요크 이음선 Ⓠ 제작 정보(표시 전용, 순수): 조각명 넷 + 이음선 안내. 표시 좌표(몸판은 내려 그림)이며 geometry 불변.
+  //   요크가 없으면 null. 교재에 없는 수치는 만들지 않는다 — 조각명과 «이음선» 글자뿐이다.
+  function yokeLabels(geometry) {
+    if (!geometry || !geometry.frontYoke || !geometry.frontBody || !geometry.backYoke || !geometry.backBody) return null;
+    const defs = [["frontYoke", "앞요크", "front"], ["frontBody", "앞몸판", "front"], ["backYoke", "뒤요크", "back"], ["backBody", "뒤몸판", "back"]];
+    const disp = (k) => PEPLUM_OF[k] ? peplumDisplayPiece(geometry, k) : geometry[k];
+    const labels = defs.map(([key, text, piece]) => {
+      const b = disp(key), pts = []; (b.outline || []).forEach(p => pointsOfPrim(p, pts));
+      const xs = pts.map(q => q.x), ys = pts.map(q => q.y);
+      return { key, text, piece, at: { x: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2, y: (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2 } };
+    });
+    const seams = [["frontYoke", "front"], ["backYoke", "back"]].map(([key, piece]) => {
+      const seg = (geometry[key].outline || []).filter(p => p.edge === "yoke-seam" && p.kind === "line")[0];
+      return seg ? { key, piece, text: "이음선", at: { x: (seg.from.x + seg.to.x) / 2, y: (seg.from.y + seg.to.y) / 2 } } : null;
+    }).filter(Boolean);
+    return { labels, seams };
+  }
   function bboxFromKeys(geometry, keys, roles) {
     const pts = [];
     keys.forEach(pc => {
+      if (YOKE_HOST_OF[pc] && geometry[YOKE_HOST_OF[pc]]) return;   // 요크 모드: 전체 앞/뒤판은 그리지 않는다
       const b = PEPLUM_OF[pc] ? peplumDisplayPiece(geometry, pc) : geometry[pc]; if (!b) return;
       roles.forEach(rl => (b[rl] || []).forEach(p => pointsOfPrim(p, pts)));
     });
@@ -406,7 +428,7 @@
 
   window.designLayout = Object.freeze({
     // 순수(harness)
-    bboxOf, outlineBBoxOf, autoLayout, peplumDrop, peplumDisplayPiece, sideSeamUnderarm, ensureLayout, bboxOfStand, collarAutoOffset,
+    bboxOf, outlineBBoxOf, autoLayout, peplumDrop, peplumDisplayPiece, yokeLabels, sideSeamUnderarm, ensureLayout, bboxOfStand, collarAutoOffset,
     // DOM 연동
     enterDesign, centerBody, placeSleeveRight, resetLayout, refreshAutoLayout, afterBodyLength, afterCollar, resetViewForDesign,
     cancelLayoutDrag   // 모드 전환 시 진행 중 배치 드래그 취소(designLineTool.setMode 에서 호출)

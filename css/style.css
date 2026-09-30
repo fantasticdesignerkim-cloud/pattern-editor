@@ -131,6 +131,12 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .collar-anno-text{font-size:10px;fill:#1E293B;font-weight:600;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px;stroke-linejoin:round}
 .collar-anno-label{font-size:9px;fill:#475569;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px}
 
+/* 요크 이음선 Ⓠ(표시 전용): 이음선(잘린 변)은 파란 실선, 조각명·이음선 글자는 흰 후광 */
+.design-working [data-edge="yoke-seam"]{stroke:#2563EB}
+.yoke-anno{pointer-events:none}
+.yoke-anno-title{font-size:12px;font-weight:700;fill:#1E293B;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px;stroke-linejoin:round}
+.yoke-anno-seam{font-size:10px;fill:#2563EB;font-weight:600;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px;stroke-linejoin:round}
+
 /* 페플럼 제작 정보(표시 전용): 외곽선보다 가늘고 옅게, 글자는 흰 후광 */
 .peplum-anno{pointer-events:none}
 .peplum-anno-wedge{fill:rgba(37,99,235,.07);stroke:none}

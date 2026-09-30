@@ -59,6 +59,8 @@ const suites = [
   { file: "yokeSeamCheck.js",           golden: false },
   // 요크 이음선 Ⓠ 체크포인트/결과 연결(bodiceCheckpoint) — 재계산 검증·완료본 보존·hash 가산·소매/카라/designResult 통과.
   { file: "yokeSeamCheckpointCheck.js", golden: false },
+  // 요크 이음선 Ⓠ 렌더 검증·표시 배치(designRenderer/designLayout)·제작 정보·hash 불변.
+  { file: "yokeSeamLayoutCheck.js",     golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },

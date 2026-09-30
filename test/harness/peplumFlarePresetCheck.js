@@ -85,7 +85,7 @@ const wlen = (outline) => T.outlinePrimsToSegs(outline).filter(s => s.edge === "
   ok(BP.resolve("waist-seam", "bunka-bodice-N").ok && BP.get("bunka-bodice-N").source.indexOf("P.27") > 0 && BP.get("bunka-bodice-N").source.indexOf("P.158") > 0, "1: Ⓝ 해석 성공·출처 P.27·P.158");
   ok(J(N_BODY) === J({ hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1.5, hemSideOffsetCm: 1, waistSeam: true, peplumFlare: true }), "1: Ⓝ body = Ⓜ + peplumFlare");
   ok(Object.keys(N_BODY).every(k => BP.fields().some(f => f.key === k)), "1: body 키는 전부 계약 필드");
-  ok(BP.variant("yoke-seam-1", "bunka-bodice-Q").availability !== "available", "1: Q~V 는 계속 보류");
+  ok(BP.variant("yoke-seam-1", "bunka-bodice-R").availability !== "available", "1: R~V 는 계속 보류(Q 는 실행 가능)");
   const rec = clone(BP.get("bunka-bodice-N"));
   throwsReason(() => BP.validateRecord(Object.assign(clone(rec), { body: Object.assign({}, rec.body, { peplumFlare: false }) })), "invalid-body", "1: peplumFlare 는 true 만");
   throwsReason(() => BP.validateRecord(Object.assign(clone(rec), { body: { hemExtensionBelowWaistCm: 20, peplumFlare: true } })), "peplum-flare-needs-waist-seam", "1: waistSeam 없는 peplumFlare 거부");

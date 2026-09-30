@@ -440,6 +440,22 @@ function _appendPeplumAnnotation(grp, model, dy){
   grp.appendChild(g);
 }
 
+// 요크 이음선 Ⓠ 제작 정보(표시 전용): 조각명 넷 + «이음선» 글자. 수치는 만들지 않는다. geometry·hit·계측·hash 무관.
+function _yokeModeOf(g){ return !!(g && g.frontYoke && g.frontBody && g.backYoke && g.backBody); }
+function _appendYokeAnnotation(grp, model, pc){
+  if(!model) return;
+  const g=E("g",{ "data-design-yoke":"annotation", "data-anno-piece":pc, class:"yoke-anno" });
+  model.labels.filter(l=>l.piece===pc).forEach(l=>{
+    const [x,y]=c2p(l.at.x,l.at.y);
+    g.appendChild(E("text",{ x, y, class:"yoke-anno-title", "text-anchor":"middle", "data-anno-text":l.key }, l.text));
+  });
+  model.seams.filter(l=>l.piece===pc).forEach(l=>{
+    const [x,y]=c2p(l.at.x,l.at.y);
+    g.appendChild(E("text",{ x, y:y-5, class:"yoke-anno-seam", "text-anchor":"middle", "data-anno-text":l.key+"-seam" }, l.text));
+  });
+  grp.appendChild(g);
+}
+
 // 카라 hit rect(collar-body manual 편집 시에만): designLineTool.pieceAt 이 "collar" 를 해석하도록.
 // 레이아웃 드래그는 designLayout 이 collar 를 PIECES 에서 제외해 무시한다(=편집 전용 hit).
 function _appendCollarHitRect(root, collarDraft, off, scale){
@@ -514,8 +530,18 @@ function render(){
       if (pp) sub[key] = pp;
       return sub;
     };
-    const frontSub  = (g) => withPep({ front: g.front, back: EMPTY, shared: g.shared, sleeve: EMPTY }, g, "frontPeplum");
-    const backSub   = (g) => withPep({ front: EMPTY, back: g.back, shared: EMPTY, sleeve: EMPTY }, g, "backPeplum");
+    // 요크 이음선 Ⓠ: 요크가 있으면 **전체 앞/뒤판(과 shared)을 그리지 않고** 요크+몸판만 그린다(중복 렌더 방지).
+    //   몸판은 표시만 요크 아래 3cm 로 내리고 짝(앞/뒤)의 offset 을 따른다 — geometry 좌표 불변.
+    const withYoke = (sub, g, side) => {
+      sub[side + "Yoke"] = g[side + "Yoke"];
+      const bd = window.designLayout ? window.designLayout.peplumDisplayPiece(g, side + "Body") : null;
+      if (bd) sub[side + "Body"] = bd;
+      return sub;
+    };
+    const frontSub  = (g) => g.frontYoke && g.frontBody ? withYoke({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }, g, "front")
+      : withPep({ front: g.front, back: EMPTY, shared: g.shared, sleeve: EMPTY }, g, "frontPeplum");
+    const backSub   = (g) => g.backYoke && g.backBody ? withYoke({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }, g, "back")
+      : withPep({ front: EMPTY, back: g.back, shared: EMPTY, sleeve: EMPTY }, g, "backPeplum");
     const sleeveSub = (g) => ({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: g.sleeve });
     const SUBS = [["front", frontSub], ["back", backSub], ["sleeve", sleeveSub]];
     const piece = (buildFn, sub, off, pc) => {
@@ -540,7 +566,10 @@ function render(){
     const _pepOn = _pepAll && (!_pepChk || _pepChk.checked);
     SUBS.forEach(([pc, sub]) => {
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
-      _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
+      // 요크 모드에서는 패턴선 도구가 꺼져 있고, 기존 패턴선은 **전체 몸판 좌표**라 요크·몸판 표시와 어긋나므로 그리지 않는다
+      //   (데이터는 그대로 — 다른 프리셋으로 돌아가면 다시 보인다).
+      if (!_yokeModeOf(dp.working.geometry)) _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
+      if (_yokeModeOf(dp.working.geometry)) _appendYokeAnnotation(grp, window.designLayout && window.designLayout.yokeLabels(dp.working.geometry), pc);
       if (_pepOn && _pepAll[pc]) _appendPeplumAnnotation(grp, _pepAll[pc], dp.working.geometry.waistSeam ? window.designLayout.peplumDrop(dp.working.geometry, pc + "Peplum") : 0);
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
       if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay

@@ -431,6 +431,7 @@
   let pendingWaistSeam;    // 〃 (true = 허리 이음선 — 상·하 조각 분리, 프리셋 Ⓜ)
   let pendingPeplumCut;    // 〃 (true = 페플럼 WL 등분 수직 절개 벌림, 프리셋 Ⓞ — waistSeam 전제)
   let pendingPeplumFlare;  // 〃 (true = 페플럼을 맞대면서 플레어 벌리기, 프리셋 Ⓝ — waistSeam 전제)
+  let pendingYokeSeam;     // 〃 (true = 요크 이음선 — 요크·몸판 조각 분리, 프리셋 Ⓠ)
   function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
   function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
   function rebuildBodiceFamilyOptions() {
@@ -503,6 +504,7 @@
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
     pendingPeplumCut = (body.peplumCut === true || body.peplumCut === "P") ? body.peplumCut : null;
+    pendingYokeSeam = body.yokeSeam === true ? true : null;   // 다른 프리셋으로 바꾸면 해제 → 요크·몸판 조각 사라짐
     onApplyBodyLength();
   }
   function bodiceSelectionStr(reason) {
@@ -521,6 +523,27 @@
       return v === 0 ? k + " 미사용" : (v === 1 ? k : k + " ×" + fmtL(v));
     });
     el.textContent = ["허리 다트 배분: " + used.join(" · "), fn].filter(Boolean).join(" / ");
+  }
+
+  // ── 요크 이음선 Ⓠ 모드: 패턴선 도구 비활성 ──
+  //   패턴선·절개는 **전체 앞/뒤판 좌표**에서 작동하는데, 요크 모드의 화면은 요크(회전)+몸판(내려 그림)이라 좌표가
+  //   어긋난다. 어긋난 곳에 선이 그려지는 일을 막기 위해 도구를 끄고 이유를 보인다. 다른 프리셋으로 돌아가면 다시 켠다.
+  const YOKE_TOOL_IDS = ["btnDesignLine", "btnDesignSelect"];
+  const YOKE_LOCK_MSG = "요크 이음선 Ⓠ 적용 중에는 패턴선 도구를 쓸 수 없습니다(화면이 요크·몸판 조각이라 전체 몸판 좌표와 다릅니다) — 다른 몸판 라인을 적용하면 다시 켜집니다";
+  function syncYokeToolLock(project) {
+    const g = project && project.working && project.working.geometry;
+    const locked = !!(g && g.frontYoke && g.frontBody && g.backYoke && g.backBody);
+    if (locked && window.designLineTool && window.designLineTool.getMode && window.designLineTool.getMode() !== "off") window.designLineTool.cancel();
+    YOKE_TOOL_IDS.forEach(id => {
+      const el = document.getElementById(id); if (!el) return;
+      el.disabled = locked; el.setAttribute("aria-disabled", locked ? "true" : "false");
+      if (locked) el.title = YOKE_LOCK_MSG; else el.removeAttribute("title");
+    });
+    const note = document.getElementById("designLineNote");
+    if (note) {
+      if (locked) { note.textContent = YOKE_LOCK_MSG; note.setAttribute("data-yoke-lock", "1"); }
+      else if (note.getAttribute("data-yoke-lock")) { note.textContent = ""; note.removeAttribute("data-yoke-lock"); }
+    }
   }
 
   // 완성 가슴(BL)·허리(WL) 둘레와 실측 대비 여유. **읽기 전용 계측** — 형상·게이트를 건드리지 않는다.
@@ -2204,7 +2227,7 @@
     setIf("inpNeckCurveAmount", cn.CA); setIf("inpNeckVDepth", cn.VD);
     setIf("inpNeckSquareWidth", cn.SW); setIf("inpNeckCornerRadius", cn.CR);
     setBodyNote(bodyStatusNote(cb.E, cb.L, cb.W, cb.H, cb.Cv, cn.type, cb.Dt, cb.Wt, sewnDartTotal(project)));
-    syncBodiceLineUI(); dartScaleNote(project); girthNote(project); sideLenNote(project); neckLenNote(project);
+    syncBodiceLineUI(); dartScaleNote(project); girthNote(project); sideLenNote(project); neckLenNote(project); syncYokeToolLock(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
     // 앞중심 여밈 입력·상태 복원(포커스 중 안 덮음)
@@ -2249,6 +2272,10 @@
       if (pendingPeplumFlare) nextParameters.body.peplumFlare = true; else delete nextParameters.body.peplumFlare;
       pendingPeplumFlare = undefined;
     }
+    if (pendingYokeSeam !== undefined) {
+      if (pendingYokeSeam) nextParameters.body.yokeSeam = true; else delete nextParameters.body.yokeSeam;
+      pendingYokeSeam = undefined;
+    }
     if (pendingDartScales !== undefined) {
       if (pendingDartScales === null) delete nextParameters.body.waistDartScales;
       else nextParameters.body.waistDartScales = structuredClone(pendingDartScales);
@@ -2287,7 +2314,7 @@
     setBack(st.nCA, st.nCA.v); setBack(st.nVD, st.nVD.v); setBack(st.nSW, st.nSW.v); setBack(st.nCR, st.nCR.v);
     const necked = st.neckType !== "original";
     setBodyNote((E === 0 && L === 0 && W === 0 && H === 0 && Cv === 0 && Dt == null && Wt == null && !necked) ? "원형으로 복원됨 · 세션 전용" : bodyStatusNote(E, L, W, H, Cv, st.neckType, Dt, Wt, sewnDartTotal(project)));
-    syncBodiceLineUI(); dartScaleNote(project); girthNote(project); sideLenNote(project); neckLenNote(project);
+    syncBodiceLineUI(); dartScaleNote(project); girthNote(project); sideLenNote(project); neckLenNote(project); syncYokeToolLock(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
     updateBodiceCheckpointUI(project);   // 몸판 변경 → 검사 요약·완료 상태(변경됨) 갱신
@@ -2303,6 +2330,7 @@
     pendingWaistSeam = null;    // 허리 이음선 해제(페플럼 제거)
     pendingPeplumFlare = null;  // 페플럼 플레어 해제
     pendingPeplumCut = null;    // 페플럼 절개 벌림 해제
+    pendingYokeSeam = null;     // 요크 이음선 해제(요크·몸판 조각 제거)
     setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }

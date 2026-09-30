@@ -43,13 +43,13 @@ const BP = sandbox.window.bodicePresets, DB = sandbox.window.designBodice;
 {
   const F = BP.families();
   const avail = F.flatMap(f => f.variants).filter(v => v.availability === "available");
-  ok(J(avail.map(v => v.symbol)) === J(["A", "B", "C", "D", "G", "M", "N", "O", "P"]), "2: 실행 가능 = 박시 A·B + 셰이프트 C·D + 플레어 G + 허리 이음선 M·N·O·P");
+  ok(J(avail.map(v => v.symbol)) === J(["A", "B", "C", "D", "G", "M", "N", "O", "P", "Q"]), "2: 실행 가능 = 박시 A·B + 셰이프트 C·D + 플레어 G + 허리 이음선 M·N·O·P + 요크 이음선 Q");
   ok(avail.every(v => v.presetId === v.id && BP.get(v.presetId)), "2: 실행 슬롯은 레코드를 가리킨다");
   const pend = F.flatMap(f => f.variants).filter(v => v.availability !== "available");
-  ok(pend.length === 13 && pend.every(v => v.presetId === null), "2: 보류 13개는 레코드 없음");
+  ok(pend.length === 12 && pend.every(v => v.presetId === null), "2: 보류 12개는 레코드 없음");
   // ★ 보류는 **왜 못 그리는지**를 반드시 들고 있다 — 없으면 "그냥 아직 안 함"과 구별이 안 된다
   ok(pend.every(v => typeof v.blockedBy === "string" && v.blockedBy.length > 0), "2: 보류 전부 blockedBy 기록");
-  ok(BP.familyOptions().filter(o => !o.available).length === 6, "2: 비활성 라인 6개(플레어·허리 이음선 해제)");
+  ok(BP.familyOptions().filter(o => !o.available).length === 5, "2: 비활성 라인 5개(플레어·허리 이음선·요크 이음선 ① 해제)");
   ok(BP.resolve("princess-line", "bunka-bodice-E").reason === "bodice-preset-unavailable", "2: 보류는 명시적 거부");
   ok(BP.resolve("nope", "x").reason === "unknown-bodice-family" && BP.get("nope") === null, "2: 알 수 없는 선택 거부");
   // 절대 다른 프리셋으로 대체하지 않는다

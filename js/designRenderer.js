@@ -38,7 +38,8 @@
     waist: { outline: 1, construction: 1 },
     neckline: { outline: 1 },
     shoulder: { outline: 1 },
-    armhole: { outline: 1 }
+    armhole: { outline: 1 },
+    "yoke-seam": { outline: 1 }   // 요크 이음선 Ⓠ — 요크·몸판 조각의 잘린 변(outline 에만)
   };
   // 고정 순회 순서(deterministic).
   const ORDER = [
@@ -48,10 +49,13 @@
     ["sleeve", "outline"], ["sleeve", "construction"]
   ];
   // 허리 이음선 Ⓜ 의 페플럼 — **선택 조각**(있을 때만 검증·렌더). 앞/뒤판과 같은 edge 규칙을 따른다.
-  const EXTRA = { frontPeplum: "front", backPeplum: "back" };
+  //   요크 이음선 Ⓠ 의 요크·몸판(frontYoke/frontBody/backYoke/backBody)도 같은 방식의 선택 조각이다.
+  const EXTRA = { frontPeplum: "front", backPeplum: "back", frontYoke: "front", frontBody: "front", backYoke: "back", backBody: "back" };
   const EXTRA_ORDER = [
     ["frontPeplum", "outline"], ["frontPeplum", "construction"],
-    ["backPeplum", "outline"], ["backPeplum", "construction"]
+    ["backPeplum", "outline"], ["backPeplum", "construction"],
+    ["frontYoke", "outline"], ["frontYoke", "construction"], ["frontBody", "outline"], ["frontBody", "construction"],
+    ["backYoke", "outline"], ["backYoke", "construction"], ["backBody", "outline"], ["backBody", "construction"]
   ];
 
   function fail(reason, detail) {

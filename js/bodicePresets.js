@@ -128,12 +128,11 @@
         availVariant("bunka-bodice-P", "P", "P · 박시 몸판 + 이음선 WL−5cm · 페플럼 절개 벌림(밑단 +1.5)", 29)
       ] },
     { id: "yoke-seam-1", order: 8, label: "요크 이음선 ①", symbol: "Q", page: 30,
-      availability: "pending-op", note: PENDING_NOTE,
-      familyNote: "어깨 쪽에서 잘라 요크를 만들고 앞뒤 요크를 한 장으로 잇는다.",
+      availability: "available", note: null,
+      familyNote: "다트 끝을 지나는 수평 이음선으로 요크와 몸판을 나눈다. 앞뒤 요크와 몸판은 **별개의 조각**이다.",
       variants: [
-        pendingVariant("bunka-bodice-Q", "Q", "요크 이음선 ①", 30, null,
-          "**맞댄다(157)·2곳 이상 맞댄다(159)** 가 필요하다 — 요크는 앞뒤를 맞대어 한 장으로 만든다."),
-        pendingVariant("bunka-bodice-R", "R", "요크 이음선 ① 변형", 31, null, "Q 와 같은 이유(미판독).")
+        availVariant("bunka-bodice-Q", "Q", "Q · 박시 몸판 + 이음선(다트 끝 높이) · 앞 AH·뒤 어깨 다트를 이음선에 흡수 · 밑단 +1", 30),
+        pendingVariant("bunka-bodice-R", "R", "요크 이음선 ① 변형", 31, null, "미판독 — P.31 을 판독하기 전에는 무엇이 다른지 알 수 없다(Ⓠ 와 같은 요크 연산은 준비됨).")
       ] },
     { id: "yoke-seam-2", order: 9, label: "요크 이음선 ②", symbol: "S", page: 32,
       availability: "pending-op", note: PENDING_NOTE, familyNote: null,
@@ -228,6 +227,15 @@
       // 사용자 확정(2026-09-30): 몸판 옆선은 WL~이음선 수직 · +1.5 는 이음선 아래 페플럼에만 · ● = 이음선 완성 둘레 ·
       //   전체 길이 WL 아래 20cm(페플럼 15cm) · 이음선·밑단 fairing. hemSideOffsetCm 은 쓰지 않는다(옆선 전체 기울기 아님).
       body: { hemExtensionBelowWaistCm: 20, waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, waistSeam: true, peplumCut: "P" }
+    },
+    {
+      id: "bunka-bodice-Q", label: "교재 Q 요크 이음선 ①", familyId: "yoke-seam-1", symbol: "Q", page: 30,
+      description: "박시 몸판 · 앞뒤 다트 끝을 지나는 수평 이음선으로 요크·몸판 분리 · 앞 AH 다트와 뒤 어깨 다트는 이음선으로 전량 흡수 · 밑단 옆 +1cm",
+      source: "[패턴학교] 요크 이음선 ① Ⓠ(P.30) · 처리 방법 닫는다(P.160)",
+      baseMethod: "bunka-bodice-Q-v1",
+      // 사용자 확정(2026-09-30): 이음선 = 다트 apex 를 지나는 수평선(도해의 «11» 은 쓰지 않는다) · 앞·뒤 요크는 어깨에서
+      //   합치지 않는 별도 조각 · 다트 전량 흡수(3cm·2cm 이동 조정은 이번 기본형에 없다) · 밑단 +1cm 는 앞·뒤 각각 옆선 방향.
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: true }
     },
     {
       id: "bunka-bodice-C", label: "교재 C 셰이프트(다트 2개)", familyId: "shaped-line", symbol: "C", page: 16,
