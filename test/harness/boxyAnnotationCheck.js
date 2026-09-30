@@ -14,7 +14,6 @@ const mkCtx = (annotationSrc) => {
   return sb.window;
 };
 const W = mkCtx(fs.readFileSync(path.join(ROOT, "js", "peplumAnnotation.js"), "utf8"));
-const OLD = mkCtx(require("child_process").execSync("git show HEAD:js/peplumAnnotation.js", { cwd: ROOT, maxBuffer: 1 << 24 }).toString());
 const REF = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "blockReferenceGeometry.json"), "utf8"));
 const DB = W.designBodice, BP = W.bodicePresets, PA = W.peplumAnnotation, BC = W.bodiceCheckpoint;
 const body = (id) => BP.bodyParams("bunka-bodice-" + id);
@@ -62,11 +61,11 @@ nul({ hemExtensionBelowWaistCm: 20, waistDartScales: { a: 0, b: 0, d: 0, e: 0 } 
 nul({ hemExtensionBelowWaistCm: 10 }, "hem 확장 10: 없음");
 { const g = geo("A"); const m = PA.buildModel(g); ok(!m.front && !m.back, "body 인자 없으면 없음(기존 호출 호환)"); }
 
-// 3. 페플럼 N/O/P(+M): 기존 모델과 바이트 동일
+// 3. 페플럼 N/O/P(+M): body 인자와 무관하고 BL 이 새지 않는다(문구·형상은 전용 하네스가 보장)
 for (const id of ["M", "N", "O", "P"]) {
-  const g = geo(id);
-  const a = J(OLD.peplumAnnotation.buildModel(JSON.parse(J(g)))), b = J(PA.buildModel(g)), c2 = J(PA.buildModel(g, body(id)));
-  ok(a === b && a === c2, id + ": 기존(HEAD)과 바이트 동일");
+  const g = geo(id), a = PA.buildModel(g), c2 = PA.buildModel(g, body(id));
+  ok(J(a) === J(c2), id + ": body 인자 무관");
+  ["front", "back"].forEach(k => ok(id === "M" ? c2[k] === null : (c2[k] && !c2[k].legs.some(l => l.id === "bl") && !c2[k].lines.some(l => l.id === "bl")), id + " " + k + ": BL 없음/모델 규칙"));
 }
 ok(PA.buildModel(geo("P"), body("P")).front != null, "P: 모델 존재");
 

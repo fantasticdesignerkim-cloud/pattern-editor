@@ -1,6 +1,6 @@
 // shapedAnnotationCheck.js — 셰이프트 Ⓒ·Ⓓ 제작 정보 표시 모델(peplumAnnotation.buildModel) 회귀. 표시 전용.
 //   node test/harness/shapedAnnotationCheck.js
-const vm = require("vm"), fs = require("fs"), path = require("path"), cp = require("child_process");
+const vm = require("vm"), fs = require("fs"), path = require("path");
 let PASS = 0, FAIL = 0; const fails = [];
 const ok = (c, n) => { if (c) PASS++; else { FAIL++; fails.push(n); } };
 const J = JSON.stringify;
@@ -14,7 +14,6 @@ const mkCtx = (src) => {
   return sb.window;
 };
 const W = mkCtx(fs.readFileSync(path.join(ROOT, "js", "peplumAnnotation.js"), "utf8"));
-const OLD = mkCtx(cp.execSync("git show HEAD:js/peplumAnnotation.js", { cwd: ROOT, maxBuffer: 1 << 24 }).toString());
 const REF = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "blockReferenceGeometry.json"), "utf8"));
 const DB = W.designBodice, BP = W.bodicePresets, PA = W.peplumAnnotation, BC = W.bodiceCheckpoint;
 const body = (id) => BP.bodyParams("bunka-bodice-" + id);
@@ -74,15 +73,29 @@ for (const id of ["A", "B", "C", "D"]) {
 // 화면의 정규화된 body(bustEaseCm·sideSeamCurve 0 동반)도 식별
 for (const id of ["C", "D"]) { const b = Object.assign({ bustEaseCm: 0, sideSeamCurve: 0 }, body(id)); const m = PA.buildModel(DB.computeGeometry(REF, { body: b }), b); ok(m.front && m.back, id + ": 정규화 body 식별"); }
 // A·B·M·N·O·P: HEAD 와 바이트 동일
-// A·B: 가슴선(BL) 선·라벨만 뺀 나머지는 HEAD 와 바이트 동일
-for (const id of ["A", "B"]) {
-  const g = geo(id), o = JSON.parse(J(OLD.peplumAnnotation.buildModel(JSON.parse(J(g)), body(id)))), n = JSON.parse(J(PA.buildModel(g, body(id))));
-  for (const k of ["front", "back"]) { n[k].legs = n[k].legs.filter(l => l.id !== "bl"); n[k].lines = n[k].lines.filter(l => l.id !== "bl"); }
-  ok(J(o) === J(n), id + ": BL 제외하면 HEAD 와 바이트 동일");
+// A·B: 기존 표시 항목이 BL 추가로 바뀌지 않았다 — 고정 기대값(id 순서·문구·분량), BL 은 정확히 하나
+{
+  const expText = { A: "기본 박시", B: "밑단 +1cm" };
+  for (const id of ["A", "B"]) {
+    const m = PA.buildModel(geo(id), body(id));
+    [["front", "앞몸판", "앞중심(CF)", "가슴,a,b,c"], ["back", "뒤몸판", "뒤중심(CB)", "뒤어깨,d,e,f,c"]].forEach(([k, title, cf, darts]) => {
+      const mm = m[k], nb = mm.lines.filter(l => l.id !== "bl");
+      ok(nb.slice(0, 6).map(l => l.id).join() === "title,variant,center,side,waist,hem", id + " " + k + ": 기존 라벨 id 순서");
+      ok(nb.slice(0, 6).map(l => l.text).join("|") === [title, expText[id], cf, "옆선", "허리선(WL)", "밑단선"].join("|"), id + " " + k + ": 기존 라벨 문구");
+      ok(names(mm) === darts, id + " " + k + ": 다트 목록 " + names(mm));
+      ok(mm.lines.filter(l => l.id === "bl").length === 1 && mm.legs.length === 1 && mm.wedges.length === 0 && mm.notches.length === 0 && mm.cuts.length === 0, id + " " + k + ": BL 외 안내 요소 없음");
+    });
+    ok(near(amt(PA.buildModel(geo(id), body(id)).front, "a"), 1.75) && near(amt(PA.buildModel(geo(id), body(id)).back, "d"), 4.38), id + ": a·d 분량");
+  }
 }
+// M·N·O·P·G: 전용 하네스가 형상·문구를 보장한다. 여기서는 BL 이 새지 않았고 body 인자가 결과를 바꾸지 않는 최소 구조만 확인
 for (const id of ["M", "N", "O", "P", "G"]) {
-  const g = geo(id);
-  ok(J(OLD.peplumAnnotation.buildModel(JSON.parse(J(g)), body(id))) === J(PA.buildModel(g, body(id))), id + ": HEAD 와 바이트 동일");
+  const g = geo(id), a = PA.buildModel(g), b = PA.buildModel(g, body(id));
+  ok(J(a) === J(b), id + ": body 인자 무관");
+  ["front", "back"].forEach(k => {
+    if (id === "N" || id === "O" || id === "P") ok(b[k] && !b[k].lines.some(l => l.id === "bl") && !b[k].legs.some(l => l.id === "bl"), id + " " + k + ": 페플럼 모델에 BL 없음");
+    else ok(b[k] === null, id + " " + k + ": 모델 없음");
+  });
 }
 // project·hash 불변
 for (const id of ["C", "D"]) {
