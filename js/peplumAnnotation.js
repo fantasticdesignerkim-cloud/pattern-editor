@@ -140,6 +140,21 @@
     if (!ok) return null;
     return body.hemSideOffsetCm === 1 ? "B" : "A";
   }
+  // 셰이프트 Ⓒ·Ⓓ: 프리셋 body 와 **정확히 일치**할 때만 식별한다(다른 편집이 섞이면 null).
+  var SHAPED = { C: "C · 옆선 WL −1cm · 밑단 +1cm", D: "D · 옆선 WL −1.5cm · 밑단 +1cm" };
+  var SHAPED_BODY = { C: [-1, { a: 1, b: 0, d: 0, e: 1 }], D: [-1.5, { a: 1, b: 1, d: 0.5, e: 1 }] };
+  function identifyShaped(body) {
+    if (!body || typeof body !== "object" || body.hemExtensionBelowWaistCm !== 20 || body.hemSideOffsetCm !== 1) return null;
+    // 화면의 working body 는 정규화돼 bustEaseCm·sideSeamCurve 기본값 0 이 붙는다 — 0 이면 프리셋과 같은 것으로 본다.
+    var extra = Object.keys(body).filter(function (k) { return k !== "hemExtensionBelowWaistCm" && k !== "hemSideOffsetCm" && k !== "waistDartScales" && k !== "waistSideOffsetCm"; });
+    if (extra.some(function (k) { return !((k === "bustEaseCm" || k === "sideSeamCurve") && body[k] === 0); })) return null;
+    if (body.waistSideOffsetCm === undefined) return null;
+    var sc = body.waistDartScales; if (!sc || typeof sc !== "object") return null;
+    return ["C", "D"].filter(function (id) {
+      var e = SHAPED_BODY[id];
+      return body.waistSideOffsetCm === e[0] && Object.keys(e[1]).every(function (k) { return sc[k] === e[1][k]; }) && Object.keys(sc).length === 4;
+    })[0] || null;
+  }
   // 다트 표시명: 허리 다트는 기호(a·b·c·d·e·f), 가슴·뒤어깨 다트는 이름
   function dartName(id) {
     var m = /-([a-f])$/.exec(id); if (m) return m[1];
@@ -163,7 +178,7 @@
     var lines = [];
     var add = function (id, at, dx, dy, anchor, text, cls) { lines.push({ id: id, at: P(at), px: { dx: dx, dy: dy }, anchor: anchor, text: text, cls: cls }); };
     add("title", below, 0, 40, "middle", label, "title");
-    add("variant", below, 0, 54, "middle", BOXY[variant], "note");
+    add("variant", below, 0, 54, "middle", (BOXY[variant] || SHAPED[variant]), "note");
     add("center", cm, -u.x * 8, 3, -u.x >= 0 ? "start" : "end", cfName, "edge");
     add("side", sm, u.x * 8, 3, u.x >= 0 ? "start" : "end", "옆선", "edge");
     add("waist", wSide, u.x * 8, 3, u.x >= 0 ? "start" : "end", "허리선(WL)", "edge");
@@ -180,7 +195,8 @@
       else return;
       var at = legs.length === 2 ? { x: (mouths[0].x + mouths[1].x) / 2, y: (mouths[0].y + mouths[1].y) / 2 } : mouths[0];
       var nm = dartName(id), boundary = legs[0].dart.boundary;
-      var txt = nm + " " + fmt1(amt) + "cm" + (half ? "(접힘 반쪽)" : "");
+      var isHalfD = variant === "D" && nm === "d";   // 교재 «d 는 반으로»: 실측 소수 둘째 자리까지 + (½)
+      var txt = nm + " " + (isHalfD ? (Math.round(amt * 100) / 100).toFixed(2) : fmt1(amt)) + "cm" + (half ? "(접힘 반쪽)" : "") + (isHalfD ? "(½)" : "");
       if (boundary === "waist") add("dart-" + id, at, 0, 12, "middle", txt, "cut");
       else if (boundary === "shoulder") add("dart-" + id, at, 0, -8, "middle", txt, "cut");
       else add("dart-" + id, at, u.x * 8, 3, u.x >= 0 ? "start" : "end", txt, "cut");
@@ -193,7 +209,7 @@
   function buildModel(geometry, body) {
     var g = geometry, ws = g && g.waistSeam;
     if (g && !ws) {
-      var v = identifyBoxy(body);
+      var v = identifyBoxy(body) || identifyShaped(body);
       if (!v) return { front: null, back: null };
       return { front: buildBoxySide("front", "앞몸판", "앞중심(CF)", g.front, v), back: buildBoxySide("back", "뒤몸판", "뒤중심(CB)", g.back, v) };
     }

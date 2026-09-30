@@ -473,6 +473,10 @@
     }
     // 박시 Ⓐ·Ⓑ: 우리 원형은 [학교책] 기준이라 교재(a·b·d·e)와 달리 c·f 다트까지 포함한다(캔버스가 아니라 여기에만 표시).
     if (v && v.availability === "available" && (v.presetId === "bunka-bodice-A" || v.presetId === "bunka-bodice-B")) parts.push("※ 우리 원형은 c·f 다트까지 포함해 교재(a·b·d·e)보다 허리가 조금 더 조입니다");
+    // 셰이프트 Ⓒ·Ⓓ: 남긴/제거한 다트와 옆선·밑단 변화, 교재 허리 여유와의 차이(캔버스에는 남은 다트만 표시).
+    if (v && v.availability === "available" && v.presetId === "bunka-bodice-C") parts.push("다트 a·e 유지, b·d 제거 · 옆선 WL −1cm · 밑단 +1cm");
+    if (v && v.availability === "available" && v.presetId === "bunka-bodice-D") parts.push("다트 a·b·e 유지, d는 절반 · 옆선 WL −1.5cm · 밑단 +1cm");
+    if (v && v.availability === "available" && (v.presetId === "bunka-bodice-C" || v.presetId === "bunka-bodice-D")) parts.push("※ 원형 차이(c·f 포함)로 교재 허리 여유와 다릅니다(교재 " + (v.presetId === "bunka-bodice-C" ? "17" : "7.8") + "cm / 우리 " + (v.presetId === "bunka-bodice-C" ? "15.4" : "5.3") + "cm) — 남은 원인은 미확정");
     el.textContent = parts.join(" · ");
     el.setAttribute("data-ok", (v && v.availability === "available") ? "1" : "0");
   }

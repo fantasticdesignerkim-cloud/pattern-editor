@@ -55,7 +55,8 @@ ok(txt(PA.buildModel(geo("A"), body("A")).front).join() !== txt(PA.buildModel(ge
 
 // 2. 식별: 다른 body 는 모델 없음(C 이후 확대 금지)
 const nul = (b, n) => { const g = DB.computeGeometry(REF, { body: b }); const m = PA.buildModel(g, b); ok(!m.front && !m.back, n); };
-["C", "D", "G"].forEach(id => nul(body(id), id + ": 모델 없음"));
+["G"].forEach(id => nul(body(id), id + ": 모델 없음"));
+nul({ hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 1, d: 0, e: 1 } }, "C 변형 편집: 없음");
 nul({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 2 }, "hem 2: 없음");
 nul({ hemExtensionBelowWaistCm: 20, waistDartScales: { a: 0, b: 0, d: 0, e: 0 } }, "다트 배분 변경: 없음");
 nul({ hemExtensionBelowWaistCm: 10 }, "hem 확장 10: 없음");
