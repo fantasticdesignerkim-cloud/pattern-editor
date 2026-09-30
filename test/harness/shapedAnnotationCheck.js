@@ -39,6 +39,23 @@ for (const id of ["C", "D"]) {
   });
   ok(near(amt(m.front, "a"), 1.75) && near(amt(m.back, "e"), 2.25) && near(amt(m.front, "c"), 0.69) && near(amt(m.back, "c"), 0.69), id + ": a·e·c 분량");
 }
+// 가슴선(BL): A·B·C·D 앞·뒤 — 수평, y = draft.js yBL(B/12+13.7), 옆선 상단점~중심선, «가슴선(BL)» 라벨, geometry 불변
+for (const id of ["A", "B", "C", "D"]) {
+  const g = geo(id), before = J(g), m = PA.buildModel(g, body(id)), yBL = 83 / 12 + 13.7;
+  ok(J(g) === before, id + ": BL geometry 불변");
+  for (const k of ["front", "back"]) {
+    const mm = m[k], piece = g[k], bl = mm.legs.filter(l => l.id === "bl");
+    ok(bl.length === 1 && mm.legs.length === 1, id + " " + k + ": BL 선 하나");
+    if (bl.length !== 1) continue;
+    const L = bl[0];
+    ok(near(L.from.y, yBL, 1e-6) && near(L.to.y, yBL, 1e-6), id + " " + k + ": BL 수평 y=" + yBL.toFixed(3));
+    const side = piece.outline.filter(o => J(o).includes('"side-seam"')).map(o => [o.from, o.to]).reduce((a, b) => a.concat(b), []);
+    ok(side.some(q => near(q.x, L.to.x, 1e-9) && near(q.y, L.to.y, 1e-9)), id + " " + k + ": BL 끝 = 옆선 상단점");
+    const cen = piece.outline.filter(o => J(o).includes('"center"') && o.kind === "line");
+    ok(cen.some(o => Math.abs(o.from.x - L.from.x) < 1e-6 && Math.abs(o.to.x - L.from.x) < 1e-6), id + " " + k + ": BL 시작 = 중심선 위");
+    ok(txt(mm).includes("가슴선(BL)") && mm.lines.filter(l => l.id === "bl").length === 1, id + " " + k + ": 가슴선(BL) 라벨");
+  }
+}
 // C: b·d 제거 → 캔버스에 없음
 { const m = PA.buildModel(geo("C"), body("C"));
   ok(names(m.front) === "가슴,a,c" && names(m.back) === "뒤어깨,e,f,c", "C: 남은 다트만 " + names(m.front) + " / " + names(m.back));
@@ -57,7 +74,13 @@ for (const id of ["C", "D"]) {
 // 화면의 정규화된 body(bustEaseCm·sideSeamCurve 0 동반)도 식별
 for (const id of ["C", "D"]) { const b = Object.assign({ bustEaseCm: 0, sideSeamCurve: 0 }, body(id)); const m = PA.buildModel(DB.computeGeometry(REF, { body: b }), b); ok(m.front && m.back, id + ": 정규화 body 식별"); }
 // A·B·M·N·O·P: HEAD 와 바이트 동일
-for (const id of ["A", "B", "M", "N", "O", "P", "G"]) {
+// A·B: 가슴선(BL) 선·라벨만 뺀 나머지는 HEAD 와 바이트 동일
+for (const id of ["A", "B"]) {
+  const g = geo(id), o = JSON.parse(J(OLD.peplumAnnotation.buildModel(JSON.parse(J(g)), body(id)))), n = JSON.parse(J(PA.buildModel(g, body(id))));
+  for (const k of ["front", "back"]) { n[k].legs = n[k].legs.filter(l => l.id !== "bl"); n[k].lines = n[k].lines.filter(l => l.id !== "bl"); }
+  ok(J(o) === J(n), id + ": BL 제외하면 HEAD 와 바이트 동일");
+}
+for (const id of ["M", "N", "O", "P", "G"]) {
   const g = geo(id);
   ok(J(OLD.peplumAnnotation.buildModel(JSON.parse(J(g)), body(id))) === J(PA.buildModel(g, body(id))), id + ": HEAD 와 바이트 동일");
 }

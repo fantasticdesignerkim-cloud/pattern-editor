@@ -183,6 +183,16 @@
     add("side", sm, u.x * 8, 3, u.x >= 0 ? "start" : "end", "옆선", "edge");
     add("waist", wSide, u.x * 8, 3, u.x >= 0 ? "start" : "end", "허리선(WL)", "edge");
     add("hem", hm, -up.x * 13, -up.y * 13 + 4, "middle", "밑단선", "edge");
+    // 가슴선(BL): 옆선 상단점 = 진동 끝점 C(draft.js ⑤, y=yBL). 이 점을 지나는 수평선을 앞/뒤중심 직선 변까지 긋는다(새 치수·추측 없음).
+    var legs = [], sTop = null;
+    sides.forEach(function (sd) { var e = ends(sd); [e.from, e.to].forEach(function (q) { if (!sTop || q.y < sTop.y) sTop = q; }); });
+    var cSeg = centers.filter(function (c) { var e = ends(c); return !isCurved(c) && Math.abs(e.from.y - e.to.y) > 1e-9 && sTop && (sTop.y - e.from.y) * (sTop.y - e.to.y) <= 0; })[0];
+    if (sTop && cSeg) {
+      var ce = ends(cSeg), tt = (sTop.y - ce.from.y) / (ce.to.y - ce.from.y);
+      var cPt = { x: ce.from.x + (ce.to.x - ce.from.x) * tt, y: sTop.y };
+      legs.push({ id: "bl", from: P(cPt), to: P(sTop) });
+      add("bl", cPt, -u.x * 8, -8, -u.x >= 0 ? "start" : "end", "가슴선(BL)", "edge");   // 앞뒤 옆선 사이 간격이 좁아 라벨은 중심선 쪽에 둔다
+    }
     // 다트: id 별로 다리를 모아 입구(허리/외곽 쪽 끝) 두 점 사이 거리 = 다트 분량. 접어 재단(onFold)은 한쪽 다리뿐이라 접힘선까지 거리(반쪽).
     var byId = {}, order = [];
     cons.forEach(function (s) { if (s && s.dart && s.dart.id) { if (!byId[s.dart.id]) { byId[s.dart.id] = []; order.push(s.dart.id); } byId[s.dart.id].push(s); } });
@@ -202,7 +212,7 @@
       else add("dart-" + id, at, u.x * 8, 3, u.x >= 0 ? "start" : "end", txt, "cut");
       darts.push({ id: id, name: nm, amountCm: amt, half: half });
     });
-    return { key: key, title: label, lines: lines, legs: [], wedges: [], notches: [], cuts: [], darts: darts,
+    return { key: key, title: label, lines: lines, legs: legs, wedges: [], notches: [], cuts: [], darts: darts,
       totalCm: null, finishedWaistCm: null };
   }
 

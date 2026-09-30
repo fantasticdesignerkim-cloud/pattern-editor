@@ -42,7 +42,7 @@ for (const id of ["A", "B"]) {
   [m.front, m.back].forEach(mm => {
     mm.darts.forEach(d => ok(d.amountCm > 0 && txt(mm).some(t => t.indexOf(d.name + " " + (Math.round(d.amountCm * 10) / 10).toFixed(1) + "cm") === 0), id + ": 다트 " + d.name + " cm 라벨"));
     ok(!txt(mm).some(t => /°|각도/.test(t)), id + ": 각도 표시 없음");
-    ok(mm.wedges.length === 0 && mm.legs.length === 0 && mm.notches.length === 0, id + ": 겹칠 안내선 없음(구성선은 기존 렌더)");
+    ok(mm.wedges.length === 0 && mm.legs.length === 1 && mm.legs[0].id === "bl" && mm.notches.length === 0, id + ": 안내선은 가슴선 하나뿐");
   });
   const c = (mm, n) => mm.darts.filter(d => d.name === n).map(d => d.amountCm);
   ok(near(c(m.front, "c")[0], 0.69) && near(c(m.back, "c")[0], 0.69), id + ": 옆허리 c 반쪽 0.69(그룹 1.37 의 절반)");
