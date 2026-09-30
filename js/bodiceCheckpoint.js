@@ -734,6 +734,111 @@
     return { f: canonOutline(g.frontPeplum.outline), b: canonOutline(g.backPeplum.outline) };
   }
 
+
+  // ── 요크 이음선 Ⓠ: 요크·몸판 네 조각 상태 ──
+  //   geometry.frontYoke/frontBody/backYoke/backBody(있을 때만). **geometry.yokeSeam 메타는 신뢰하지 않는다** —
+  //   폐곡선·연속성·자기교차·이음 길이·면적을 출력 geometry 에서 **전부 다시 계산**한다(메타는 보존·표시용).
+  //   전체 몸판(front/back)은 그대로이므로 면적 보존은 «요크+몸판 = 전체 몸판 링(열린 다트 다리로 닫은 것)» 이다.
+  var YOKE_SEAM_LEN_EPS = 1e-4;    // 상·하 이음 길이 정합(cm) — 강체 회전이라 실제 오차는 ≈1e-13
+  var YOKE_AREA_EPS = 0.05;        // 면적 보존(cm²) — designYokeSeam 의 AREA_TOL 과 같다
+  var YOKE_HORIZ_EPS = 1e-3;       // 이음선 수평 허용(cm)
+  var YOKE_WHOLE_EPS = 0.02;       // 전체 몸판 링(원본 외곽 + 다트 다리) 접합 허용
+  var YOKE_CHAIN_EPS = 1e-4;       // 연속성(designYokeSeam CLOSE_EPS 와 같다)
+  var YOKE_DART = { front: "front-bust", back: "back-shoulder" };   // 이음선이 흡수하는 다트(designYokeSeam.ABSORB)
+  function yokeFlatSeg(s) {
+    if (s.kind !== "cubic") return [[s.from, s.to]];
+    var out = [], N = 24, prev = s.from;
+    for (var k = 1; k <= N; k++) {
+      var t = k / N, u = 1 - t;
+      var q = { x: u * u * u * s.from.x + 3 * u * u * t * s.c1.x + 3 * u * t * t * s.c2.x + t * t * t * s.to.x,
+                y: u * u * u * s.from.y + 3 * u * u * t * s.c1.y + 3 * u * t * t * s.c2.y + t * t * t * s.to.y };
+      out.push([prev, q]); prev = q;
+    }
+    return out;
+  }
+  // 무순서 세그먼트 → 이어진 폐곡선 체인(방향 정규화). 안 닫히거나 끊기면 null.
+  function yokeOrderRing(segs, eps) {
+    if (!segs.length) return null;
+    eps = eps == null ? YOKE_CHAIN_EPS : eps;
+    var used = segs.map(function () { return false; }); used[0] = true;
+    var out = [segs[0]], tip = segs[0].to, near = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y) <= eps; };
+    for (var step = 1; step < segs.length; step++) {
+      var hit = -1, rev = false;
+      for (var j = 0; j < segs.length; j++) {
+        if (used[j]) continue;
+        if (near(segs[j].from, tip)) { hit = j; break; }
+        if (near(segs[j].to, tip)) { hit = j; rev = true; break; }
+      }
+      if (hit < 0) return null;
+      used[hit] = true;
+      var sg = segs[hit];
+      if (rev) sg = sg.kind === "cubic" ? { kind: "cubic", from: sg.to, c1: sg.c2, c2: sg.c1, to: sg.from } : { kind: "line", from: sg.to, to: sg.from };
+      out.push(sg); tip = sg.to;
+    }
+    return near(tip, out[0].from) ? out : null;
+  }
+  function yokeRingMetrics(ring) {
+    var flat = []; ring.forEach(function (s) { yokeFlatSeg(s).forEach(function (ab) { flat.push(ab); }); });
+    var a = 0; flat.forEach(function (ab) { a += ab[0].x * ab[1].y - ab[1].x * ab[0].y; });
+    var o = function (p, q, r) { return (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x); };
+    var same = function (p, q) { return Math.hypot(p.x - q.x, p.y - q.y) < 1e-6; };
+    var cross = false;
+    for (var i = 0; i < flat.length && !cross; i++) for (var j = i + 1; j < flat.length; j++) {
+      var A = flat[i][0], B = flat[i][1], C = flat[j][0], D = flat[j][1];
+      if (same(A, C) || same(A, D) || same(B, C) || same(B, D)) continue;
+      if (o(A, B, C) * o(A, B, D) < 0 && o(C, D, A) * o(C, D, B) < 0) { cross = true; break; }
+    }
+    return { areaCm2: Math.abs(a / 2), selfIntersects: cross };
+  }
+  function yokeSeamState(proj) {
+    var g = proj && proj.working && proj.working.geometry;
+    if (!g || !(g.frontYoke || g.frontBody || g.backYoke || g.backBody || g.yokeSeam)) return null;
+    var row = function (side) {
+      var Y = g[side + "Yoke"], B = g[side + "Body"], whole = g[side], m = (g.yokeSeam || {})[side];
+      var r = { side: side, closed: { yoke: false, body: false }, selfIntersects: null, seamLenYokeCm: null, seamLenBodyCm: null,
+        deltaCm: null, areaYokeCm2: null, areaBodyCm2: null, areaWholeCm2: null, areaDeltaCm2: null,
+        absorbedDartIds: m && Array.isArray(m.absorbedDarts) ? m.absorbedDarts.map(function (d) { return d.id; }) : null, reason: null };
+      var okPiece = function (pc) { return pc && Array.isArray(pc.outline) && pc.outline.length >= 3; };
+      if (!okPiece(Y) || !okPiece(B) || !okPiece(whole) || !m) { r.reason = "yoke-seam-missing"; return r; }
+      var ry = yokeOrderRing(ringSegs(Y.outline)), rb = yokeOrderRing(ringSegs(B.outline));
+      r.closed = { yoke: !!ry, body: !!rb };
+      if (!ry || !rb) { r.reason = "yoke-seam-open"; return r; }
+      var my = yokeRingMetrics(ry), mb = yokeRingMetrics(rb);
+      r.areaYokeCm2 = round4(my.areaCm2); r.areaBodyCm2 = round4(mb.areaCm2);
+      r.selfIntersects = my.selfIntersects || mb.selfIntersects;
+      if (r.selfIntersects || !(my.areaCm2 > 0) || !(mb.areaCm2 > 0)) { r.reason = "yoke-seam-self-intersection"; return r; }
+      // 흡수한 다트는 어느 조각에도 남지 않는다(닫힌 다트 = 과거 흔적).
+      var dartId = YOKE_DART[side];
+      var hasDart = function (pc) { return pc.outline.concat(pc.construction || []).some(function (s) { return s && s.dart && s.dart.id === dartId; }); };
+      if (hasDart(Y) || hasDart(B)) { r.reason = "yoke-seam-dart-open"; return r; }
+      var seamOf = function (pc) { return pc.outline.filter(function (s) { return s && s.edge === "yoke-seam"; }); };
+      var sy = seamOf(Y), sb = seamOf(B);
+      if (sy.length !== 2 || sb.length !== 2 || !sy.concat(sb).every(function (s) { return s.kind === "line"; })) { r.reason = "yoke-seam-missing"; return r; }
+      var ys = sb.map(function (s) { return [s.from.y, s.to.y]; }).reduce(function (a, b) { return a.concat(b); }, []);
+      if (Math.max.apply(null, ys) - Math.min.apply(null, ys) > YOKE_HORIZ_EPS) { r.reason = "yoke-seam-not-horizontal"; return r; }
+      r.seamLenYokeCm = round4(sy.reduce(function (t, s) { return t + segLen(s); }, 0));
+      r.seamLenBodyCm = round4(sb.reduce(function (t, s) { return t + segLen(s); }, 0));
+      var ly = sy.reduce(function (t, s) { return t + segLen(s); }, 0), lb = sb.reduce(function (t, s) { return t + segLen(s); }, 0);
+      r.deltaCm = ly - lb;
+      if (!(Math.abs(r.deltaCm) <= YOKE_SEAM_LEN_EPS)) { r.reason = "yoke-seam-length-mismatch"; return r; }
+      // 전체 몸판 링 = 외곽 + 열린 다트 다리(construction)로 닫은 폐곡선. 요크+몸판 면적과 비교한다.
+      var legs = (whole.construction || []).filter(function (s) { return s && s.kind === "line" && s.dart && s.dart.id === dartId; }).map(function (s) { return { kind: "line", from: cp(s.from), to: cp(s.to) }; });
+      var rw = yokeOrderRing(ringSegs(whole.outline).concat(legs), YOKE_WHOLE_EPS);   // 원본 몸판의 다트 입 접합 허용(designLineTool RING_EPS 와 같다)
+      if (!rw) { r.reason = "yoke-seam-missing"; return r; }
+      var aw = yokeRingMetrics(rw).areaCm2;
+      r.areaWholeCm2 = round4(aw); r.areaDeltaCm2 = round4(my.areaCm2 + mb.areaCm2 - aw);
+      if (Math.abs(my.areaCm2 + mb.areaCm2 - aw) > YOKE_AREA_EPS) { r.reason = "yoke-seam-area-mismatch"; return r; }
+      return r;
+    };
+    var F = row("front"), B = row("back");
+    return { front: F, back: B, ok: !F.reason && !B.reason, reason: F.reason || B.reason };
+  }
+  function yokeCanon(proj) {
+    var g = proj && proj.working && proj.working.geometry;
+    if (!g || !g.frontYoke || !g.frontBody || !g.backYoke || !g.backBody) return null;
+    return { fy: canonOutline(g.frontYoke.outline), fb: canonOutline(g.frontBody.outline), by: canonOutline(g.backYoke.outline), bb: canonOutline(g.backBody.outline) };
+  }
+
   // ── 검사 ──
   function check(proj) {
     proj = proj || project();
@@ -770,8 +875,11 @@
     // 허리 이음선 Ⓜ(있을 때만): 페플럼이 닫힌 한 장이고 상·하 허리 이음 길이가 맞아야 완료할 수 있다.
     var waistSeam = waistSeamState(proj);
     if (waistSeam && !waistSeam.ok) fails.push(waistSeam.reason);
+    // 요크 이음선 Ⓠ(있을 때만): 네 조각을 출력 geometry 에서 재계산해 위반 시 완료를 막는다.
+    var yokeSeam = yokeSeamState(proj);
+    if (yokeSeam && !yokeSeam.ok) fails.push(yokeSeam.reason);
 
-    return {
+    var out = {
       ok: fails.length === 0,
       fails: fails,
       connectivity: { front: conF, back: conB, ok: conF && conB },
@@ -783,6 +891,8 @@
       sideWaistDart: sideWaistDart,   // v8 에서는 ok=false 면 fails 에 reason(완료 차단)
       waistSeam: waistSeam            // null = 허리 이음선 미적용(기존 몸판)
     };
+    if (yokeSeam) out.yokeSeam = yokeSeam;   // 요크 이음선 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
+    return out;
   }
 
   function deepFreeze(o) {
@@ -805,8 +915,8 @@
     var ahF = armholeLen(g, "front"), ahB = armholeLen(g, "back");
     // 소매가 참조할 형상 hash(형상 전용: 유효 외곽·진동·목둘레·여밈. 배치·선택·guide 제외).
     var placketParams = proj.working.frontPlacket ? proj.working.frontPlacket.parameters : null;
-    var sig = signature(canonOutline(effF), canonOutline(effB), c.armhole, c.neckline, placketParams, peplumCanon(proj));
-    var result = deepFreeze({
+    var sig = signature(canonOutline(effF), canonOutline(effB), c.armhole, c.neckline, placketParams, peplumCanon(proj), yokeCanon(proj));
+    var result = {
       sourceVersion: proj.sourceBlock ? proj.sourceBlock.version : null,
       hash: hashStr(sig),                                     // 소매 결과의 sourceBodiceHash 앵커
       front: { outline: clone(effF), construction: clone(g.front.construction || []) },
@@ -825,13 +935,21 @@
       // 편집 후 봉제 의미 readiness(복수 원인 보존). **hash signature 에 미포함** — 형상 identity 불변.
       semantics: evaluateSemantics(proj),
       completedAt: Date.now()
-    });
+    };
+    // 요크 이음선 Ⓠ: 네 조각·메타를 동결 복제 보존(없으면 키 자체를 두지 않는다 — 기존 완료본 바이트 동일).
+    if (g.frontYoke && g.frontBody && g.backYoke && g.backBody) {
+      ["frontYoke", "frontBody", "backYoke", "backBody"].forEach(function (k) {
+        result[k] = { outline: clone(g[k].outline), construction: clone(g[k].construction || []) };
+      });
+      result.yokeSeam = g.yokeSeam ? clone(g.yokeSeam) : null;
+    }
+    deepFreeze(result);
     proj.working.bodiceResult = result;   // 세션 전용(reload 시 소멸). reference·원본 불변.
     return { ok: true, result: result, check: c };
   }
 
   // 현재 몸판 상태 signature(스테일 판정용): 유효 외곽 + 진동/목둘레 + 여밈 파라미터.
-  function signature(front, back, armhole, neckline, placketParams, pep) {
+  function signature(front, back, armhole, neckline, placketParams, pep, yk) {
     var o = {
       f: front, b: back,
       ah: { f: round4(armhole.front), b: round4(armhole.back) },
@@ -839,18 +957,20 @@
       pk: placketParams
     };
     if (pep) o.pp = pep;   // 페플럼이 있을 때만 — 없으면 기존 hash 와 바이트 단위로 같다
+    if (yk) o.yk = yk;     // 요크 이음선 조각이 있을 때만 — 없으면 기존 hash 와 바이트 단위로 같다
     return JSON.stringify(o);
   }
   function currentSignature(proj) {
     var c = check(proj);
     var placketParams = proj.working.frontPlacket ? proj.working.frontPlacket.parameters : null;
-    return signature(canonOutline(effectiveOutline(proj, "front")), canonOutline(effectiveOutline(proj, "back")), c.armhole, c.neckline, placketParams, peplumCanon(proj));
+    return signature(canonOutline(effectiveOutline(proj, "front")), canonOutline(effectiveOutline(proj, "back")), c.armhole, c.neckline, placketParams, peplumCanon(proj), yokeCanon(proj));
   }
   function snapshotSignature(res) {
     return signature(canonOutline(res.front.outline), canonOutline(res.back.outline),
       { front: res.armholeLengths.front, back: res.armholeLengths.back },
       { half: res.necklineLengths.half }, res.placket ? res.placket.parameters : null,
-      (res.frontPeplum && res.backPeplum) ? { f: canonOutline(res.frontPeplum.outline), b: canonOutline(res.backPeplum.outline) } : null);
+      (res.frontPeplum && res.backPeplum) ? { f: canonOutline(res.frontPeplum.outline), b: canonOutline(res.backPeplum.outline) } : null,
+      (res.frontYoke && res.frontBody && res.backYoke && res.backBody) ? { fy: canonOutline(res.frontYoke.outline), fb: canonOutline(res.frontBody.outline), by: canonOutline(res.backYoke.outline), bb: canonOutline(res.backBody.outline) } : null);
   }
   function canonOutline(outline) {
     if (!outline) return null;
@@ -864,5 +984,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

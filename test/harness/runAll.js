@@ -57,6 +57,8 @@ const suites = [
   { file: "peplumSeamLowPresetCheck.js", golden: false },
   // 요크 이음선 ① Ⓠ(P.30) 순수 geometry 연산(엔진만 — 프리셋·UI 미연결).
   { file: "yokeSeamCheck.js",           golden: false },
+  // 요크 이음선 Ⓠ 체크포인트/결과 연결(bodiceCheckpoint) — 재계산 검증·완료본 보존·hash 가산·소매/카라/designResult 통과.
+  { file: "yokeSeamCheckpointCheck.js", golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },
