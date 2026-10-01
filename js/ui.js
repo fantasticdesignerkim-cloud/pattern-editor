@@ -527,14 +527,17 @@
     el.textContent = ["허리 다트 배분: " + used.join(" · "), fn].filter(Boolean).join(" / ");
   }
 
-  // ── 요크 이음선 Ⓠ 모드: 패턴선 도구 비활성 ──
+  // ── 요크 이음선(Ⓠ·Ⓡ) 모드: 패턴선 도구 비활성 ──
   //   패턴선·절개는 **전체 앞/뒤판 좌표**에서 작동하는데, 요크 모드의 화면은 요크(회전)+몸판(내려 그림)이라 좌표가
   //   어긋난다. 어긋난 곳에 선이 그려지는 일을 막기 위해 도구를 끄고 이유를 보인다. 다른 프리셋으로 돌아가면 다시 켠다.
   const YOKE_TOOL_IDS = ["btnDesignLine", "btnDesignSelect"];
-  const YOKE_LOCK_MSG = "요크 이음선 Ⓠ 적용 중에는 패턴선 도구를 쓸 수 없습니다(화면이 요크·몸판 조각이라 전체 몸판 좌표와 다릅니다) — 다른 몸판 라인을 적용하면 다시 켜집니다";
+  const yokeLockMsg = (sym) => "요크 이음선 " + sym + " 적용 중에는 패턴선 도구를 쓸 수 없습니다(화면이 요크·몸판 조각이라 전체 몸판 좌표와 다릅니다) — 다른 몸판 라인을 적용하면 다시 켜집니다";
+  const yokeCircled = (s) => /^[A-Z]$/.test(s || "") ? String.fromCodePoint(0x24B6 + s.charCodeAt(0) - 65) : "Ⓠ";
   function syncYokeToolLock(project) {
     const g = project && project.working && project.working.geometry;
     const locked = !!(g && g.frontYoke && g.frontBody && g.backYoke && g.backBody);
+    const body = project && project.working && project.working.parameters && project.working.parameters.body;
+    const YOKE_LOCK_MSG = yokeLockMsg(yokeCircled(window.bodicePresets && window.bodicePresets.yokeVariantSymbol(body)));
     if (locked && window.designLineTool && window.designLineTool.getMode && window.designLineTool.getMode() !== "off") window.designLineTool.cancel();
     YOKE_TOOL_IDS.forEach(id => {
       const el = document.getElementById(id); if (!el) return;

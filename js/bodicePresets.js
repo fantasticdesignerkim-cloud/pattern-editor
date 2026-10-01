@@ -399,6 +399,16 @@
     var r = get(presetId);
     return r ? clone(r.body) : null;
   }
+  // 요크 이음선 ① 라인에서 body 파라미터에 해당하는 변형 기호(Q/R). 레코드의 body 와 yokeGather 유무로 가른다. 없으면 null.
+  function yokeVariantSymbol(body) {
+    if (!body || body.yokeSeam !== true) return null;
+    var want = body.yokeGather === true, hit = null;
+    variants("yoke-seam-1").forEach(function (v) {
+      var r = v.presetId ? get(v.presetId) : null;
+      if (r && r.body.yokeSeam === true && (r.body.yokeGather === true) === want) hit = v.symbol;
+    });
+    return hit;
+  }
   function displayTitle(familyId, variantId) {
     var f = family(familyId); if (!f) return null;
     var v = variant(familyId, variantId);
@@ -411,7 +421,7 @@
   window.bodicePresets = Object.freeze({
     families: families, family: family, variants: variants, variant: variant,
     get: get, familyOptions: familyOptions, variantOptions: variantOptions,
-    resolve: resolve, bodyParams: bodyParams, displayTitle: displayTitle,
+    resolve: resolve, bodyParams: bodyParams, yokeVariantSymbol: yokeVariantSymbol, displayTitle: displayTitle,
     fields: function () { return clone(BODY_FIELDS); },
     validateRecord: validateRecord,
     PENDING_NOTE: PENDING_NOTE, DEFAULT_ID: DEFAULT_ID, DEFAULT_FAMILY_ID: DEFAULT_FAMILY_ID

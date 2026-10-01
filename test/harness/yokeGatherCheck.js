@@ -172,6 +172,22 @@ const yokeReason = (p) => { const c = chk(p); return c.ok ? null : c.fails.filte
   ok(new Set(ids).size === ids.length, "5: 중복 렌더 0");
 }
 
+// ── 6. 패턴선 도구 잠금 문구: 현재 variant 로 분기(Ⓠ 문구는 기존과 바이트 동일) ──
+{
+  ok(BP.yokeVariantSymbol(Q_BODY) === "Q" && BP.yokeVariantSymbol(R_BODY) === "R", "6: body → 변형 기호(Q/R)");
+  ok(BP.yokeVariantSymbol(BP.bodyParams("bunka-bodice-A")) === null && BP.yokeVariantSymbol(null) === null, "6: 요크 아니면 null");
+  const src = fs.readFileSync(path.join(__dirname, "..", "..", "js", "ui.js"), "utf8");
+  const mMsg = src.match(/const yokeLockMsg = [^\n]*;/), mCir = src.match(/const yokeCircled = [^\n]*;/);
+  ok(!!mMsg && !!mCir, "6: ui.js 에 yokeLockMsg/yokeCircled 존재");
+  if (mMsg && mCir) {
+    const f = new Function(mMsg[0] + mCir[0] + "return (body) => yokeLockMsg(yokeCircled(window.bodicePresets.yokeVariantSymbol(body)));");
+    const msgOf = vm.runInContext("(" + f.toString() + ")()", Object.assign(sandbox, {})) ;
+    const OLD_Q = "요크 이음선 Ⓠ 적용 중에는 패턴선 도구를 쓸 수 없습니다(화면이 요크·몸판 조각이라 전체 몸판 좌표와 다릅니다) — 다른 몸판 라인을 적용하면 다시 켜집니다";
+    ok(msgOf(Q_BODY) === OLD_Q, "6: Ⓠ 문구 기존과 바이트 동일");
+    ok(msgOf(R_BODY) === OLD_Q.replace("Ⓠ", "Ⓡ") && msgOf(R_BODY).includes("Ⓡ 적용 중") && !msgOf(R_BODY).includes("Ⓠ"), "6: Ⓡ 문구는 Ⓡ 로 표시(Ⓠ 잔존 없음)");
+  }
+}
+
 console.log("══════════════════════════════════════════════");
 console.log(`yokeGatherCheck: ${PASS} PASS / ${FAIL} FAIL`);
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); process.exit(1); }
