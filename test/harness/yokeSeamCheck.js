@@ -247,7 +247,7 @@ ok(J(G) === GSNAP, "F: 실패·성공 호출 후에도 입력 불변");
   throwsReason(() => BP.validateRecord(rec({ yokeSeam: true, waistSeam: true })), "yoke-seam-waist-seam-conflict", "W8: waistSeam 충돌");
   ok(BP.fields().some(f => f.key === "yokeSeam"), "W8: fields 에 yokeSeam");
   ok(BP.variant("yoke-seam-1", "bunka-bodice-Q").availability === "available" && J(BP.bodyParams("bunka-bodice-Q")) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: true }), "W9: Ⓠ 프리셋 등록(박시 A 기반 · 밑단 +1 · yokeSeam)");
-  ok(BP.variant("yoke-seam-1", "bunka-bodice-R").availability !== "available" && typeof BP.variant("yoke-seam-1", "bunka-bodice-R").blockedBy === "string", "W9: Ⓡ 는 보류 + blockedBy");
+  ok(BP.variant("yoke-seam-2", "bunka-bodice-S").availability !== "available" && typeof BP.variant("yoke-seam-2", "bunka-bodice-S").blockedBy === "string", "W9: Ⓢ 는 보류 + blockedBy(Ⓡ 는 실행 가능)");
 }
 
 console.log("yokeSeamCheck: " + PASS + " PASS / " + FAIL + " FAIL");

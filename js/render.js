@@ -453,6 +453,10 @@ function _appendYokeAnnotation(grp, model, pc){
     const [x,y]=c2p(l.at.x,l.at.y);
     g.appendChild(E("text",{ x, y:y-5, class:"yoke-anno-seam", "text-anchor":"middle", "data-anno-text":l.key+"-seam" }, l.text));
   });
+  (model.gathers||[]).filter(l=>l.piece===pc).forEach(l=>{
+    const [x,y]=c2p(l.at.x,l.at.y);
+    g.appendChild(E("text",{ x, y:y+14, class:"yoke-anno-seam", "text-anchor":"middle", "data-anno-text":l.key+"-gather" }, l.text));
+  });
   grp.appendChild(g);
 }
 

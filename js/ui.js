@@ -432,6 +432,7 @@
   let pendingPeplumCut;    // 〃 (true = 페플럼 WL 등분 수직 절개 벌림, 프리셋 Ⓞ — waistSeam 전제)
   let pendingPeplumFlare;  // 〃 (true = 페플럼을 맞대면서 플레어 벌리기, 프리셋 Ⓝ — waistSeam 전제)
   let pendingYokeSeam;     // 〃 (true = 요크 이음선 — 요크·몸판 조각 분리, 프리셋 Ⓠ)
+  let pendingYokeGather;   // 〃 (true = 이음선 아래 몸판 중심 개더 띠, 프리셋 Ⓡ — yokeSeam 전제)
   function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
   function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
   function rebuildBodiceFamilyOptions() {
@@ -505,6 +506,7 @@
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
     pendingPeplumCut = (body.peplumCut === true || body.peplumCut === "P") ? body.peplumCut : null;
     pendingYokeSeam = body.yokeSeam === true ? true : null;   // 다른 프리셋으로 바꾸면 해제 → 요크·몸판 조각 사라짐
+    pendingYokeGather = body.yokeGather === true ? true : null;   // Ⓠ 로 바꾸면 해제 → 개더 띠 없는 요크
     onApplyBodyLength();
   }
   function bodiceSelectionStr(reason) {
@@ -2276,6 +2278,10 @@
       if (pendingYokeSeam) nextParameters.body.yokeSeam = true; else delete nextParameters.body.yokeSeam;
       pendingYokeSeam = undefined;
     }
+    if (pendingYokeGather !== undefined) {
+      if (pendingYokeGather) nextParameters.body.yokeGather = true; else delete nextParameters.body.yokeGather;
+      pendingYokeGather = undefined;
+    }
     if (pendingDartScales !== undefined) {
       if (pendingDartScales === null) delete nextParameters.body.waistDartScales;
       else nextParameters.body.waistDartScales = structuredClone(pendingDartScales);
@@ -2331,6 +2337,7 @@
     pendingPeplumFlare = null;  // 페플럼 플레어 해제
     pendingPeplumCut = null;    // 페플럼 절개 벌림 해제
     pendingYokeSeam = null;     // 요크 이음선 해제(요크·몸판 조각 제거)
+    pendingYokeGather = null;   // 개더 띠 해제
     setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }

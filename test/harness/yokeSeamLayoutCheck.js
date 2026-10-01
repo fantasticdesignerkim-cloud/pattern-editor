@@ -46,7 +46,7 @@ const eqBB = (a, b) => a && b && ["minX", "maxX", "minY", "maxY"].every(k => nea
 // ── 1. 프리셋 Ⓠ ──
 ok(BP.resolve("yoke-seam-1", "bunka-bodice-Q").ok && BP.get("bunka-bodice-Q").body.yokeSeam === true, "1: Ⓠ 해석 성공·yokeSeam");
 ok(J(BP.bodyParams("bunka-bodice-Q")) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: true }), "1: Ⓠ = 박시 A(엉덩이 20) + 밑단 옆 +1 + yokeSeam");
-ok(BP.family("yoke-seam-1").availability === "available" && BP.variant("yoke-seam-1", "bunka-bodice-R").availability === "pending-op", "1: 요크 ① 라인 available · Ⓡ 는 보류");
+ok(BP.family("yoke-seam-1").availability === "available" && BP.variant("yoke-seam-1", "bunka-bodice-R").availability === "available" && BP.variant("yoke-seam-2", "bunka-bodice-S").availability === "pending-op", "1: 요크 ① 라인 available · Ⓡ 실행 · Ⓢ 는 보류");
 ok(BP.familyOptions().find(o => o.value === "yoke-seam-1").available === true, "1: 라인 목록에서 활성");
 
 // ── 2. 배치: 요크 위·몸판 아래 3cm, 좌표 불변 ──

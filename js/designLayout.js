@@ -89,7 +89,16 @@
       const seg = (geometry[key].outline || []).filter(p => p.edge === "yoke-seam" && p.kind === "line")[0];
       return seg ? { key, piece, text: "이음선", at: { x: (seg.from.x + seg.to.x) / 2, y: (seg.from.y + seg.to.y) / 2 } } : null;
     }).filter(Boolean);
-    return { labels, seams };
+    // Ⓡ 개더 띠(있을 때만): 이음선 아래 몸판 중심 쪽 띠의 구간 중앙(표시 좌표)과 분량. 분량은 geometry.yokeSeam 메타의 값이며
+    //   체크포인트가 독립 재계산으로 검증한다. 없으면 키를 만들지 않는다(Ⓠ 출력 불변).
+    const gathers = [["frontBody", "front"], ["backBody", "back"]].map(([key, piece]) => {
+      const gm = geometry.yokeSeam && geometry.yokeSeam[piece] && geometry.yokeSeam[piece].gather;
+      if (!gm) return null;
+      const b = disp(key), pts = []; (b.outline || []).forEach(p => pointsOfPrim(p, pts));
+      const minY = Math.min.apply(null, pts.map(q => q.y));
+      return { key, piece, text: "개더 +" + (Math.round(gm.addedCm * 10) / 10) + "cm", addedCm: gm.addedCm, at: { x: (gm.centerX + gm.newCenterX) / 2, y: minY } };
+    }).filter(Boolean);
+    return gathers.length ? { labels, seams, gathers } : { labels, seams };
   }
   function bboxFromKeys(geometry, keys, roles) {
     const pts = [];

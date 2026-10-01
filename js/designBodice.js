@@ -718,6 +718,10 @@
     var yokeSeam = body.yokeSeam;
     var applyYoke = (yokeSeam === true);
     if (yokeSeam != null && yokeSeam !== false && !applyYoke) fail("invalid-body-yoke-seam", yokeSeam);
+    var yokeGather = body.yokeGather;                    // Ⓡ(P.31): 이음선 아래 몸판 중심에 개더 띠 추가(요크 이음선 전제)
+    var applyGather = (yokeGather === true);
+    if (yokeGather != null && yokeGather !== false && !applyGather) fail("invalid-body-yoke-gather", yokeGather);
+    if (applyGather && !applyYoke) fail("yoke-gather-needs-yoke-seam");
     if (applyYoke && applySeam) fail("yoke-seam-waist-seam-conflict");
     if (applyYoke && applyFlare) fail("yoke-seam-flare-conflict");
     if (applySeam && !(L > 0)) fail("waist-seam-needs-hem");   // 밑단(엉덩이 길이)이 없으면 페플럼이 없다
@@ -825,7 +829,7 @@
       var DY = (typeof window !== "undefined") && window.designYokeSeam;
       if (!DY || typeof DY.split !== "function") fail("designYokeSeam-missing");
       var yk;
-      try { yk = DY.split({ front: fPiece, back: bPiece }); }
+      try { yk = DY.split({ front: fPiece, back: bPiece }, applyGather ? { gather: true } : undefined); }
       catch (e) { fail("yoke-seam-failed", (e.reason || e.message) + (e.detail !== undefined ? " " + JSON.stringify(e.detail) : "")); }
       outGeom.frontYoke = yk.frontYoke; outGeom.frontBody = yk.frontBody;
       outGeom.backYoke = yk.backYoke; outGeom.backBody = yk.backBody;

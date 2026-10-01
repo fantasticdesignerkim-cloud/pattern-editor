@@ -43,6 +43,11 @@
   var HEM_TOL = 1e-6;
   var ABSORB = { front: "front-bust", back: "back-shoulder" };   // 이음선이 흡수하는 다트 id
   var DEFAULT_HEM_SIDE_CM = 1;
+  // ── Ⓡ(P.31) 개더 띠 — 사용자 확정(2026-10-01, 도메인 판단): 뒤 ⌀ = 10cm 고정(BNP–CB 가슴라인점 1/2 높이에서 수평 11cm − 1cm),
+  //   앞 ⊠ = 앞중심에서 AH 다트 끝점까지 이음선상 수평거리 − 1cm. 분량 = ⌀·⊠ 의 1배. 책에 없는 주름 수·턱 형상은 만들지 않는다.
+  var GATHER_BACK_CM = 10;
+  var GATHER_FRONT_TRIM_CM = 1;
+  var GATHER_AREA_TOL = 1e-6;
 
   function fail(reason, detail) {
     var e = new Error("designYokeSeam: " + reason);
@@ -328,6 +333,48 @@
       else if (s) { var id = s.dart && s.dart.id || s.edge || "?"; if (dropped.indexOf(id) < 0) dropped.push(id); }
     });
 
+    // 9b) Ⓡ 개더 띠 — 이음선 **아래 몸판에만** 중심 쪽으로 평행 추가한다. 요크(yokeSegs)·이음선 위 geometry 는 손대지 않는다.
+    //   opts.gather 가 없으면 이 블록은 실행되지 않고 Ⓠ 결과는 바이트 동일하다.
+    var gatherMeta = null;
+    if (opts && opts.gather === true) {
+      var Wcm = (which === "back") ? GATHER_BACK_CM : Math.abs(apex.x - cx) - GATHER_FRONT_TRIM_CM;
+      if (!(Wcm > 0) || !isFinite(Wcm)) fail("gather-width-invalid", { side: which, widthCm: Wcm });
+      var dirX = (cx - Ps.x) >= 0 ? 1 : -1;               // 중심 쪽 = 옆선의 반대
+      var dx = dirX * Wcm;
+      var onCenter = function (p) { return Math.abs(p.x - cx) <= 1e-6; };
+      var touches = bodySegs.filter(function (sg) { return onCenter(sg.from) || onCenter(sg.to); });
+      if (!touches.every(function (sg) { return sg.kind === "line"; })) fail("gather-center-not-line", { side: which });
+      var shiftP = function (p) { return onCenter(p) ? { x: p.x + dx, y: p.y } : P(p); };
+      var gSegs = bodySegs.map(function (sg) {
+        var q = clone(sg);
+        if (q.kind === "line") { q.from = shiftP(sg.from); q.to = shiftP(sg.to); }
+        return q;
+      });
+      var centerYs = [];
+      bodySegs.forEach(function (sg) { if (sg.edge === "center") centerYs.push(sg.from.y, sg.to.y); });
+      var botY = Math.max.apply(null, centerYs);
+      var areaLowG = checkClosed(gSegs, which + ":body-gather");
+      var seamLowG = gSegs.filter(function (sg) { return sg.edge === "yoke-seam"; });
+      var seamLenLowG = segsLen(seamLowG);
+      if (Math.abs((seamLenLowG - seamLenUp) - Wcm) > SEAM_TOL) fail("gather-seam-length-mismatch", { side: which, bodyCm: seamLenLowG, yokeCm: seamLenUp, widthCm: Wcm });
+      var areaAdded = Wcm * (botY - Ys);
+      if (Math.abs((areaLowG - areaLow) - areaAdded) > AREA_TOL) fail("gather-area-mismatch", { side: which, gotCm2: areaLowG - areaLow, wantCm2: areaAdded });
+      keep = keep.map(function (sg) {
+        if (sg.edge !== "waist" || sg.kind !== "line") return sg;
+        sg.from = shiftP(sg.from); sg.to = shiftP(sg.to);
+        return sg;
+      });
+      keep.push({ kind: "line", from: { x: cx, y: Ys }, to: { x: cx, y: botY }, gatherBoundary: true, gatherCm: Wcm });
+      gatherMeta = {
+        addedCm: Wcm,
+        rule: which === "back" ? "back-fixed-10" : "front-apex-distance-minus-1",
+        centerX: cx, newCenterX: cx + dx,
+        seamLenBodyCm: seamLenLowG, seamLenYokeCm: seamLenUp, seamExcessCm: seamLenLowG - seamLenUp,
+        areaAddedCm2: areaLowG - areaLow
+      };
+      bodySegs = gSegs;
+    }
+
     var meta = {
       side: which,
       seamY: Ys,
@@ -343,6 +390,12 @@
       areaYokeCm2: areaUp, areaBodyCm2: areaLow, areaInputCm2: areaIn,
       droppedConstruction: dropped
     };
+    if (gatherMeta) {
+      meta.gather = gatherMeta;
+      meta.seamLenLowerCm = gatherMeta.seamLenBodyCm;     // 개더 적용 후 몸판 이음 길이(정직 기록)
+      meta.seamDeltaCm = seamLenUp - gatherMeta.seamLenBodyCm;
+      meta.areaBodyCm2 = areaLow + gatherMeta.areaAddedCm2;
+    }
     return {
       yoke: { outline: toPrims(yokeSegs, originalOutline), construction: [] },
       body: { outline: toPrims(bodySegs, originalOutline), construction: keep },

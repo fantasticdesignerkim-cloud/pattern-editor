@@ -50,7 +50,8 @@
     { key: "waistSeam", label: "허리 이음선(상·하 조각 분리)", unit: "" },
     { key: "peplumFlare", label: "페플럼 맞대면서 플레어 벌리기", unit: "" },
     { key: "peplumCut", label: "페플럼 WL 등분 수직 절개로 벌리기", unit: "" },
-    { key: "yokeSeam", label: "요크 이음선(요크·몸판 조각 분리)", unit: "" }
+    { key: "yokeSeam", label: "요크 이음선(요크·몸판 조각 분리)", unit: "" },
+    { key: "yokeGather", label: "요크 이음선 아래 몸판 중심 개더 띠", unit: "" }
   ];
   var BODY_KEYS = BODY_FIELDS.map(function (f) { return f.key; });
   var DART_SYMBOLS = ["a", "b", "d", "e"];   // [패턴학교]가 쓰는 봉제 허리다트 넷
@@ -132,7 +133,7 @@
       familyNote: "다트 끝을 지나는 수평 이음선으로 요크와 몸판을 나눈다. 앞뒤 요크와 몸판은 **별개의 조각**이다.",
       variants: [
         availVariant("bunka-bodice-Q", "Q", "Q · 박시 몸판 + 이음선(다트 끝 높이) · 앞 AH·뒤 어깨 다트를 이음선에 흡수 · 밑단 +1", 30),
-        pendingVariant("bunka-bodice-R", "R", "요크 이음선 ① 변형", 31, null, "미판독 — P.31 을 판독하기 전에는 무엇이 다른지 알 수 없다(Ⓠ 와 같은 요크 연산은 준비됨).")
+        availVariant("bunka-bodice-R", "R", "R · Ⓠ 방법 + 이음선 아래 몸판 중심에 개더 분량 추가(뒤 10cm · 앞 다트끝 거리−1cm)", 31)
       ] },
     { id: "yoke-seam-2", order: 9, label: "요크 이음선 ②", symbol: "S", page: 32,
       availability: "pending-op", note: PENDING_NOTE, familyNote: null,
@@ -238,6 +239,14 @@
       body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: true }
     },
     {
+      id: "bunka-bodice-R", label: "교재 R 요크 이음선 ① + 중심 개더", familyId: "yoke-seam-1", symbol: "R", page: 31,
+      description: "Ⓠ 방법 + 이음선 아래 몸판 중심 쪽에 개더 분량을 평행 추가 · 뒤 ⌀=10cm · 앞 ⊠=앞중심→AH 다트 끝 수평거리−1cm · 요크는 Ⓠ 와 동일",
+      source: "[패턴학교] 요크 이음선 ① Ⓡ(P.31) · 처리 방법 닫는다(P.160)",
+      baseMethod: "bunka-bodice-R-v1",
+      // 사용자 확정(2026-10-01): 개더 띠는 몸판에만(요크 geometry 불변) · 뒤 10cm 고정 · 앞 ⊠ = 앞중심→다트 끝 − 1cm · 주름 수·턱 형상은 책에 없어 만들지 않는다.
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: true, yokeGather: true }
+    },
+    {
       id: "bunka-bodice-C", label: "교재 C 셰이프트(다트 2개)", familyId: "shaped-line", symbol: "C", page: 16,
       description: "허리 다트 a·e 만 사용 · 옆선 1cm 줄임 · 밑단 1cm 추가",
       source: "[패턴학교] 셰이프트 라인 Ⓒ(P.16)",
@@ -276,6 +285,11 @@
         if (v !== true) fail("invalid-body", id + ".yokeSeam");
         if (body.waistSeam === true) fail("yoke-seam-waist-seam-conflict", id);
         if (body.flare != null) fail("yoke-seam-flare-conflict", id);
+        return;
+      }
+      if (k === "yokeGather") {
+        if (v !== true) fail("invalid-body", id + ".yokeGather");
+        if (body.yokeSeam !== true) fail("yoke-gather-needs-yoke-seam", id);
         return;
       }
       if (k === "peplumCut") {

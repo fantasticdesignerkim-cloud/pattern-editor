@@ -61,6 +61,8 @@ const suites = [
   { file: "yokeSeamCheckpointCheck.js", golden: false },
   // 요크 이음선 Ⓠ 렌더 검증·표시 배치(designRenderer/designLayout)·제작 정보·hash 불변.
   { file: "yokeSeamLayoutCheck.js",     golden: false },
+  // 요크 이음선 ① Ⓡ(P.31) 개더 띠 — Ⓠ 가산 변형·분량 공식·이음 길이 차·체크포인트·표시·A~Ⓠ 바이트 불변.
+  { file: "yokeGatherCheck.js",         golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },

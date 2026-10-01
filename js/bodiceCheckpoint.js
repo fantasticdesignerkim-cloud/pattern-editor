@@ -744,7 +744,12 @@
   var YOKE_HORIZ_EPS = 1e-3;       // 이음선 수평 허용(cm)
   var YOKE_WHOLE_EPS = 0.02;       // 전체 몸판 링(원본 외곽 + 다트 다리) 접합 허용
   var YOKE_CHAIN_EPS = 1e-4;       // 연속성(designYokeSeam CLOSE_EPS 와 같다)
-  var YOKE_DART = { front: "front-bust", back: "back-shoulder" };   // 이음선이 흡수하는 다트(designYokeSeam.ABSORB)
+  var YOKE_DART = { front: "front-bust", back: "back-shoulder" };
+  // Ⓡ(P.31) 개더 띠 분량 — designYokeSeam 의 확정식을 **여기서 독립 재계산**한다(메타를 신뢰하지 않는다):
+  //   뒤 ⌀ = 10cm 고정 · 앞 ⊠ = 앞중심→AH 다트 끝 이음선상 수평거리 − 1cm.
+  var YOKE_GATHER_BACK_CM = 10;
+  var YOKE_GATHER_FRONT_TRIM_CM = 1;
+  var YOKE_GATHER_EPS = 1e-4;   // 이음선이 흡수하는 다트(designYokeSeam.ABSORB)
   function yokeFlatSeg(s) {
     if (s.kind !== "cubic") return [[s.from, s.to]];
     var out = [], N = 24, prev = s.from;
@@ -820,14 +825,36 @@
       r.seamLenBodyCm = round4(sb.reduce(function (t, s) { return t + segLen(s); }, 0));
       var ly = sy.reduce(function (t, s) { return t + segLen(s); }, 0), lb = sb.reduce(function (t, s) { return t + segLen(s); }, 0);
       r.deltaCm = ly - lb;
-      if (!(Math.abs(r.deltaCm) <= YOKE_SEAM_LEN_EPS)) { r.reason = "yoke-seam-length-mismatch"; return r; }
+      // 개더(Ⓡ): 메타가 선언했을 때만 — 몸판 이음 길이가 요크보다 **정확히 개더 분량만큼** 길어야 한다. 미선언이면 Ⓠ 그대로(차이 0).
+      var gather = !!(m && m.gather);
+      var gatherW = null;
+      if (gather) {
+        var apexP = sy[0].to, cxWhole = null;
+        var wc = ringSegs(whole.outline.filter(function (s) { return s && s.edge === "center"; }));
+        if (wc.length) cxWhole = wc[0].from.x;
+        if (cxWhole == null || !(Math.abs(sy[0].to.x - sy[1].from.x) < YOKE_CHAIN_EPS)) { r.reason = "yoke-gather-mismatch"; return r; }
+        gatherW = side === "back" ? YOKE_GATHER_BACK_CM : Math.abs(apexP.x - cxWhole) - YOKE_GATHER_FRONT_TRIM_CM;
+        r.gatherCm = round4(gatherW);
+        r.gatherDeclaredCm = typeof m.gather.addedCm === "number" ? round4(m.gather.addedCm) : null;
+        r.gatherDeltaCm = lb - ly;
+        if (!(gatherW > 0) || !(Math.abs(lb - ly - gatherW) <= YOKE_GATHER_EPS) ||
+            typeof m.gather.addedCm !== "number" || !(Math.abs(m.gather.addedCm - gatherW) <= YOKE_GATHER_EPS)) { r.reason = "yoke-gather-mismatch"; return r; }
+      } else if (!(Math.abs(r.deltaCm) <= YOKE_SEAM_LEN_EPS)) { r.reason = "yoke-seam-length-mismatch"; return r; }
       // 전체 몸판 링 = 외곽 + 열린 다트 다리(construction)로 닫은 폐곡선. 요크+몸판 면적과 비교한다.
       var legs = (whole.construction || []).filter(function (s) { return s && s.kind === "line" && s.dart && s.dart.id === dartId; }).map(function (s) { return { kind: "line", from: cp(s.from), to: cp(s.to) }; });
       var rw = yokeOrderRing(ringSegs(whole.outline).concat(legs), YOKE_WHOLE_EPS);   // 원본 몸판의 다트 입 접합 허용(designLineTool RING_EPS 와 같다)
       if (!rw) { r.reason = "yoke-seam-missing"; return r; }
       var aw = yokeRingMetrics(rw).areaCm2;
       r.areaWholeCm2 = round4(aw); r.areaDeltaCm2 = round4(my.areaCm2 + mb.areaCm2 - aw);
-      if (Math.abs(my.areaCm2 + mb.areaCm2 - aw) > YOKE_AREA_EPS) { r.reason = "yoke-seam-area-mismatch"; return r; }
+      if (gather) {
+        // 면적 = 전체 몸판 + 개더 띠(분량 × 이음선~밑단 중심 높이). 띠 높이는 몸판의 center 변에서 재계산한다.
+        var ce = ringSegs(B.outline.filter(function (s) { return s && s.edge === "center"; }));
+        var ysC = []; ce.forEach(function (s) { ysC.push(s.from.y, s.to.y); });
+        var hStrip = ysC.length ? Math.max.apply(null, ysC) - sb[0].from.y : NaN;
+        var extra = gatherW * hStrip;
+        r.gatherAreaCm2 = round4(extra);
+        if (!(Math.abs(my.areaCm2 + mb.areaCm2 - aw - extra) <= YOKE_AREA_EPS)) { r.reason = "yoke-seam-area-mismatch"; return r; }
+      } else if (Math.abs(my.areaCm2 + mb.areaCm2 - aw) > YOKE_AREA_EPS) { r.reason = "yoke-seam-area-mismatch"; return r; }
       return r;
     };
     var F = row("front"), B = row("back");
