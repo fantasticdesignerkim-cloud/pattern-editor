@@ -795,6 +795,108 @@
     }
     return { areaCm2: Math.abs(a / 2), selfIntersects: cross };
   }
+  // ── 요크 이음선 Ⓢ(P.32) 한 면 — 출력 geometry 에서 **독립 재계산**한다(메타는 선언 확인용일 뿐 신뢰하지 않는다) ──
+  //   BL = 전체 몸판 옆선 변의 위 끝 y(`bustLineY`). 뒤 이음선 = BL+5 수평선 · 앞 이음선 = CF→BP(BL 높이)→옆선 BL+5 사선.
+  //   앞 AH 다트는 어느 조각에도 없어야 하고, 뒤 어깨 다트는 **요크에 열린 다리 두 줄로 원본 그대로** 남아야 한다.
+  //   개더 폭 W = 이음선 전체 길이(요크 쪽) × 0.5 → 몸판 이음 길이 − 요크 이음 길이 = W.
+  var YOKE_S_DROP_CM = 5;
+  var YOKE_S_RATIO = 0.5;
+  var YOKE_S_POS_EPS = 1e-3;
+  function yokeRowS(r, side, Y, B, whole, m, proj) {
+    var dartId = YOKE_DART[side];
+    var legsOf = function (pc) {
+      return (pc.construction || []).filter(function (s) { return s && s.kind === "line" && s.dart && s.dart.id === dartId; })
+        .map(function (s) { return { kind: "line", from: cp(s.from), to: cp(s.to), apexAt: s.dart.apexAt }; });
+    };
+    var back = side === "back";
+    var yLegs = legsOf(Y), wLegs = legsOf(whole);
+    var ry = yokeOrderRing(ringSegs(Y.outline).concat(back ? yLegs.map(function (l) { return { kind: "line", from: l.from, to: l.to }; }) : []), back ? YOKE_WHOLE_EPS : undefined);
+    var rb = yokeOrderRing(ringSegs(B.outline));
+    r.closed = { yoke: !!ry, body: !!rb };
+    if (!ry || !rb) { r.reason = "yoke-seam-open"; return r; }
+    var my = yokeRingMetrics(ry), mb = yokeRingMetrics(rb);
+    r.areaYokeCm2 = round4(my.areaCm2); r.areaBodyCm2 = round4(mb.areaCm2);
+    r.selfIntersects = my.selfIntersects || mb.selfIntersects;
+    if (r.selfIntersects || !(my.areaCm2 > 0) || !(mb.areaCm2 > 0)) { r.reason = "yoke-seam-self-intersection"; return r; }
+    // 다트: 앞 = 어느 조각에도 없다(흡수) / 뒤 = 요크에 원본 다리 두 줄 그대로, 몸판에는 없다(열린 봉제 다트 보존)
+    var hasDart = function (pc) { return pc.outline.concat(pc.construction || []).some(function (s) { return s && s.dart && s.dart.id === dartId; }); };
+    var sameLeg = function (a, b) { return Math.hypot(a.from.x - b.from.x, a.from.y - b.from.y) < 1e-6 && Math.hypot(a.to.x - b.to.x, a.to.y - b.to.y) < 1e-6; };
+    if (!back) { if (hasDart(Y) || hasDart(B)) { r.reason = "yoke-seam-dart-open"; return r; } }
+    else {
+      var kept = yLegs.length === 2 && wLegs.length === 2 && yLegs.every(function (l, i) { return sameLeg(l, wLegs[i]); });
+      var inOutline = Y.outline.some(function (s) { return s && s.dart && s.dart.id === dartId; });
+      if (!kept || inOutline || hasDart(B)) { r.reason = "yoke-seam-dart-not-preserved"; return r; }
+    }
+    r.preservedDartIds = back ? [dartId] : [];
+    // 이음선 좌표: BL(전체 몸판 옆선 위 끝)에서 독립 계산
+    var BLy = bustLineY(proj, side), Ys = BLy + YOKE_S_DROP_CM;
+    r.bustLineY = round4(BLy); r.seamYCm = round4(Ys);
+    var seamOf = function (pc) { return pc.outline.filter(function (s) { return s && s.edge === "yoke-seam"; }); };
+    var sy = seamOf(Y), sb = seamOf(B), wantN = back ? 1 : 2;
+    if (sy.length !== wantN || sb.length !== wantN || !sy.concat(sb).every(function (s) { return s.kind === "line"; })) { r.reason = "yoke-seam-missing"; return r; }
+    var wc = ringSegs(whole.outline.filter(function (s) { return s && s.edge === "center"; }));
+    var cxWhole = wc.length ? wc[0].from.x : null;
+    var wSide = ringSegs(whole.outline.filter(function (s) { return s && s.edge === "side-seam"; }));
+    if (cxWhole == null || !wSide.length) { r.reason = "yoke-seam-missing"; return r; }
+    var onSide = function (p) {   // 점이 전체 몸판 옆선(직선 변) 위에 있다
+      return wSide.some(function (sg) {
+        if (sg.kind !== "line") return false;
+        var dx = sg.to.x - sg.from.x, dy = sg.to.y - sg.from.y, L2 = dx * dx + dy * dy; if (!(L2 > 0)) return false;
+        var t = ((p.x - sg.from.x) * dx + (p.y - sg.from.y) * dy) / L2; if (t < -1e-9 || t > 1 + 1e-9) return false;
+        return Math.hypot(sg.from.x + dx * t - p.x, sg.from.y + dy * t - p.y) <= YOKE_S_POS_EPS;
+      });
+    };
+    var ly = sy.reduce(function (t, sg) { return t + segLen(sg); }, 0), lb = sb.reduce(function (t, sg) { return t + segLen(sg); }, 0);
+    var W = YOKE_S_RATIO * ly;
+    var Ycf;   // 중심 쪽 이음선 높이
+    if (back) {
+      Ycf = Ys;
+      var flat = sb[0].from.y, ok1 = [sb[0].from, sb[0].to, sy[0].from, sy[0].to].every(function (p) { return Math.abs(p.y - Ys) <= YOKE_S_POS_EPS; });
+      var sideEnd = function (sg) { return onSide(sg.from) ? sg.from : (onSide(sg.to) ? sg.to : null); };
+      var cenEnd = function (sg) { return onSide(sg.from) ? sg.to : sg.from; };
+      var seY = sideEnd(sy[0]), seB = sideEnd(sb[0]);
+      if (!ok1 || !seY || !seB || Math.abs(cenEnd(sy[0]).x - cxWhole) > YOKE_S_POS_EPS || Math.abs(Math.abs(cenEnd(sb[0]).x - cxWhole) - W) > YOKE_GATHER_EPS) { r.reason = "yoke-seam-position-mismatch"; return r; }
+    } else {
+      Ycf = BLy;
+      var wl = wLegs[0], apex = wl ? (wl.apexAt === "to" ? wl.to : wl.from) : null;
+      if (!apex || Math.abs(apex.y - BLy) > YOKE_S_POS_EPS) { r.reason = "yoke-seam-position-mismatch"; return r; }
+      var parts = function (pc) {   // 앞 이음선 두 줄 → { hor: 중심 쪽 끝점, slant: 옆 쪽 끝점 } (apex 를 공유해야 한다)
+        var o = null;
+        [[0, 1], [1, 0]].some(function (ij) {
+          var a = pc[ij[0]], b = pc[ij[1]];
+          [[a.from, a.to], [a.to, a.from]].some(function (pq) {
+            if (Math.hypot(pq[0].x - apex.x, pq[0].y - apex.y) > YOKE_S_POS_EPS) return false;
+            [[b.from, b.to], [b.to, b.from]].some(function (uv) {
+              if (Math.hypot(uv[0].x - apex.x, uv[0].y - apex.y) > YOKE_S_POS_EPS) return false;
+              if (Math.abs(pq[1].y - BLy) <= YOKE_S_POS_EPS) o = { hor: pq[1], slant: uv[1] };
+              return !!o;
+            });
+            return !!o;
+          });
+          return !!o;
+        });
+        return o;
+      };
+      var py = parts(sy), pb = parts(sb);
+      if (!py || !pb || Math.abs(py.hor.x - cxWhole) > YOKE_S_POS_EPS || Math.abs(Math.abs(pb.hor.x - cxWhole) - W) > YOKE_GATHER_EPS ||
+          Math.abs(pb.slant.y - Ys) > YOKE_S_POS_EPS || !onSide(pb.slant) ||
+          Math.abs(Math.hypot(py.slant.x - apex.x, py.slant.y - apex.y) - Math.hypot(pb.slant.x - apex.x, pb.slant.y - apex.y)) > YOKE_SEAM_LEN_EPS) { r.reason = "yoke-seam-position-mismatch"; return r; }
+    }
+    r.seamLenYokeCm = round4(ly); r.seamLenBodyCm = round4(lb); r.deltaCm = ly - lb;
+    r.gatherCm = round4(W); r.gatherDeltaCm = lb - ly;
+    r.gatherDeclaredCm = (m.gather && typeof m.gather.addedCm === "number") ? round4(m.gather.addedCm) : null;
+    if (!m.gather || typeof m.gather.addedCm !== "number" || !(W > 0) || !(Math.abs(lb - ly - W) <= YOKE_GATHER_EPS) || !(Math.abs(m.gather.addedCm - W) <= YOKE_GATHER_EPS)) { r.reason = "yoke-gather-mismatch"; return r; }
+    // 면적 = 전체 몸판 링(외곽 + 열린 다트 다리) + 띠(W × 중심 쪽 이음선~밑단)
+    var allLegs = wLegs.map(function (l) { return { kind: "line", from: l.from, to: l.to }; });
+    var rw = yokeOrderRing(ringSegs(whole.outline).concat(allLegs), YOKE_WHOLE_EPS);
+    if (!rw) { r.reason = "yoke-seam-missing"; return r; }
+    var aw = yokeRingMetrics(rw).areaCm2;
+    var ysC = []; ringSegs(B.outline.filter(function (sg) { return sg && sg.edge === "center"; })).forEach(function (sg) { ysC.push(sg.from.y, sg.to.y); });
+    var extra = W * (ysC.length ? Math.max.apply(null, ysC) - Ycf : NaN);
+    r.areaWholeCm2 = round4(aw); r.areaDeltaCm2 = round4(my.areaCm2 + mb.areaCm2 - aw); r.gatherAreaCm2 = round4(extra);
+    if (!(Math.abs(my.areaCm2 + mb.areaCm2 - aw - extra) <= YOKE_AREA_EPS)) { r.reason = "yoke-seam-area-mismatch"; return r; }
+    return r;
+  }
   function yokeSeamState(proj) {
     var g = proj && proj.working && proj.working.geometry;
     if (!g || !(g.frontYoke || g.frontBody || g.backYoke || g.backBody || g.yokeSeam)) return null;
@@ -805,6 +907,8 @@
         absorbedDartIds: m && Array.isArray(m.absorbedDarts) ? m.absorbedDarts.map(function (d) { return d.id; }) : null, reason: null };
       var okPiece = function (pc) { return pc && Array.isArray(pc.outline) && pc.outline.length >= 3; };
       if (!okPiece(Y) || !okPiece(B) || !okPiece(whole) || !m) { r.reason = "yoke-seam-missing"; return r; }
+      var pbody = proj.working.parameters && proj.working.parameters.body;
+      if ((pbody && pbody.yokeSeam === "S") || m.variant === "S") { r.variant = "S"; return yokeRowS(r, side, Y, B, whole, m, proj); }   // Ⓢ(P.32): 별도 규칙(Ⓠ·Ⓡ 경로는 아래 그대로)
       var ry = yokeOrderRing(ringSegs(Y.outline)), rb = yokeOrderRing(ringSegs(B.outline));
       r.closed = { yoke: !!ry, body: !!rb };
       if (!ry || !rb) { r.reason = "yoke-seam-open"; return r; }
@@ -863,7 +967,9 @@
   function yokeCanon(proj) {
     var g = proj && proj.working && proj.working.geometry;
     if (!g || !g.frontYoke || !g.frontBody || !g.backYoke || !g.backBody) return null;
-    return { fy: canonOutline(g.frontYoke.outline), fb: canonOutline(g.frontBody.outline), by: canonOutline(g.backYoke.outline), bb: canonOutline(g.backBody.outline) };
+    var o = { fy: canonOutline(g.frontYoke.outline), fb: canonOutline(g.frontBody.outline), by: canonOutline(g.backYoke.outline), bb: canonOutline(g.backBody.outline) };
+    if (g.backYoke.construction && g.backYoke.construction.length) o.byc = canonOutline(g.backYoke.construction);   // Ⓢ: 요크에 남는 열린 다트 다리 — 없으면 Ⓠ·Ⓡ hash 불변
+    return o;
   }
 
   // ── 검사 ──
@@ -997,7 +1103,11 @@
       { front: res.armholeLengths.front, back: res.armholeLengths.back },
       { half: res.necklineLengths.half }, res.placket ? res.placket.parameters : null,
       (res.frontPeplum && res.backPeplum) ? { f: canonOutline(res.frontPeplum.outline), b: canonOutline(res.backPeplum.outline) } : null,
-      (res.frontYoke && res.frontBody && res.backYoke && res.backBody) ? { fy: canonOutline(res.frontYoke.outline), fb: canonOutline(res.frontBody.outline), by: canonOutline(res.backYoke.outline), bb: canonOutline(res.backBody.outline) } : null);
+      (res.frontYoke && res.frontBody && res.backYoke && res.backBody) ? (function () {
+        var o = { fy: canonOutline(res.frontYoke.outline), fb: canonOutline(res.frontBody.outline), by: canonOutline(res.backYoke.outline), bb: canonOutline(res.backBody.outline) };
+        if (res.backYoke.construction && res.backYoke.construction.length) o.byc = canonOutline(res.backYoke.construction);
+        return o;
+      })() : null);
   }
   function canonOutline(outline) {
     if (!outline) return null;

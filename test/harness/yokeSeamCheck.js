@@ -227,7 +227,7 @@ ok(J(G) === GSNAP, "F: 실패·성공 호출 후에도 입력 불변");
   ok(on.yokeSeam.front.side === "front" && on.yokeSeam.back.side === "back" && on.yokeSeam.front.absorbedDarts[0].id === "front-bust", "W5: 메타 side·흡수 다트 id");
   // 기존 A~Ⓟ 프리셋: 플래그 없음/false 가 바이트 동일, 새 키가 생기지 않는다
   BP.families().forEach(f => f.variants.forEach(v => {
-    if (v.availability !== "available" || BP.bodyParams(v.id).yokeSeam === true) return;   // Ⓠ 는 아래 W10 에서 별도 검증
+    if (v.availability !== "available" || BP.bodyParams(v.id).yokeSeam != null) return;   // Ⓠ·Ⓡ·Ⓢ 는 아래 W10·별도 하네스에서 검증
     const bp = BP.bodyParams(v.id);
     const g0 = DB.computeGeometry(REF, { body: bp }), g1 = DB.computeGeometry(REF, { body: Object.assign({}, bp, { yokeSeam: false }) });
     ok(J(g0) === J(g1) && !("yokeSeam" in g0) && !("frontYoke" in g0), "W6: 프리셋 " + v.id + " yokeSeam:false 바이트 동일");
@@ -247,7 +247,7 @@ ok(J(G) === GSNAP, "F: 실패·성공 호출 후에도 입력 불변");
   throwsReason(() => BP.validateRecord(rec({ yokeSeam: true, waistSeam: true })), "yoke-seam-waist-seam-conflict", "W8: waistSeam 충돌");
   ok(BP.fields().some(f => f.key === "yokeSeam"), "W8: fields 에 yokeSeam");
   ok(BP.variant("yoke-seam-1", "bunka-bodice-Q").availability === "available" && J(BP.bodyParams("bunka-bodice-Q")) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: true }), "W9: Ⓠ 프리셋 등록(박시 A 기반 · 밑단 +1 · yokeSeam)");
-  ok(BP.variant("yoke-seam-2", "bunka-bodice-S").availability !== "available" && typeof BP.variant("yoke-seam-2", "bunka-bodice-S").blockedBy === "string", "W9: Ⓢ 는 보류 + blockedBy(Ⓡ 는 실행 가능)");
+  ok(BP.variant("yoke-seam-2", "bunka-bodice-T").availability !== "available" && typeof BP.variant("yoke-seam-2", "bunka-bodice-T").blockedBy === "string", "W9: Ⓣ 는 보류 + blockedBy(Ⓡ·Ⓢ 는 실행 가능)");
 }
 
 console.log("yokeSeamCheck: " + PASS + " PASS / " + FAIL + " FAIL");

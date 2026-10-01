@@ -26,6 +26,10 @@
 //   다르면(뒤 어깨 다트 ≈0.10cm) 회전 뒤 입 점이 그만큼 어긋나므로 그 짧은 잔여 step 을
 //   `closedDart` 태그 선분으로 잇고 `residualStepCm` 으로 기록한다.
 //
+// ★ Ⓢ(P.32, 2026-10-01 사용자 확정) — `split(…, { variant: "S", gather: true })` → `splitSideS`: 이음선 = BL 5cm 아래(뒤 수평) / 앞은 CF→BP(BL 높이)→
+//   옆선 BL−5 사선. 앞 AH 다트는 BP 축으로 닫아 흡수(위 회전 그대로), **뒤 어깨 다트는 요크 construction 에 열린 봉제 다트로 그대로 보존**한다.
+//   개더 띠 폭 = 각 면 완성 이음선 전체 길이 × 0.5(몸판에만, 요크 불변). Ⓠ·Ⓡ 경로(`splitSide`)는 바이트 불변이다.
+//
 // 원자성·순수성: 입력 불변(deepClone), 실패는 reason 을 단 Error throw(부분 결과 없음), DOM·storage·render
 //   미접근, 결정론. designLineTool·designJoin 의 순수 헬퍼만 쓴다(그 둘 **다음에** 로드).
 //   designJoin / designWaistSeam / dartMove 의 기존 계약은 넓히지 않았다.
@@ -48,6 +52,11 @@
   var GATHER_BACK_CM = 10;
   var GATHER_FRONT_TRIM_CM = 1;
   var GATHER_AREA_TOL = 1e-6;
+  // ── Ⓢ(P.32) — 사용자 확정(2026-10-01, 도메인 판단): 이음선 = BL 5cm 아래(뒤 수평) / 앞은 CF→BP 를 BL 높이로 잇고 BP→옆선 BL−5 사선.
+  //   앞 AH 다트는 BP 축으로 닫아 요크에 흡수 · **뒤 어깨 다트는 요크에 열린 봉제 다트로 그대로 보존**(닫지도 흡수하지도 않는다).
+  //   개더 띠 폭 = 각 면의 완성 이음선 전체 길이 × 0.5(앞뒤 모두, 요크에는 추가하지 않는다). 주름 수·턱 형상은 만들지 않는다.
+  var SEAM_BELOW_BL_CM = 5;
+  var GATHER_S_RATIO = 0.5;
 
   function fail(reason, detail) {
     var e = new Error("designYokeSeam: " + reason);
@@ -192,36 +201,25 @@
     return out;
   }
 
-  // ══ 한 면(앞 또는 뒤) ══════════════════════════════════════════════════════
-  function splitSide(piece, which, opts) {
+  // ══ 링 분할(Ⓠ·Ⓡ·Ⓢ 공용) ═══════════════════════════════════════════════════
+  //   열린 다트 다리로 닫은 폐곡선 링을 이음선과 만나는 두 점에서 가른다. levelOf(seg) = 그 외곽 변을 가르는 수평 높이(없으면 null).
+  //   Ⓠ·Ⓡ 은 모든 변에 같은 높이, Ⓢ 는 앞뒤 중심 변과 옆선 변에 서로 다른 높이를 준다.
+  //   반환: rb(링) · U(다트 다리가 든 호 = 요크 쪽) · L(몸판 쪽) · Pcf(중심 쪽 교차) · Ps(옆쪽 교차).
+  function cutRing(piece, which, legs, levelOf) {
     var t = T();
-    var hemSideCm = (opts && "hemSideCm" in opts) ? opts.hemSideCm : DEFAULT_HEM_SIDE_CM;
-    if (hemSideCm != null && !(typeof hemSideCm === "number" && isFinite(hemSideCm))) fail("invalid-option", { hemSideCm: hemSideCm });
-    if (!piece || !Array.isArray(piece.outline) || !Array.isArray(piece.construction)) fail("invalid-geometry", which);
-
-    // 1) 흡수할 다트(열린 AH / 어깨 다트)와 apex
-    var dartId = ABSORB[which];
-    var legs = piece.construction.filter(function (s) { return s && s.dart && s.dart.id === dartId; });
-    if (legs.length !== 2) fail("dart-missing", { side: which, dartId: dartId, found: legs.length });
-    var apexOf = function (s) { return s.dart.apexAt === "to" ? s.to : s.from; };
-    var apex = P(apexOf(legs[0]));
-    if (!near(apex, apexOf(legs[1]), 1e-6)) fail("dart-apex-mismatch", dartId);
-    var Ys = apex.y;                                   // ★ 이음선 높이 = 다트 끝 y (잠긴 결정 1)
-
-    // 2) 다트 입구가 열린 폐곡선 링(외곽 + 다트 다리)
-    var originalOutline = piece.outline;
-    var rb = t.buildPieceRing(t.outlinePrimsToSegs(originalOutline), legs);
+    var rb = t.buildPieceRing(t.outlinePrimsToSegs(piece.outline), legs);
     if (!rb.ok) fail("ring-failed", rb.reason);
 
-    // 3) 이음선 높이에서 링을 정점으로 쪼갠다(다트 다리는 교차 검사하지 않는다)
+    // 이음선 높이에서 링을 정점으로 쪼갠다(다트 다리는 교차 검사하지 않는다)
     var pieces = [], cross = [];
     var addCross = function (p) { if (!cross.some(function (c) { return near(c, p, 1e-6); })) cross.push(P(p)); };
     rb.ring.forEach(function (r) {
       if (r.source !== "outline") { pieces.push({ seg: clone(r.seg), source: r.source }); return; }
-      var seg = r.seg;
-      if (Math.abs(yAt(seg, 0) - Ys) <= Y_TOL) addCross(seg.from);
-      if (Math.abs(yAt(seg, 1) - Ys) <= Y_TOL) addCross(seg.to);
-      var ts = interiorCrossings(seg, Ys), prev = 0;
+      var seg = r.seg, Y = levelOf(seg);
+      if (Y == null) { pieces.push({ seg: t.subSegment(seg, 0, 1), source: "outline" }); return; }
+      if (Math.abs(yAt(seg, 0) - Y) <= Y_TOL) addCross(seg.from);
+      if (Math.abs(yAt(seg, 1) - Y) <= Y_TOL) addCross(seg.to);
+      var ts = interiorCrossings(seg, Y), prev = 0;
       ts.forEach(function (tc) {
         pieces.push({ seg: t.subSegment(seg, prev, tc), source: "outline" });
         addCross(ptAt(seg, tc));
@@ -260,7 +258,53 @@
     if (hasLeg(arc1) && !hasLeg(arc2)) { U = arc1; L = arc2; }
     else if (hasLeg(arc2) && !hasLeg(arc1)) { U = arc2; L = arc1; }
     else fail("dart-not-above-seam", { side: which });
+    return { rb: rb, U: U, L: L, Pcf: Pcf, Ps: Ps };
+  }
 
+  // ── 개더 띠(Ⓡ·Ⓢ 공용) — 이음선 **아래 몸판에만** 중심 쪽으로 Wcm 평행 추가한다. 요크·이음선 위 geometry 는 손대지 않는다.
+  //   반환: { meta, bodySegs(개더 적용), keep(구성선 — 허리선 이동 + 띠 경계 추가) }. 입력 배열은 변형하지 않는다.
+  function gatherBand(which, Wcm, rule, Ps, cx, bodySegs, keep, Ys, seamLenUp, areaLow) {
+    if (!(Wcm > 0) || !isFinite(Wcm)) fail("gather-width-invalid", { side: which, widthCm: Wcm });
+    var dirX = (cx - Ps.x) >= 0 ? 1 : -1;               // 중심 쪽 = 옆선의 반대
+    var dx = dirX * Wcm;
+    var onCenter = function (p) { return Math.abs(p.x - cx) <= 1e-6; };
+    var touches = bodySegs.filter(function (sg) { return onCenter(sg.from) || onCenter(sg.to); });
+    if (!touches.every(function (sg) { return sg.kind === "line"; })) fail("gather-center-not-line", { side: which });
+    var shiftP = function (p) { return onCenter(p) ? { x: p.x + dx, y: p.y } : P(p); };
+    var gSegs = bodySegs.map(function (sg) {
+      var q = clone(sg);
+      if (q.kind === "line") { q.from = shiftP(sg.from); q.to = shiftP(sg.to); }
+      return q;
+    });
+    var centerYs = [];
+    bodySegs.forEach(function (sg) { if (sg.edge === "center") centerYs.push(sg.from.y, sg.to.y); });
+    var botY = Math.max.apply(null, centerYs);
+    var areaLowG = checkClosed(gSegs, which + ":body-gather");
+    var seamLowG = gSegs.filter(function (sg) { return sg.edge === "yoke-seam"; });
+    var seamLenLowG = segsLen(seamLowG);
+    if (Math.abs((seamLenLowG - seamLenUp) - Wcm) > SEAM_TOL) fail("gather-seam-length-mismatch", { side: which, bodyCm: seamLenLowG, yokeCm: seamLenUp, widthCm: Wcm });
+    var areaAdded = Wcm * (botY - Ys);
+    if (Math.abs((areaLowG - areaLow) - areaAdded) > AREA_TOL) fail("gather-area-mismatch", { side: which, gotCm2: areaLowG - areaLow, wantCm2: areaAdded });
+    var gatherMeta = {
+      addedCm: Wcm,
+      rule: rule,
+      centerX: cx, newCenterX: cx + dx,
+      seamLenBodyCm: seamLenLowG, seamLenYokeCm: seamLenUp, seamExcessCm: seamLenLowG - seamLenUp,
+      areaAddedCm2: areaLowG - areaLow
+    };
+    keep = keep.map(function (sg) {
+      if (sg.edge !== "waist" || sg.kind !== "line") return sg;
+      sg.from = shiftP(sg.from); sg.to = shiftP(sg.to);
+      return sg;
+    });
+    keep.push({ kind: "line", from: { x: cx, y: Ys }, to: { x: cx, y: botY }, gatherBoundary: true, gatherCm: Wcm });
+    return { meta: gatherMeta, bodySegs: gSegs, keep: keep };
+  }
+
+  // ── 열린 다트를 apex 축 강체 회전으로 닫는다(Ⓠ·Ⓡ·Ⓢ 앞 공용) ──
+  //   U = cutRing 의 요크 호(다트 다리 두 개를 품음). 옆(Ps) 쪽 호가 회전하고 중심 쪽은 고정이다.
+  //   반환: 다트 다리가 사라진 요크 호(upSegs, 연속) · 입 점(mA·mB) · 회전각 theta · 두 다리 길이 차(residual) · 회전한 옆 끝(PsRot) · 호의 양 끝.
+  function absorbDart(U, Ps, apex, which, dartId, aboveY) {
     var il = -1;
     for (var ui = 0; ui < U.length; ui++) if (U[ui].source === "dartleg") { il = ui; break; }
     if (!(il > 0 && il + 2 < U.length && U[il + 1].source === "dartleg" && U[il + 2].source !== "dartleg")) fail("dart-legs-layout", { side: which });
@@ -270,9 +314,11 @@
     if (!near(U[il].seg.to, apex, 1e-6) || !near(U[il + 1].seg.from, apex, 1e-6)) fail("dart-apex-mismatch", { side: which });
     var Q0 = P(U[0].seg.from), Q1 = P(U[U.length - 1].seg.to);
 
-    // 요크 링이 이음선 위(y ≤ Ys)에만 있는지
-    var above = flatPairs(X1.concat(X2)).every(function (ab) { return ab[0].y <= Ys + Y_TOL && ab[1].y <= Ys + Y_TOL; });
-    if (!above) fail("yoke-crosses-seam", { side: which });
+    // 요크 링이 수평 이음선 위(y ≤ aboveY)에만 있는지 — Ⓠ·Ⓡ 전용(Ⓢ 앞은 이음선이 꺾여 이 검사를 쓰지 않는다)
+    if (aboveY != null) {
+      var above = flatPairs(X1.concat(X2)).every(function (ab) { return ab[0].y <= aboveY + Y_TOL && ab[1].y <= aboveY + Y_TOL; });
+      if (!above) fail("yoke-crosses-seam", { side: which });
+    }
 
     // 6) 옆쪽 호를 apex 축으로 회전해 다트를 닫는다
     var movingFirst = near(Q0, Ps, 1e-6);            // 옆 끝이 요크 호의 시작이면 X1 이 회전
@@ -299,6 +345,32 @@
     var PsRot = movingFirst ? P(upSegs[0].from) : P(upSegs[upSegs.length - 1].to);
     var eUp = P(upSegs[upSegs.length - 1].to), sUp = P(upSegs[0].from);
     for (var g = 0; g + 1 < upSegs.length; g++) upSegs[g + 1].from = P(upSegs[g].to);   // 회전 오차 제거(연속)
+    return { upSegs: upSegs, mA: mA, mB: mB, theta: theta, residual: residual, PsRot: PsRot, eUp: eUp, sUp: sUp };
+  }
+
+  // ══ 한 면(앞 또는 뒤) ══════════════════════════════════════════════════════
+  function splitSide(piece, which, opts) {
+    var t = T();
+    var hemSideCm = (opts && "hemSideCm" in opts) ? opts.hemSideCm : DEFAULT_HEM_SIDE_CM;
+    if (hemSideCm != null && !(typeof hemSideCm === "number" && isFinite(hemSideCm))) fail("invalid-option", { hemSideCm: hemSideCm });
+    if (!piece || !Array.isArray(piece.outline) || !Array.isArray(piece.construction)) fail("invalid-geometry", which);
+
+    // 1) 흡수할 다트(열린 AH / 어깨 다트)와 apex
+    var dartId = ABSORB[which];
+    var legs = piece.construction.filter(function (s) { return s && s.dart && s.dart.id === dartId; });
+    if (legs.length !== 2) fail("dart-missing", { side: which, dartId: dartId, found: legs.length });
+    var apexOf = function (s) { return s.dart.apexAt === "to" ? s.to : s.from; };
+    var apex = P(apexOf(legs[0]));
+    if (!near(apex, apexOf(legs[1]), 1e-6)) fail("dart-apex-mismatch", dartId);
+    var Ys = apex.y;                                   // ★ 이음선 높이 = 다트 끝 y (잠긴 결정 1)
+
+    // 2~5) 다트 입구가 열린 폐곡선 링을 이음선 높이(수평 Ys)에서 두 호(요크 U / 몸판 L)로 가른다
+    var originalOutline = piece.outline;
+    var cut = cutRing(piece, which, legs, function () { return Ys; });
+    var rb = cut.rb, U = cut.U, L = cut.L, Pcf = cut.Pcf, Ps = cut.Ps;
+
+    var ab = absorbDart(U, Ps, apex, which, dartId, Ys);
+    var upSegs = ab.upSegs, mA = ab.mA, mB = ab.mB, theta = ab.theta, residual = ab.residual, PsRot = ab.PsRot, eUp = ab.eUp, sUp = ab.sUp;
     var seamUp = [line(eUp, apex, { edge: "yoke-seam", yokeSeam: "upper" }), line(apex, sUp, { edge: "yoke-seam", yokeSeam: "upper" })];
     var yokeSegs = upSegs.concat(seamUp);
 
@@ -338,41 +410,8 @@
     var gatherMeta = null;
     if (opts && opts.gather === true) {
       var Wcm = (which === "back") ? GATHER_BACK_CM : Math.abs(apex.x - cx) - GATHER_FRONT_TRIM_CM;
-      if (!(Wcm > 0) || !isFinite(Wcm)) fail("gather-width-invalid", { side: which, widthCm: Wcm });
-      var dirX = (cx - Ps.x) >= 0 ? 1 : -1;               // 중심 쪽 = 옆선의 반대
-      var dx = dirX * Wcm;
-      var onCenter = function (p) { return Math.abs(p.x - cx) <= 1e-6; };
-      var touches = bodySegs.filter(function (sg) { return onCenter(sg.from) || onCenter(sg.to); });
-      if (!touches.every(function (sg) { return sg.kind === "line"; })) fail("gather-center-not-line", { side: which });
-      var shiftP = function (p) { return onCenter(p) ? { x: p.x + dx, y: p.y } : P(p); };
-      var gSegs = bodySegs.map(function (sg) {
-        var q = clone(sg);
-        if (q.kind === "line") { q.from = shiftP(sg.from); q.to = shiftP(sg.to); }
-        return q;
-      });
-      var centerYs = [];
-      bodySegs.forEach(function (sg) { if (sg.edge === "center") centerYs.push(sg.from.y, sg.to.y); });
-      var botY = Math.max.apply(null, centerYs);
-      var areaLowG = checkClosed(gSegs, which + ":body-gather");
-      var seamLowG = gSegs.filter(function (sg) { return sg.edge === "yoke-seam"; });
-      var seamLenLowG = segsLen(seamLowG);
-      if (Math.abs((seamLenLowG - seamLenUp) - Wcm) > SEAM_TOL) fail("gather-seam-length-mismatch", { side: which, bodyCm: seamLenLowG, yokeCm: seamLenUp, widthCm: Wcm });
-      var areaAdded = Wcm * (botY - Ys);
-      if (Math.abs((areaLowG - areaLow) - areaAdded) > AREA_TOL) fail("gather-area-mismatch", { side: which, gotCm2: areaLowG - areaLow, wantCm2: areaAdded });
-      keep = keep.map(function (sg) {
-        if (sg.edge !== "waist" || sg.kind !== "line") return sg;
-        sg.from = shiftP(sg.from); sg.to = shiftP(sg.to);
-        return sg;
-      });
-      keep.push({ kind: "line", from: { x: cx, y: Ys }, to: { x: cx, y: botY }, gatherBoundary: true, gatherCm: Wcm });
-      gatherMeta = {
-        addedCm: Wcm,
-        rule: which === "back" ? "back-fixed-10" : "front-apex-distance-minus-1",
-        centerX: cx, newCenterX: cx + dx,
-        seamLenBodyCm: seamLenLowG, seamLenYokeCm: seamLenUp, seamExcessCm: seamLenLowG - seamLenUp,
-        areaAddedCm2: areaLowG - areaLow
-      };
-      bodySegs = gSegs;
+      var gr = gatherBand(which, Wcm, which === "back" ? "back-fixed-10" : "front-apex-distance-minus-1", Ps, cx, bodySegs, keep, Ys, seamLenUp, areaLow);
+      gatherMeta = gr.meta; bodySegs = gr.bodySegs; keep = gr.keep;
     }
 
     var meta = {
@@ -403,12 +442,133 @@
     };
   }
 
+  // ══ Ⓢ(P.32) 한 면 ═════════════════════════════════════════════════════════
+  //   BL = 옆선 변의 위 끝(진동 밑 점)의 y. 뒤: BL+5 수평선(CB→옆선). 앞: CF→BP 를 BL 높이로 잇고 BP→옆선 BL+5 사선.
+  //   (y 는 아래로 증가한다 — 도해의 «BL 에서 5cm 아래» = BL.y + 5.)
+  function splitSideS(piece, which, opts) {
+    var hemSideCm = (opts && "hemSideCm" in opts) ? opts.hemSideCm : DEFAULT_HEM_SIDE_CM;
+    if (hemSideCm != null && !(typeof hemSideCm === "number" && isFinite(hemSideCm))) fail("invalid-option", { hemSideCm: hemSideCm });
+    if (!piece || !Array.isArray(piece.outline) || !Array.isArray(piece.construction)) fail("invalid-geometry", which);
+    var isFront = (which === "front");
+
+    // 1) BL · 이음선 높이
+    var sideEdges = piece.outline.filter(function (s) { return s && s.edge === "side-seam"; });
+    if (!sideEdges.length) fail("side-seam-missing", which);
+    var BLy = Infinity;
+    sideEdges.forEach(function (s) { BLy = Math.min(BLy, s.from.y, s.to.y); });
+    var Ys = BLy + SEAM_BELOW_BL_CM;
+
+    // 2) 다트(앞 AH = 흡수 / 뒤 어깨 = 보존)와 apex
+    var dartId = ABSORB[which];
+    var legs = piece.construction.filter(function (s) { return s && s.dart && s.dart.id === dartId; });
+    if (legs.length !== 2) fail("dart-missing", { side: which, dartId: dartId, found: legs.length });
+    var apexOf = function (s) { return s.dart.apexAt === "to" ? s.to : s.from; };
+    var mouthOf = function (s) { return s.dart.apexAt === "to" ? s.from : s.to; };
+    var apex = P(apexOf(legs[0]));
+    if (!near(apex, apexOf(legs[1]), 1e-6)) fail("dart-apex-mismatch", dartId);
+    if (isFront && Math.abs(apex.y - BLy) > Y_TOL) fail("bust-point-off-bust-line", { apexY: apex.y, bustLineY: BLy });
+    var Ycf = isFront ? BLy : Ys;                       // 중심 쪽 이음선 높이(앞 = BL, 뒤 = BL+5)
+
+    // 3) 링을 두 높이에서 가른다: 중심 변은 Ycf, 옆선 변은 Ys
+    var cut = cutRing(piece, which, legs, function (seg) { return seg.edge === "center" ? Ycf : (seg.edge === "side-seam" ? Ys : null); });
+    var U = cut.U, L = cut.L, Pcf = cut.Pcf, Ps = cut.Ps, rb = cut.rb;
+    if (Math.abs(Pcf.y - Ycf) > Y_TOL || Math.abs(Ps.y - Ys) > Y_TOL) fail("seam-crossing-height", { side: which, centerY: Pcf.y, sideY: Ps.y });
+
+    // 4) 요크
+    var yokeRingSegs, yokeOutlineSegs, yokeConstruction = [], seamUp, absorbed = [], preserved = [], PsRot = P(Ps);
+    if (isFront) {
+      var ab = absorbDart(U, Ps, apex, which, dartId, null);
+      var eUp = ab.eUp, sUp = ab.sUp;
+      seamUp = [line(eUp, apex, { edge: "yoke-seam", yokeSeam: "upper" }), line(apex, sUp, { edge: "yoke-seam", yokeSeam: "upper" })];
+      yokeRingSegs = ab.upSegs.concat(seamUp);
+      yokeOutlineSegs = yokeRingSegs;
+      PsRot = ab.PsRot;
+      absorbed.push({ id: dartId, apex: P(apex), mouths: [P(ab.mA), P(ab.mB)], mouthWidthCm: dist(ab.mA, ab.mB),
+        angleDeg: Math.abs(ab.theta) * 180 / Math.PI, rotatedSide: "side", legLenCm: [dist(ab.mA, apex), dist(ab.mB, apex)],
+        residualStepCm: ab.residual });
+    } else {
+      var uSegs = U.map(function (pc) { return pc.seg; });
+      seamUp = [line(U[U.length - 1].seg.to, U[0].seg.from, { edge: "yoke-seam", yokeSeam: "upper" })];
+      yokeRingSegs = uSegs.concat(seamUp);                                       // 검증용 링(다트 다리 포함 — 열린 V 노치)
+      yokeOutlineSegs = U.filter(function (pc) { return pc.source !== "dartleg"; }).map(function (pc) { return pc.seg; }).concat(seamUp);
+      yokeConstruction = legs.map(deepClone);                                    // 열린 봉제 다트: 원본 다리(dart 메타 포함) 그대로
+      var mo = legs.map(mouthOf);
+      preserved.push({ id: dartId, apex: P(apex), mouths: [P(mo[0]), P(mo[1])], mouthWidthCm: dist(mo[0], mo[1]),
+        legLenCm: [dist(mo[0], apex), dist(mo[1], apex)], open: true });
+    }
+
+    // 5) 하부 몸판: 이음선은 원래 모양 그대로(앞: Ps→apex→Pcf, 뒤: Ps→Pcf 수평)
+    var lowSegs = L.map(function (pc) { return clone(pc.seg); });
+    var lQ0 = P(lowSegs[lowSegs.length - 1].to), lQ1 = P(lowSegs[0].from);
+    var seamLow = isFront
+      ? [line(lQ0, apex, { edge: "yoke-seam", yokeSeam: "lower" }), line(apex, lQ1, { edge: "yoke-seam", yokeSeam: "lower" })]
+      : [line(lQ0, lQ1, { edge: "yoke-seam", yokeSeam: "lower" })];
+    var bodySegs = lowSegs.concat(seamLow);
+
+    // 6) 검증
+    var areaUp = checkClosed(yokeRingSegs, which + ":yoke");
+    var areaLow = checkClosed(bodySegs, which + ":body");
+    var seamLenUp = segsLen(seamUp), seamLenLow = segsLen(seamLow);
+    if (Math.abs(seamLenUp - seamLenLow) > SEAM_TOL) fail("seam-length-mismatch", { side: which, upperCm: seamLenUp, lowerCm: seamLenLow });
+    var areaIn = Math.abs(signedArea(rb.ring.map(function (r) { return r.seg; })));
+    if (Math.abs(areaUp + areaLow - areaIn) > AREA_TOL) fail("area-not-conserved", { side: which, upperCm2: areaUp, lowerCm2: areaLow, inputCm2: areaIn });
+    var sides = lowSegs.filter(function (s) { return s.edge === "side-seam"; });
+    if (!sides.length) fail("side-seam-missing", which);
+    var pts = []; sides.forEach(function (s) { pts.push(s.from, s.to); });
+    var top = pts.reduce(function (a, b) { return b.y < a.y ? b : a; }), bot = pts.reduce(function (a, b) { return b.y > a.y ? b : a; });
+    var centerX = lowSegs.filter(function (s) { return s.edge === "center"; })[0];
+    var cx = centerX ? centerX.from.x : Pcf.x;
+    var hemExtra = (top.x >= cx ? 1 : -1) * (bot.x - top.x);
+    if (hemSideCm != null && Math.abs(hemExtra - hemSideCm) > HEM_TOL) fail("hem-side-mismatch", { side: which, actualCm: hemExtra, wantCm: hemSideCm });
+
+    // 7) 구성선: 이음선 꺾인 선 **아래**에 완전히 있는 선만 몸판이 잇는다(요크는 구성선 대신 보존한 다트 다리만)
+    var seamYAt = function (x) {
+      if (!isFront) return Ys;
+      var lo = Math.min(Ps.x, apex.x), hi = Math.max(Ps.x, apex.x);
+      if (x <= lo) return (Ps.x <= apex.x) ? Ps.y : apex.y;
+      if (x >= hi) return (Ps.x <= apex.x) ? apex.y : Ps.y;
+      return Ps.y + (apex.y - Ps.y) * (x - Ps.x) / (apex.x - Ps.x);
+    };
+    var keep = [], dropped = [];
+    piece.construction.forEach(function (sg) {
+      if (sg && sg.dart && sg.dart.id === dartId) return;
+      if (sg && sg.from && sg.to && sg.from.y >= seamYAt(sg.from.x) - CON_TOL && sg.to.y >= seamYAt(sg.to.x) - CON_TOL) keep.push(deepClone(sg));
+      else if (sg) { var id = sg.dart && sg.dart.id || sg.edge || "?"; if (dropped.indexOf(id) < 0) dropped.push(id); }
+    });
+
+    // 8) 개더 띠 — 폭 = 완성 이음선 전체 길이 × 0.5, 몸판에만(요크 geometry 불변). 띠 윗변 = 중심 쪽 이음선 높이(Pcf.y).
+    var Wcm = GATHER_S_RATIO * seamLenUp;
+    var gr = gatherBand(which, Wcm, "seam-length-half", Ps, cx, bodySegs, keep, Pcf.y, seamLenUp, areaLow);
+    bodySegs = gr.bodySegs; keep = gr.keep;
+
+    var meta = {
+      side: which, variant: "S",
+      seamY: Ys, seamYCenter: Ycf, bustLineY: BLy, seamDropCm: SEAM_BELOW_BL_CM,
+      seamPoints: { center: P(Pcf), apex: isFront ? P(apex) : null, side: P(Ps), sideAfterClose: P(PsRot) },
+      seamLenUpperCm: seamLenUp,
+      seamLenLowerCm: gr.meta.seamLenBodyCm,
+      seamDeltaCm: seamLenUp - gr.meta.seamLenBodyCm,
+      seamMaxDyCm: isFront ? Math.abs(Ps.y - Ys) : Math.max(Math.abs(Pcf.y - Ys), Math.abs(Ps.y - Ys)),
+      absorbedDarts: absorbed, preservedDarts: preserved,
+      hemSideExtraCm: hemExtra,
+      areaYokeCm2: areaUp, areaBodyCm2: areaLow + gr.meta.areaAddedCm2, areaInputCm2: areaIn,
+      droppedConstruction: dropped,
+      gather: gr.meta
+    };
+    return {
+      yoke: { outline: toPrims(yokeOutlineSegs, piece.outline), construction: yokeConstruction },
+      body: { outline: toPrims(bodySegs, piece.outline), construction: keep },
+      meta: meta
+    };
+  }
+
   // split({front, back}, opts) → { frontYoke, frontBody, backYoke, backBody, meta:{front, back} }
   // 원자적: 앞·뒤 중 하나라도 실패하면 아무것도 반환하지 않는다. 입력은 변형하지 않는다.
   function split(geometry, opts) {
     if (!geometry || typeof geometry !== "object" || !geometry.front || !geometry.back) fail("invalid-geometry");
-    var f = splitSide(deepClone(geometry.front), "front", opts);
-    var b = splitSide(deepClone(geometry.back), "back", opts);
+    var sideFn = (opts && opts.variant === "S") ? splitSideS : splitSide;   // Ⓢ(P.32) = 이음선 BL−5·앞 꺾인 선·뒤 어깨 다트 보존
+    var f = sideFn(deepClone(geometry.front), "front", opts);
+    var b = sideFn(deepClone(geometry.back), "back", opts);
     return { frontYoke: f.yoke, frontBody: f.body, backYoke: b.yoke, backBody: b.body, meta: { front: f.meta, back: b.meta } };
   }
 

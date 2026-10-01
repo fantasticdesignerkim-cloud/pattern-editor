@@ -716,11 +716,13 @@
     // 요크 이음선 ① Ⓠ(P.30) — 다트 끝을 지나는 수평선으로 요크·몸판을 **별개 조각**으로 가른다(순수 연산은
     //   `js/designYokeSeam.js`). front/back 은 전체 몸판 그대로 두고 네 슬롯만 **추가**한다(소매·카라·체크포인트 무영향).
     var yokeSeam = body.yokeSeam;
-    var applyYoke = (yokeSeam === true);
+    var applyYoke = (yokeSeam === true || yokeSeam === "S");   // "S" = 요크 이음선 ② Ⓢ(P.32): BL−5 이음선 · 앞 꺾인 선 · 뒤 어깨 다트 보존 · 개더 = 이음선 길이×0.5
+    var yokeS = (yokeSeam === "S");
     if (yokeSeam != null && yokeSeam !== false && !applyYoke) fail("invalid-body-yoke-seam", yokeSeam);
     var yokeGather = body.yokeGather;                    // Ⓡ(P.31): 이음선 아래 몸판 중심에 개더 띠 추가(요크 이음선 전제)
     var applyGather = (yokeGather === true);
     if (yokeGather != null && yokeGather !== false && !applyGather) fail("invalid-body-yoke-gather", yokeGather);
+    if (yokeS && yokeGather === false) fail("yoke-seam-s-gather-implied");   // Ⓢ 의 개더 띠는 라인의 일부다(끌 수 없다)
     if (applyGather && !applyYoke) fail("yoke-gather-needs-yoke-seam");
     if (applyYoke && applySeam) fail("yoke-seam-waist-seam-conflict");
     if (applyYoke && applyFlare) fail("yoke-seam-flare-conflict");
@@ -829,7 +831,7 @@
       var DY = (typeof window !== "undefined") && window.designYokeSeam;
       if (!DY || typeof DY.split !== "function") fail("designYokeSeam-missing");
       var yk;
-      try { yk = DY.split({ front: fPiece, back: bPiece }, applyGather ? { gather: true } : undefined); }
+      try { yk = DY.split({ front: fPiece, back: bPiece }, yokeS ? { variant: "S", gather: true } : (applyGather ? { gather: true } : undefined)); }
       catch (e) { fail("yoke-seam-failed", (e.reason || e.message) + (e.detail !== undefined ? " " + JSON.stringify(e.detail) : "")); }
       outGeom.frontYoke = yk.frontYoke; outGeom.frontBody = yk.frontBody;
       outGeom.backYoke = yk.backYoke; outGeom.backBody = yk.backBody;

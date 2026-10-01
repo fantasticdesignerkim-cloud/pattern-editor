@@ -76,7 +76,7 @@ const reasonOf = (proj) => { const c = chk(proj); return c.ok ? null : c.fails.f
 // ── 2. 비요크: 기존 출력·hash 바이트 동일, 새 키 없음 ──
 {
   const bodies = [];
-  BP.families().forEach(f => f.variants.forEach(v => { if (v.availability === "available" && BP.bodyParams(v.id).yokeSeam !== true) bodies.push([v.id, BP.bodyParams(v.id)]); }));   // 요크(Ⓠ)는 §1·§4
+  BP.families().forEach(f => f.variants.forEach(v => { if (v.availability === "available" && BP.bodyParams(v.id).yokeSeam == null) bodies.push([v.id, BP.bodyParams(v.id)]); }));   // 요크(Ⓠ·Ⓡ·Ⓢ)는 §1·§4
   bodies.forEach(([id, body]) => {
     const p = mk(body); const c = chk(p);
     ok(!("yokeSeam" in c), "2: " + id + " check 에 yokeSeam 키 없음");

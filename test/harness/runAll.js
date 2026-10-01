@@ -63,6 +63,8 @@ const suites = [
   { file: "yokeSeamLayoutCheck.js",     golden: false },
   // 요크 이음선 ① Ⓡ(P.31) 개더 띠 — Ⓠ 가산 변형·분량 공식·이음 길이 차·체크포인트·표시·A~Ⓠ 바이트 불변.
   { file: "yokeGatherCheck.js",         golden: false },
+  // 요크 이음선 ② Ⓢ(P.32) — 뒤 BL−5 · 앞 CF→BP→옆선 BL−5 꺾인 이음선·앞 AH 흡수·뒤 어깨 다트 보존·개더=이음선×½·체크포인트·표시·A~Ⓡ 바이트 불변.
+  { file: "yokeSeamSCheck.js",          golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },

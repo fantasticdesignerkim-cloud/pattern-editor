@@ -431,7 +431,7 @@
   let pendingWaistSeam;    // 〃 (true = 허리 이음선 — 상·하 조각 분리, 프리셋 Ⓜ)
   let pendingPeplumCut;    // 〃 (true = 페플럼 WL 등분 수직 절개 벌림, 프리셋 Ⓞ — waistSeam 전제)
   let pendingPeplumFlare;  // 〃 (true = 페플럼을 맞대면서 플레어 벌리기, 프리셋 Ⓝ — waistSeam 전제)
-  let pendingYokeSeam;     // 〃 (true = 요크 이음선 — 요크·몸판 조각 분리, 프리셋 Ⓠ)
+  let pendingYokeSeam;     // 〃 (true = 요크 이음선 — 요크·몸판 조각 분리, 프리셋 Ⓠ·Ⓡ / "S" = 요크 이음선 ② Ⓢ)
   let pendingYokeGather;   // 〃 (true = 이음선 아래 몸판 중심 개더 띠, 프리셋 Ⓡ — yokeSeam 전제)
   function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
   function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
@@ -505,7 +505,7 @@
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
     pendingPeplumCut = (body.peplumCut === true || body.peplumCut === "P") ? body.peplumCut : null;
-    pendingYokeSeam = body.yokeSeam === true ? true : null;   // 다른 프리셋으로 바꾸면 해제 → 요크·몸판 조각 사라짐
+    pendingYokeSeam = (body.yokeSeam === true || body.yokeSeam === "S") ? body.yokeSeam : null;   // true = Ⓠ·Ⓡ · "S" = Ⓢ. 다른 프리셋으로 바꾸면 해제 → 요크·몸판 조각 사라짐
     pendingYokeGather = body.yokeGather === true ? true : null;   // Ⓠ 로 바꾸면 해제 → 개더 띠 없는 요크
     onApplyBodyLength();
   }
@@ -2278,7 +2278,7 @@
       pendingPeplumFlare = undefined;
     }
     if (pendingYokeSeam !== undefined) {
-      if (pendingYokeSeam) nextParameters.body.yokeSeam = true; else delete nextParameters.body.yokeSeam;
+      if (pendingYokeSeam) nextParameters.body.yokeSeam = pendingYokeSeam; else delete nextParameters.body.yokeSeam;
       pendingYokeSeam = undefined;
     }
     if (pendingYokeGather !== undefined) {
