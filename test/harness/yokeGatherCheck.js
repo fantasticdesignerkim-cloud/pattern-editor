@@ -45,7 +45,7 @@ const seamLen = (pc) => pc.outline.filter(s => s.edge === "yoke-seam").reduce((t
 ok(BP.resolve("yoke-seam-1", "bunka-bodice-R").ok, "1: Ⓡ 해석 성공(실행 가능)");
 ok(J(R_BODY) === J(Object.assign({}, Q_BODY, { yokeGather: true })), "1: Ⓡ = Ⓠ 파라미터 + yokeGather(가산 변형)");
 ok(J(BP.bodyParams("bunka-bodice-Q")) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: true }), "1: Ⓠ 파라미터 불변");
-ok(BP.variant("yoke-seam-2", "bunka-bodice-T").availability === "pending-op", "1: Ⓣ 는 계속 보류(Ⓢ 는 별도 하네스)");
+ok(BP.variant("yoke-seam-2", "bunka-bodice-T").availability === "available", "1: Ⓣ 는 실행 가능(별도 하네스 yokeSeamTCheck)");
 throwsReason(() => DB.computeGeometry(REF, { body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeGather: true } }), "yoke-gather-needs-yoke-seam", "1: 요크 없는 개더 거부");
 throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, R_BODY, { yokeGather: 2 }) }), "invalid-body-yoke-gather", "1: yokeGather 값 검증");
 ok(J(DB.computeGeometry(REF, { body: Object.assign({}, Q_BODY, { yokeGather: false }) })) === J(GQ), "1: yokeGather:false = Ⓠ 와 동일");

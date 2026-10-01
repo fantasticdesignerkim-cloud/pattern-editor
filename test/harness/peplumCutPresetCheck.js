@@ -81,7 +81,7 @@ const fmt = (s) => s;
 {
   const fam = BP.family("waist-seam");
   ok(fam.variants.filter(v => v.availability === "available").map(v => v.symbol).join() === "M,N,O,P", "1: 허리 이음선 = Ⓜ·Ⓝ·Ⓞ·Ⓟ 실행");
-  ok(BP.variant("yoke-seam-2", "bunka-bodice-T").availability !== "available", "1: Ⓣ 는 계속 보류(Ⓠ·Ⓡ·Ⓢ 는 실행 가능)");
+  ok(BP.variant("yoke-seam-2", "bunka-bodice-T").availability === "available", "1: Ⓣ 도 실행 가능(Ⓠ·Ⓡ·Ⓢ·Ⓣ)");
   ok(BP.resolve("waist-seam", "bunka-bodice-O").ok && BP.get("bunka-bodice-O").source.indexOf("P.28") > 0 && BP.get("bunka-bodice-O").source.indexOf("P.163") > 0, "1: Ⓞ 해석 성공·출처 P.28·P.163");
   ok(J(O_BODY) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 2, waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, waistSeam: true, peplumCut: true }), "1: Ⓞ body = 박시 + 밑단 +2 + 허리 다트 0 + 이음선 + 절개");
   ok(!("waistSideOffsetCm" in O_BODY), "1: 옆선 −1.5 조정 없음(WL 까지 수직)");

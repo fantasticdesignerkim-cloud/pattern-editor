@@ -30,6 +30,12 @@
 //   옆선 BL−5 사선. 앞 AH 다트는 BP 축으로 닫아 흡수(위 회전 그대로), **뒤 어깨 다트는 요크 construction 에 열린 봉제 다트로 그대로 보존**한다.
 //   개더 띠 폭 = 각 면 완성 이음선 전체 길이 × 0.5(몸판에만, 요크 불변). Ⓠ·Ⓡ 경로(`splitSide`)는 바이트 불변이다.
 //
+// ★ Ⓣ(P.33, 2026-10-01 사용자 확정) — `split(…, { variant: "T", hemSideCm: 2.5 })`: 요크·이음선·앞 AH 다트 흡수·뒤 어깨 다트 보존은 Ⓢ 와 **완전히 같고**
+//   (`splitSideS` 재사용), 개더 띠 대신 **몸판을 수직 절개 2곳(WL 3등분점)으로 잘라 이음선 교점을 고정하고 밑단만 벌린다**(처리 방법 P.163).
+//   총 벌림 ∅ = ● × 0.5 − 2.5, 절개당 ∅/2 · ● = 그 면 Ⓐ 몸판의 **BL 수평폭**(앞뒤 각각 독립 — 이음선 전체 길이가 아니다) · 밑단 옆 +2.5(이미 차지한 몫).
+//   절개마다 `designJoin.buttSpread`(접선 연속 밑단 fairing 포함)를 중심→옆 순으로 부른다. 이음선은 강체 회전이라 길이가 정확히 보존되고(꺾임은 패턴선
+//   확정 단계 몫), 개더·턱은 만들지 않는다. Ⓠ·Ⓡ·Ⓢ 경로는 바이트 불변이다.
+//
 // 원자성·순수성: 입력 불변(deepClone), 실패는 reason 을 단 Error throw(부분 결과 없음), DOM·storage·render
 //   미접근, 결정론. designLineTool·designJoin 의 순수 헬퍼만 쓴다(그 둘 **다음에** 로드).
 //   designJoin / designWaistSeam / dartMove 의 기존 계약은 넓히지 않았다.
@@ -57,6 +63,10 @@
   //   개더 띠 폭 = 각 면의 완성 이음선 전체 길이 × 0.5(앞뒤 모두, 요크에는 추가하지 않는다). 주름 수·턱 형상은 만들지 않는다.
   var SEAM_BELOW_BL_CM = 5;
   var GATHER_S_RATIO = 0.5;
+  // ── Ⓣ(P.33) — 사용자 확정(2026-10-01): ∅ = BL 수평폭 × 0.5 − 2.5(앞뒤 독립) · 절개 2곳(WL 3등분) 균등 ∅/2 · 밑단 옆 +2.5 · 개더·턱 없음.
+  var SPREAD_T = { ratio: 0.5, subtractCm: 2.5, cuts: 2 };
+  var DEFAULT_HEM_SIDE_T_CM = 2.5;
+  var CUT_EPS = 1e-9;
 
   function fail(reason, detail) {
     var e = new Error("designYokeSeam: " + reason);
@@ -445,8 +455,145 @@
   // ══ Ⓢ(P.32) 한 면 ═════════════════════════════════════════════════════════
   //   BL = 옆선 변의 위 끝(진동 밑 점)의 y. 뒤: BL+5 수평선(CB→옆선). 앞: CF→BP 를 BL 높이로 잇고 BP→옆선 BL+5 사선.
   //   (y 는 아래로 증가한다 — 도해의 «BL 에서 5cm 아래» = BL.y + 5.)
+  // ══ Ⓣ(P.33) 몸판 절개 벌림 ═════════════════════════════════════════════════
+  //   bodySegs = 이음선 아래 몸판 폐곡선(개더 없음), keep = 그 몸판의 구성선. WL 참고선(keep 의 edge:"waist")을 (cuts+1)등분한 x 에서
+  //   수직 절개 → 중심 조각 고정, 나머지를 바깥으로 순차 `buttSpread`(고정점 = 절개선과 이음선의 교점, 밑단 끝 chord = ∅/cuts).
+  //   반환: { outline(geometry 포맷), construction, flare(메타), areaCm2, seamLenCm }. 실패는 reason 을 단 throw(부분 결과 없음).
+  function spreadBody(which, bodySegs, keep, BLw, spec) {
+    var t = T(), Jn = J();
+    if (!Jn || typeof Jn.buttSpread !== "function") fail("designJoin-missing");
+    var n = spec.cuts, total = spec.ratio * BLw - spec.subtractCm;
+    if (!(total > 0) || !isFinite(total)) fail("flare-not-positive", { side: which, bustWidthCm: BLw, totalCm: total });
+    var chord = total / n;
+    var byEdge = function (e) { return bodySegs.filter(function (sg) { return sg.edge === e; }); };
+    var seam = byEdge("yoke-seam"), center = byEdge("center"), side = byEdge("side-seam"), hemL = byEdge("hem");
+    if (!seam.length || !center.length || !side.length || hemL.length !== 1) fail("spread-body-topology", which);
+    if (!seam.every(function (sg) { return sg.kind === "line"; }) || hemL[0].kind !== "line") fail("spread-body-not-line", which);
+    var cx = center[0].from.x;
+    if (!center.every(function (sg) { return Math.abs(sg.from.x - cx) < 1e-6 && Math.abs(sg.to.x - cx) < 1e-6; })) fail("spread-center-not-vertical", which);
+    var sideTopX = side.reduce(function (a, sg) { var p = sg.from.y < sg.to.y ? sg.from : sg.to; return p.y < a.y ? p : a; }, { x: 0, y: Infinity }).x;
+    if (Math.abs(sideTopX - cx) < 1e-6) fail("spread-side-degenerate", which);
+    var dir = sideTopX > cx ? 1 : -1;
+    var U = function (x) { return (x - cx) * dir; };
+    var X = function (u) { return cx + dir * u; };
+
+    // WL 참고선 → 3등분(= Ⓞ·Ⓟ 와 같은 표기)
+    var wl = keep.filter(function (sg) { return sg && sg.kind === "line" && sg.edge === "waist"; });
+    if (wl.length !== 1) fail("spread-waist-reference", { side: which, count: wl.length });
+    var uW = Math.max(U(wl[0].from.x), U(wl[0].to.x));
+    if (Math.min(U(wl[0].from.x), U(wl[0].to.x)) > 1e-6 || !(uW > 0)) fail("spread-waist-reference", { side: which, reason: "not-from-center" });
+    var cutU = []; for (var ci = 1; ci <= n; ci++) cutU.push(uW * ci / (n + 1));
+
+    // 이음선(중심→옆 방향으로 정렬) · 밑단(중심→옆) · 옆선(위→아래) · 중심(아래→위)
+    var seamC = seam.map(function (sg) { return U(sg.from.x) <= U(sg.to.x) ? clone(sg) : t.reverseSeg(sg); })
+      .sort(function (a, b) { return U(a.from.x) - U(b.from.x); });
+    for (var k = 0; k + 1 < seamC.length; k++) if (dist(seamC[k].to, seamC[k + 1].from) > CLOSE_EPS) fail("spread-seam-discontinuous", which);
+    if (Math.abs(U(seamC[0].from.x)) > 1e-6) fail("spread-seam-not-from-center", which);
+    var uSeamEnd = U(seamC[seamC.length - 1].to.x);
+    var hemC = U(hemL[0].from.x) <= U(hemL[0].to.x) ? clone(hemL[0]) : t.reverseSeg(hemL[0]);
+    var sideD = side.map(function (sg) { return sg.from.y <= sg.to.y ? clone(sg) : t.reverseSeg(sg); }).sort(function (a, b) { return a.from.y - b.from.y; });
+    var centerU = center.map(function (sg) { return sg.from.y >= sg.to.y ? clone(sg) : t.reverseSeg(sg); }).sort(function (a, b) { return b.from.y - a.from.y; });
+    var uHem0 = U(hemC.from.x), uHem1 = U(hemC.to.x);
+    if (!(uHem1 - uHem0 > CUT_EPS)) fail("spread-hem-degenerate", which);
+    var seamAt = function (u) {
+      for (var i = 0; i < seamC.length; i++) {
+        var a = U(seamC[i].from.x), b = U(seamC[i].to.x);
+        if (u >= a - CUT_EPS && u <= b + CUT_EPS) { var f = b - a > CUT_EPS ? (u - a) / (b - a) : 0; return { x: X(u), y: seamC[i].from.y + (seamC[i].to.y - seamC[i].from.y) * f }; }
+      }
+      return null;
+    };
+    var hemAt = function (u) { var f = (u - uHem0) / (uHem1 - uHem0); return { x: X(u), y: hemC.from.y + (hemC.to.y - hemC.from.y) * f }; };
+    var cuts = cutU.map(function (u, i) {
+      var sp = seamAt(u);
+      if (!sp || u >= uSeamEnd - 1e-6 || u >= uHem1 - 1e-6) fail("cut-outside-body", { side: which, cut: i + 1 });
+      return { u: u, id: which + "-yoke-cut-" + (i + 1), seamPt: sp, hemPt: hemAt(u) };
+    });
+    var tag = function (pid, sd) { return "join:" + pid + ":" + sd; };
+
+    // 조각(strip) 0..n — 허리 대신 이음선 구간이 윗변이다
+    var clipSeam = function (uA, uB) {
+      var out = [];
+      seamC.forEach(function (sg) {
+        var a = U(sg.from.x), b = U(sg.to.x), lo = Math.max(a, uA), hi = Math.min(b, uB);
+        if (!(hi - lo > 1e-9)) return;
+        var f0 = (lo - a) / (b - a), f1 = (hi - a) / (b - a);
+        out.push(line({ x: sg.from.x + (sg.to.x - sg.from.x) * f0, y: sg.from.y + (sg.to.y - sg.from.y) * f0 },
+          { x: sg.from.x + (sg.to.x - sg.from.x) * f1, y: sg.from.y + (sg.to.y - sg.from.y) * f1 }, { edge: "yoke-seam", yokeSeam: "lower" }));
+      });
+      return out;
+    };
+    var strips = [], areaStrips = 0;
+    var assignCon = function (uA, uB, last) {
+      var out = [];
+      keep.forEach(function (sg) {
+        if (!sg || sg.kind !== "line" || (sg.dart && sg.dart.id)) return;
+        var a = U(sg.from.x), b = U(sg.to.x);
+        if (Math.abs(b - a) < CUT_EPS) { if (a >= uA - CUT_EPS && (a < uB - CUT_EPS || last)) out.push(clone(sg)); return; }
+        var lo = Math.max(Math.min(a, b), uA), hi = Math.min(Math.max(a, b), uB);
+        if (!(hi - lo > 1e-9)) return;
+        var f = function (u) { return (u - a) / (b - a); };
+        var q = clone(sg), pa = { x: sg.from.x + (sg.to.x - sg.from.x) * f(lo), y: sg.from.y + (sg.to.y - sg.from.y) * f(lo) },
+          pb = { x: sg.from.x + (sg.to.x - sg.from.x) * f(hi), y: sg.from.y + (sg.to.y - sg.from.y) * f(hi) };
+        if (a <= b) { q.from = pa; q.to = pb; } else { q.from = pb; q.to = pa; }
+        out.push(q);
+      });
+      return out;
+    };
+    for (var s = 0; s <= n; s++) {
+      var uA = s === 0 ? 0 : cuts[s - 1].u, uB = s === n ? uSeamEnd : cuts[s].u, segs = clipSeam(uA, uB);
+      if (!segs.length) fail("spread-strip-empty", { side: which, strip: s });
+      if (s < n) segs.push(line(cuts[s].seamPt, cuts[s].hemPt, { edge: tag(cuts[s].id, "first") }));
+      else sideD.forEach(function (sg) { segs.push(clone(sg)); });
+      var ha = s === 0 ? 0 : (cuts[s - 1].u - uHem0) / (uHem1 - uHem0), hb = s === n ? 1 : (cuts[s].u - uHem0) / (uHem1 - uHem0);
+      segs.push(t.reverseSeg(t.subSegment(hemC, ha, hb)));
+      if (s > 0) segs.push(line(cuts[s - 1].hemPt, cuts[s - 1].seamPt, { edge: tag(cuts[s - 1].id, "second") }));
+      else centerU.forEach(function (sg) { segs.push(clone(sg)); });
+      var R = Jn.buildClosedRing(segs);
+      if (!R.ok) fail(R.reason, { side: which, strip: s });
+      areaStrips += checkClosed(R.chain, which + ".body-strip" + s);
+      strips.push({ outline: R.chain.map(Jn.toGeomPrim), construction: assignCon(uA, s === n ? Infinity : uB, s === n).map(Jn.toGeomPrim) });
+    }
+
+    var legEnds = function (pc, edgeTag) {
+      var R = Jn.buildClosedRing(t.outlinePrimsToSegs(pc.outline));
+      if (!R.ok) fail(R.reason, edgeTag);
+      var hit = Jn.canonicalRing(R.chain).chain.filter(function (sg) { return sg.edge === edgeTag; });
+      if (hit.length !== 1) fail("join-leg-not-found", { tag: edgeTag, count: hit.length });
+      return { start: P(hit[0].from), end: P(hit[0].to) };
+    };
+    // 고정점 = 다리 끝 중 이음선 모서리에 닿은 쪽(좌표를 추측하지 않는다)
+    var pivotOf = function (pc, ends, tagName) {
+      var sm = t.outlinePrimsToSegs(pc.outline).filter(function (sg) { return sg.edge === "yoke-seam"; });
+      var on = function (pt) { return sm.some(function (sg) { return near(sg.from, pt, 1e-6) || near(sg.to, pt, 1e-6); }); };
+      var a0 = on(ends.start), a1 = on(ends.end);
+      if (a0 === a1) fail("spread-pivot-not-found", { tag: tagName });
+      return a0 ? ends.start : ends.end;
+    };
+    var acc = strips[0], joins = [];
+    for (var j = 0; j < n; j++) {
+      var d = cuts[j], ea = legEnds(acc, tag(d.id, "first")), eb = legEnds(strips[j + 1], tag(d.id, "second")), res;
+      try {
+        res = Jn.buttSpread({ joinPairId: d.id,
+          a: { piece: acc, pairId: d.id, start: ea.start, end: ea.end },
+          b: { piece: strips[j + 1], pairId: d.id, start: eb.start, end: eb.end },
+          spread: { pivot: pivotOf(acc, ea, tag(d.id, "first")), chordCm: chord } }, { bridge: "smooth", bridgeEdge: "hem" });
+      } catch (e) { fail("spread-join-failed", { side: which, cut: d.id, reason: e.reason || e.message }); }
+      acc = { outline: res.outline, construction: res.construction };
+      joins.push({ cutId: d.id, uCm: d.u, seamPoint: P(d.seamPt), hemPoint: P(d.hemPt), chordCm: res.spread.chordCm, angleDeg: res.spread.angleDeg,
+        bridgeLenCm: res.spread.bridgeLenCm, wedgeAreaCm2: res.spread.wedgeAreaCm2, areaDeltaCm2: res.areaDeltaCm2, maxSeamDeviationCm: res.maxSeamDeviationCm });
+    }
+    var fin = Jn.buildClosedRing(t.outlinePrimsToSegs(acc.outline));
+    if (!fin.ok) fail(fin.reason, which);
+    var finArea = checkClosed(fin.chain, which + ":body-spread");
+    var seamLen = segsLen(fin.chain.filter(function (sg) { return sg.edge === "yoke-seam"; }));
+    return { outline: acc.outline, construction: acc.construction, areaCm2: finArea, areaStripsCm2: areaStrips, seamLenCm: seamLen,
+      flare: { bustWidthCm: BLw, ratio: spec.ratio, subtractCm: spec.subtractCm, totalCm: total, perCutChordCm: chord, cuts: joins,
+        waistThirdsCm: uW, strips: n + 1 } };
+  }
+
   function splitSideS(piece, which, opts) {
-    var hemSideCm = (opts && "hemSideCm" in opts) ? opts.hemSideCm : DEFAULT_HEM_SIDE_CM;
+    var variantT = !!(opts && opts.variant === "T");   // Ⓣ(P.33): 개더 띠 대신 몸판 절개 벌림
+    var hemSideCm = (opts && "hemSideCm" in opts) ? opts.hemSideCm : (variantT ? DEFAULT_HEM_SIDE_T_CM : DEFAULT_HEM_SIDE_CM);
     if (hemSideCm != null && !(typeof hemSideCm === "number" && isFinite(hemSideCm))) fail("invalid-option", { hemSideCm: hemSideCm });
     if (!piece || !Array.isArray(piece.outline) || !Array.isArray(piece.construction)) fail("invalid-geometry", which);
     var isFront = (which === "front");
@@ -536,25 +683,43 @@
       else if (sg) { var id = sg.dart && sg.dart.id || sg.edge || "?"; if (dropped.indexOf(id) < 0) dropped.push(id); }
     });
 
-    // 8) 개더 띠 — 폭 = 완성 이음선 전체 길이 × 0.5, 몸판에만(요크 geometry 불변). 띠 윗변 = 중심 쪽 이음선 높이(Pcf.y).
-    var Wcm = GATHER_S_RATIO * seamLenUp;
-    var gr = gatherBand(which, Wcm, "seam-length-half", Ps, cx, bodySegs, keep, Pcf.y, seamLenUp, areaLow);
-    bodySegs = gr.bodySegs; keep = gr.keep;
+    // 8) 개더 띠(Ⓢ) — 폭 = 완성 이음선 전체 길이 × 0.5, 몸판에만(요크 geometry 불변). 띠 윗변 = 중심 쪽 이음선 높이(Pcf.y).
+    //    Ⓣ 는 개더 대신 몸판을 절개해 벌린다(● = 이 면 Ⓐ 몸판의 BL 수평폭).
+    var gr = null, sp = null;
+    if (variantT) {
+      var BLside = sideEdges.reduce(function (a, s2) { var p = s2.from.y <= s2.to.y ? s2.from : s2.to; return p.y < a.y ? p : a; }, { x: 0, y: Infinity });
+      if (Math.abs(BLside.y - BLy) > Y_TOL) fail("bust-line-side-point", which);
+      sp = spreadBody(which, bodySegs, keep, Math.abs(BLside.x - cx), SPREAD_T);
+      if (Math.abs(sp.areaStripsCm2 - areaLow) > AREA_TOL) fail("spread-strips-area", { side: which, stripsCm2: sp.areaStripsCm2, bodyCm2: areaLow });
+      if (Math.abs(sp.seamLenCm - seamLenUp) > 1e-4) fail("spread-seam-length-mismatch", { side: which, bodyCm: sp.seamLenCm, yokeCm: seamLenUp });
+    } else {
+      var Wcm = GATHER_S_RATIO * seamLenUp;
+      gr = gatherBand(which, Wcm, "seam-length-half", Ps, cx, bodySegs, keep, Pcf.y, seamLenUp, areaLow);
+      bodySegs = gr.bodySegs; keep = gr.keep;
+    }
 
     var meta = {
-      side: which, variant: "S",
+      side: which, variant: variantT ? "T" : "S",
       seamY: Ys, seamYCenter: Ycf, bustLineY: BLy, seamDropCm: SEAM_BELOW_BL_CM,
       seamPoints: { center: P(Pcf), apex: isFront ? P(apex) : null, side: P(Ps), sideAfterClose: P(PsRot) },
       seamLenUpperCm: seamLenUp,
-      seamLenLowerCm: gr.meta.seamLenBodyCm,
-      seamDeltaCm: seamLenUp - gr.meta.seamLenBodyCm,
+      seamLenLowerCm: gr ? gr.meta.seamLenBodyCm : sp.seamLenCm,
+      seamDeltaCm: seamLenUp - (gr ? gr.meta.seamLenBodyCm : sp.seamLenCm),
       seamMaxDyCm: isFront ? Math.abs(Ps.y - Ys) : Math.max(Math.abs(Pcf.y - Ys), Math.abs(Ps.y - Ys)),
       absorbedDarts: absorbed, preservedDarts: preserved,
       hemSideExtraCm: hemExtra,
-      areaYokeCm2: areaUp, areaBodyCm2: areaLow + gr.meta.areaAddedCm2, areaInputCm2: areaIn,
+      areaYokeCm2: areaUp, areaBodyCm2: gr ? areaLow + gr.meta.areaAddedCm2 : sp.areaCm2, areaInputCm2: areaIn,
       droppedConstruction: dropped,
-      gather: gr.meta
+      gather: gr ? gr.meta : null
     };
+    if (sp) {
+      meta.flare = sp.flare;
+      return {
+        yoke: { outline: toPrims(yokeOutlineSegs, piece.outline), construction: yokeConstruction },
+        body: { outline: sp.outline, construction: sp.construction },
+        meta: meta
+      };
+    }
     return {
       yoke: { outline: toPrims(yokeOutlineSegs, piece.outline), construction: yokeConstruction },
       body: { outline: toPrims(bodySegs, piece.outline), construction: keep },
@@ -566,11 +731,11 @@
   // 원자적: 앞·뒤 중 하나라도 실패하면 아무것도 반환하지 않는다. 입력은 변형하지 않는다.
   function split(geometry, opts) {
     if (!geometry || typeof geometry !== "object" || !geometry.front || !geometry.back) fail("invalid-geometry");
-    var sideFn = (opts && opts.variant === "S") ? splitSideS : splitSide;   // Ⓢ(P.32) = 이음선 BL−5·앞 꺾인 선·뒤 어깨 다트 보존
+    var sideFn = (opts && (opts.variant === "S" || opts.variant === "T")) ? splitSideS : splitSide;   // Ⓢ(P.32)·Ⓣ(P.33) = 이음선 BL−5·앞 꺾인 선·뒤 어깨 다트 보존(Ⓣ 는 개더 대신 절개 벌림)
     var f = sideFn(deepClone(geometry.front), "front", opts);
     var b = sideFn(deepClone(geometry.back), "back", opts);
     return { frontYoke: f.yoke, frontBody: f.body, backYoke: b.yoke, backBody: b.body, meta: { front: f.meta, back: b.meta } };
   }
 
-  window.designYokeSeam = Object.freeze({ split: split, splitSide: splitSide, ABSORB: Object.freeze(deepClone(ABSORB)) });
+  window.designYokeSeam = Object.freeze({ split: split, splitSide: splitSide, ABSORB: Object.freeze(deepClone(ABSORB)), SPREAD_T: Object.freeze(deepClone(SPREAD_T)) });
 })();

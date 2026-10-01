@@ -50,14 +50,13 @@ const edgesOf = (pc, e) => segsOf(pc.outline).filter(s => s.edge === e);
 // ── 1. 프리셋 Ⓢ ──
 ok(BP.resolve("yoke-seam-2", "bunka-bodice-S").ok, "1: Ⓢ 해석 성공(실행 가능)");
 ok(J(S_BODY) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: "S" }), "1: Ⓢ 파라미터 = 박시 Ⓐ + 밑단 옆 +1 + yokeSeam:S");
-ok(BP.family("yoke-seam-2").availability === "available" && BP.variant("yoke-seam-2", "bunka-bodice-T").availability === "pending-op" &&
-   typeof BP.variant("yoke-seam-2", "bunka-bodice-T").blockedBy === "string", "1: 요크 ② 라인 available · Ⓣ 는 보류+blockedBy");
+ok(BP.family("yoke-seam-2").availability === "available" && BP.variant("yoke-seam-2", "bunka-bodice-T").availability === "available", "1: 요크 ② 라인 available · Ⓣ(P.33)도 실행 가능");
 ok(J(Q_BODY) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: true }) && J(R_BODY) === J(Object.assign({}, Q_BODY, { yokeGather: true })), "1: Ⓠ·Ⓡ 파라미터 불변");
 ok(BP.yokeVariantSymbol(S_BODY) === "S" && BP.yokeVariantSymbol(Q_BODY) === "Q" && BP.yokeVariantSymbol(R_BODY) === "R", "1: body → 변형 기호(Q/R/S)");
 throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, S_BODY, { waistSeam: true }) }), "yoke-seam-waist-seam-conflict", "1: 요크+허리 이음선 충돌 거부");
 throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, S_BODY, { flare: true }) }), "yoke-seam-flare-conflict", "1: 요크+플레어 충돌 거부");
 throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, S_BODY, { yokeGather: false }) }), "yoke-seam-s-gather-implied", "1: Ⓢ 의 개더는 끌 수 없다");
-throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, S_BODY, { yokeSeam: "T" }) }), "invalid-body-yoke-seam", "1: 알 수 없는 yokeSeam 값 거부");
+throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, S_BODY, { yokeSeam: "X" }) }), "invalid-body-yoke-seam", "1: 알 수 없는 yokeSeam 값 거부");
 ok(J(DB.computeGeometry(REF, { body: S_BODY })) === J(GS), "1: 결정론(같은 입력 → 바이트 동일)");
 ok(J(REF) === SNAP, "1: 입력 reference 불변");
 

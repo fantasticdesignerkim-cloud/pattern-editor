@@ -65,6 +65,8 @@ const suites = [
   { file: "yokeGatherCheck.js",         golden: false },
   // 요크 이음선 ② Ⓢ(P.32) — 뒤 BL−5 · 앞 CF→BP→옆선 BL−5 꺾인 이음선·앞 AH 흡수·뒤 어깨 다트 보존·개더=이음선×½·체크포인트·표시·A~Ⓡ 바이트 불변.
   { file: "yokeSeamSCheck.js",          golden: false },
+  // 요크 이음선 ② Ⓣ(P.33) — Ⓢ 요크 + 몸판 WL 3등분 수직 절개 2곳 밑단 벌림(∅ = BL 폭×½−2.5)·이음선 길이 보존·fairing·체크포인트·A~Ⓢ 바이트 불변.
+  { file: "yokeSeamTCheck.js",          golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },

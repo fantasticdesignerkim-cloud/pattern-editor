@@ -897,6 +897,81 @@
     if (!(Math.abs(my.areaCm2 + mb.areaCm2 - aw - extra) <= YOKE_AREA_EPS)) { r.reason = "yoke-seam-area-mismatch"; return r; }
     return r;
   }
+  // ── 요크 이음선 Ⓣ(P.33) 한 면 — Ⓢ 의 요크·이음선·다트 규칙 + 몸판 절개 벌림을 출력 geometry 에서 **독립 재계산**한다 ──
+  //   요크 쪽(다트 처리·이음선 위치)은 Ⓢ 와 같다. 몸판은 개더 띠가 없고, ① 이음선 총길이가 요크와 같아야 하며(강체 회전)
+  //   ② 밑단 이음 호(edge:"hem" 곡선)의 현 합 = ∅ = 그 면 **BL 수평폭**(전체 몸판 옆선 위 끝~중심) × 0.5 − 2.5 · 호 수 = 절개 수 2 ·
+  //   ③ 밑단 옆 +2.5 · ④ (요크+몸판) − 전체 몸판 면적 = 벌림 쐐기 면적(메타 합과 일치).
+  var YOKE_T_RATIO = 0.5, YOKE_T_SUBTRACT_CM = 2.5, YOKE_T_CUTS = 2, YOKE_T_HEM_SIDE_CM = 2.5, YOKE_T_FLARE_EPS = 1e-3;
+  function yokeRowT(r, side, Y, B, whole, m, proj) {
+    var dartId = YOKE_DART[side], back = side === "back";
+    var legsOf = function (pc) {
+      return (pc.construction || []).filter(function (s) { return s && s.kind === "line" && s.dart && s.dart.id === dartId; })
+        .map(function (s) { return { kind: "line", from: cp(s.from), to: cp(s.to), apexAt: s.dart.apexAt }; });
+    };
+    var yLegs = legsOf(Y), wLegs = legsOf(whole);
+    var ry = yokeOrderRing(ringSegs(Y.outline).concat(back ? yLegs.map(function (l) { return { kind: "line", from: l.from, to: l.to }; }) : []), back ? YOKE_WHOLE_EPS : undefined);
+    var rb = yokeOrderRing(ringSegs(B.outline));
+    r.closed = { yoke: !!ry, body: !!rb };
+    if (!ry || !rb) { r.reason = "yoke-seam-open"; return r; }
+    var my = yokeRingMetrics(ry), mb = yokeRingMetrics(rb);
+    r.areaYokeCm2 = round4(my.areaCm2); r.areaBodyCm2 = round4(mb.areaCm2);
+    r.selfIntersects = my.selfIntersects || mb.selfIntersects;
+    if (r.selfIntersects || !(my.areaCm2 > 0) || !(mb.areaCm2 > 0)) { r.reason = "yoke-seam-self-intersection"; return r; }
+    var hasDart = function (pc) { return pc.outline.concat(pc.construction || []).some(function (s) { return s && s.dart && s.dart.id === dartId; }); };
+    var sameLeg = function (a, b) { return Math.hypot(a.from.x - b.from.x, a.from.y - b.from.y) < 1e-6 && Math.hypot(a.to.x - b.to.x, a.to.y - b.to.y) < 1e-6; };
+    if (!back) { if (hasDart(Y) || hasDart(B)) { r.reason = "yoke-seam-dart-open"; return r; } }
+    else {
+      var kept = yLegs.length === 2 && wLegs.length === 2 && yLegs.every(function (l, i) { return sameLeg(l, wLegs[i]); });
+      var inOutline = Y.outline.some(function (s) { return s && s.dart && s.dart.id === dartId; });
+      if (!kept || inOutline || hasDart(B)) { r.reason = "yoke-seam-dart-not-preserved"; return r; }
+    }
+    r.preservedDartIds = back ? [dartId] : [];
+    var BLy = bustLineY(proj, side), Ys = BLy + YOKE_S_DROP_CM;
+    r.bustLineY = round4(BLy); r.seamYCm = round4(Ys);
+    var seamOf = function (pc) { return pc.outline.filter(function (s) { return s && s.edge === "yoke-seam"; }); };
+    var sy = seamOf(Y), sb = seamOf(B), wantY = back ? 1 : 2;
+    if (sy.length !== wantY || !sb.length || !sy.concat(sb).every(function (s) { return s.kind === "line"; })) { r.reason = "yoke-seam-missing"; return r; }
+    var wc = ringSegs(whole.outline.filter(function (s) { return s && s.edge === "center"; }));
+    var cxWhole = wc.length ? wc[0].from.x : null;
+    var wSide = whole.outline.filter(function (s) { return s && s.edge === "side-seam"; });
+    if (cxWhole == null || !wSide.length) { r.reason = "yoke-seam-missing"; return r; }
+    var Ycf = back ? Ys : BLy;
+    var atCf = function (p, y) { return Math.abs(p.x - cxWhole) <= YOKE_S_POS_EPS && Math.abs(p.y - y) <= YOKE_S_POS_EPS; };
+    if (back) {
+      if (![sy[0].from, sy[0].to].every(function (p) { return Math.abs(p.y - Ys) <= YOKE_S_POS_EPS; }) || !(atCf(sy[0].from, Ys) || atCf(sy[0].to, Ys))) { r.reason = "yoke-seam-position-mismatch"; return r; }
+    } else {
+      var wl = wLegs[0], apex = wl ? (wl.apexAt === "to" ? wl.to : wl.from) : null;
+      var onApex = function (p) { return Math.hypot(p.x - apex.x, p.y - apex.y) <= YOKE_S_POS_EPS; };
+      var horiz = apex ? sy.filter(function (sg) { return Math.abs(sg.from.y - BLy) <= YOKE_S_POS_EPS && Math.abs(sg.to.y - BLy) <= YOKE_S_POS_EPS; }) : [];
+      if (!apex || Math.abs(apex.y - BLy) > YOKE_S_POS_EPS || horiz.length !== 1 || !(atCf(horiz[0].from, BLy) || atCf(horiz[0].to, BLy)) || !(onApex(horiz[0].from) || onApex(horiz[0].to))) { r.reason = "yoke-seam-position-mismatch"; return r; }
+    }
+    // 몸판 이음선: 중심 쪽 끝이 CF 의 이음선 높이에 있고(중심 조각은 고정), 총길이 = 요크 이음선 길이(절개 벌림은 강체 회전이라 보존)
+    var ly = sy.reduce(function (t, sg) { return t + segLen(sg); }, 0), lb = sb.reduce(function (t, sg) { return t + segLen(sg); }, 0);
+    if (!sb.some(function (sg) { return atCf(sg.from, Ycf) || atCf(sg.to, Ycf); })) { r.reason = "yoke-seam-position-mismatch"; return r; }
+    r.seamLenYokeCm = round4(ly); r.seamLenBodyCm = round4(lb); r.deltaCm = ly - lb;
+    if (!(Math.abs(ly - lb) <= YOKE_SEAM_LEN_EPS)) { r.reason = "yoke-seam-length-mismatch"; return r; }
+    // 플레어: ∅ = BL 수평폭 × 0.5 − 2.5 (BL = 전체 몸판 옆선 위 끝) · 밑단 이음 호의 현 합과 일치, 호 수 = 절개 수
+    var top = null, bot = null;
+    wSide.forEach(function (sg) { [sg.from, sg.to].forEach(function (p) { if (!top || p.y < top.y) top = p; if (!bot || p.y > bot.y) bot = p; }); });
+    var BLw = Math.abs(top.x - cxWhole), want = YOKE_T_RATIO * BLw - YOKE_T_SUBTRACT_CM;
+    var hemExtra = (top.x >= cxWhole ? 1 : -1) * (bot.x - top.x);
+    var arcs = B.outline.filter(function (sg) { return sg && sg.edge === "hem" && sg.kind === "path" && Array.isArray(sg.commands); });
+    var chords = arcs.map(function (sg) { var a = sg.commands[0].points[0], cc = sg.commands[sg.commands.length - 1], b = cc.points[cc.points.length - 1]; return Math.hypot(b.x - a.x, b.y - a.y); });
+    var sum = chords.reduce(function (t, c) { return t + c; }, 0);
+    r.bustWidthCm = round4(BLw); r.flareWantCm = round4(want); r.flareCm = round4(sum); r.flareCuts = arcs.length; r.hemSideExtraCm = round4(hemExtra);
+    r.flareDeclaredCm = (m.flare && typeof m.flare.totalCm === "number") ? round4(m.flare.totalCm) : null;
+    if (!(want > 0) || arcs.length !== YOKE_T_CUTS || !(Math.abs(sum - want) <= YOKE_T_FLARE_EPS) || !chords.every(function (c) { return Math.abs(c - want / YOKE_T_CUTS) <= YOKE_T_FLARE_EPS; }) ||
+        !m.flare || typeof m.flare.totalCm !== "number" || !(Math.abs(m.flare.totalCm - want) <= YOKE_T_FLARE_EPS)) { r.reason = "yoke-flare-mismatch"; return r; }
+    if (!(Math.abs(hemExtra - YOKE_T_HEM_SIDE_CM) <= 1e-6)) { r.reason = "yoke-hem-side-mismatch"; return r; }
+    // 면적: (요크 + 몸판) − 전체 몸판 링 = 벌림 쐐기 + 밑단 이음 호 면적(메타 합과 일치, 양수)
+    var rw = yokeOrderRing(ringSegs(whole.outline).concat(wLegs.map(function (l) { return { kind: "line", from: l.from, to: l.to }; })), YOKE_WHOLE_EPS);
+    if (!rw) { r.reason = "yoke-seam-missing"; return r; }
+    var aw = yokeRingMetrics(rw).areaCm2, delta = my.areaCm2 + mb.areaCm2 - aw;
+    var declared = (m.flare.cuts || []).reduce(function (t, c) { return t + (typeof c.areaDeltaCm2 === "number" ? c.areaDeltaCm2 : NaN); }, 0);
+    r.areaWholeCm2 = round4(aw); r.areaDeltaCm2 = round4(delta);
+    if (!(delta > 0) || !(Math.abs(delta - declared) <= YOKE_AREA_EPS)) { r.reason = "yoke-seam-area-mismatch"; return r; }
+    return r;
+  }
   function yokeSeamState(proj) {
     var g = proj && proj.working && proj.working.geometry;
     if (!g || !(g.frontYoke || g.frontBody || g.backYoke || g.backBody || g.yokeSeam)) return null;
@@ -908,6 +983,8 @@
       var okPiece = function (pc) { return pc && Array.isArray(pc.outline) && pc.outline.length >= 3; };
       if (!okPiece(Y) || !okPiece(B) || !okPiece(whole) || !m) { r.reason = "yoke-seam-missing"; return r; }
       var pbody = proj.working.parameters && proj.working.parameters.body;
+      var pyk = pbody && pbody.yokeSeam;   // 파라미터가 Ⓢ/Ⓣ 를 말하면 그 규칙이 우선한다(geometry 메타로 다른 규칙을 고르지 않는다)
+      if (pyk === "T" || (pyk !== "S" && m.variant === "T")) { r.variant = "T"; return yokeRowT(r, side, Y, B, whole, m, proj); }   // Ⓣ(P.33): Ⓢ 요크 + 몸판 절개 벌림
       if ((pbody && pbody.yokeSeam === "S") || m.variant === "S") { r.variant = "S"; return yokeRowS(r, side, Y, B, whole, m, proj); }   // Ⓢ(P.32): 별도 규칙(Ⓠ·Ⓡ 경로는 아래 그대로)
       var ry = yokeOrderRing(ringSegs(Y.outline)), rb = yokeOrderRing(ringSegs(B.outline));
       r.closed = { yoke: !!ry, body: !!rb };
