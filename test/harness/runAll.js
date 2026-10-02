@@ -67,6 +67,8 @@ const suites = [
   { file: "yokeSeamSCheck.js",          golden: false },
   // 요크 이음선 ② Ⓣ(P.33) — Ⓢ 요크 + 몸판 WL 3등분 수직 절개 2곳 밑단 벌림(∅ = BL 폭×½−2.5)·이음선 길이 보존·fairing·체크포인트·A~Ⓢ 바이트 불변.
   { file: "yokeSeamTCheck.js",          golden: false },
+  // 요크 이음선 ③ Ⓤ(P.34) — 어깨 요크 한 장(뒤 다트 먼저 닫음 → 앞 요크와 어깨선 맞댐)·앞 어깨 평행 −6 이음선·앞 쐐기 개더·뒤 중심 개더 (이음선−2)×½·체크포인트·표시·A~Ⓣ 바이트 불변.
+  { file: "yokeSeamUCheck.js",          golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },

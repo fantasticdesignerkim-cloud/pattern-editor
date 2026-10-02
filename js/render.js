@@ -441,7 +441,7 @@ function _appendPeplumAnnotation(grp, model, dy){
 }
 
 // 요크 이음선 Ⓠ 제작 정보(표시 전용): 조각명 넷 + «이음선» 글자. 수치는 만들지 않는다. geometry·hit·계측·hash 무관.
-function _yokeModeOf(g){ return !!(g && g.frontYoke && g.frontBody && g.backYoke && g.backBody); }
+function _yokeModeOf(g){ return !!(g && g.frontBody && g.backBody && ((g.frontYoke && g.backYoke) || g.shoulderYoke)); }   // Ⓠ~Ⓣ = 요크 둘 · Ⓤ = 어깨 요크 한 장
 function _appendYokeAnnotation(grp, model, pc){
   if(!model) return;
   const g=E("g",{ "data-design-yoke":"annotation", "data-anno-piece":pc, class:"yoke-anno" });
@@ -542,9 +542,13 @@ function render(){
       if (bd) sub[side + "Body"] = bd;
       return sub;
     };
-    const frontSub  = (g) => g.frontYoke && g.frontBody ? withYoke({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }, g, "front")
+    // Ⓤ: 어깨 요크는 한 장이고 좌표계가 뒤(back) 쪽이다 → 뒤 서브셋이 어깨 요크 + 뒤 몸판을, 앞 서브셋은 앞 몸판만 그린다.
+    const bodyOnly = (g, side) => { const sub = { front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }; const bd = window.designLayout ? window.designLayout.peplumDisplayPiece(g, side + "Body") : null; if (bd) sub[side + "Body"] = bd; return sub; };
+    const frontSub  = (g) => g.shoulderYoke && g.frontBody ? bodyOnly(g, "front")
+      : g.frontYoke && g.frontBody ? withYoke({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }, g, "front")
       : withPep({ front: g.front, back: EMPTY, shared: g.shared, sleeve: EMPTY }, g, "frontPeplum");
-    const backSub   = (g) => g.backYoke && g.backBody ? withYoke({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }, g, "back")
+    const backSub   = (g) => g.shoulderYoke && g.backBody ? (() => { const sub = bodyOnly(g, "back"); sub.shoulderYoke = g.shoulderYoke; return sub; })()
+      : g.backYoke && g.backBody ? withYoke({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }, g, "back")
       : withPep({ front: EMPTY, back: g.back, shared: EMPTY, sleeve: EMPTY }, g, "backPeplum");
     const sleeveSub = (g) => ({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: g.sleeve });
     const SUBS = [["front", frontSub], ["back", backSub], ["sleeve", sleeveSub]];

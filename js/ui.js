@@ -505,7 +505,7 @@
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
     pendingPeplumCut = (body.peplumCut === true || body.peplumCut === "P") ? body.peplumCut : null;
-    pendingYokeSeam = (body.yokeSeam === true || body.yokeSeam === "S" || body.yokeSeam === "T") ? body.yokeSeam : null;   // true = Ⓠ·Ⓡ · "S" = Ⓢ · "T" = Ⓣ. 다른 프리셋으로 바꾸면 해제 → 요크·몸판 조각 사라짐
+    pendingYokeSeam = (body.yokeSeam === true || body.yokeSeam === "S" || body.yokeSeam === "T" || body.yokeSeam === "U") ? body.yokeSeam : null;   // true = Ⓠ·Ⓡ · "S" = Ⓢ · "T" = Ⓣ · "U" = Ⓤ. 다른 프리셋으로 바꾸면 해제 → 요크·몸판 조각 사라짐
     pendingYokeGather = body.yokeGather === true ? true : null;   // Ⓠ 로 바꾸면 해제 → 개더 띠 없는 요크
     onApplyBodyLength();
   }
@@ -535,7 +535,7 @@
   const yokeCircled = (s) => /^[A-Z]$/.test(s || "") ? String.fromCodePoint(0x24B6 + s.charCodeAt(0) - 65) : "Ⓠ";
   function syncYokeToolLock(project) {
     const g = project && project.working && project.working.geometry;
-    const locked = !!(g && g.frontYoke && g.frontBody && g.backYoke && g.backBody);
+    const locked = !!(g && g.frontBody && g.backBody && ((g.frontYoke && g.backYoke) || g.shoulderYoke));   // Ⓠ~Ⓣ = 요크 둘 · Ⓤ = 어깨 요크 한 장
     const body = project && project.working && project.working.parameters && project.working.parameters.body;
     const YOKE_LOCK_MSG = yokeLockMsg(yokeCircled(window.bodicePresets && window.bodicePresets.yokeVariantSymbol(body)));
     if (locked && window.designLineTool && window.designLineTool.getMode && window.designLineTool.getMode() !== "off") window.designLineTool.cancel();

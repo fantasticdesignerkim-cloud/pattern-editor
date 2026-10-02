@@ -50,12 +50,13 @@
   ];
   // 허리 이음선 Ⓜ 의 페플럼 — **선택 조각**(있을 때만 검증·렌더). 앞/뒤판과 같은 edge 규칙을 따른다.
   //   요크 이음선 Ⓠ 의 요크·몸판(frontYoke/frontBody/backYoke/backBody)도 같은 방식의 선택 조각이다.
-  const EXTRA = { frontPeplum: "front", backPeplum: "back", frontYoke: "front", frontBody: "front", backYoke: "back", backBody: "back" };
+  const EXTRA = { frontPeplum: "front", backPeplum: "back", frontYoke: "front", frontBody: "front", backYoke: "back", backBody: "back", shoulderYoke: "back" };   // shoulderYoke = Ⓤ 어깨 요크 한 장(좌표계 = 뒤)
   const EXTRA_ORDER = [
     ["frontPeplum", "outline"], ["frontPeplum", "construction"],
     ["backPeplum", "outline"], ["backPeplum", "construction"],
     ["frontYoke", "outline"], ["frontYoke", "construction"], ["frontBody", "outline"], ["frontBody", "construction"],
-    ["backYoke", "outline"], ["backYoke", "construction"], ["backBody", "outline"], ["backBody", "construction"]
+    ["backYoke", "outline"], ["backYoke", "construction"], ["backBody", "outline"], ["backBody", "construction"],
+    ["shoulderYoke", "outline"], ["shoulderYoke", "construction"]
   ];
 
   function fail(reason, detail) {

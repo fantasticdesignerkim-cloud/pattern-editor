@@ -31,13 +31,15 @@
   //   아니라 한 벌로 움직이고, 겹치지 않도록 표시만 허리 아래로 내린다(아래 peplumDrop). 형상 좌표는 불변.
   const PIECE_KEYS = {
     front: ["front", "shared", "frontPeplum", "frontYoke", "frontBody"],
-    back: ["back", "backPeplum", "backYoke", "backBody"],
+    back: ["back", "backPeplum", "backYoke", "backBody", "shoulderYoke"],   // Ⓤ 어깨 요크 한 장은 좌표계가 뒤(back) 쪽이라 뒤 피스가 호스트다
     sleeve: ["sleeve"],
-    body: ["front", "back", "shared", "frontPeplum", "backPeplum", "frontYoke", "frontBody", "backYoke", "backBody"]   // 하위호환(앞+뒤 묶음)
+    body: ["front", "back", "shared", "frontPeplum", "backPeplum", "frontYoke", "frontBody", "backYoke", "backBody", "shoulderYoke"]   // 하위호환(앞+뒤 묶음)
   };
   //   요크 이음선 Ⓠ: 요크가 있으면 **전체 앞/뒤판은 표시하지 않는다**(요크+몸판이 대신 그려진다) → bbox 에서도 뺀다.
   //   hit rect 는 여전히 앞/뒤 피스 하나(요크 ∪ 내려 그린 몸판)이고 좌표(geometry)는 불변이다.
   const YOKE_HOST_OF = { front: "frontYoke", shared: "frontYoke", back: "backYoke" };
+  //   Ⓤ(P.34): 요크가 한 장(`shoulderYoke`)이면 앞·뒤 전체판이 그 한 장을 호스트로 삼아 숨고, 앞·뒤 몸판은 그 아래로 내려 그린다.
+  const yokeHosted = (geometry, pc) => !!YOKE_HOST_OF[pc] && !!(geometry[YOKE_HOST_OF[pc]] || geometry.shoulderYoke);
   const PEPLUM_GAP = 3;        // 몸판(upper) 아래 끝과 페플럼 위 끝 사이 표시 간격(도안 cm)
   //   요크 모드에서는 **몸판이 요크 아래로** 내려간다(호스트 = 요크): 요크 아래 끝 + PEPLUM_GAP 아래에 몸판 위 끝.
   const PEPLUM_OF = { frontPeplum: "front", backPeplum: "back", frontBody: "frontYoke", backBody: "backYoke" };   // 조각 → 위쪽 짝
@@ -52,7 +54,7 @@
   //   페플럼 위 끝이 오도록 **표시만** 내린다(upper 는 허리 옆 끝이 회전으로 조금 내려가 페플럼과 겹칠 수
   //   있다). geometry 좌표는 안 움직이고, 결정론(같은 geometry → 같은 dy)이다.
   function peplumDrop(geometry, peplumKey) {
-    const host = PEPLUM_OF[peplumKey];
+    const host = (geometry && geometry.shoulderYoke && (peplumKey === "frontBody" || peplumKey === "backBody")) ? "shoulderYoke" : PEPLUM_OF[peplumKey];
     const up = geometry && geometry[host], pp = geometry && geometry[peplumKey];
     if (!up || !pp || !Array.isArray(up.outline) || !Array.isArray(pp.outline)) return 0;
     const u = [], q = [];
@@ -76,7 +78,30 @@
   }
   // 요크 이음선 Ⓠ 제작 정보(표시 전용, 순수): 조각명 넷 + 이음선 안내. 표시 좌표(몸판은 내려 그림)이며 geometry 불변.
   //   요크가 없으면 null. 교재에 없는 수치는 만들지 않는다 — 조각명과 «이음선» 글자뿐이다.
+  function yokeLabelsU(geometry) {
+    const ptsOf = (b) => { const pts = []; (b.outline || []).forEach(p => pointsOfPrim(p, pts)); return pts; };
+    const mid = (pts) => { const xs = pts.map(q => q.x), ys = pts.map(q => q.y); return { x: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2, y: (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2 }; };
+    const fb = peplumDisplayPiece(geometry, "frontBody"), bb = peplumDisplayPiece(geometry, "backBody");
+    const labels = [
+      { key: "shoulderYoke", text: "어깨 요크", piece: "back", at: mid(ptsOf(geometry.shoulderYoke)) },
+      { key: "frontBody", text: "앞몸판", piece: "front", at: mid(ptsOf(fb)) },
+      { key: "backBody", text: "뒤몸판", piece: "back", at: mid(ptsOf(bb)) }
+    ];
+    const seams = (geometry.shoulderYoke.outline || []).filter(p => p.edge === "yoke-seam" && p.kind === "line")
+      .map((seg, i) => ({ key: "shoulderYoke" + i, piece: "back", text: "이음선", at: { x: (seg.from.x + seg.to.x) / 2, y: (seg.from.y + seg.to.y) / 2 } }));
+    const ys = geometry.yokeSeam || {}, gathers = [];
+    const gb = ys.back && ys.back.gather;
+    if (gb) gathers.push({ key: "backBody", piece: "back", text: "개더 +" + (Math.round(gb.addedCm * 10) / 10) + "cm", addedCm: gb.addedCm, at: { x: (gb.centerX + gb.newCenterX) / 2, y: Math.min.apply(null, ptsOf(bb).map(q => q.y)) } });
+    const gf = ys.front && ys.front.gather, sp = ys.front && ys.front.seamPoints;
+    if (gf && sp) {
+      const dy = peplumDrop(geometry, "frontBody");
+      gathers.push({ key: "frontBody", piece: "front", text: "개더 +" + (Math.round(gf.addedCm * 10) / 10) + "cm(쐐기)", addedCm: gf.addedCm,
+        at: { x: (sp.cutTop.x + sp.cutTopRotated.x) / 2, y: (sp.cutTop.y + sp.cutTopRotated.y) / 2 + dy } });
+    }
+    return { labels, seams, gathers };
+  }
   function yokeLabels(geometry) {
+    if (geometry && geometry.shoulderYoke && geometry.frontBody && geometry.backBody) return yokeLabelsU(geometry);
     if (!geometry || !geometry.frontYoke || !geometry.frontBody || !geometry.backYoke || !geometry.backBody) return null;
     const defs = [["frontYoke", "앞요크", "front"], ["frontBody", "앞몸판", "front"], ["backYoke", "뒤요크", "back"], ["backBody", "뒤몸판", "back"]];
     const disp = (k) => PEPLUM_OF[k] ? peplumDisplayPiece(geometry, k) : geometry[k];
@@ -103,7 +128,7 @@
   function bboxFromKeys(geometry, keys, roles) {
     const pts = [];
     keys.forEach(pc => {
-      if (YOKE_HOST_OF[pc] && geometry[YOKE_HOST_OF[pc]]) return;   // 요크 모드: 전체 앞/뒤판은 그리지 않는다
+      if (yokeHosted(geometry, pc)) return;   // 요크 모드: 전체 앞/뒤판은 그리지 않는다
       const b = PEPLUM_OF[pc] ? peplumDisplayPiece(geometry, pc) : geometry[pc]; if (!b) return;
       roles.forEach(rl => (b[rl] || []).forEach(p => pointsOfPrim(p, pts)));
     });
