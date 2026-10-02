@@ -901,7 +901,7 @@
   //   요크 쪽(다트 처리·이음선 위치)은 Ⓢ 와 같다. 몸판은 개더 띠가 없고, ① 이음선 총길이가 요크와 같아야 하며(강체 회전)
   //   ② 밑단 이음 호(edge:"hem" 곡선)의 현 합 = ∅ = 그 면 **BL 수평폭**(전체 몸판 옆선 위 끝~중심) × 0.5 − 2.5 · 호 수 = 절개 수 2 ·
   //   ③ 밑단 옆 +2.5 · ④ (요크+몸판) − 전체 몸판 면적 = 벌림 쐐기 면적(메타 합과 일치).
-  var YOKE_T_RATIO = 0.5, YOKE_T_SUBTRACT_CM = 2.5, YOKE_T_CUTS = 2, YOKE_T_HEM_SIDE_CM = 2.5, YOKE_T_FLARE_EPS = 1e-3;
+  var YOKE_T_RATIO = 0.5, YOKE_T_SUBTRACT_CM = 2.5, YOKE_T_CUTS = 2, YOKE_T_HEM_SIDE_CM = 2.5, YOKE_T_FLARE_EPS = 1e-3, YOKE_T_SEAM_TURN_EPS = 1e-3;
   function yokeRowT(r, side, Y, B, whole, m, proj) {
     var dartId = YOKE_DART[side], back = side === "back";
     var legsOf = function (pc) {
@@ -929,8 +929,10 @@
     var BLy = bustLineY(proj, side), Ys = BLy + YOKE_S_DROP_CM;
     r.bustLineY = round4(BLy); r.seamYCm = round4(Ys);
     var seamOf = function (pc) { return pc.outline.filter(function (s) { return s && s.edge === "yoke-seam"; }); };
-    var sy = seamOf(Y), sb = seamOf(B), wantY = back ? 1 : 2;
-    if (sy.length !== wantY || !sb.length || !sy.concat(sb).every(function (s) { return s.kind === "line"; })) { r.reason = "yoke-seam-missing"; return r; }
+    var sy = seamOf(Y), wantY = back ? 1 : 2;
+    // 몸판 이음선은 truing 으로 직선 + 모서리 cubic(path) 이 섞인다 — 끝점·길이는 ringSegs(line/cubic 정규화)로 읽는다
+    var sbRaw = seamOf(B), sb = ringSegs(sbRaw);
+    if (sy.length !== wantY || !sbRaw.length || !sy.every(function (s) { return s.kind === "line"; }) || sb.length < sbRaw.length) { r.reason = "yoke-seam-missing"; return r; }
     var wc = ringSegs(whole.outline.filter(function (s) { return s && s.edge === "center"; }));
     var cxWhole = wc.length ? wc[0].from.x : null;
     var wSide = whole.outline.filter(function (s) { return s && s.edge === "side-seam"; });
@@ -950,6 +952,23 @@
     if (!sb.some(function (sg) { return atCf(sg.from, Ycf) || atCf(sg.to, Ycf); })) { r.reason = "yoke-seam-position-mismatch"; return r; }
     r.seamLenYokeCm = round4(ly); r.seamLenBodyCm = round4(lb); r.deltaCm = ly - lb;
     if (!(Math.abs(ly - lb) <= YOKE_SEAM_LEN_EPS)) { r.reason = "yoke-seam-length-mismatch"; return r; }
+    // 이음선 truing: 몸판 이음선의 이웃 선분 사이에 각진 모서리(절개 교점의 꺾임)가 남아 있으면 안 된다(접선 연속)
+    var leave = function (sg, atStart) {   // 끝점에서 선분 안쪽으로 나가는 접선 방향
+      var a = atStart ? sg.from : sg.to, b = atStart ? (sg.kind === "cubic" ? sg.c1 : sg.to) : (sg.kind === "cubic" ? sg.c2 : sg.from);
+      return { x: b.x - a.x, y: b.y - a.y };
+    };
+    var maxTurn = 0;
+    for (var qi = 0; qi < sb.length; qi++) for (var qj = qi + 1; qj < sb.length; qj++) {
+      [[true, true], [true, false], [false, true], [false, false]].forEach(function (c) {
+        var pa = c[0] ? sb[qi].from : sb[qi].to, pb = c[1] ? sb[qj].from : sb[qj].to;
+        if (Math.hypot(pa.x - pb.x, pa.y - pb.y) > YOKE_CHAIN_EPS) return;
+        var ua = leave(sb[qi], c[0]), ub = leave(sb[qj], c[1]);
+        var tn = Math.abs(Math.atan2(-ua.x * ub.y + ua.y * ub.x, -ua.x * ub.x - ua.y * ub.y));   // (−ua) 와 ub 사이 각 = 통과 시 꺾임
+        if (tn > maxTurn) maxTurn = tn;
+      });
+    }
+    r.seamMaxTurnDeg = round4(maxTurn * 180 / Math.PI);
+    if (!(maxTurn <= YOKE_T_SEAM_TURN_EPS)) { r.reason = "yoke-seam-kink"; return r; }
     // 플레어: ∅ = BL 수평폭 × 0.5 − 2.5 (BL = 전체 몸판 옆선 위 끝) · 밑단 이음 호의 현 합과 일치, 호 수 = 절개 수
     var top = null, bot = null;
     wSide.forEach(function (sg) { [sg.from, sg.to].forEach(function (p) { if (!top || p.y < top.y) top = p; if (!bot || p.y > bot.y) bot = p; }); });
@@ -968,8 +987,9 @@
     if (!rw) { r.reason = "yoke-seam-missing"; return r; }
     var aw = yokeRingMetrics(rw).areaCm2, delta = my.areaCm2 + mb.areaCm2 - aw;
     var declared = (m.flare.cuts || []).reduce(function (t, c) { return t + (typeof c.areaDeltaCm2 === "number" ? c.areaDeltaCm2 : NaN); }, 0);
+    var fairArea = typeof m.flare.seamFairingAreaCm2 === "number" ? m.flare.seamFairingAreaCm2 : NaN;   // 이음선 truing 이 깎거나 보탠 면적(작아야 한다)
     r.areaWholeCm2 = round4(aw); r.areaDeltaCm2 = round4(delta);
-    if (!(delta > 0) || !(Math.abs(delta - declared) <= YOKE_AREA_EPS)) { r.reason = "yoke-seam-area-mismatch"; return r; }
+    if (!(delta > 0) || !(Math.abs(fairArea) <= 1) || !(Math.abs(delta - declared - fairArea) <= YOKE_AREA_EPS)) { r.reason = "yoke-seam-area-mismatch"; return r; }
     return r;
   }
   function yokeSeamState(proj) {

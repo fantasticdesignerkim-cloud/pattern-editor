@@ -67,6 +67,10 @@
   var SPREAD_T = { ratio: 0.5, subtractCm: 2.5, cuts: 2 };
   var DEFAULT_HEM_SIDE_T_CM = 2.5;
   var CUT_EPS = 1e-9;
+  // Ⓣ 이음선 truing — 절개 벌림은 조각을 이음선 교점에서 돌리므로 몸판 윗변(이음선)에 교점마다 꺾임이 생긴다(교재 P.158 ③ «각지지 않게 완만한 곡선으로 수정»).
+  //   이음선의 모든 내부 모서리를 접선 연속 cubic 으로 둥글린다. 모서리마다 양 이웃 선분의 0.45 만큼씩 물러난다(한 선분을 두 모서리가 나눠 써도 겹치지 않는다).
+  //   cubic 의 핸들 길이는 **호 길이가 원래 꺾인 길(2t)과 정확히 같도록** 풀어 몸판 이음 길이를 요크와 그대로 맞춘다. 모서리 위치(BP·교점)는 옮기지 않는다.
+  var SEAM_FAIR_FRAC = 0.45, SEAM_FAIR_MIN_TURN = 1e-4;
 
   function fail(reason, detail) {
     var e = new Error("designYokeSeam: " + reason);
@@ -455,6 +459,45 @@
   // ══ Ⓢ(P.32) 한 면 ═════════════════════════════════════════════════════════
   //   BL = 옆선 변의 위 끝(진동 밑 점)의 y. 뒤: BL+5 수평선(CB→옆선). 앞: CF→BP 를 BL 높이로 잇고 BP→옆선 BL+5 사선.
   //   (y 는 아래로 증가한다 — 도해의 «BL 에서 5cm 아래» = BL.y + 5.)
+  // ── Ⓣ 이음선 truing: 연속한 yoke-seam 직선 사이의 모서리를 길이 보존 접선 연속 cubic 으로 대체 ──
+  function fairSeamRun(chain, which) {
+    var t = T(), n = chain.length, isSeam = function (sg) { return sg && sg.edge === "yoke-seam" && sg.kind === "line"; };
+    var len = function (sg) { return dist(sg.from, sg.to); };
+    var trim = chain.map(function () { return { a: 0, b: 0 }; }), fil = [];
+    for (var i = 0; i < n; i++) {
+      var A = chain[i], B = chain[(i + 1) % n];
+      if (!isSeam(A) || !isSeam(B)) continue;
+      var d0 = { x: (A.to.x - A.from.x) / len(A), y: (A.to.y - A.from.y) / len(A) }, d1 = { x: (B.to.x - B.from.x) / len(B), y: (B.to.y - B.from.y) / len(B) };
+      var turn = Math.abs(Math.atan2(d0.x * d1.y - d0.y * d1.x, d0.x * d1.x + d0.y * d1.y));
+      if (turn < SEAM_FAIR_MIN_TURN) continue;
+      var tt = SEAM_FAIR_FRAC * Math.min(len(A), len(B));
+      var V = P(A.to), P0 = { x: V.x - tt * d0.x, y: V.y - tt * d0.y }, P3 = { x: V.x + tt * d1.x, y: V.y + tt * d1.y };
+      var mk = function (h) {
+        return { kind: "cubic", from: P(P0), c1: { x: P0.x + h * d0.x, y: P0.y + h * d0.y }, c2: { x: P3.x - h * d1.x, y: P3.y - h * d1.y }, to: P(P3),
+          edge: "yoke-seam", yokeSeam: "lower" };
+      };
+      var lo = 0, hi = 2 * tt;
+      if (!(segsLen([mk(hi)]) >= 2 * tt)) fail("seam-fair-length", { side: which, turnRad: turn });
+      for (var it = 0; it < 80; it++) { var mid = (lo + hi) / 2; if (segsLen([mk(mid)]) < 2 * tt) lo = mid; else hi = mid; }
+      var c = mk((lo + hi) / 2);
+      trim[i].b = tt; trim[(i + 1) % n].a = tt;
+      fil.push({ after: i, seg: c, atX: V.x, atY: V.y, turnDeg: turn * 180 / Math.PI, tCm: tt, handleCm: (lo + hi) / 2 });
+    }
+    if (!fil.length) return { chain: chain, corners: [] };
+    var out = [];
+    for (var k = 0; k < n; k++) {
+      var sg = chain[k], tr = trim[k];
+      if (tr.a || tr.b) {
+        var L = len(sg), q = t.subSegment(sg, tr.a / L, 1 - tr.b / L);
+        q.edge = sg.edge; if (sg.yokeSeam) q.yokeSeam = sg.yokeSeam;
+        out.push(q);
+      } else out.push(sg);
+      fil.forEach(function (f) { if (f.after === k) out.push(f.seg); });
+    }
+    for (var g = 0; g < out.length; g++) out[(g + 1) % out.length].from = P(out[g].to);   // 연속(부동소수 drift 제거)
+    return { chain: out, corners: fil.map(function (f) { return { at: { x: f.atX, y: f.atY }, turnDeg: f.turnDeg, setbackCm: f.tCm, handleCm: f.handleCm }; }) };
+  }
+
   // ══ Ⓣ(P.33) 몸판 절개 벌림 ═════════════════════════════════════════════════
   //   bodySegs = 이음선 아래 몸판 폐곡선(개더 없음), keep = 그 몸판의 구성선. WL 참고선(keep 의 edge:"waist")을 (cuts+1)등분한 x 에서
   //   수직 절개 → 중심 조각 고정, 나머지를 바깥으로 순차 `buttSpread`(고정점 = 절개선과 이음선의 교점, 밑단 끝 chord = ∅/cuts).
@@ -584,10 +627,12 @@
     }
     var fin = Jn.buildClosedRing(t.outlinePrimsToSegs(acc.outline));
     if (!fin.ok) fail(fin.reason, which);
-    var finArea = checkClosed(fin.chain, which + ":body-spread");
-    var seamLen = segsLen(fin.chain.filter(function (sg) { return sg.edge === "yoke-seam"; }));
-    return { outline: acc.outline, construction: acc.construction, areaCm2: finArea, areaStripsCm2: areaStrips, seamLenCm: seamLen,
-      flare: { bustWidthCm: BLw, ratio: spec.ratio, subtractCm: spec.subtractCm, totalCm: total, perCutChordCm: chord, cuts: joins,
+    var areaBeforeFair = Math.abs(signedArea(fin.chain));
+    var fr = fairSeamRun(fin.chain, which);
+    var finArea = checkClosed(fr.chain, which + ":body-spread");
+    var seamLen = segsLen(fr.chain.filter(function (sg) { return sg.edge === "yoke-seam"; }));
+    return { outline: fr.chain.map(Jn.toGeomPrim), construction: acc.construction, areaCm2: finArea, areaStripsCm2: areaStrips, seamLenCm: seamLen,
+      flare: { bustWidthCm: BLw, ratio: spec.ratio, subtractCm: spec.subtractCm, totalCm: total, perCutChordCm: chord, cuts: joins, seamFairing: fr.corners, seamFairingAreaCm2: finArea - areaBeforeFair,
         waistThirdsCm: uW, strips: n + 1 } };
   }
 

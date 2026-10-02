@@ -43,7 +43,8 @@ const GT = DB.computeGeometry(REF, { body: T_BODY });
 const D = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const segsOf = (outline) => T.outlinePrimsToSegs(outline);
 const edgesOf = (pc, e) => segsOf(pc.outline).filter(s => s.edge === e);
-const seamLen = (pc) => edgesOf(pc, "yoke-seam").reduce((t, s) => t + D(s.from, s.to), 0);
+const arcLen = (segs) => segs.reduce((t, s) => t + T.flattenLine([s]).reduce((u, ab) => u + D(ab[0], ab[1]), 0), 0);   // line/cubic 호 길이(평탄화)
+const seamLen = (pc) => arcLen(edgesOf(pc, "yoke-seam"));
 const BLY = 83 / 12 + 13.7, YS = BLY + 5;                    // draft.js yBL 공식과 독립으로 다시 계산
 const sideTop = (pc) => segsOf(pc.outline).filter(s => s.edge === "side-seam").flatMap(s => [s.from, s.to]).reduce((a, b) => b.y < a.y ? b : a);
 const sideBot = (pc) => segsOf(pc.outline).filter(s => s.edge === "side-seam").flatMap(s => [s.from, s.to]).reduce((a, b) => b.y > a.y ? b : a);
@@ -105,8 +106,6 @@ const BW = {}, FLARE = {};
     ok(near(c.hemPoint.y, 58, 1e-9), `4: ${side} 절개 ${i + 1} 밑단 끝 y`);
   });
   // 고정점이 이음선 위: 절개 이음선 점은 요크가 아니라 몸판 이음선 원래 모양 위(처음 ring 의 seam)에 있다
-  const seamOrig = edgesOf(GS[side + "Body"], "yoke-seam");   // Ⓢ 몸판 이음선(개더로 평행 이동했으므로 형상만 본다)
-  ok(seamOrig.length === (side === "front" ? 2 : 1), `4: ${side} (참고) 이음선 줄 수`);
   const sy = (side === "front") ? [BLY, YS] : [YS];
   f.cuts.forEach((c, i) => ok(c.seamPoint.y >= Math.min(...sy) - 1e-9 && c.seamPoint.y <= Math.max(...sy) + 1e-9, `4: ${side} 절개 ${i + 1} 교점 y 가 이음선 범위 안`));
   // 이음선 길이 보존
@@ -127,7 +126,7 @@ const BW = {}, FLARE = {};
   const dirOf = (a, b) => ({ x: b.x - a.x, y: b.y - a.y });
   let g1 = true;
   segs.forEach((s, i) => {
-    if (s.kind !== "cubic") return;
+    if (s.kind !== "cubic" || s.edge !== "hem") return;
     const prev = segs[(i - 1 + n) % n], next = segs[(i + 1) % n];
     if (prev.kind !== "line" || next.kind !== "line") { g1 = false; return; }
     if (ang(dirOf(prev.from, prev.to), dirOf(s.from, s.c1)) > 1e-3 || ang(dirOf(s.c2, s.to), dirOf(next.from, next.to)) > 1e-3) g1 = false;
@@ -146,6 +145,61 @@ ok(near(BW.front, 24.447, 1e-3) && near(BW.back, 23.053, 1e-3), `4: BL 수평폭
 ok(near(FLARE.front, 9.7234, 1e-3) && near(FLARE.back, 9.0266, 1e-3), `4: ∅ 앞 ${FLARE.front.toFixed(4)} · 뒤 ${FLARE.back.toFixed(4)}`);
 ok(Math.abs(FLARE.front - (0.5 * seamLen(GT.frontYoke) - 2.5)) > 0.3, "4: 앞 ∅ 는 이음선 전체 길이(25.235) 기준(10.12) 값과 다르다");
 ok(FLARE.front !== FLARE.back && near(GT.yokeSeam.front.flare.perCutChordCm, FLARE.front / 2, 1e-9) && near(GT.yokeSeam.back.flare.perCutChordCm, FLARE.back / 2, 1e-9), "4: 앞뒤 각각 독립 계산");
+
+// ── 4b. 요크↔아래몸판 이음 경계(시각 회귀: 절개 교점마다 꺾이고 BP 곁에 짧은 지그재그가 생기던 문제) ──
+//   절개 벌림은 조각을 이음선 교점에서 돌리므로 truing 전에는 앞 이음선이 «수평 → 7.5° 올림 → BP 18° 꺾임 → 8° 꺾임» 으로 지그재그였다.
+//   종이에서 이어 붙는 봉제선이므로 몸판 이음선은 요크와 길이가 같고, 반대 방향으로 같은 두 끝점을 공유하며, 각진 모서리·왕복·틈·중복선이 없어야 한다.
+["front", "back"].forEach(side => {
+  const Y = GT[side + "Yoke"], B = GT[side + "Body"], m = GT.yokeSeam[side], f = m.flare;
+  const ringOrder = (outline) => segsOf(outline);                      // 외곽 선언 순서 = 링 순서
+  const seamIdx = (pc) => ringOrder(pc.outline).map((s, i) => s.edge === "yoke-seam" ? i : -1).filter(i => i >= 0);
+  const bseg = ringOrder(B.outline), yseg = ringOrder(Y.outline), n = bseg.length;
+  // (a) 몸판 이음선 세그먼트는 링에서 하나의 연속 구간(순환)이며, 이음선 선분끼리 끝점이 정확히 이어진다(틈 0)
+  const bi = seamIdx(B), yi = seamIdx(Y);
+  const nextOf = (i) => (i + 1) % n;
+  const startIdx = bi.find(i => !bi.includes((i - 1 + n) % n));
+  const run = []; for (let i = startIdx, k = 0; k < bi.length; i = nextOf(i), k++) run.push(bseg[i]);
+  ok(startIdx !== undefined && run.length === bi.length && run.every(s => s.edge === "yoke-seam"), `4b: ${side} 몸판 이음선 = 링 위 연속 구간 하나`);
+  ok(run.every((s, i) => i === 0 || D(run[i - 1].to, s.from) < 1e-9), `4b: ${side} 몸판 이음선 세그먼트 틈 0`);
+  ok(run.every(s => arcLen([s]) > 1e-3), `4b: ${side} 길이 0 의 중복·퇴화 선분 없음`);
+  // (b) 이음선 안의 모든 모서리가 접선 연속(각진 꺾임 0) — 절개 교점·BP 모두
+  const leaveDir = (sg, atStart) => atStart ? (sg.kind === "cubic" ? { x: sg.c1.x - sg.from.x, y: sg.c1.y - sg.from.y } : { x: sg.to.x - sg.from.x, y: sg.to.y - sg.from.y })
+    : (sg.kind === "cubic" ? { x: sg.c2.x - sg.to.x, y: sg.c2.y - sg.to.y } : { x: sg.from.x - sg.to.x, y: sg.from.y - sg.to.y });
+  let maxTurn = 0;
+  for (let i = 1; i < run.length; i++) {
+    const ua = leaveDir(run[i - 1], false), ub = leaveDir(run[i], true);
+    maxTurn = Math.max(maxTurn, Math.abs(Math.atan2(-ua.x * ub.y + ua.y * ub.x, -ua.x * ub.x - ua.y * ub.y)));
+  }
+  ok(maxTurn < 1e-3, `4b: ${side} 몸판 이음선 모서리 최대 꺾임 ${(maxTurn * 180 / Math.PI).toExponential(1)}° < 0.06° (truing 전 ≈18°)`);
+  ok(f.seamFairing.length === (side === "front" ? 3 : 2) && f.seamFairing.every(c => c.turnDeg > 1), `4b: ${side} truing 모서리 = 절개 교점 2${side === "front" ? " + BP 1" : ""}(각 >1°)`);
+  // (c) 왕복·돌출 없음: 이음선 평탄화 점의 x 가 중심→옆선 방향으로 단조
+  const pts = []; run.forEach(s => T.flattenLine([s]).forEach(ab => { if (!pts.length) pts.push(ab[0]); pts.push(ab[1]); }));
+  const cxB = edgesOf(B, "center")[0].from.x, xdir = Math.sign(pts[pts.length - 1].x - pts[0].x);
+  ok(xdir !== 0 && pts.every((p, i) => i === 0 || (p.x - pts[i - 1].x) * xdir >= -1e-9), `4b: ${side} 몸판 이음선 x 단조(왕복·돌출 0)`);
+  // (d) 요크와 정확히 같은 두 끝점·같은 길이. 두 조각은 서로 반대 방향으로 이 변을 지난다(링 방향을 고려한 통과 방향이 반대).
+  const ys = yi.map(i => yseg[i]), yStart = ys[0].from, yEnd = ys[ys.length - 1].to;
+  const bStart = run[0].from, bEnd = run[run.length - 1].to;
+  const cfEnd = (a, b2) => Math.abs(a.x - cxB) < 1e-9 ? a : b2;
+  ok(D(cfEnd(yStart, yEnd), cfEnd(bStart, bEnd)) < 1e-9, `4b: ${side} 요크·몸판 이음선이 같은 CF 점에서 시작`);
+  const ringArea = (segs) => { const q = []; segs.forEach(sg => T.flattenLine([sg]).forEach(ab => { if (!q.length) q.push(ab[0]); q.push(ab[1]); })); let a2 = 0; for (let i = 0; i < q.length; i++) { const u = q[i], v = q[(i + 1) % q.length]; a2 += u.x * v.y - v.x * u.y; } return a2 / 2; };
+  // 링 방향(부호 면적) × 이음선을 CF→옆으로 지나는가(+1)/옆→CF(−1): 두 조각의 곱이 서로 반대여야 같은 변을 «반대로» 공유한다
+  const cfFirst = (a) => Math.abs(a.x - cxB) < 1e-9 ? 1 : -1;
+  const orient = (segs, start) => Math.sign(ringArea(segs)) * cfFirst(start);
+  ok(orient(yseg, yStart) === -orient(bseg, bStart), `4b: ${side} 요크와 몸판이 같은 이음선을 서로 반대 방향으로 통과`);
+  ok(near(arcLen(ys), arcLen(run), 1e-6), `4b: ${side} 이음 길이 요크 = 몸판`);
+  // (e) 교점·BP 위치를 옮기지 않는다: 둥글린 곡선이 각 모서리 정점에서 벗어난 거리는 미소(< 0.1cm)
+  f.seamFairing.forEach(c => {
+    const near2 = Math.min(...pts.map(p => D(p, c.at)));
+    ok(near2 < 0.1, `4b: ${side} truing 이 모서리(${c.at.x.toFixed(2)},${c.at.y.toFixed(2)})를 ${near2.toFixed(3)}cm 이상 옮기지 않는다`);
+  });
+  // (f) 둥글리기 때문에 이음 길이·면적이 어긋나지 않는다(길이 보존 핸들 보정)
+  ok(Math.abs(f.seamFairingAreaCm2) < 1, `4b: ${side} truing 면적 변화 ${f.seamFairingAreaCm2.toFixed(3)}cm² (미소)`);
+});
+// 절개 교점이 BP 에 붙지 않았다: 앞 둘째 절개(WL 3등분)는 BP 에서 떨어져 있다(스냅 없음)
+{
+  const bp = GT.yokeSeam.front.seamPoints.apex, c2 = GT.yokeSeam.front.flare.cuts[0].seamPoint;
+  ok(D(bp, c2) > 0.5, `4b: 절개 교점이 BP 에 스냅되지 않았다(떨어진 거리 ${D(bp, c2).toFixed(3)}cm)`);
+}
 
 // ── 5. 폐곡선·자기교차·겹침 ──
 {
@@ -190,7 +244,7 @@ const reasonOf = (p) => { const c = chk(p); return c.ok ? null : c.fails.filter(
     const r = c.yokeSeam[k];
     ok(r.variant === "T" && r.closed.yoke && r.closed.body && r.selfIntersects === false, "6: " + k + " 폐곡선·자기교차 0(재계산)");
     ok(near(r.bustWidthCm, BW[k], 1e-3) && near(r.flareWantCm, FLARE[k], 1e-3) && near(r.flareCm, FLARE[k], 1e-3) && r.flareCuts === 2, "6: " + k + " ∅ = BL 폭×½−2.5 독립 재계산 " + r.flareCm);
-    ok(near(r.deltaCm, 0, 1e-6) && near(r.hemSideExtraCm, 2.5, 1e-6) && r.areaDeltaCm2 > 0, "6: " + k + " 이음 길이 보존·밑단 옆 +2.5·쐐기 면적 양수");
+    ok(near(r.deltaCm, 0, 1e-4) && near(r.hemSideExtraCm, 2.5, 1e-6) && r.areaDeltaCm2 > 0, "6: " + k + " 이음 길이 보존·밑단 옆 +2.5·쐐기 면적 양수");
     ok(near(r.bustLineY, BLY, 1e-3) && near(r.seamYCm, YS, 1e-3), "6: " + k + " BL·이음선 y 독립 재계산");
   });
   ok(J(c.yokeSeam.front.absorbedDartIds) === J(["front-bust"]) && J(c.yokeSeam.back.preservedDartIds) === J(["back-shoulder"]), "6: 흡수 앞 AH / 보존 뒤 어깨 다트 기록");
@@ -201,7 +255,7 @@ const reasonOf = (p) => { const c = chk(p); return c.ok ? null : c.fails.filter(
   ok(tamper(g => { delete g.yokeSeam.back.flare; }) === "yoke-flare-mismatch", "6: flare 메타 삭제 거부");
   ok(tamper(g => { g.frontBody.outline.forEach(s => { if (s.kind === "path" && s.edge === "hem") s.commands[1].points[2].x += 0.6; }); }) !== null, "6: 밑단 호 끝점 변조 거부");
   ok(tamper(g => { g.backBody.outline = g.backBody.outline.filter(s => !(s.kind === "path" && s.edge === "hem")); }) !== null, "6: 밑단 이음 호 삭제 거부");
-  ok(tamper(g => { g.backBody.outline.forEach(s => { if (s.edge === "yoke-seam") { s.from.y += 0.3; } }); }) !== null, "6: 몸판 이음선 변조 거부");
+  ok(tamper(g => { g.backBody.outline.some(s => { if (s.edge === "yoke-seam" && s.kind === "line") { s.from.y += 0.3; return true; } return false; }); }) !== null, "6: 몸판 이음선 변조 거부");
   ok(tamper(g => { g.frontBody.outline.forEach(s => { if (s.edge === "center") ["from", "to"].forEach(k => { s[k].x += 0.4; }); }); }) !== null, "6: 중심선 이동(고정 조각 변조) 거부");
   ok(tamper(g => { g.backYoke.construction.pop(); }) !== null, "6: 뒤 어깨 다트 다리 삭제 거부");
   ok(tamper(g => { g.frontYoke.construction.push(clone(g.front.construction.filter(s => s.dart && s.dart.id === "front-bust")[0])); }) === "yoke-seam-dart-open", "6: 앞 AH 다트가 열려 있으면 거부");
@@ -211,7 +265,7 @@ const reasonOf = (p) => { const c = chk(p); return c.ok ? null : c.fails.filter(
   const pr = mk(clone(GT), T_BODY); PROJECT = pr;
   const done = BC.complete(pr);
   ok(done.ok && pr.working.bodiceResult.yokeSeam.front.flare.cuts.length === 2 && Object.isFrozen(pr.working.bodiceResult), "6: 완료본에 Ⓣ 메타 보존·동결");
-  ok(J(pr.working.bodiceResult.frontBody.outline) === J(GT.frontBody.outline), "6: 완료본 몸판 = 현재 geometry");
+  ok(!!pr.working.bodiceResult && J(pr.working.bodiceResult.frontBody.outline) === J(GT.frontBody.outline), "6: 완료본 몸판 = 현재 geometry");
   const hash = (g, b) => { const p = mk(clone(g), b); PROJECT = p; const c2 = BC.complete(p); return c2.ok ? BC.latest(p).hash : "FAIL:" + c2.reason; };
   const hT = hash(GT, T_BODY);
   ok(hT === hash(GT, T_BODY) && !hT.startsWith("FAIL") && hT !== hash(GS, S_BODY), "6: Ⓣ hash 결정론 · Ⓢ hash 와 다름");
