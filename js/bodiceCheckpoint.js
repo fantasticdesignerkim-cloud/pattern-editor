@@ -996,9 +996,9 @@
   //   불변식 ① 뒤 어깨 다트를 먼저 닫는다(어느 조각에도 다트 id 가 없고, 어깨 요크 안의 뒤 어깨 구성선이 원본 뒤 어깨와 길이가 맞는다)
   //   ② 앞·뒤 요크는 어깨선에서 맞대어 한 장(요크 외곽에 `shoulder` 변이 없고, 앞·뒤 어깨 구성선 두 줄이 목점에서 정확히 만난다)
   //   ③ 앞·뒤 몸판은 별도 조각. 이음선·개더 봉제 대응: 뒤 = 몸판 이음 − 요크 이음 = 띠 폭 W = (요크 이음 − 2)×0.5 /
-  //   앞 = 몸판 이음 − 요크 이음 = 쐐기 현 g(두 절개선 끝 사이) · 앞 이음선은 어깨선과 평행·6cm · 쐐기 각 = 원본 AH 다트 각 · 절개는 BP 연직.
+  //   앞 = 몸판 이음 − 요크 이음 = 쐐기 현 g(두 절개선 끝 사이) · 앞 이음선은 어깨선과 평행·6cm · 쐐기 각 = 원본 AH 다트 각 · 절개 끝 = 이음선 호길이 1/2점(BP 연직 투영 아님, 김님 확정).
   var YOKE_U_OFFSET_CM = 6, YOKE_U_TRIM_CM = 2, YOKE_U_RATIO = 0.5;
-  var YOKE_U_GEO_EPS = 1e-4;       // 평행·거리·연직 허용(cm)
+  var YOKE_U_GEO_EPS = 1e-4;       // 평행·거리·1/2점 허용(cm)
   var YOKE_U_SHOULDER_STEP_EPS = 0.2;   // 앞·뒤 어깨끝 단차 상한(cm) — 뒤 다트 다리 길이 차 허용(designYokeSeam LEG_TOL)과 같다
   var YOKE_U_GAP_MAX_CM2 = 8;
   var YOKE_U_AREA_EPS = 0.1;       // 어깨 단차 삼각 + 곡선 평탄화 차이(designLineTool 평탄화와 24분할의 차) — Ⓠ~Ⓣ 의 0.05 보다 조금 넉넉하다
@@ -1086,7 +1086,7 @@
     var cxB = BB.outline.filter(function (s) { return s && s.edge === "center"; }).map(function (s) { return s.from.x; })[0];
     if (!(W > 0) || !gb || typeof gb.addedCm !== "number" || !(Math.abs(gb.addedCm - W) <= YOKE_GATHER_EPS) || !(Math.abs(lbB - lyB - W) <= YOKE_GATHER_EPS) ||
         cxW === undefined || cxB === undefined || !(Math.abs(Math.abs(cxB - cxW) - W) <= YOKE_GATHER_EPS)) return bad("yoke-gather-mismatch");
-    // 앞: 쐐기 — 고정 절개선(BP→T)·회전 절개선(BP→T') · T 는 BP 연직 · 쐐기 각 = 원본 AH 다트 각 · 현 g = 몸판 이음 − 요크 이음
+    // 앞: 쐐기 — 고정 절개선(BP→T)·회전 절개선(BP→T') · T = 이음선 1/2점 · 쐐기 각 = 원본 AH 다트 각 · 현 g = 몸판 이음 − 요크 이음
     var cuts = (FB.construction || []).filter(function (s) { return s && s.wedgeCut && s.kind === "line"; });
     var cFix = cuts.filter(function (s) { return s.wedgeCut === "fixed"; })[0], cRot = cuts.filter(function (s) { return s.wedgeCut === "rotated"; })[0];
     if (!cFix || !cRot || !near(cFix.from, cRot.from)) return bad("yoke-gather-mismatch");
@@ -1102,7 +1102,7 @@
     out.front.gatherCm = round4(gap); out.front.wedgeDeg = round4(wedgeDeg); out.front.dartDeg = round4(dartDeg); out.front.gatherDeltaCm = lbF - lyF;
     out.front.gatherSpanCm = round4(lyF - 2 * YOKE_U_TRIM_CM); out.front.gatherRefRatio = round4(gap / (lyF - 2 * YOKE_U_TRIM_CM));   // ●×0.6 은 결과 비율 — 게이트 아님
     var gf = m.front.gather;
-    if (!(gap > 0) || !(Math.abs(rF - rR) <= YOKE_U_GEO_EPS) || !(Math.abs(Tp.x - BP.x) <= YOKE_U_GEO_EPS) || !(Math.abs(wedgeDeg - dartDeg) <= YOKE_U_ANGLE_EPS_DEG) ||
+    if (!(gap > 0) || !(Math.abs(rF - rR) <= YOKE_U_GEO_EPS) || !(Math.abs(wedgeDeg - dartDeg) <= YOKE_U_ANGLE_EPS_DEG) ||
         !(Math.abs(lbF - lyF - gap) <= YOKE_GATHER_EPS) || !gf || typeof gf.addedCm !== "number" || !(Math.abs(gf.addedCm - gap) <= YOKE_GATHER_EPS)) return bad("yoke-gather-mismatch");
     // 앞 이음선: 어깨선과 평행 · 어깨선에서 6cm(수직거리) — 몸판의 고정 이음선(T 에 닿는 직선)과 요크의 앞 이음선 둘 다
     var sh = wFSh[0], sd = { x: sh.to.x - sh.from.x, y: sh.to.y - sh.from.y }, sdl = Math.hypot(sd.x, sd.y);
@@ -1110,6 +1110,10 @@
     var fixedSeam = seamBodyF.filter(function (s) { var e = endpointsOf(s); return s.kind === "line" && (near(e[0], Tp) || near(e[1], Tp)) && !near(e[0], Tr) && !near(e[1], Tr); })[0];
     if (!fixedSeam) return bad("yoke-seam-front-seam");
     var par = Math.abs((fixedSeam.to.x - fixedSeam.from.x) * sd.y - (fixedSeam.to.y - fixedSeam.from.y) * sd.x) / sdl;
+    // 절개 끝 T = 이음선 양 끝(목둘레↔진동) 사이 호길이 정확히 1/2점: 고정 이음선(목둘레 끝 → T) 길이 = 요크 이음선 길이 / 2 · 회전한 쪽(T' → 진동 끝)도 같다. 연직 투영이 아니다.
+    var rotSeam = seamBodyF.filter(function (s) { var e = endpointsOf(s); return s.kind === "line" && (near(e[0], Tr) || near(e[1], Tr)) && !near(e[0], Tp) && !near(e[1], Tp); })[0];
+    out.front.cutFraction = round4(segLen(fixedSeam) / lyF);
+    if (!rotSeam || !(Math.abs(segLen(fixedSeam) - lyF / 2) <= YOKE_U_GEO_EPS) || !(Math.abs(segLen(rotSeam) - lyF / 2) <= YOKE_U_GEO_EPS)) return bad("yoke-seam-front-cut-end");
     out.front.seamOffsetCm = round4(perp(fixedSeam.from));
     if (!(par <= YOKE_U_GEO_EPS) || !(Math.abs(perp(fixedSeam.from) - YOKE_U_OFFSET_CM) <= YOKE_U_GEO_EPS) || !(Math.abs(perp(fixedSeam.to) - YOKE_U_OFFSET_CM) <= YOKE_U_GEO_EPS)) return bad("yoke-seam-front-seam");
     var ysF = runFront[0][0], sdy = { x: cf[0].to.x - cf[0].from.x, y: cf[0].to.y - cf[0].from.y }, sdyl = Math.hypot(sdy.x, sdy.y);

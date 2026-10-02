@@ -4,8 +4,9 @@
 //       앞 이음선(어깨 평행·6cm·진동→목둘레) · 앞 AH 다트를 몸판에서 BP 축으로 닫아 이음선 쐐기(= 개더) · 뒤 중심 개더 (이음선−2)×0.5 · 밑단 +1 ·
 //       폐곡선·자기교차 0 · 면적·이음 길이·개더 분량 · 체크포인트 독립 재계산·변조 거부 · 완료본/hash · 표시·배치·렌더 · A~Ⓣ 바이트 불변(HEAD 4b85483 측정).
 // 사용자 확정(2026-10-02): 어깨 요크 = 뒤 어깨 다트를 먼저 닫아 붙이고 그다음 앞 요크를 어깨선으로 붙인 한 장.
-// 책에서 직접 읽히지 않아 정한 값(구현 가정, docs/book/P034.md): «6» = 어깨선에서의 수직거리 · BP 절개의 이음선 끝 = BP 연직 · 앞 «2» = 개더 구간에서 양 끝 제외.
-//   → 교재 캡션 «앞은 ● 의 약 0.6배» 와 쐐기 폭/(이음선−4) = 0.62 가 맞는다(결과 비율 — 게이트 아님, 회귀 감시만).
+// 사용자 최종 확정(2026-10-02, P.34·P.35 도해 대조): 앞 이음선 = 어깨선과 평행·수직거리 6cm → 그 양 끝(목둘레↔진동) 사이 호길이 정확히 1/2점 T 를 잡고 BP 와 **직선**으로 잇는다.
+//   BP→이음선 구간은 연직 투영이 아니다(7a09fba 의 구현 오류). BP 아래 구간이 필요한 Ⓥ 만 앞중심과 평행한 수직선이다. 앞 «2» = 개더 구간에서 양 끝 제외.
+//   7a09fba 의 연직 투영점 T=(38.5125, 3.0481)·쐐기 5.5724·쐐기/(이음선−4)=0.6216 은 폐기값이다 — 아래에서 «다름» 으로 고정한다.
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
@@ -132,13 +133,22 @@ ok(meta.variant === "U" && meta.front.variant === "U" && meta.back.variant === "
   const mouths = darts.map(s => s.dart.apexAt === "to" ? s.from : s.to);
   const ang = (a, b) => Math.abs(Math.atan2((a.x - apex.x) * (b.y - apex.y) - (a.y - apex.y) * (b.x - apex.x), (a.x - apex.x) * (b.x - apex.x) + (a.y - apex.y) * (b.y - apex.y))) * 180 / Math.PI;
   ok(near(ang(Tp, Tr), ang(mouths[0], mouths[1]), 1e-6), "5: 쐐기 각 = 닫은 AH 다트 각 " + ang(Tp, Tr).toFixed(3) + "°");
-  ok(near(Tp.x, BP0.x, 1e-9) && near(D(BP0, Tp), D(BP0, Tr), 1e-9), "5: 고정 절개 = BP 연직 · 회전 절개는 같은 반경");
+  const Qa = f.seamPoints.armhole, Qn = f.seamPoints.neckline, mid = { x: (Qa.x + Qn.x) / 2, y: (Qa.y + Qn.y) / 2 };
+  ok(D(Tp, mid) < 1e-9 && near(D(Qa, Tp), D(Tp, Qn), 1e-9) && near(perp(Tp), 6, 1e-6), "5: 절개 끝 = 이음선 호길이 정확히 1/2점(목둘레 교점↔진동선 교점)·이음선 위");
+  const cFix = fb.construction.filter(s => s.wedgeCut === "fixed")[0], cRot = fb.construction.filter(s => s.wedgeCut === "rotated")[0];
+  ok(cFix.kind === "line" && D(cFix.from, BP0) < 1e-9 && D(cFix.to, Tp) < 1e-9, "5: BP 와 1/2점을 직선으로 연결(고정 절개선 = BP→T)");
+  const OLD_T = { x: 38.5125, y: 3.048114295239522 };
+  ok(D(Tp, OLD_T) > 1.5 && Math.abs(Tp.x - BP0.x) > 1.5, "5: 이전 연직 투영점과 다르다(Δ=" + D(Tp, OLD_T).toFixed(3) + "cm, T.x−BP.x=" + (Tp.x - BP0.x).toFixed(3) + ")");
+  const tilt = Math.atan2(Math.abs(Tp.x - BP0.x), Math.abs(Tp.y - BP0.y)) * 180 / Math.PI;
+  ok(tilt > 4 && tilt < 20, "5: 절개선은 연직에서 진동 쪽으로 기운다(" + tilt.toFixed(2) + "° — 책 도해 약 4~5° 이상의 기울기, 연직 아님)");
+  ok(Tp.x < BP0.x && near(D(BP0, Tp), D(BP0, Tr), 1e-9), "5: 1/2점은 BP 보다 진동 쪽 · 회전 절개는 같은 반경");
   const g = D(Tp, Tr), lenY = D(f.seamPoints.armhole, f.seamPoints.neckline);
   const yokeSeamLen = arcLen(GU.shoulderYoke.outline.filter(s => s.edge === "yoke-seam" && s.kind === "line" && false)) || lenY;
   ok(near(f.seamLenUpperCm, lenY, 1e-9) && near(arcLen(seamF) - lenY, g, 1e-9), "5: 몸판 이음 길이 − 요크 이음 길이 = 쐐기 현 " + g.toFixed(3) + "cm(= 앞 개더 분량)");
   ok(near(f.gather.addedCm, g, 1e-9) && f.gather.rule === "ah-dart-closure-wedge", "5: 개더 메타 = 쐐기 현");
   const ratio = g / (lenY - 4);
-  ok(ratio > 0.55 && ratio < 0.7, "5: 쐐기/(이음선−4) = " + ratio.toFixed(3) + " — 교재 캡션 «● 의 약 0.6배» 와 부합(결과 비율, 게이트 아님)");
+  ok(Math.abs(g - 5.5724) > 0.1, "5: 쐐기 폭이 이전 연직 투영 구현(5.5724cm)과 다르다 — " + g.toFixed(4) + "cm");
+  ok(near(ratio, 0.6, 0.02), "5: 쐐기/(이음선−4) = " + ratio.toFixed(4) + " — 교재 캡션 «● 의 약 0.6배» 와 부합(결과 비율 감시 — 게이트는 아님)");
   ok(near(f.hemSideExtraCm, 1, 1e-9), "5: 앞 밑단 옆 +1");
   // 몸판에 닫은 다트의 흔적 없음 + 새 구성선 두 줄(고정·회전)
   ok(fb.construction.filter(s => s.wedgeCut).length === 2 && !fb.construction.some(s => s.dart && s.dart.id === "front-bust"), "5: 쐐기 절개 구성선 2 · 닫은 AH 다트 흔적 0");
@@ -204,7 +214,7 @@ const reasonOf = (p) => { const c = chk(p); return c.ok ? null : c.fails.filter(
   ok(ys.shoulderYoke.selfIntersects === false && ys.front.selfIntersects === false && ys.back.selfIntersects === false, "9: 자기교차 0(재계산)");
   ok(near(ys.back.gatherCm, 0.5 * (ys.back.seamLenYokeCm - 2), 1e-3) && near(ys.back.gatherDeltaCm, ys.back.gatherCm, 1e-3), "9: 뒤 개더 W 독립 재계산·몸판−요크 이음 = W");
   ok(near(ys.front.gatherCm, ys.front.gatherDeltaCm, 1e-3) && near(ys.front.wedgeDeg, ys.front.dartDeg, 1e-3) && near(ys.front.seamOffsetCm, 6, 1e-3), "9: 앞 쐐기 = 몸판−요크 이음 · 쐐기각 = AH 다트각 · 이음선 6cm");
-  ok(ys.front.gatherRefRatio > 0.55 && ys.front.gatherRefRatio < 0.7, "9: ●×0.6 결과 비율 " + ys.front.gatherRefRatio + " (표시용)");
+  ok(near(ys.front.cutFraction, 0.5, 1e-4), "9: 앞 절개 끝 = 이음선 1/2점(재계산 " + ys.front.cutFraction + ") · 결과 비율 " + ys.front.gatherRefRatio + " (표시용)");
   ok(Math.abs(ys.shoulderYoke.areaDeltaCm2) < 0.1 && ys.shoulderYoke.gapAreaCm2 > 1, "9: 면적 정합 Δ=" + ys.shoulderYoke.areaDeltaCm2);
   ok(c.sideSeam.status === "match" && c.armhole.ok && c.neckline.ok, "9: 전체 몸판 기존 검사(옆선·진동·목선) 그대로 통과");
 
@@ -214,7 +224,9 @@ const reasonOf = (p) => { const c = chk(p); return c.ok ? null : c.fails.filter(
   ok(tamper(g => { g.backBody.outline.forEach(s => { if (s.edge === "center") { const e = s.kind === "line" ? [s] : []; e.forEach(q => { q.from.x -= 0.4; q.to.x -= 0.4; }); } }); }) !== null, "9: 뒤 몸판 중심 이동 거부");
   ok(tamper(g => { g.shoulderYoke.outline.some(s => { if (s.edge === "yoke-seam" && s.kind === "line") { s.to.y += 0.4; return true; } return false; }); }) !== null, "9: 요크 이음선 변조 거부");
   ok(tamper(g => { g.frontBody.construction.find(s => s.wedgeCut === "rotated").to.x += 0.3; }) === "yoke-gather-mismatch", "9: 쐐기 회전 절개선 변조 거부");
-  ok(tamper(g => { g.frontBody.construction.find(s => s.wedgeCut === "fixed").to.x += 0.3; }) !== null, "9: 쐐기 고정 절개가 BP 연직이 아니면 거부");
+  ok(tamper(g => { g.frontBody.construction.find(s => s.wedgeCut === "fixed").to.x += 0.3; }) !== null, "9: 쐐기 고정 절개 끝이 1/2점에서 벗어나면 거부");
+  ok(tamper(g => { const c0 = g.frontBody.construction.find(s => s.wedgeCut === "fixed"); c0.to = { x: c0.from.x, y: 3.048114295239522 }; }) !== null, "9: 절개 끝을 이전 연직 투영점으로 바꾸면 거부");
+  ok(tamper(g => { g.frontBody.outline.forEach(s => { if (s.edge === "yoke-seam" && s.kind === "line" && Math.abs(s.from.x - 42.9235) < 1e-3) { const mx = (s.from.x + s.to.x) / 2; s.to.x = mx + 0.5; } }); }) !== null, "9: 고정 이음선이 1/2 길이가 아니면 거부");
   ok(tamper(g => { g.shoulderYoke.construction = g.shoulderYoke.construction.filter(s => s.shoulderJoin !== "front"); }) === "yoke-seam-shoulder-missing", "9: 앞 어깨 구성선 삭제 거부");
   ok(tamper(g => { const c0 = g.shoulderYoke.construction.find(s => s.shoulderJoin === "front"); c0.from.x += 0.3; }) !== null, "9: 어깨 맞댐점(목점) 어긋남 거부");
   ok(tamper(g => { g.shoulderYoke.outline.push({ kind: "line", from: { x: 0, y: 0 }, to: { x: 1, y: 1 }, edge: "shoulder" }); }) !== null, "9: 요크 외곽에 어깨 변 남음 거부");

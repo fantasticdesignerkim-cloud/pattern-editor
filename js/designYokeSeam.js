@@ -77,8 +77,10 @@
   var CUT_EPS = 1e-9;
   // ── Ⓤ(P.34) — 사용자 확정(2026-10-02): 앞 이음선 = 어깨선 평행·어깨선에서 6cm 아래(수직거리) / 뒤 이음선 = 뒤 다트 끝 높이 수평 /
   //   뒤 개더 띠 폭 = (뒤 이음선 길이 − 2) × 0.5 / 앞 개더 = AH 다트를 닫아 BP→이음선 절개가 벌어진 쐐기 / 밑단 옆 +1.
-  //   BP 절개의 이음선 쪽 끝은 책에 거리 표기가 없어 BP 에서 연직으로 올린 점(도해의 «거의 연직»)으로 둔다 — 쐐기 폭만 이에 따른다.
+  //   BP 절개의 이음선 쪽 끝 = 앞 이음선(목둘레 교점↔진동선 교점)의 **호길이 정확히 1/2점**(김님 최종 확정 2026-10-02 — P.34·P.35 도해 대조). BP→이음선 구간은 연직 투영이 아니다.
+  //   (BP 아래 구간이 필요한 Ⓥ 에서는 앞중심선과 평행한 수직선이 맞다 — Ⓤ 의 이 규칙과 혼동하지 않는다.)
   var SEAM_U_OFFSET_CM = 6;
+  var CUT_U_SEAM_FRACTION = 0.5;     // BP 절개의 이음선 쪽 끝 = 이음선 양 끝 사이 1/2점
   var GATHER_U_TRIM_CM = 2;
   var GATHER_U_RATIO = 0.5;
   var SHOULDER_GAP_MAX_CM2 = 8;      // 어깨 렌즈형 틈 면적 상한(cm²) — 이보다 크면 맞댄 것이 아니다
@@ -899,13 +901,9 @@
     var seamYoke = line(Up[Up.length - 1].seg.to, Up[0].seg.from, { edge: "yoke-seam", yokeSeam: "upper" });
     var yokeSegs = Up.map(function (pc) { return pc.seg; }).concat([seamYoke]);
 
-    // 3) 몸판: BP 에서 이음선까지 연직 절개점 T. 진동 쪽(Qa) 조각을 BP 축으로 돌려 AH 다트를 닫는다 — 절개선이 벌어져 이음선에 쐐기가 생긴다.
+    // 3) 몸판: BP 에서 이음선 1/2점 T 까지 직선 절개(연직 투영이 아니다). 진동 쪽(Qa) 조각을 BP 축으로 돌려 AH 다트를 닫는다 — 절개선이 벌어져 이음선에 쐐기가 생긴다.
     var seamLenYoke = dist(Qa, Qn);
-    var sd = { x: (Qn.x - Qa.x) / seamLenYoke, y: (Qn.y - Qa.y) / seamLenYoke };
-    if (Math.abs(sd.x) < 1e-6) fail("seam-vertical", which);
-    var sT = (BP.x - Qa.x) / sd.x;
-    if (!(sT > 0.05 * seamLenYoke && sT < 0.95 * seamLenYoke)) fail("wedge-cut-off-seam", { sCm: sT, seamCm: seamLenYoke });
-    var Tp = { x: BP.x, y: Qa.y + sd.y * sT };
+    var Tp = { x: Qa.x + (Qn.x - Qa.x) * CUT_U_SEAM_FRACTION, y: Qa.y + (Qn.y - Qa.y) * CUT_U_SEAM_FRACTION };
     var areaLoRing = checkClosed(Lo.map(function (pc) { return pc.seg; }).concat([line(Qn, Qa)]), which + ":body-ring");   // 다트 노치를 제외한 몸판 링(다리가 닫는다)
     var chain = [{ seg: line(Tp, Qa, { edge: "yoke-seam" }), source: "outline" }].concat(Lo, [{ seg: line(Qn, Tp, { edge: "yoke-seam" }), source: "outline" }]);
     var ab = absorbDart(chain, Tp, BP, which, dartId, null);
