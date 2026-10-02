@@ -998,6 +998,9 @@
   //   ③ 앞·뒤 몸판은 별도 조각. 이음선·개더 봉제 대응: 뒤 = 몸판 이음 − 요크 이음 = 띠 폭 W = (요크 이음 − 2)×0.5 /
   //   앞 = 몸판 이음 − 요크 이음 = 쐐기 현 g(두 절개선 끝 사이) · 앞 이음선은 어깨선과 평행·6cm · 쐐기 각 = 원본 AH 다트 각 · 절개 끝 = 이음선 호길이 1/2점(BP 연직 투영 아님, 김님 확정).
   var YOKE_U_OFFSET_CM = 6, YOKE_U_TRIM_CM = 2, YOKE_U_RATIO = 0.5;
+  //   Ⓥ(P.35) = Ⓤ 위에 개더만 키운 변형: 뒤 띠 = (요크 이음 − 2) × 1 · 앞 총 개더(몸판 이음 − 요크 이음) = 1.2 × (요크 이음 − 4) — 쐐기(Ⓤ 그대로) + BP→밑단 수직 절개를 앞중심 쪽 조각이
+  //   수평으로 d 만큼 평행 이동한 몫. 아래 yokeStateU 가 variant 로 갈린다(어깨 요크·어깨 맞댐·뒤 규칙은 공용).
+  var YOKE_V_BACK_RATIO = 1, YOKE_V_FRONT_RATIO = 1.2, YOKE_V_LEN_EPS = 2e-3;   // 길이 허용 — 체크포인트 24분할 cubic 길이와 생성기 평탄화의 차(fairing cubic)
   var YOKE_U_GEO_EPS = 1e-4;       // 평행·거리·1/2점 허용(cm)
   var YOKE_U_SHOULDER_STEP_EPS = 0.2;   // 앞·뒤 어깨끝 단차 상한(cm) — 뒤 다트 다리 길이 차 허용(designYokeSeam LEG_TOL)과 같다
   var YOKE_U_GAP_MAX_CM2 = 8;
@@ -1031,7 +1034,10 @@
     var bad = function (reason) { out.reason = reason; return out; };
     var okPiece = function (pc) { return pc && Array.isArray(pc.outline) && pc.outline.length >= 3; };
     var pbody = proj.working.parameters && proj.working.parameters.body;
-    if (pbody && pbody.yokeSeam != null && pbody.yokeSeam !== "U") return bad("yoke-seam-variant-mismatch");
+    if (pbody && pbody.yokeSeam != null && pbody.yokeSeam !== "U" && pbody.yokeSeam !== "V") return bad("yoke-seam-variant-mismatch");
+    var vSel = (pbody && pbody.yokeSeam != null) ? pbody.yokeSeam : (m.variant === "V" ? "V" : "U"), isV = (vSel === "V");
+    if (m.variant != null && m.variant !== vSel) return bad("yoke-seam-variant-mismatch");   // 파라미터가 말하는 규칙이 우선 — 메타가 다른 규칙을 고르지 못한다
+    out.variant = vSel;
     if (!okPiece(Y) || !okPiece(FB) || !okPiece(BB) || !okPiece(wF) || !okPiece(wB) || !m.front || !m.back || g.frontYoke || g.backYoke) return bad("yoke-seam-missing");
     var ry = yokeOrderRing(ringSegs(Y.outline)), rf = yokeOrderRing(ringSegs(FB.outline)), rb = yokeOrderRing(ringSegs(BB.outline));
     out.shoulderYoke.closed = !!ry; out.front.closed = !!rf; out.back.closed = !!rb;
@@ -1079,13 +1085,96 @@
     out.back.seamLenYokeCm = round4(lyB); out.back.seamLenBodyCm = round4(lbB); out.back.deltaCm = lyB - lbB;
     out.front.seamLenYokeCm = round4(lyF); out.front.seamLenBodyCm = round4(lbF); out.front.deltaCm = lyF - lbF;
     // 뒤: 띠 폭 W = (요크 이음 − 2) × 0.5 = 몸판 이음 − 요크 이음 = 몸판 중심 변이 원본에서 밀린 거리
-    var W = YOKE_U_RATIO * (lyB - YOKE_U_TRIM_CM);
+    var W = (isV ? YOKE_V_BACK_RATIO : YOKE_U_RATIO) * (lyB - YOKE_U_TRIM_CM);
     var gb = m.back.gather;
     out.back.gatherCm = round4(W); out.back.gatherDeclaredCm = gb && typeof gb.addedCm === "number" ? round4(gb.addedCm) : null; out.back.gatherDeltaCm = lbB - lyB;
     var cxW = wB.outline.filter(function (s) { return s && s.edge === "center"; }).map(function (s) { return s.from.x; })[0];
     var cxB = BB.outline.filter(function (s) { return s && s.edge === "center"; }).map(function (s) { return s.from.x; })[0];
     if (!(W > 0) || !gb || typeof gb.addedCm !== "number" || !(Math.abs(gb.addedCm - W) <= YOKE_GATHER_EPS) || !(Math.abs(lbB - lyB - W) <= YOKE_GATHER_EPS) ||
         cxW === undefined || cxB === undefined || !(Math.abs(Math.abs(cxB - cxW) - W) <= YOKE_GATHER_EPS)) return bad("yoke-gather-mismatch");
+    var rF, rR, wedgeDeg, gapAreaV = 0, areaFairDelta = 0;
+    if (isV) {
+      // Ⓥ 앞: 독립 재계산 — T = 앞 이음선 양 끝의 1/2점, BP = 원본 AH 다트 apex, 수직 절개 두 줄, 앞중심 쪽 조각의 수평 평행 이동 d
+      var legsV = (wF.construction || []).filter(function (s) { return s && s.kind === "line" && s.dart && s.dart.id === YOKE_DART.front; });
+      if (legsV.length !== 2) return bad("yoke-seam-missing");
+      var apexV = legsV[0].dart.apexAt === "to" ? legsV[0].to : legsV[0].from;
+      var mouthV = function (sg) { return sg.dart.apexAt === "to" ? sg.from : sg.to; };
+      var mv0 = mouthV(legsV[0]), mv1 = mouthV(legsV[1]);
+      var dartDegV = Math.abs(Math.atan2((mv0.x - apexV.x) * (mv1.y - apexV.y) - (mv0.y - apexV.y) * (mv1.x - apexV.x), (mv0.x - apexV.x) * (mv1.x - apexV.x) + (mv0.y - apexV.y) * (mv1.y - apexV.y))) * 180 / Math.PI;
+      var cutsV = (FB.construction || []).filter(function (s) { return s && s.wedgeCut && s.kind === "line"; });
+      var cFixV = cutsV.filter(function (s) { return s.wedgeCut === "fixed"; })[0], cRotV = cutsV.filter(function (s) { return s.wedgeCut === "rotated"; })[0];
+      var spCuts = (FB.construction || []).filter(function (s) { return s && s.spreadCut && s.kind === "line"; });
+      var spStay = spCuts.filter(function (s) { return s.spreadCut === "stay"; }), spMoved = spCuts.filter(function (s) { return s.spreadCut === "moved"; });
+      if (!cFixV || !cRotV || spStay.length !== 1 || spMoved.length !== 1 || spCuts.length !== 2) return bad("yoke-spread-cut");
+      var BPv = cRotV.from, Trv = cRotV.to, Tpp = cFixV.to, BPm = cFixV.from;
+      // 수직 절개: 옆 조각 가장자리 = BP 에서 밑단까지 수직(앞중심과 평행), 이동 조각 가장자리 = 같은 y 구간의 수직 · 둘의 간격 = d · 방향 = 앞중심 쪽
+      var cxFWv = wF.outline.filter(function (s) { return s && s.edge === "center"; }).map(function (s) { return s.from.x; })[0];
+      var dirV = cxFWv >= apexV.x ? 1 : -1, stay = spStay[0], mov = spMoved[0];
+      var dV = (mov.from.x - stay.from.x) * dirV;
+      // 앞 이음선 양 끝(앞 좌표계 — 어깨 요크는 어깨 맞댐으로 뒤 좌표계라 못 쓴다): Qn = 몸판 이음선의 목둘레 쪽 끝 − d(평행 이동 되돌림), 이음선 방향 = 원본 앞 어깨선 방향(평행), 길이 = 요크 이음선 길이
+      var runsB = edgeRuns(FB.outline, "yoke-seam");
+      if (runsB.length !== 1) return bad("yoke-seam-front-seam");
+      var cntB = []; runsB[0].forEach(function (sg) { var e = endpointsOf(sg); [e[0], e[e.length - 1]].forEach(function (pt) { var h = cntB.filter(function (c) { return near(c.p, pt); })[0]; if (h) h.n++; else cntB.push({ p: pt, n: 1 }); }); });
+      var endsB = cntB.filter(function (c) { return c.n === 1; }).map(function (c) { return c.p; });
+      var neckPtsB = []; FB.outline.filter(function (sg) { return sg && sg.edge === "neckline"; }).forEach(function (sg) { var e = endpointsOf(sg); neckPtsB.push(e[0], e[e.length - 1]); });
+      var QnMv = endsB.filter(function (pt) { return neckPtsB.some(function (q) { return near(q, pt); }); })[0];
+      var neckPtsW = []; wF.outline.filter(function (sg) { return sg && sg.edge === "neckline"; }).forEach(function (sg) { var e = endpointsOf(sg); neckPtsW.push(e[0], e[e.length - 1]); });
+      var shA = wFSh[0] && endpointsOf(wFSh[0]), shNeck = shA && (neckPtsW.some(function (q) { return near(q, shA[0]); }) ? shA[0] : shA[1]), shTip = shA && (shNeck === shA[0] ? shA[1] : shA[0]);
+      if (endsB.length !== 2 || !QnMv || !shNeck) return bad("yoke-seam-front-seam");
+      var shLenV = dist(shNeck, shTip), uSh = { x: (shTip.x - shNeck.x) / shLenV, y: (shTip.y - shNeck.y) / shLenV };
+      var Qn = { x: QnMv.x - dirV * dV, y: QnMv.y }, Tm = { x: Qn.x + uSh.x * lyF / 2, y: Qn.y + uSh.y * lyF / 2 };
+      if (!(Math.abs(Math.abs((Qn.x - shNeck.x) * uSh.y - (Qn.y - shNeck.y) * uSh.x) - YOKE_U_OFFSET_CM) <= YOKE_U_GEO_EPS)) return bad("yoke-seam-front-seam");   // Qn 은 어깨선에서 6cm
+      var vertical = function (sg) { return Math.abs(sg.from.x - sg.to.x) <= YOKE_U_GEO_EPS; };
+      var hemsV = FB.outline.filter(function (s) { return s && s.edge === "hem" && s.kind === "line"; });
+      var hemYv = hemsV.length ? hemsV[0].from.y : NaN;
+      if (!hemsV.length || !hemsV.every(function (s) { return Math.abs(s.from.y - hemYv) <= 1e-9 && Math.abs(s.to.y - hemYv) <= 1e-9; })) return bad("yoke-spread-hem");
+      if (!near(BPv, apexV) || !vertical(stay) || !vertical(mov) || !(dV > 1e-6) || !near(stay.from, apexV) || !near(mov.from, BPm) ||
+          !(Math.abs(stay.to.y - hemYv) <= YOKE_U_GEO_EPS) || !(Math.abs(mov.to.y - hemYv) <= YOKE_U_GEO_EPS) || !(Math.abs(mov.from.y - stay.from.y) <= YOKE_U_GEO_EPS) ||
+          !(Math.abs(BPm.x - (apexV.x + dirV * dV)) <= YOKE_U_GEO_EPS) || !(Math.abs(BPm.y - apexV.y) <= YOKE_U_GEO_EPS)) return bad("yoke-spread-cut");
+      // 쐐기 보존: 회전 절개 반경 = 고정 절개 반경 = |BP−T| · 쐐기 각 = 원본 AH 다트 각 · 이동한 고정 절개 = 원래 BP→T 의 평행 이동(수평)
+      var rRv = dist(apexV, Trv), rFv = dist(apexV, Tm);
+      var wedgeDegV = Math.abs(Math.atan2((Tm.x - apexV.x) * (Trv.y - apexV.y) - (Tm.y - apexV.y) * (Trv.x - apexV.x), (Tm.x - apexV.x) * (Trv.x - apexV.x) + (Tm.y - apexV.y) * (Trv.y - apexV.y))) * 180 / Math.PI;
+      var Tdx = Tm.x + dirV * dV;
+      if (!(Math.abs(rFv - rRv) <= YOKE_U_GEO_EPS) || !(Math.abs(wedgeDegV - dartDegV) <= YOKE_U_ANGLE_EPS_DEG) || !(Math.abs(Tpp.x - Tdx) <= YOKE_U_GEO_EPS) || !(Math.abs(Tpp.y - Tm.y) <= YOKE_U_GEO_EPS)) return bad("yoke-wedge-mismatch");
+      // 총 개더: 몸판 이음 − 요크 이음 = 1.2 × ● (● = 요크 이음 − 4) · 이음선 초과분 = |T″ − T′| (fairing 이 길이를 보존) · d 는 이 방정식의 해
+      var bulletV = lyF - 2 * YOKE_U_TRIM_CM, Etarget = YOKE_V_FRONT_RATIO * bulletV, wedgeChord = dist(Tm, Trv), chordNew = dist(Tpp, Trv);
+      var gf = m.front.gather;
+      out.front.gatherCm = round4(lbF - lyF); out.front.gatherSpanCm = round4(bulletV); out.front.gatherTargetCm = round4(Etarget); out.front.wedgeDeg = round4(wedgeDegV); out.front.dartDeg = round4(dartDegV);
+      out.front.wedgeChordCm = round4(wedgeChord); out.front.spreadSeamCm = round4(Etarget - wedgeChord); out.front.spreadCm = round4(dV); out.front.gatherDeltaCm = lbF - lyF;
+      if (!(Math.abs(lbF - lyF - Etarget) <= YOKE_V_LEN_EPS) || !(Math.abs(chordNew - Etarget) <= YOKE_V_LEN_EPS) || !(Etarget > wedgeChord) || !gf || typeof gf.addedCm !== "number" ||
+          !(Math.abs(gf.addedCm - Etarget) <= YOKE_V_LEN_EPS)) return bad("yoke-gather-mismatch");
+      // d 의 정확해(독립 재계산): (cdx + dir·d)² + cdy² = E² — 총 초과분 E 를 만족하는 평행 이동량
+      var cdx = Tm.x - Trv.x, cdy = Tm.y - Trv.y, dExact = Math.sqrt(Etarget * Etarget - cdy * cdy) - dirV * cdx;
+      if (!(Math.abs(dV - dExact) <= 1e-4)) return bad("yoke-spread-amount");
+      // 평행 이동은 순수 수평 이동: 앞중심 변·목둘레 변은 원본 앞판의 그 변을 정확히 +d 이동한 것
+      var cenY = wF.outline.filter(function (s) { return s && s.edge === "center"; }), cenFB = FB.outline.filter(function (s) { return s && s.edge === "center"; });
+      var yr = function (list) { var ys = []; list.forEach(function (s) { ys.push(s.from.y, s.to.y); }); return [Math.min.apply(null, ys), Math.max.apply(null, ys)]; };
+      var yrW = yr(cenY), yrB = yr(cenFB);
+      if (!cenFB.length || !cenFB.every(function (s) { return Math.abs(s.from.x - (cxFWv + dirV * dV)) <= 1e-6 && Math.abs(s.to.x - (cxFWv + dirV * dV)) <= 1e-6; }) || !(Math.abs(yrW[0] - yrB[0]) <= 1e-6) || !(Math.abs(yrW[1] - yrB[1]) <= 1e-6)) return bad("yoke-spread-translation");
+      var neckW = wF.outline.filter(function (s) { return s && s.edge === "neckline"; }), neckB = FB.outline.filter(function (s) { return s && s.edge === "neckline"; });
+      var cfNeckW = neckW.map(function (s) { return endpointsOf(s); }).reduce(function (a, e) { return a.concat(e); }, []).filter(function (p) { return Math.abs(p.x - cxFWv) <= 1e-6; })[0];
+      var cfNeckB = neckB.map(function (s) { return endpointsOf(s); }).reduce(function (a, e) { return a.concat(e); }, []).filter(function (p) { return Math.abs(p.x - (cxFWv + dirV * dV)) <= 1e-6; })[0];
+      if (!cfNeckW || !cfNeckB || !(Math.abs(cfNeckB.y - cfNeckW.y) <= 1e-6)) return bad("yoke-spread-translation");
+      // 밑단: 수평 · 절개 사이 간격 d 의 이음 변 포함 · 밑단 연속
+      var hemBridge = hemsV.filter(function (s) { return Math.abs(Math.min(s.from.x, s.to.x) - apexV.x) <= 1e-6 && Math.abs(Math.max(s.from.x, s.to.x) - (apexV.x + dirV * dV)) <= 1e-6; });
+      if (hemBridge.length !== 1) return bad("yoke-spread-hem");
+      // 이음선 fairing 은 길이를 보존한다(위 방정식) — 면적용으로 fairing 전 모서리 다각형을 재구성
+      var cornersSeq = [Tpp, Trv];
+      var unf = [], placed = false, flatPts = function (sg) { ringSegs([sg]).forEach(function (q) { yokeFlatSeg(q).forEach(function (ab) { unf.push(ab[0]); }); }); };
+      FB.outline.forEach(function (sg) {
+        if (sg.edge === "yoke-seam") {
+          if (!placed) { placed = true; var st = sg.from, o = cornersSeq.slice().sort(function (a, b) { return dist(st, a) - dist(st, b); }); unf.push(cp(st)); o.forEach(function (c) { unf.push(cp(c)); }); }
+          return;
+        }
+        flatPts(sg);
+      });
+      var areaUnf = Math.abs(shoelace(unf));
+      areaFairDelta = mf.areaCm2 - areaUnf;
+      var Hl = stay.to, Hr = mov.to;
+      gapAreaV = Math.abs(shoelace([Trv, Tpp, BPm, Hr, Hl, BPv]));
+      out.front.areaGapCm2 = round4(gapAreaV); out.front.areaUnfairedCm2 = round4(areaUnf); out.front.areaFairDeltaCm2 = round4(areaFairDelta);
+      rF = rFv; rR = rRv; wedgeDeg = wedgeDegV; mf = { areaCm2: areaUnf, selfIntersects: mf.selfIntersects };   // 이하 면적 정산은 fairing 전 몸판으로
+    } else {
     // 앞: 쐐기 — 고정 절개선(BP→T)·회전 절개선(BP→T') · T = 이음선 1/2점 · 쐐기 각 = 원본 AH 다트 각 · 현 g = 몸판 이음 − 요크 이음
     var cuts = (FB.construction || []).filter(function (s) { return s && s.wedgeCut && s.kind === "line"; });
     var cFix = cuts.filter(function (s) { return s.wedgeCut === "fixed"; })[0], cRot = cuts.filter(function (s) { return s.wedgeCut === "rotated"; })[0];
@@ -1116,6 +1205,7 @@
     if (!rotSeam || !(Math.abs(segLen(fixedSeam) - lyF / 2) <= YOKE_U_GEO_EPS) || !(Math.abs(segLen(rotSeam) - lyF / 2) <= YOKE_U_GEO_EPS)) return bad("yoke-seam-front-cut-end");
     out.front.seamOffsetCm = round4(perp(fixedSeam.from));
     if (!(par <= YOKE_U_GEO_EPS) || !(Math.abs(perp(fixedSeam.from) - YOKE_U_OFFSET_CM) <= YOKE_U_GEO_EPS) || !(Math.abs(perp(fixedSeam.to) - YOKE_U_OFFSET_CM) <= YOKE_U_GEO_EPS)) return bad("yoke-seam-front-seam");
+    }
     var ysF = runFront[0][0], sdy = { x: cf[0].to.x - cf[0].from.x, y: cf[0].to.y - cf[0].from.y }, sdyl = Math.hypot(sdy.x, sdy.y);
     var perpY = function (p) { return Math.abs((p.x - cf[0].from.x) * sdy.y - (p.y - cf[0].from.y) * sdy.x) / sdyl; };
     var eY = endpointsOf(ysF), eY1 = eY[eY.length - 1];
@@ -1137,7 +1227,7 @@
     var awF = yokeRingMetrics(rwF).areaCm2, awB = yokeRingMetrics(rwB).areaCm2;
     var strip = (BB.construction || []).filter(function (s) { return s && s.gatherBoundary; })[0];
     var stripArea = strip ? W * dist(strip.from, strip.to) : NaN;
-    var wedgeArea = 0.5 * rF * rR * Math.sin(wedgeDeg * Math.PI / 180);
+    var wedgeArea = isV ? gapAreaV : 0.5 * rF * rR * Math.sin(wedgeDeg * Math.PI / 180);   // Ⓥ: 쐐기 면적은 틈 다각형 G(쐐기 + 평행 벌림 띠)에 포함돼 W 항이 상쇄된다
     var dArea = my.areaCm2 + mf.areaCm2 + mb.areaCm2 - awF - awB - lensCm2 - stripArea - wedgeArea;
     out.shoulderYoke.areaDeltaCm2 = round4(dArea);
     if (!isFinite(dArea) || !(Math.abs(dArea) <= YOKE_U_AREA_EPS)) return bad("yoke-seam-area-mismatch");

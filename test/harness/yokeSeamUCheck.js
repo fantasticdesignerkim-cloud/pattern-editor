@@ -65,7 +65,7 @@ const selfCross = (ring) => { const f = []; ring.forEach(s => T.flattenLine([s])
 // ── 1. 프리셋 Ⓤ ──
 ok(BP.resolve("yoke-seam-3", "bunka-bodice-U").ok, "1: Ⓤ 해석 성공(실행 가능)");
 ok(BP.variant("yoke-seam-3", "bunka-bodice-U").availability === "available" && BP.variant("yoke-seam-3", "bunka-bodice-U").page === 34, "1: Ⓤ available · P.34");
-ok(BP.variant("yoke-seam-3", "bunka-bodice-V").availability === "pending-op" && typeof BP.variant("yoke-seam-3", "bunka-bodice-V").blockedBy === "string", "1: Ⓥ 는 보류(blockedBy 보유)");
+ok(BP.variant("yoke-seam-3", "bunka-bodice-V").availability === "available" && BP.variant("yoke-seam-3", "bunka-bodice-V").page === 35, "1: Ⓥ 는 실행 가능(P.35 — 전용 테스트 yokeSeamVCheck)");
 ok(J(U_BODY) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: "U" }), "1: Ⓤ 파라미터 = 박시 Ⓑ + 밑단 옆 +1 + yokeSeam:U");
 ok(BP.yokeVariantSymbol(U_BODY) === "U" && BP.yokeVariantSymbol(Q_BODY) === "Q", "1: body → 변형 기호(U/Q)");
 throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, U_BODY, { yokeGather: true }) }), "yoke-seam-u-no-gather", "1: Ⓤ 에 개더 지정 거부(개더는 라인의 일부)");

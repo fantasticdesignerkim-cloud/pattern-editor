@@ -144,10 +144,10 @@
       ] },
     { id: "yoke-seam-3", order: 10, label: "요크 이음선 ③", symbol: "U", page: 34,
       availability: "available", note: null,
-      familyNote: "처리 방법 P.159「2곳 이상 맞댄다」의 워크 예시가 이 몸판 Ⓤ 요크다: 뒤 요크 다트를 먼저 맞대고, 그다음 앞 요크와 어깨선에서 맞대어 «어깨 요크» 한 장으로 만든다. 앞 이음선은 어깨선과 평행, 앞 AH 다트는 몸판에서 닫아 이음선에 쐐기(개더)를 벌린다.",
+      familyNote: "처리 방법 P.159「2곳 이상 맞댄다」의 워크 예시가 이 몸판 Ⓤ 요크다: 뒤 요크 다트를 먼저 맞대고, 그다음 앞 요크와 어깨선에서 맞대어 «어깨 요크» 한 장으로 만든다. 앞 이음선은 어깨선과 평행, 앞 AH 다트는 몸판에서 닫아 이음선에 쐐기(개더)를 벌린다. Ⓥ(P.35)는 Ⓤ 에 개더만 키운다 — 뒤 ∅×1 · 앞은 BP→밑단 수직 절개를 평행으로 벌려 총 ●×1.2.",
       variants: [
         availVariant("bunka-bodice-U", "U", "U · 박시 몸판 + 어깨 요크 한 장(뒤 다트를 먼저 닫아 앞 요크와 어깨선에서 맞댐) · 앞 이음선 어깨 평행 −6 · 앞 AH 다트 몸판에서 닫아 쐐기 개더 · 뒤 중심 개더 ∅×0.5 · 밑단 +1", 34),
-        pendingVariant("bunka-bodice-V", "V", "요크 이음선 ③ 변형", 35, null, "U 와 같은 이유(미판독).")
+        availVariant("bunka-bodice-V", "V", "V · Ⓤ 방법 + 앞뒤 개더 분량 추가 · 뒤 중심 개더 ∅×1 · 앞 BP→밑단 수직 절개를 평행으로 벌려 총 개더 ●×1.2 · 밑단 +1", 35)
       ] }
   ];
 
@@ -273,6 +273,14 @@
       body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: "U" }
     },
     {
+      id: "bunka-bodice-V", label: "교재 V 요크 이음선 ③ 변형", familyId: "yoke-seam-3", symbol: "V", page: 35,
+      description: "Ⓤ 방법 + 앞뒤에서 개더 분량을 추가 · 어깨 요크·앞 이음선·BP→이음선 1/2점 절개·AH 쐐기는 Ⓤ 와 같다 · 뒤 중심 개더 띠 = ∅×1(∅ = 이음선 − 2) · 앞은 BP 에서 밑단까지 앞중심과 평행한 수직 절개를 넣어 앞중심 쪽 조각을 수평으로 평행 이동 — 총 앞 개더 = ● × 1.2(● = 이음선 − 양 끝 2cm×2) · 밑단 옆 +1. 도해 «5 정도» 는 평행 벌림 분량의 참고 결과(고정 5cm 가 아니다).",
+      source: "[패턴학교] 요크 이음선 ③ Ⓥ(P.35) · 처리 방법 2곳 이상 맞댄다(P.159) · 닫는다(P.160) · 평행으로 잘라서 벌린다(P.162)",
+      baseMethod: "bunka-bodice-V-v1",
+      // 책이 정한 공식만: 뒤 ∅×1 · 앞 ●×1.2(총 초과분). 평행 벌림 d 는 «1.2● − Ⓤ 쐐기 g» 가 이음선에 더해지도록 수평 이동량을 푼다(주름 수·턱은 책에 없어 만들지 않는다).
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, yokeSeam: "V" }
+    },
+    {
       id: "bunka-bodice-C", label: "교재 C 셰이프트(다트 2개)", familyId: "shaped-line", symbol: "C", page: 16,
       description: "허리 다트 a·e 만 사용 · 옆선 1cm 줄임 · 밑단 1cm 추가",
       source: "[패턴학교] 셰이프트 라인 Ⓒ(P.16)",
@@ -308,7 +316,7 @@
       if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
       if (k === "waistSeam") { if (v !== true) fail("invalid-body", id + ".waistSeam"); return; }
       if (k === "yokeSeam") {
-        if (v !== true && v !== "S" && v !== "T" && v !== "U") fail("invalid-body", id + ".yokeSeam");   // true = Ⓠ·Ⓡ(P.30–31) · "S" = Ⓢ(P.32) · "T" = Ⓣ(P.33) · "U" = Ⓤ(P.34)
+        if (v !== true && v !== "S" && v !== "T" && v !== "U" && v !== "V") fail("invalid-body", id + ".yokeSeam");   // true = Ⓠ·Ⓡ(P.30–31) · "S" = Ⓢ(P.32) · "T" = Ⓣ(P.33) · "U" = Ⓤ(P.34)
         if (body.waistSeam === true) fail("yoke-seam-waist-seam-conflict", id);
         if (body.flare != null) fail("yoke-seam-flare-conflict", id);
         return;
@@ -428,8 +436,8 @@
   // 요크 이음선 라인에서 body 파라미터에 해당하는 변형 기호(Q/R = 요크 ①, S = 요크 ②). 레코드의 body 와 비교한다. 없으면 null.
   function yokeVariantSymbol(body) {
     var ys = body && body.yokeSeam;
-    if (ys !== true && ys !== "S" && ys !== "T" && ys !== "U") return null;
-    var fam = ys === "U" ? "yoke-seam-3" : (ys === "S" || ys === "T") ? "yoke-seam-2" : "yoke-seam-1", want = body.yokeGather === true, hit = null;
+    if (ys !== true && ys !== "S" && ys !== "T" && ys !== "U" && ys !== "V") return null;
+    var fam = (ys === "U" || ys === "V") ? "yoke-seam-3" : (ys === "S" || ys === "T") ? "yoke-seam-2" : "yoke-seam-1", want = body.yokeGather === true, hit = null;
     variants(fam).forEach(function (v) {
       var r = v.presetId ? get(v.presetId) : null;
       if (r && r.body.yokeSeam === ys && (ys !== true || (r.body.yokeGather === true) === want)) hit = v.symbol;

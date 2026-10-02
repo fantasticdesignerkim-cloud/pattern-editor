@@ -95,8 +95,10 @@
     const gf = ys.front && ys.front.gather, sp = ys.front && ys.front.seamPoints;
     if (gf && sp) {
       const dy = peplumDrop(geometry, "frontBody");
-      gathers.push({ key: "frontBody", piece: "front", text: "개더 +" + (Math.round(gf.addedCm * 10) / 10) + "cm(쐐기)", addedCm: gf.addedCm,
-        at: { x: (sp.cutTop.x + sp.cutTopRotated.x) / 2, y: (sp.cutTop.y + sp.cutTopRotated.y) / 2 + dy } });
+      const r1 = (v) => Math.round(v * 10) / 10, sv = ys.front.spread;   // Ⓥ: 총 개더 = 쐐기 + 평행 벌림(수직 절개) — 라벨은 총량과 두 몫을 함께 보인다
+      gathers.push({ key: "frontBody", piece: "front", text: sv ? "개더 +" + r1(gf.addedCm) + "cm(쐐기 " + r1(gf.wedgeCm) + " + 벌림 " + r1(gf.spreadSeamCm) + ")" : "개더 +" + r1(gf.addedCm) + "cm(쐐기)", addedCm: gf.addedCm,
+        at: sv ? { x: (sv.cutTopMoved.x + sv.cutTopRotated.x) / 2, y: (sv.cutTopMoved.y + sv.cutTopRotated.y) / 2 + dy }
+               : { x: (sp.cutTop.x + sp.cutTopRotated.x) / 2, y: (sp.cutTop.y + sp.cutTopRotated.y) / 2 + dy } });
     }
     return { labels, seams, gathers };
   }

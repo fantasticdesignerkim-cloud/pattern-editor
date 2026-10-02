@@ -83,6 +83,11 @@
   var CUT_U_SEAM_FRACTION = 0.5;     // BP 절개의 이음선 쪽 끝 = 이음선 양 끝 사이 1/2점
   var GATHER_U_TRIM_CM = 2;
   var GATHER_U_RATIO = 0.5;
+  // ── Ⓥ(P.35) — Ⓤ 방법 + 앞뒤 개더 분량 추가: 뒤 띠 = ∅ × 1(Ⓤ ×0.5) / 앞 = ● × 1.2(● = 앞 이음선에서 양 끝 2cm 를 뺀 개더 구간).
+  //   앞 총 개더 분량(몸판 이음선 − 요크 이음선) = 1.2●. Ⓤ 의 AH 쐐기(g)는 그대로 두고, BP 에서 밑단까지 앞중심과 평행한 수직 절개를 넣어 앞중심 쪽 조각을
+  //   수평(절개선에 직각)으로 d 만큼 평행 이동한다(P.162). 이음선 기여분 e = 1.2● − g 가 «평행 벌림 분량»이고, 수평 이동 d 는 총 초과분이 정확히 1.2● 가 되게 푼다.
+  var GATHER_V_BACK_RATIO = 1;
+  var GATHER_V_FRONT_RATIO = 1.2;
   var SHOULDER_GAP_MAX_CM2 = 8;      // 어깨 렌즈형 틈 면적 상한(cm²) — 이보다 크면 맞댄 것이 아니다
   // Ⓣ 이음선 truing — 절개 벌림은 조각을 이음선 교점에서 돌리므로 몸판 윗변(이음선)에 교점마다 꺾임이 생긴다(교재 P.158 ③ «각지지 않게 완만한 곡선으로 수정»).
   //   이음선의 모든 내부 모서리를 접선 연속 cubic 으로 둥글린다. 모서리마다 양 이웃 선분의 0.45 만큼씩 물러난다(한 선분을 두 모서리가 나눠 써도 겹치지 않는다).
@@ -442,7 +447,8 @@
     if (opts && opts.gatherU === true) {   // Ⓤ(P.34) 뒤: 띠 폭 = (이음선 길이 − 2) × 0.5 (∅ = 원래 CB → 진동 쪽 끝 2cm 앞)
       if (which !== "back") fail("gather-u-back-only", which);
       var spanU = seamLenUp - GATHER_U_TRIM_CM;
-      var gru = gatherBand(which, GATHER_U_RATIO * spanU, "back-seam-minus-2-half", Ps, cx, bodySegs, keep, Ys, seamLenUp, areaLow);
+      var ratioU = (opts.gatherRatio != null) ? opts.gatherRatio : GATHER_U_RATIO;
+      var gru = gatherBand(which, ratioU * spanU, ratioU === GATHER_U_RATIO ? "back-seam-minus-2-half" : "back-seam-minus-2-full", Ps, cx, bodySegs, keep, Ys, seamLenUp, areaLow);
       gru.meta.spanCm = spanU; gru.meta.trimCm = GATHER_U_TRIM_CM;
       gatherMeta = gru.meta; bodySegs = gru.bodySegs; keep = gru.keep;
     } else if (opts && opts.gather === true) {
@@ -940,6 +946,11 @@
       else if (sg) { var id = sg.dart && sg.dart.id || sg.edge || "?"; if (dropped.indexOf(id) < 0) dropped.push(id); }
     });
     keep.push(line(BP, Tp, { wedgeCut: "fixed" }), line(BP, Tr, { wedgeCut: "rotated" }));
+    var spreadMeta = null;
+    if (opts && opts.spreadV === true) {   // Ⓥ(P.35): BP→밑단 수직 절개 + 앞중심 쪽 조각 수평 평행 이동
+      var sv = spreadFrontV(which, bodySegs, keep, BP, Tp, Tr, seamLenYoke, areaLoRing);
+      bodySegs = sv.bodySegs; keep = sv.keep; spreadMeta = sv.meta;
+    }
 
     var angDeg = Math.abs(ab.theta) * 180 / Math.PI;
     var meta = {
@@ -955,10 +966,107 @@
         seamLenBodyCm: seamLenBody, seamLenYokeCm: seamLenYoke, seamExcessCm: seamLenBody - seamLenYoke },
       hemSideExtraCm: hemExtra, areaYokeCm2: areaUp, areaBodyCm2: areaLow, areaInputCm2: areaIn, droppedConstruction: dropped
     };
+    if (spreadMeta) {   // Ⓥ: 총 개더 분량 = 1.2● — 쐐기 g 는 보존, 평행 벌림은 이음선 기여분 e 와 수평 이동 d 로 따로 기록
+      meta.variant = "V";
+      meta.seamLenLowerCm = spreadMeta.seamLenBodyCm; meta.seamDeltaCm = seamLenYoke - spreadMeta.seamLenBodyCm; meta.areaBodyCm2 = spreadMeta.areaBodyCm2;
+      meta.gather = { kind: "wedge+spread", rule: "front-1.2-bullet", addedCm: spreadMeta.excessCm, wedgeCm: gapCm, spreadSeamCm: spreadMeta.spreadSeamCm, spreadCm: spreadMeta.spreadCm,
+        spanCm: seamLenYoke - 2 * GATHER_U_TRIM_CM, trimCm: GATHER_U_TRIM_CM, targetRatio: GATHER_V_FRONT_RATIO, cutRadiusCm: dist(BP, Tp), wedgeAngleDeg: angDeg,
+        seamLenBodyCm: spreadMeta.seamLenBodyCm, seamLenYokeCm: seamLenYoke, seamExcessCm: spreadMeta.excessCm, areaAddedCm2: spreadMeta.areaBodyCm2 - areaLoRing };
+      meta.spread = spreadMeta.spread;
+    }
     return {
       yoke: { outline: toPrims(yokeSegs, piece.outline), construction: [] },
       body: { outline: toPrims(bodySegs, piece.outline), construction: keep },
       meta: meta
+    };
+  }
+
+  // ── Ⓥ 앞 몸판 평행 벌림(P.35 + 처리 방법 P.162) ──
+  //   Ⓤ 몸판 링(AH 쐐기가 닫힌 상태)을 BP→T(절개 위쪽)·BP→밑단(수직) 경로로 가르고, 앞중심 쪽 조각을 수평으로 d 만큼 이동한다.
+  //   d 는 총 이음선 초과분(몸판 − 요크)이 정확히 1.2●(● = 요크 이음선 − 4) 가 되도록 푼다 — 초과분 = |T″ − T′|(T″ = T + d, T′ = 회전한 절개점).
+  //   끊긴 이음선(T″·T′ 모서리)은 Ⓣ 의 길이 보존 fairing 으로 완만하게 다시 그린다. 구성선은 소속 조각의 같은 변환을 따른다(절개를 가로지르는 선은 절개에서 나눠 각자).
+  function spreadFrontV(which, bodySegs, keep, BP, Tp, Tr, seamLenYoke, areaLoRing) {
+    var t = T();
+    var cEdge = bodySegs.filter(function (s) { return s.edge === "center"; })[0];
+    if (!cEdge) fail("center-missing", which);
+    var dir = cEdge.from.x >= BP.x ? 1 : -1;                       // 앞중심 쪽 = 평행 이동 방향
+    var hems = bodySegs.filter(function (s) { return s.edge === "hem"; });
+    if (hems.length !== 1 || hems[0].kind !== "line" || Math.abs(hems[0].from.y - hems[0].to.y) > 1e-9) fail("spread-v-hem-not-horizontal", which);
+    var hemY = hems[0].from.y, hx0 = Math.min(hems[0].from.x, hems[0].to.x), hx1 = Math.max(hems[0].from.x, hems[0].to.x);
+    if (!(BP.x > hx0 + 1e-6 && BP.x < hx1 - 1e-6) || !(hemY > BP.y + 1e-6)) fail("spread-v-cut-outside", { bustX: BP.x, hemY: hemY });
+    // 목표: 총 이음선 초과분 E = 1.2 × ●, ● = 요크 이음선 − 양 끝 2cm × 2
+    var bullet = seamLenYoke - 2 * GATHER_U_TRIM_CM;
+    var E = GATHER_V_FRONT_RATIO * bullet, g = dist(Tp, Tr);
+    var cdx = Tp.x - Tr.x, cdy = Tp.y - Tr.y;
+    if (!(E > Math.abs(cdy) + 1e-9) || !(bullet > 0)) fail("spread-v-target-invalid", { targetCm: E, wedgeCm: g });
+    var d = Math.sqrt(E * E - cdy * cdy) - dir * cdx;                // (cdx + dir·d)² + cdy² = E²
+    if (!(d > 1e-6)) fail("spread-v-nonpositive", { spreadCm: d, targetCm: E, wedgeCm: g });
+    var dx = dir * d;
+    var shiftP = function (p) { return { x: p.x + dx, y: p.y }; };
+    var shiftSeg = function (sg) { var q = clone(sg); ["from", "to", "c1", "c2"].forEach(function (k) { if (q[k]) q[k] = shiftP(q[k]); }); return q; };
+    // 링을 «옆선 → 앞중심» 방향으로 정렬하고 밑단 변에서 시작해 순회: hemL · hemR · (앞중심 쪽 오른 구간) · 쐐기 다리(bridge) · (옆 쪽 왼 구간)
+    var ring = bodySegs.map(clone);
+    if ((hems[0].to.x - hems[0].from.x) * dir < 0) ring = ring.slice().reverse().map(function (sg) { return t.reverseSeg(sg); });
+    var n = ring.length, hi = -1, bi = -1;
+    for (var i = 0; i < n; i++) { if (ring[i].edge === "hem") hi = i; if ((near(ring[i].from, Tp, 1e-9) && near(ring[i].to, Tr, 1e-9)) || (near(ring[i].from, Tr, 1e-9) && near(ring[i].to, Tp, 1e-9))) bi = i; }
+    if (hi < 0 || bi < 0) fail("spread-v-ring-markers", which);
+    var rightRun = [], leftRun = [];
+    for (var k = (hi + 1) % n; k !== bi; k = (k + 1) % n) rightRun.push(ring[k]);
+    for (var k2 = (bi + 1) % n; k2 !== hi; k2 = (k2 + 1) % n) leftRun.push(ring[k2]);
+    if (!rightRun.length || !leftRun.length) fail("spread-v-ring-runs", which);
+    var f = (BP.x - ring[hi].from.x) / (ring[hi].to.x - ring[hi].from.x);
+    var hemL = t.subSegment(ring[hi], 0, f), hemR = t.subSegment(ring[hi], f, 1);
+    var H = P(hemL.to), H2 = shiftP(H), T2 = shiftP(Tp);
+    var hemBridge = line(H, H2, { edge: "hem", spreadBridge: true });
+    var chord = line(T2, Tr, { edge: "yoke-seam", spreadChord: true });
+    var chain = [hemL, hemBridge, shiftSeg(hemR)].concat(rightRun.map(shiftSeg), [chord], leftRun);
+    for (var c = 0; c < chain.length; c++) {
+      var nx = chain[(c + 1) % chain.length];
+      if (dist(chain[c].to, nx.from) > CLOSE_EPS) fail("spread-v-discontinuous", { at: c, gapCm: dist(chain[c].to, nx.from) });
+      nx.from = P(chain[c].to);
+    }
+    // 검증용 면적: 쐐기 링(areaLoRing, 다트 노치 제외) + 틈 다각형 G(Tr·T″·BP′·H′·H·BP) — fairing 전 몸판 면적
+    var BP2 = shiftP(BP);
+    var Gsegs = [line(Tr, T2), line(T2, BP2), line(BP2, H2), line(H2, H), line(H, BP), line(BP, Tr)];
+    var areaG = Math.abs(signedArea(Gsegs));
+    var areaRaw = checkClosed(chain, which + ":body-spread");
+    if (Math.abs(areaRaw - areaLoRing - areaG) > AREA_TOL) fail("spread-v-area-mismatch", { side: which, gotCm2: areaRaw, wantCm2: areaLoRing + areaG });
+    var fair = fairSeamRun(chain, which);
+    var finalSegs = fair.chain;
+    var areaBody = checkClosed(finalSegs, which + ":body-spread-fair");
+    var seamLenBody = segsLen(finalSegs.filter(function (s) { return s.edge === "yoke-seam"; }));
+    if (Math.abs(seamLenBody - seamLenYoke - E) > SEAM_TOL) fail("spread-v-seam-length-mismatch", { side: which, bodyCm: seamLenBody, yokeCm: seamLenYoke, targetCm: E });
+
+    // 구성선: 소속 조각(수직 절개의 오른쪽 = 앞중심 쪽)이면 같은 평행 이동, 왼쪽이면 그대로. 절개를 가로지르면 절개에서 나눠 각자.
+    var EPS = 1e-6, sideOf = function (p) { return (p.x - BP.x) * dir; };
+    var newKeep = [];
+    keep.forEach(function (sg) {
+      if (sg.wedgeCut === "fixed") { var m = deepClone(sg); m.from = shiftP(sg.from); m.to = shiftP(sg.to); newKeep.push(m); return; }   // BP→T 절개선은 고정 조각(앞중심 쪽)의 가장자리
+      if (sg.wedgeCut === "rotated") { newKeep.push(sg); return; }                                                                     // BP→T′ 는 옆 조각(회전한 쪽)의 가장자리
+      if (sg.kind !== "line" || !sg.from || !sg.to) fail("spread-v-construction-kind", sg.edge || "?");
+      var sa = sideOf(sg.from), sb = sideOf(sg.to);
+      var above = sg.from.y < BP.y - EPS || sg.to.y < BP.y - EPS;
+      if (above && ((sa > EPS && sb < -EPS) || (sa < -EPS && sb > EPS))) fail("spread-v-construction-upper-crossing", sg.edge || (sg.dart && sg.dart.id) || "?");
+      if (sa >= -EPS && sb >= -EPS && (sa > EPS || sb > EPS)) { var r = deepClone(sg); r.from = shiftP(sg.from); r.to = shiftP(sg.to); newKeep.push(r); }
+      else if (sa <= EPS && sb <= EPS) newKeep.push(sg);
+      else {                                                                                    // 절개를 가로지름: 나눠서 각자 변환(삭제·승격 없음)
+        var u = (BP.x - sg.from.x) / (sg.to.x - sg.from.x), X = { x: BP.x, y: sg.from.y + (sg.to.y - sg.from.y) * u };
+        var A = deepClone(sg), B = deepClone(sg);
+        A.from = P(sg.from); A.to = X; B.from = X; B.to = P(sg.to);
+        var aRight = sa > 0;
+        [[A, aRight], [B, !aRight]].forEach(function (pr) {
+          var q = pr[0]; q.spreadSplit = true;
+          if (pr[1]) { q.from = shiftP(q.from); q.to = shiftP(q.to); }
+          newKeep.push(q);
+        });
+      }
+    });
+    newKeep.push(line(BP, H, { spreadCut: "stay" }), line(BP2, H2, { spreadCut: "moved" }));
+    return {
+      bodySegs: finalSegs, keep: newKeep,
+      meta: { spreadCm: d, spreadSeamCm: E - g, excessCm: seamLenBody - seamLenYoke, seamLenBodyCm: seamLenBody, areaBodyCm2: areaBody,
+        spread: { dir: dir, dx: dx, bullet: bullet, targetCm: E, wedgeCm: g, bust: P(BP), bustMoved: P(BP2), cutTop: P(Tp), cutTopMoved: P(T2), cutTopRotated: P(Tr),
+          hemY: hemY, hemLeft: P(H), hemRight: P(H2), areaGapCm2: areaG, areaBodyUnfairedCm2: areaRaw, corners: fair.corners } }
     };
   }
 
@@ -1027,18 +1135,20 @@
   }
   function splitU(geometry, opts) {
     var hemSideCm = (opts && "hemSideCm" in opts) ? opts.hemSideCm : DEFAULT_HEM_SIDE_CM;
-    var b = splitSide(deepClone(geometry.back), "back", { gatherU: true, hemSideCm: hemSideCm });    // ① 뒤 어깨 다트를 닫은 뒤 요크
-    var f = splitFrontU(deepClone(geometry.front), { hemSideCm: hemSideCm });
+    var isV = !!(opts && opts.variant === "V");                                                       // Ⓥ(P.35) = Ⓤ + 뒤 띠 ×1 + 앞 총 개더 1.2● (요크·어깨 맞댐은 Ⓤ 와 같다)
+    var b = splitSide(deepClone(geometry.back), "back", isV ? { gatherU: true, gatherRatio: GATHER_V_BACK_RATIO, hemSideCm: hemSideCm } : { gatherU: true, hemSideCm: hemSideCm });    // ① 뒤 어깨 다트를 닫은 뒤 요크
+    var f = splitFrontU(deepClone(geometry.front), isV ? { hemSideCm: hemSideCm, spreadV: true } : { hemSideCm: hemSideCm });
     var j = joinShoulder(f.yoke, b.yoke);                                                            // ② 어깨선에서 맞댄 한 장
-    b.meta.variant = "U";
-    return { shoulderYoke: j.piece, frontBody: f.body, backBody: b.body, meta: { variant: "U", front: f.meta, back: b.meta, shoulderYoke: j.meta } };
+    var vr = isV ? "V" : "U";
+    b.meta.variant = vr;
+    return { shoulderYoke: j.piece, frontBody: f.body, backBody: b.body, meta: { variant: vr, front: f.meta, back: b.meta, shoulderYoke: j.meta } };
   }
 
   // split({front, back}, opts) → { frontYoke, frontBody, backYoke, backBody, meta:{front, back} }
   // 원자적: 앞·뒤 중 하나라도 실패하면 아무것도 반환하지 않는다. 입력은 변형하지 않는다.
   function split(geometry, opts) {
     if (!geometry || typeof geometry !== "object" || !geometry.front || !geometry.back) fail("invalid-geometry");
-    if (opts && opts.variant === "U") return splitU(geometry, opts);
+    if (opts && (opts.variant === "U" || opts.variant === "V")) return splitU(geometry, opts);
     var sideFn = (opts && (opts.variant === "S" || opts.variant === "T")) ? splitSideS : splitSide;   // Ⓢ(P.32)·Ⓣ(P.33) = 이음선 BL−5·앞 꺾인 선·뒤 어깨 다트 보존(Ⓣ 는 개더 대신 절개 벌림)
     var f = sideFn(deepClone(geometry.front), "front", opts);
     var b = sideFn(deepClone(geometry.back), "back", opts);

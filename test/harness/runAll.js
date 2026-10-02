@@ -69,6 +69,7 @@ const suites = [
   { file: "yokeSeamTCheck.js",          golden: false },
   // 요크 이음선 ③ Ⓤ(P.34) — 어깨 요크 한 장(뒤 다트 먼저 닫음 → 앞 요크와 어깨선 맞댐)·앞 어깨 평행 −6 이음선·앞 쐐기 개더·뒤 중심 개더 (이음선−2)×½·체크포인트·표시·A~Ⓣ 바이트 불변.
   { file: "yokeSeamUCheck.js",          golden: false },
+  { file: "yokeSeamVCheck.js",          golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },

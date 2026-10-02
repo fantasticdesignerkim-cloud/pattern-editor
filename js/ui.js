@@ -505,7 +505,7 @@
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
     pendingPeplumCut = (body.peplumCut === true || body.peplumCut === "P") ? body.peplumCut : null;
-    pendingYokeSeam = (body.yokeSeam === true || body.yokeSeam === "S" || body.yokeSeam === "T" || body.yokeSeam === "U") ? body.yokeSeam : null;   // true = Ⓠ·Ⓡ · "S" = Ⓢ · "T" = Ⓣ · "U" = Ⓤ. 다른 프리셋으로 바꾸면 해제 → 요크·몸판 조각 사라짐
+    pendingYokeSeam = (body.yokeSeam === true || body.yokeSeam === "S" || body.yokeSeam === "T" || body.yokeSeam === "U" || body.yokeSeam === "V") ? body.yokeSeam : null;   // true = Ⓠ·Ⓡ · "S" = Ⓢ · "T" = Ⓣ · "U" = Ⓤ. 다른 프리셋으로 바꾸면 해제 → 요크·몸판 조각 사라짐
     pendingYokeGather = body.yokeGather === true ? true : null;   // Ⓠ 로 바꾸면 해제 → 개더 띠 없는 요크
     onApplyBodyLength();
   }
