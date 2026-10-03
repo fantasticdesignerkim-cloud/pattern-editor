@@ -428,6 +428,7 @@
   //   예외는 **다트 배분**(waistDartScales) — 입력칸이 없어 parameters 에만 산다.
   let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
   let pendingFlare;        // 〃 (true = 다트를 닫아 밑단 벌리기)
+  let pendingNeckTuck;     // 〃 (true = 다트를 닫아 목둘레 절개 2곳 벌리기, 프리셋 Ⓘ — 플레어·이음선과 함께 쓰지 않는다)
   let pendingFlareSlash;   // 〃 (true = 진동 가장 안쪽 수직 절개로 플레어 더 벌리기, 프리셋 Ⓗ — flare 전제)
   let pendingWaistSeam;    // 〃 (true = 허리 이음선 — 상·하 조각 분리, 프리셋 Ⓜ)
   let pendingPeplumCut;    // 〃 (true = 페플럼 WL 등분 수직 절개 벌림, 프리셋 Ⓞ — waistSeam 전제)
@@ -508,6 +509,7 @@
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     pendingDartScales = body.waistDartScales ? structuredClone(body.waistDartScales) : null;
     pendingFlare = body.flare === true ? true : null;
+    pendingNeckTuck = body.neckTuck === true ? true : null;   // 다른 프리셋으로 바꾸면 해제 → 턱 사라짐
     pendingFlareSlash = body.flareSlash === true ? true : null;   // Ⓖ 로 바꾸면 해제 → 추가 절개 없는 플레어
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
@@ -635,6 +637,12 @@
   function flareNote(project) {
     const g = project && project.working && project.working.geometry;
     const f = g && g.front && g.front.flareCm, b = g && g.back && g.back.flareCm;
+    // Ⓘ(P.22): 목둘레 턱 — 절개 틈(목둘레 벌림)과 닫은 다트각. 메타를 읽기만 한다.
+    const tf = g && g.front && g.front.neckTuck, tb = g && g.back && g.back.neckTuck;
+    if (tf || tb) {
+      const tk = (x, k) => x ? `${k} 목둘레 ${x.cuts.map(c => fmtL(c.gapChordCm)).join("+")}cm(다트 ${fmtL(Math.abs(x.dartAngleRad) * 180 / Math.PI)}° 균등 분배)` : "";
+      return "목둘레 턱 · " + [tk(tf, "앞"), tk(tb, "뒤")].filter(Boolean).join(" · ") + (tb && tb.residualSliverCm > 0.001 ? ` · 뒤 어깨 잔여 ${fmtL(tb.residualSliverCm)}cm(패턴선 확정에서 정리)` : "");
+    }
     if (!f && !b) return "";
     const one = (x, k) => x ? `${k} 벌어짐 ${fmtL(x.spread)}cm` : "";
     const sliver = (b && b.residualSliverCm > 0.001) ? ` · 뒤 어깨 잔여 ${fmtL(b.residualSliverCm)}cm(패턴선 확정에서 정리)` : "";
@@ -670,6 +678,9 @@
     if (reason === "designWaistSeam-missing") return "허리 이음선 연산 모듈을 불러오지 못했습니다";
     if (reason === "invalid-body-waist-seam") return "허리 이음선 설정이 올바르지 않습니다";
     if (reason && reason.indexOf("waist-seam-failed") === 0) return "허리 이음선을 적용할 수 없습니다 · " + String(detail || "");
+    if (reason === "neck-tuck-conflict") return "목둘레 턱은 플레어·허리 이음선·요크·프린세스와 함께 쓸 수 없습니다";
+    if (reason === "invalid-body-neck-tuck") return "목둘레 턱 설정이 올바르지 않습니다";
+    if (reason && reason.indexOf("neck-tuck-failed") === 0) return "목둘레 턱을 적용할 수 없습니다 · " + String(detail || "");
     if (reason && reason.indexOf("flare-failed") === 0) return "플레어를 적용할 수 없습니다 · " + flareReasonStr(detail);
     if (reason === "invalid-waist-target") return "목표 완성 허리는 30–200 사이여야 합니다";
     if (reason === "waist-overdetermined") return "목표 완성 허리와 허리 다트량은 함께 쓸 수 없습니다";
@@ -2279,6 +2290,10 @@
       if (pendingFlare) nextParameters.body.flare = true; else delete nextParameters.body.flare;
       pendingFlare = undefined;
     }
+    if (pendingNeckTuck !== undefined) {
+      if (pendingNeckTuck) nextParameters.body.neckTuck = true; else delete nextParameters.body.neckTuck;
+      pendingNeckTuck = undefined;
+    }
     if (pendingFlareSlash !== undefined) {
       if (pendingFlareSlash) nextParameters.body.flareSlash = true; else delete nextParameters.body.flareSlash;
       pendingFlareSlash = undefined;
@@ -2362,6 +2377,7 @@
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     pendingDartScales = null;   // 원형 다트 배분으로 복귀
     pendingFlare = null;        // 플레어 해제
+    pendingNeckTuck = null;     // 목둘레 턱 해제
     pendingFlareSlash = null;   // 플레어 추가 절개 해제
     pendingWaistSeam = null;    // 허리 이음선 해제(페플럼 제거)
     pendingPeplumFlare = null;  // 페플럼 플레어 해제
