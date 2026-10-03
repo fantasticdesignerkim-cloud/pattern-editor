@@ -97,7 +97,7 @@ const ringAreaOf = (pc) => { const r = T.buildPieceRing(segsOf(pc.outline), pc.c
   ok(J(I_BODY) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, neckTuck: true }), "1: Ⓘ 레코드 = Ⓑ(밑단 +1) + 허리 다트 0 + neckTuck");
   ok(BP.get("bunka-bodice-I").source.indexOf("P.161") > 0 && BP.get("bunka-bodice-I").source.indexOf("사용자 확정") > 0, "1: 출처 = P.161 · 책에 없는 규칙은 사용자 확정이라고 밝힌다");
   const j = BP.variant("neck-tuck", "bunka-bodice-J");
-  ok(j.availability === "pending-op" && typeof j.blockedBy === "string" && j.blockedBy.length > 0, "1: Ⓙ 는 보류 + blockedBy 보유");
+  ok(j.availability === "available" && j.page === 23 && j.presetId === "bunka-bodice-J" && !j.blockedBy, "1: Ⓙ 는 실행 가능(P.23 — neckTuckJPresetCheck 가 따로 검증)");
   throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, I_BODY, { flare: true }) }), "neck-tuck-conflict", "1: 플레어와 함께 쓰면 거부");
   throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, I_BODY, { waistSeam: true }) }), "neck-tuck-conflict", "1: 허리 이음선과 함께 쓰면 거부");
   throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, I_BODY, { princess: "E" }) }), "neck-tuck-conflict", "1: 프린세스와 함께 쓰면 거부");
@@ -168,13 +168,13 @@ const ringAreaOf = (pc) => { const r = T.buildPieceRing(segsOf(pc.outline), pc.c
   throwsReason(() => DF.neckTuck(crossing), "tuck-construction-crosses-cut", "4: 절개선을 가로지르는 construction 은 거부(조용히 틀어지지 않게)");
 }
 
-// ── 5. 기존 실행 가능 프리셋 geometry 바이트 불변 (HEAD 2abfd7f 에서 측정한 sha) ──
+// ── 5. 기존 실행 가능 프리셋 geometry 바이트 불변 (HEAD 2abfd7f 에서 측정한 sha · Ⓘ 는 5fecd46) ──
 {
   const WANT = { A: "f87b86b25abc", B: "3fade9d306cf", C: "d9ccd8ad2748", D: "dea05147006a", E: "c8445d93bfad", F: "21a011a86875", G: "d9a46f8358da", H: "c7c54c484627",
-    M: "66936c94c7ce", N: "6b02cf3e2596", O: "d1fae91f00e5", P: "160d3aaee53e", Q: "76a325d296cd", R: "63193d5a879a", S: "8f5a2535f192", T: "04de67175bdb", U: "dc8c572d7432", V: "5237c10f1106" };
+    I: "d0ecd75a37e3", M: "66936c94c7ce", N: "6b02cf3e2596", O: "d1fae91f00e5", P: "160d3aaee53e", Q: "76a325d296cd", R: "63193d5a879a", S: "8f5a2535f192", T: "04de67175bdb", U: "dc8c572d7432", V: "5237c10f1106" };
   Object.keys(WANT).forEach(sym => {
     const g = DB.computeGeometry(REF, { body: BP.bodyParams("bunka-bodice-" + sym) });
-    ok(sha(g) === WANT[sym], "5: Ⓐ~Ⓥ 바이트 불변 — " + sym);
+    ok(sha(g) === WANT[sym], "5: Ⓐ~Ⓥ(Ⓘ 포함) 바이트 불변 — " + sym);
   });
   ok(!("neckTuck" in GB.front) && !("neckTuck" in GB.back) && !("necklineLenCm" in GB.front), "5: Ⓑ 에는 neckTuck·necklineLenCm 키가 없다");
   ok(!("waistSeam" in GI) && !("frontPeplum" in GI) && !("princess" in GI) && !("yokeSeam" in GI), "5: Ⓘ 는 조각 분리 슬롯을 만들지 않는다(몸판 한 장)");

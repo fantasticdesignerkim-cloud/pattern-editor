@@ -708,7 +708,8 @@
     if (flareSlash != null && flareSlash !== false && !applySlash) fail("invalid-body-flare-slash", flareSlash);
     if (applySlash && !applyFlare) fail("flare-slash-needs-flare");
     // 목둘레 턱 Ⓘ(P.22·P.161) — 다트를 닫아 그 반동으로 목둘레 절개 2곳을 벌린다(`designFlare.neckTuck`). 플레어·이음선·요크·프린세스와 함께 쓰지 않는다(한 번에 한 가지 처리).
-    var neckTuck = body.neckTuck, applyTuck = (neckTuck === true);
+    // Ⓙ(P.23·P.162) = neckTuck:"J" — Ⓘ 에 앞·뒤 중심 평행 띠(폭 = 앞 목둘레 틈 합)를 더한다(`designFlare.centerBand`).
+    var neckTuck = body.neckTuck, applyBand = (neckTuck === "J"), applyTuck = (neckTuck === true || applyBand);
     if (neckTuck != null && neckTuck !== false && !applyTuck) fail("invalid-body-neck-tuck", neckTuck);
     if (applyTuck && (applyFlare || waistSeam === true || body.yokeSeam || body.yokeGather || body.princess || body.peplumFlare || body.peplumCut)) fail("neck-tuck-conflict");
     var applySeam = (waistSeam === true);
@@ -873,6 +874,21 @@
         pair[0].neckTuck = tr.meta;   // Ⓘ 에만 — 없으면 다른 라인과 바이트 동일
         pair[0].necklineLenCm = tr.meta.neckLenCm;   // 봉제 목둘레 = 세 조각의 neckline 호 합(틈은 접혀 사라진다) — 계측·칼라가 한 조각만 재지 않게
       });
+      // ★ Ⓙ — 목둘레를 벌린 뒤 중심에 평행 띠. 띠 폭 T = 앞 AH 다트를 닫아 벌어지는 목둘레 틈 합(앞·뒤 공통, 사용자 확정 2026-10-04 · 도해 «6»).
+      if (applyBand) {
+        if (typeof DFt.centerBand !== "function") fail("designFlare-missing");
+        var bandW = 0;
+        fPiece.neckTuck.cuts.forEach(function (c) { bandW += c.gapChordCm; });
+        [[fPiece, "front"], [bPiece, "back"]].forEach(function (pair) {
+          var br;
+          try { br = DFt.centerBand({ outline: pair[0].outline, construction: pair[0].construction }, { widthCm: bandW }); }
+          catch (e) { fail("neck-tuck-band-failed", pair[1] + ": " + (e.reason || e.message)); }
+          pair[0].outline = br.outline;
+          pair[0].construction = br.construction;
+          pair[0].neckTuck.tuckDirection = "center";   // 턱은 중심 쪽으로 꺾는다(Ⓘ 는 바깥쪽) — 표시 전용
+          pair[0].neckTuck.centerBand = br.meta;
+        });
+      }
     }
     var outGeom = {
       front: fPiece, back: bPiece,

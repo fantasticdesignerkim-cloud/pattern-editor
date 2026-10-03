@@ -103,10 +103,10 @@
      ] },
     { id: "neck-tuck", order: 5, label: "목둘레에 턱을 넣는다", symbol: "I", page: 22,
       availability: "available", note: null,
-      familyNote: "다트를 닫아 그 반동으로 목둘레를 벌려 턱을 만든다(처리 방법 161). Ⓘ = 목둘레 호 1/3·2/3 두 절개에 닫는 다트각을 균등하게 나눠 벌린다.",
+      familyNote: "다트를 닫아 그 반동으로 목둘레를 벌려 턱을 만든다(처리 방법 161). Ⓘ = 목둘레 호 1/3·2/3 두 절개에 닫는 다트각을 균등하게 나눠 벌린다. Ⓙ = Ⓘ + 앞·뒤 중심 평행 띠.",
       variants: [
         availVariant("bunka-bodice-I", "I", "I · 밑단 폭을 1cm 추가 · 다트를 닫아 목둘레를 벌린다", 22),
-        pendingVariant("bunka-bodice-J", "J", "J · 턱 변형", 23, null, "Ⓘ 는 구현됐지만 Ⓙ(P.23)는 아직 판독하지 않았다.")
+        availVariant("bunka-bodice-J", "J", "J · 밑단 폭 1cm 추가 · 다트를 닫아 목둘레를 벌리고 중심에 턱 분량(평행 띠)을 추가", 23)
       ] },
     { id: "neck-gather", order: 6, label: "목둘레에 개더를 넣는다", symbol: "K", page: 24,
       availability: "pending-op", note: PENDING_NOTE,
@@ -201,6 +201,14 @@
       baseMethod: "bunka-bodice-I-v1",
       body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1,
               waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, neckTuck: true }
+    },
+    {
+      id: "bunka-bodice-J", label: "교재 J 목둘레 턱 + 중심 턱 분량", familyId: "neck-tuck", symbol: "J", page: 23,
+      description: "Ⓘ 와 같이 목둘레 호 1/3·2/3 두 절개를 균등(각 θ/2)으로 벌린 뒤, 앞·뒤 중심에 평행 띠(폭 = 앞 목둘레 틈 합)를 추가 · 턱은 중심 쪽 · 박기 끝 새 중심선에서 2cm",
+      source: "[패턴학교] 목둘레 턱 Ⓙ(P.23) · 처리 방법 닫는다·벌린다(P.161)·평행으로 잘라서 벌린다(P.162) — 절개는 Ⓘ 확정 규칙, 띠 폭·박기 끝·방향은 사용자 확정(2026-10-04)",
+      baseMethod: "bunka-bodice-J-v1",
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1,
+              waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, neckTuck: "J" }
     },
     {
       id: "bunka-bodice-M", label: "교재 M 허리 이음선", familyId: "waist-seam", symbol: "M", page: 26,
@@ -348,7 +356,7 @@
       }
       if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
       if (k === "flareSlash") { if (v !== true) fail("invalid-body", id + ".flareSlash"); if (body.flare !== true) fail("flare-slash-needs-flare", id); return; }
-      if (k === "neckTuck") { if (v !== true) fail("invalid-body", id + ".neckTuck"); return; }
+      if (k === "neckTuck") { if (v !== true && v !== "J") fail("invalid-body", id + ".neckTuck"); return; }   // true = Ⓘ(P.22) · "J" = Ⓙ(P.23)
       if (k === "waistSeam") { if (v !== true) fail("invalid-body", id + ".waistSeam"); return; }
       if (k === "yokeSeam") {
         if (v !== true && v !== "S" && v !== "T" && v !== "U" && v !== "V") fail("invalid-body", id + ".yokeSeam");   // true = Ⓠ·Ⓡ(P.30–31) · "S" = Ⓢ(P.32) · "T" = Ⓣ(P.33) · "U" = Ⓤ(P.34)

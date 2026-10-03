@@ -1605,14 +1605,16 @@
     if (!wants && !has) return null;
     var out = { front: { reason: null }, back: { reason: null }, ok: false, reason: null };
     var bad = function (reason, side) { out.ok = false; out.reason = reason; if (side && out[side]) out[side].reason = reason; return out; };
-    if (!pb || pb.neckTuck !== true || pb.flare || pb.waistSeam || pb.yokeSeam || pb.yokeGather || pb.princess || pb.peplumFlare || pb.peplumCut) return bad("neck-tuck-mismatch");   // false 는 «없음»(다른 프리셋 검사가 명시 false 를 얹기도 한다)
+    var isJ = !!(pb && pb.neckTuck === "J");   // Ⓙ(P.23) = Ⓘ + 앞·뒤 중심 평행 띠
+    if (!pb || (pb.neckTuck !== true && !isJ) || pb.flare || pb.waistSeam || pb.yokeSeam || pb.yokeGather || pb.princess || pb.peplumFlare || pb.peplumCut) return bad("neck-tuck-mismatch");   // false 는 «없음»(다른 프리셋 검사가 명시 false 를 얹기도 한다)
     var sc = pb.waistDartScales;
     if (!sc || ["a", "b", "d", "e"].some(function (k) { return sc[k] !== 0; })) return bad("neck-tuck-waist-darts");   // Ⓘ 는 허리 다트 없는 몸판(사용자 확정)
     if (g.frontPeplum || g.backPeplum || g.frontYoke || g.backYoke || g.shoulderYoke || g.frontCenter || g.backCenter) return bad("neck-tuck-mismatch");
-    var sides = ["front", "back"];
+    var sides = ["front", "back"], frontBandW = null;
     for (var i = 0; i < sides.length; i++) {
       var side = sides[i], pc = g[side], m = pc.neckTuck, row = out[side];
       if (!m || !Array.isArray(m.cuts) || m.cuts.length !== 2) return bad("neck-tuck-missing", side);
+      if (isJ !== !!m.centerBand) return bad("neck-tuck-mismatch", side);   // 파라미터는 Ⓙ 인데 띠 메타가 없거나 그 반대
       if ([m.dartAngleRad, m.perCutAngleRad, m.neckLenCm, m.areaBeforeCm2, m.areaAfterCm2].some(function (v) { return typeof v !== "number" || !isFinite(v); })) return bad("neck-tuck-mismatch", side);
       var segs = [];   // ringSegs 는 edge·dart 를 버리므로 태그를 다시 붙인다(순서 그대로).
       (pc.outline || []).forEach(function (o) { ringSegs([o]).forEach(function (r) { r.edge = o.edge; r.dart = o.dart; segs.push(r); }); });
@@ -1643,6 +1645,33 @@
       segs.forEach(function (sg) { if (sg.edge === "neckline") yokeFlatSeg(sg).forEach(function (ab) { neckLen += Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y); }); });
       if (Math.abs(neckLen - m.neckLenCm) > 1e-3) return bad("neck-tuck-neckline-length", side);
       if (Math.abs(m.areaAfterCm2 - m.areaBeforeCm2) > 1) return bad("neck-tuck-area", side);
+      if (side === "front") frontBandW = gaps[0].chordCm + gaps[1].chordCm;   // 띠 폭 T = 앞 목둘레 틈 합(앞·뒤 공통) — 메타가 아니라 출력 외곽에서 잰 값
+      if (isJ) {
+        // 중심 평행 띠 — 중심선(edge:"center")은 한 직선이고, 그 앞뒤의 edge 없는 수평 연결선 둘이 길이 T · 중심선에 직각 · 같은 쪽(바깥)이어야 한다.
+        var cIdx = [];
+        segs.forEach(function (sg, ix) { if (sg.edge === "center") cIdx.push(ix); });
+        if (!cIdx.length) return bad("neck-tuck-band-center", side);
+        for (var cj = 1; cj < cIdx.length; cj++) if (cIdx[cj] !== cIdx[0] + cj) return bad("neck-tuck-band-center", side);
+        if (cIdx[0] === 0 || cIdx[cIdx.length - 1] === n - 1) return bad("neck-tuck-band-center", side);
+        var cA = segs[cIdx[0]].from, cB = segs[cIdx[cIdx.length - 1]].to, cLen = Math.hypot(cB.x - cA.x, cB.y - cA.y);
+        if (!(cLen > 1e-6)) return bad("neck-tuck-band-center", side);
+        var du = { x: (cB.x - cA.x) / cLen, y: (cB.y - cA.y) / cLen };
+        for (var cq = 0; cq < cIdx.length; cq++) {
+          var cs = segs[cIdx[cq]], cl = Math.hypot(cs.to.x - cs.from.x, cs.to.y - cs.from.y);
+          if (!(cl > 1e-9) || Math.abs((cs.to.x - cs.from.x) * du.y - (cs.to.y - cs.from.y) * du.x) / cl > 1e-6 || ((cs.to.x - cs.from.x) * du.x + (cs.to.y - cs.from.y) * du.y) < 0) return bad("neck-tuck-band-center", side);
+        }
+        var tp = segs[cIdx[0] - 1], bt = segs[cIdx[cIdx.length - 1] + 1];
+        if (!tp || !bt || tp.edge || tp.dart || bt.edge || bt.dart || tp.kind !== "line" || bt.kind !== "line") return bad("neck-tuck-band-connector", side);
+        var tv = { x: tp.to.x - tp.from.x, y: tp.to.y - tp.from.y }, bv = { x: bt.from.x - bt.to.x, y: bt.from.y - bt.to.y };   // 둘 다 «원래 중심 → 새 중심» 방향
+        var tw = Math.hypot(tv.x, tv.y);
+        if (Math.abs(tv.x * du.x + tv.y * du.y) > 1e-6 || Math.abs(bv.x * du.x + bv.y * du.y) > 1e-6 || Math.hypot(tv.x - bv.x, tv.y - bv.y) > 1e-6) return bad("neck-tuck-band-connector", side);   // 직각 · 위·아래 같은 이동
+        if (Math.abs(tw - frontBandW) > 1e-6 || typeof m.centerBand.widthCm !== "number" || Math.abs(m.centerBand.widthCm - frontBandW) > 1e-6) return bad("neck-tuck-band-width", side);   // T = 앞 틈 합
+        var cx = 0, cy = 0; segs.forEach(function (sg) { cx += sg.from.x; cy += sg.from.y; }); cx /= n; cy /= n;
+        if (tv.x * (cx - tp.from.x) + tv.y * (cy - tp.from.y) >= 0) return bad("neck-tuck-band-direction", side);   // 바깥쪽이어야 한다(몸판 안쪽으로 밀면 겹친다)
+        if (Math.abs(m.centerBand.centerLenCm - cLen) > 1e-6 || Math.abs(m.centerBand.areaAfterCm2 - m.areaAfterCm2 - tw * cLen) > 1e-6 * Math.max(1, m.areaAfterCm2)) return bad("neck-tuck-band-area", side);
+        if (Math.abs(met.areaCm2 - (m.areaAfterCm2 + tw * cLen)) > 0.05) return bad("neck-tuck-band-area", side);   // 출력 외곽 면적 = Ⓘ 면적 + T × 중심선 길이 (곡선 평탄화 해상도 차이 0.02cm² 허용 — 폭·길이는 위에서 1e-6 으로 따로 잰다)
+        row.bandWidthCm = round4(tw); row.bandLenCm = round4(cLen); row.bandAreaCm2 = round4(tw * cLen);
+      }
       row.dartAngleDeg = round4(Math.abs(m.dartAngleRad) * 180 / Math.PI);
       row.gapChordsCm = gaps.map(function (x) { return round4(x.chordCm); });
       row.perCutAngleDeg = round4(gaps[0].angleRad * 180 / Math.PI);

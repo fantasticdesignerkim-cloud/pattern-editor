@@ -273,10 +273,14 @@
     var add = function (id, at, dx, dy, anchor, text, cls) { lines.push({ id: id, at: P(at), px: { dx: dx, dy: dy }, anchor: anchor, text: text, cls: cls }); };
     var deg = Math.abs(m.dartAngleRad) * 180 / Math.PI, total = 0;
     m.cuts.forEach(function (c) { total += c.gapChordCm; });
-    add("title", below, 0, 40, "middle", label + " · 목둘레 턱 Ⓘ", "title");
-    add("amount", below, 0, 54, "middle", "턱 2개 · 목둘레 벌림 " + m.cuts.map(function (c) { return fmt1(c.gapChordCm); }).join(" + ") + " = " + fmt1(total) + "cm", "amount");
+    var band = m.centerBand;   // Ⓙ(P.23) 에만 — 중심 평행 띠
+    if (band && (!num(band.widthCm) || !band.stitchEnd || !band.oldCenter || !band.newCenter)) return null;
+    add("title", below, 0, 40, "middle", label + (band ? " · 목둘레 턱 Ⓙ" : " · 목둘레 턱 Ⓘ"), "title");
+    add("amount", below, 0, 54, "middle", "턱 2개 · 목둘레 벌림 " + m.cuts.map(function (c) { return fmt1(c.gapChordCm); }).join(" + ") + " = " + fmt1(total) + "cm" + (band ? " · 중심 평행 띠 " + fmt1(band.widthCm) + "cm" : ""), "amount");
     add("rule", below, 0, 67, "middle", "닫는 다트 " + fmt2(deg) + "° 를 절개 둘이 균등 분배(각 " + fmt2(deg / 2) + "°) · 목둘레 호 1/3·2/3 · 교재 P.161", "note");
-    add("basis", below, 0, 80, "middle", "턱은 바깥쪽으로 꺾는다 · 박기 끝 = 목둘레에서 " + fmt1(m.depthCm) + "cm 아래(절개 위치·배분·깊이는 책에 수치가 없어 확정값)", "note");
+    add("basis", below, 0, 80, "middle", band
+      ? "턱은 중심 쪽으로 꺾는다 · 띠 폭 = 앞 목둘레 틈 합(앞·뒤 공통) · 박기 끝 = 새 중심선에서 목둘레 아래 " + fmt1(band.stitchEndCm) + "cm(책 P.23 + 확정값)"
+      : "턱은 바깥쪽으로 꺾는다 · 박기 끝 = 목둘레에서 " + fmt1(m.depthCm) + "cm 아래(절개 위치·배분·깊이는 책에 수치가 없어 확정값)", "note");
     m.cuts.forEach(function (c) {
       var id = "tuck" + c.index;
       wedges.push({ id: id, pts: [P(c.neckBefore), P(c.neckAfter), P(m.apex)] });
@@ -289,6 +293,14 @@
       cuts.push({ id: id, symbol: null, chordCm: c.gapChordCm, angleDeg: c.angleRad * 180 / Math.PI, pivot: P(m.apex), matched: true });
     });
     notches.push({ id: "apex", at: P(m.apex) });
+    if (band) {   // 띠(원래 중심 → 새 중심) 표시와 박기 끝 — 새 중심선 위, 목둘레(위쪽 끝)에서 아래로
+      var oc = band.oldCenter, nc = band.newCenter, up = nc.from.y <= nc.to.y ? nc.from : nc.to;
+      wedges.push({ id: "band", pts: [P(oc.from), P(nc.from), P(nc.to), P(oc.to)] });
+      legs.push({ id: "band-stitch", from: P(up), to: P(band.stitchEnd) });
+      notches.push({ id: "band-stitch-end", at: P(band.stitchEnd) });
+      var outDx = nc.from.x >= oc.from.x ? 6 : -6;
+      add("band-stitch-end", band.stitchEnd, outDx, 4, outDx > 0 ? "start" : "end", "박기 끝", "cut");
+    }
     var cm = mid(centers[0]);
     add("center", cm, -8, 3, "end", cfName, "edge");
     return { key: key, title: label, lines: lines, legs: legs, wedges: wedges, notches: notches, cuts: cuts, totalCm: total, finishedWaistCm: null };
@@ -296,7 +308,7 @@
 
   function buildModel(geometry, body) {
     var g = geometry, ws = g && g.waistSeam;
-    if (g && !ws && body && body.neckTuck === true) {   // Ⓘ — 파라미터가 말할 때만
+    if (g && !ws && body && (body.neckTuck === true || body.neckTuck === "J")) {   // Ⓘ·Ⓙ — 파라미터가 말할 때만
       return { front: buildNeckTuckSide("front", "앞몸판", "앞중심(CF)", g.front), back: buildNeckTuckSide("back", "뒤몸판", "뒤중심(CB)", g.back) };
     }
     if (g && !ws && body && body.flareSlash === true) {   // Ⓗ — 파라미터가 말할 때만(메타만으로 식별하지 않는다)

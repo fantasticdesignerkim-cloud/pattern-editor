@@ -570,6 +570,70 @@
     };
   }
 
+  // ── Ⓙ(P.23 · 처리 방법 P.162) — 중심선 평행 띠: Ⓘ 로 목둘레를 벌린 뒤, 앞·뒤 중심에 «턱 분량»을 **평행으로 추가**한다 ──
+  // 중심선(edge:"center")을 **자기 방향에 직각 바깥쪽**으로 widthCm 만큼 옮기고, 목둘레 끝점·밑단 끝점과 옮긴 중심선을 수평 직선 둘로 잇는다
+  // (책 도해: 띠 윗변은 목둘레 높이로 수평 · 밑단도 수평). 연결선은 edge 이름이 없다 — 렌더러의 edge 어휘는 닫혀 있고(`bad-edge`),
+  // 이 선들은 목둘레·밑단 호가 아니라 띠의 위·아래 변이라 목둘레 길이 계측에도 섞이지 않는다. 옮긴 중심선은 edge·boundary 선언을 그대로 든다(평행 이동이라
+  // 선을 따라 잰 매개변수 t 의 의미가 안 바뀐다). construction 은 건드리지 않는다 — 원래 중심선 쪽 기준선이 도해의 점선(이동 전 위치) 역할을 한다.
+  // 박기 끝(새 중심선에서 목둘레 아래 2cm)·턱 방향(중심 쪽)은 표시 전용이라 메타에만 둔다.
+  var BAND_STITCH_END_CM = 2;
+  function centerBand(piece, opts) {
+    opts = opts || {};
+    var t = T();
+    if (!piece || !Array.isArray(piece.outline) || !piece.outline.length) fail("invalid-piece");
+    var w = opts.widthCm;
+    if (typeof w !== "number" || !isFinite(w) || !(w > 1e-6)) fail("invalid-band-width", w);
+    var stitchEnd = opts.stitchEndCm == null ? BAND_STITCH_END_CM : opts.stitchEndCm;
+    if (typeof stitchEnd !== "number" || !isFinite(stitchEnd) || !(stitchEnd > 0)) fail("invalid-stitch-end", stitchEnd);
+    var outline = piece.outline, n = outline.length, idx = [];
+    outline.forEach(function (p, i) { if (p && p.edge === "center") idx.push(i); });
+    if (!idx.length) fail("no-center-edge");
+    for (var k = 1; k < idx.length; k++) if (idx[k] !== idx[0] + k) fail("center-not-contiguous");
+    if (idx[0] === 0 && idx[idx.length - 1] === n - 1) fail("center-not-contiguous");   // 외곽 시작점에 걸친 경우는 지원하지 않는다
+    var run = idx.map(function (i) { return outline[i]; });
+    if (run.some(function (p) { return p.kind !== "line"; })) fail("center-not-straight");
+    var P0 = run[0].from, P1 = run[run.length - 1].to;
+    var d = unit(sub(P1, P0));
+    if (!d) fail("degenerate-center");
+    run.forEach(function (p, i) {
+      var u = unit(sub(p.to, p.from));
+      if (!u || Math.abs(u.x * d.y - u.y * d.x) > 1e-6 || u.x * d.x + u.y * d.y < 0) fail("center-not-straight");
+      if (i > 0 && Math.hypot(p.from.x - run[i - 1].to.x, p.from.y - run[i - 1].to.y) > CLOSE_EPS) fail("center-not-contiguous");
+    });
+    var before = outline[(idx[0] + n - 1) % n], after = outline[(idx[idx.length - 1] + 1) % n];
+    var endOf = function (p) { return p.kind === "line" ? p.to : p.commands[p.commands.length - 1].points.slice(-1)[0]; };
+    var startOf = function (p) { return p.kind === "line" ? p.from : p.commands[0].points[0]; };
+    if (Math.hypot(endOf(before).x - P0.x, endOf(before).y - P0.y) > CLOSE_EPS || Math.hypot(startOf(after).x - P1.x, startOf(after).y - P1.y) > CLOSE_EPS) fail("outline-discontinuous");
+    var area = signedArea(t.outlinePrimsToSegs(outline));
+    if (!(Math.abs(area) > 1e-6)) fail("degenerate-outline");
+    var nrm = area > 0 ? { x: d.y, y: -d.x } : { x: -d.y, y: d.x };       // 닫힌 외곽의 바깥쪽 직각 방향
+    var mv = function (q) { return { x: q.x + nrm.x * w, y: q.y + nrm.y * w }; };
+    var moved = run.map(function (p) { var c = clone(p); c.from = mv(p.from); c.to = mv(p.to); return c; });
+    var top = line(P0, mv(P0)), bottom = line(mv(P1), P1);
+    var out = outline.slice(0, idx[0]).concat([top], moved, [bottom], outline.slice(idx[idx.length - 1] + 1)).map(function (p) { return clone(p); });
+    for (var i = 0; i < out.length; i++) {
+      var a = t.outlinePrimsToSegs([out[i]])[0], b = t.outlinePrimsToSegs([out[(i + 1) % out.length]])[0];
+      if (Math.hypot(a.to.x - b.from.x, a.to.y - b.from.y) > CLOSE_EPS) fail("outline-discontinuous", i);
+    }
+    var outSegs = t.outlinePrimsToSegs(out);
+    if (selfIntersects(outSegs)) fail("self-intersection");
+    var centerLen = Math.hypot(P1.x - P0.x, P1.y - P0.y);
+    var areaBefore = Math.abs(area), areaAfter = Math.abs(signedArea(outSegs));
+    if (!(Math.abs(areaAfter - areaBefore - w * centerLen) < 1e-6 * Math.max(1, areaBefore))) fail("band-area-mismatch", areaAfter - areaBefore - w * centerLen);
+    // 박기 끝 — 새 중심선 위, 목둘레 쪽 끝(옮긴 중심선의 위쪽 끝)에서 중심선을 따라 stitchEnd 아래. 위쪽 끝 = 중심선 두 끝 중 y 가 작은 쪽.
+    var topEnd = P0.y <= P1.y ? mv(P0) : mv(P1), dirDown = P0.y <= P1.y ? d : { x: -d.x, y: -d.y };
+    var se = Math.min(stitchEnd, centerLen * 0.5);
+    return {
+      outline: out, construction: clone(piece.construction || []),
+      meta: {
+        widthCm: w, normal: { x: nrm.x, y: nrm.y }, centerLenCm: centerLen,
+        oldCenter: { from: { x: P0.x, y: P0.y }, to: { x: P1.x, y: P1.y } }, newCenter: { from: mv(P0), to: mv(P1) },
+        areaBeforeCm2: areaBefore, areaAfterCm2: areaAfter, addedAreaCm2: w * centerLen,
+        stitchEnd: { x: topEnd.x + dirDown.x * se, y: topEnd.y + dirDown.y * se }, stitchEndCm: se, tuckDirection: "center"
+      }
+    };
+  }
+
   // 절개선(apex→H)의 어느 쪽인가 — 외적 부호로 판정한다. 회전 조각 쪽이면 true.
   function inRotatedPart(seg, apex, H, rotateB, ring, dIdx) {
     var p = seg && (seg.from || (seg.commands && seg.commands[0] && seg.commands[0].points[0]));
@@ -586,7 +650,7 @@
   }
 
   window.designFlare = Object.freeze({
-    closeDartSpread: closeDartSpread, slashSpread: slashSpread, neckTuck: neckTuck, bustWidthCm: bustWidthCm,
+    closeDartSpread: closeDartSpread, slashSpread: slashSpread, neckTuck: neckTuck, centerBand: centerBand, bustWidthCm: bustWidthCm,
     tangentAtEnd: tangentAtEnd, tangentAtStart: tangentAtStart, fairBridge: fairBridge
   });
 })();
