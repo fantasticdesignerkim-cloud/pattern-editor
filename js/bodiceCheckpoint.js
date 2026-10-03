@@ -1533,6 +1533,63 @@
   }
 
   // ── 검사 ──
+  // ── 플레어 Ⓗ(P.21 · 처리 방법 P.161·P.163): Ⓖ + 진동 가장 안쪽 수직 절개 ──
+  //   파라미터(body.flare·flareSlash·hemSideOffsetCm·waistDartScales)가 규칙이고, geometry.*.flareCm.slash 메타는 **신뢰하지 않는다** —
+  //   ∅ = min(●−(3+■), ■) 를 메타의 ●·■ 로 다시 계산해 대조하고, 출력 외곽의 밑단 접선 연속 이음(cubic hem) 두 개의 현을 직접 재서 {∅, ■} 와 맞춘다.
+  //   (● = 벌리기 전 가슴선 폭, 3 = 파라미터 hemSideOffsetCm, ■ = Ⓖ 밑단 벌림.) 없으면(Ⓖ 포함 다른 라인) null.
+  var FLARE_SLASH_EPS = 1e-6;
+  function flareSlashState(proj) {
+    var g = proj && proj.working && proj.working.geometry;
+    if (!g || !g.front || !g.back) return null;
+    var pb = proj.working.parameters && proj.working.parameters.body;
+    var wants = !!(pb && pb.flareSlash != null);
+    var has = !!((g.front.flareCm && g.front.flareCm.slash) || (g.back.flareCm && g.back.flareCm.slash));
+    if (!wants && !has) return null;
+    var out = { front: { reason: null }, back: { reason: null }, ok: false, reason: null };
+    var bad = function (reason, side) { out.ok = false; out.reason = reason; if (side && out[side]) out[side].reason = reason; return out; };
+    if (!pb || pb.flareSlash !== true || pb.flare !== true) return bad("flare-slash-mismatch");
+    var sc = pb.waistDartScales;
+    if (!sc || ["a", "b", "d", "e"].some(function (k) { return sc[k] !== 0; })) return bad("flare-slash-waist-darts");   // 허리 다트는 남기지 않는다(Ⓖ 와 같은 몸판)
+    if (g.frontPeplum || g.backPeplum || g.frontYoke || g.backYoke || g.shoulderYoke || g.frontCenter || g.backCenter) return bad("flare-slash-mismatch");
+    var extra = typeof pb.hemSideOffsetCm === "number" ? pb.hemSideOffsetCm : 0;
+    var sides = ["front", "back"];
+    for (var i = 0; i < sides.length; i++) {
+      var side = sides[i], pc = g[side], fc = pc.flareCm, m = fc && fc.slash, row = out[side];
+      if (!m) return bad("flare-slash-missing", side);
+      var nums = [m.bustWidthCm, m.dartSpreadCm, m.chordCm, m.formulaCm, m.cutLenCm];
+      if (nums.some(function (v) { return typeof v !== "number" || !isFinite(v); }) || !(m.chordCm > 0)) return bad("flare-slash-mismatch", side);
+      if (Math.abs(m.hemExtraCm - extra) > FLARE_SLASH_EPS || Math.abs(fc.spread - m.dartSpreadCm) > FLARE_SLASH_EPS) return bad("flare-slash-mismatch", side);
+      var formula = m.bustWidthCm - (extra + m.dartSpreadCm), expect = Math.min(formula, m.dartSpreadCm);
+      row.bustWidthCm = round4(m.bustWidthCm); row.dartSpreadCm = round4(m.dartSpreadCm); row.formulaCm = round4(formula);
+      row.chordCm = round4(m.chordCm); row.expectedCm = round4(expect); row.clamped = formula > m.dartSpreadCm + 1e-12;
+      if (Math.abs(m.formulaCm - formula) > FLARE_SLASH_EPS || Math.abs(m.chordCm - expect) > FLARE_SLASH_EPS) return bad("flare-slash-mismatch", side);   // ∅ 산식·상한 clamp
+      if (!!m.clamped !== row.clamped || m.chordCm > m.dartSpreadCm + FLARE_SLASH_EPS) return bad("flare-slash-mismatch", side);
+      // 출력 외곽의 접선 연속 밑단 이음 두 개(Ⓖ 의 ■ · Ⓗ 의 ∅) 현을 직접 잰다.
+      var chords = [];
+      (pc.outline || []).forEach(function (sg) {
+        if (sg && sg.edge === "hem" && sg.kind === "path") { var e = endpointsOf(sg); if (e.length === 2) chords.push(Math.hypot(e[1].x - e[0].x, e[1].y - e[0].y)); }
+      });
+      chords.sort(function (a, b) { return a - b; });
+      row.measuredChordsCm = chords.map(round4);
+      if (chords.length !== 2 || Math.abs(chords[0] - expect) > FLARE_SLASH_EPS || Math.abs(chords[1] - m.dartSpreadCm) > FLARE_SLASH_EPS) return bad("flare-slash-hem-mismatch", side);
+      // 기준점 = 출력 외곽 위의 점, 규칙은 앞 = 다트 입구 · 뒤 = 진동 극점
+      if (m.rule !== (side === "front" ? "dart-mouth" : "armhole-innermost")) return bad("flare-slash-mismatch", side);
+      var onOutline = false;
+      (pc.outline || []).forEach(function (sg) { if (sg && sg.edge === "armhole") endpointsOf(sg).forEach(function (q) { if (Math.hypot(q.x - m.pivot.x, q.y - m.pivot.y) < 1e-3) onOutline = true; }); });
+      if (!onOutline) return bad("flare-slash-pivot-off-armhole", side);
+      var angle = 2 * Math.asin(m.chordCm / (2 * m.cutLenCm)) * 180 / Math.PI;
+      row.angleDeg = round4(Math.abs(m.angleDeg));
+      if (Math.abs(Math.abs(m.angleDeg) - angle) > 1e-6) return bad("flare-slash-mismatch", side);
+      var r = yokeOrderRing(ringSegs(pc.outline || []));
+      if (!r) return bad("flare-slash-open", side);
+      var met = yokeRingMetrics(r);
+      if (met.selfIntersects || !(met.areaCm2 > 0)) return bad("flare-slash-self-intersection", side);
+      row.areaCm2 = round4(met.areaCm2); row.cutLenCm = round4(m.cutLenCm); row.rule = m.rule;
+    }
+    out.ok = true;
+    return out;
+  }
+
   function check(proj) {
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
@@ -1574,6 +1631,9 @@
     // 프린세스 Ⓔ(있을 때만): 네 조각을 출력 geometry 에서 재계산해 위반 시 완료를 막는다.
     var princess = princessState(proj);
     if (princess && !princess.ok) fails.push(princess.reason);
+    // 플레어 Ⓗ(있을 때만): ∅ 산식·상한·밑단 이음 현·폐곡선을 출력 geometry 에서 다시 계산한다.
+    var flareSlash = flareSlashState(proj);
+    if (flareSlash && !flareSlash.ok) fails.push(flareSlash.reason);
 
     var out = {
       ok: fails.length === 0,
@@ -1589,6 +1649,7 @@
     };
     if (yokeSeam) out.yokeSeam = yokeSeam;   // 요크 이음선 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
     if (princess) out.princess = princess;   // 프린세스 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
+    if (flareSlash) out.flareSlash = flareSlash;   // 플레어 Ⓗ 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
     return out;
   }
 
@@ -1702,5 +1763,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, princessState: princessState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, princessState: princessState, flareSlashState: flareSlashState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

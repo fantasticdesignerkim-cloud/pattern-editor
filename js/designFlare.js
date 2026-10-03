@@ -257,7 +257,179 @@
       residualSliverCm: sliver,
       areaBeforeCm2: areaBefore,
       wedgeAreaCm2: areaAfter - areaBefore,
-      rotatedSide: rotateB ? "B" : "A"
+      rotatedSide: rotateB ? "B" : "A",
+      // Ⓗ(P.21) 절개가 쓰는 값 — geometry 는 바꾸지 않는다(스칼라만 추가).
+      rotationRad: rt,                                   // 회전 조각이 돈 각(원본 수직선 → Ⓖ 좌표계의 절개 방향)
+      mouth: { x: kA[0].from.x, y: kA[0].from.y },       // 닫힌 다트 입구(진동 또는 어깨 위의 점)
+      mouthEdges: [kB[kB.length - 1].edge || null, kA[0].edge || null]
+    };
+  }
+
+  // ── Ⓗ(P.21) — Ⓖ 결과 한 조각에 «진동 가장 안쪽 → 밑단» 수직 절개를 하나 더 넣고 P.163 으로 벌린다 ──────────
+  // 새 엔진이 아니다: ① Ⓖ(closeDartSpread) 가 낸 한 조각을 절개선으로 둘로 가르고 ② designJoin.buttSpread(기준점 고정 ·
+  // 밑단 chord · 접선 연속 fairing) 로 다시 한 장으로 맞대 벌린다. 여기 있는 건 절개선·분량을 정하는 접착 코드뿐이다.
+  //   ∅ = min(●×1 − (3 + ■), ■)   — 교재 «■ 까지가 최대»(사용자 확정 A안)가 산식보다 우선한다.
+  //   ● = 벌리기 전 가슴선 폭(앞중심~옆선, 닫기 전·후 같다) · 3 = 밑단 옆 추가(hemSideOffsetCm) · ■ = Ⓖ 밑단 벌림(spreadCm).
+  function J() {
+    var j = (typeof window !== "undefined") && window.designJoin;
+    if (!j || typeof j.buttSpread !== "function") fail("designJoin-missing");
+    return j;
+  }
+  var outEdge = function (s) { return s && s.edge; };
+  // 벌리기 전 가슴선 폭 ● — 앞중심(center 모서리) x 와 진동·옆선이 만나는 겨드랑점 x 의 수평 거리.
+  function bustWidthCm(piece) {
+    var segs = T().outlinePrimsToSegs(piece.outline);
+    var ctr = segs.filter(function (s) { return outEdge(s) === "center"; });
+    var arm = segs.filter(function (s) { return outEdge(s) === "armhole"; });
+    var sid = segs.filter(function (s) { return outEdge(s) === "side-seam"; });
+    if (!ctr.length || !arm.length || !sid.length) fail("bust-width-edges-missing");
+    var near2 = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y) < 0.01; };   // 원형 겨드랑점 이음 허용(0.0004cm 잔차)
+    var hit = null;
+    arm.forEach(function (a) { sid.forEach(function (d) { [a.from, a.to].forEach(function (p) { [d.from, d.to].forEach(function (q) { if (!hit && near2(p, q)) hit = p; }); }); }); });
+    if (!hit) fail("underarm-point-not-found");
+    var w = Math.abs(ctr[0].from.x - hit.x);
+    if (!(w > 0)) fail("bust-width-not-positive", w);
+    return w;
+  }
+  var cubicAt = function (s, u) {
+    var m = 1 - u, a = m * m * m, b = 3 * m * m * u, c = 3 * m * u * u, d = u * u * u;
+    return { x: a * s.from.x + b * s.c1.x + c * s.c2.x + d * s.to.x, y: a * s.from.y + b * s.c1.y + c * s.c2.y + d * s.to.y };
+  };
+  // 진동 곡선에서 방향 n 으로 가장 먼(= 앞중심/뒤중심 쪽으로 가장 안쪽인) 점. 곡선 위의 정확한 점을 돌려준다.
+  function armholeInnermost(segs, n) {
+    var best = null, dot = function (p) { return p.x * n.x + p.y * n.y; };
+    segs.forEach(function (s) {
+      var ev = s.kind === "cubic" ? function (u) { return cubicAt(s, u); } : function (u) { return { x: s.from.x + (s.to.x - s.from.x) * u, y: s.from.y + (s.to.y - s.from.y) * u }; };
+      var N = 400, bu = 0, bv = -Infinity;
+      for (var i = 0; i <= N; i++) { var v = dot(ev(i / N)); if (v > bv) { bv = v; bu = i / N; } }
+      var lo = Math.max(0, bu - 1 / N), hi = Math.min(1, bu + 1 / N);
+      for (var k = 0; k < 60; k++) {          // 삼분 탐색 — 극점 정밀화
+        var m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+        if (dot(ev(m1)) < dot(ev(m2))) lo = m1; else hi = m2;
+      }
+      var u = (lo + hi) / 2, p = ev(u);
+      if (!best || dot(p) > dot(best)) best = p;
+    });
+    return best;
+  }
+  function slashSpread(piece, res, opts) {
+    opts = opts || {};
+    var t = T(), Jn = J();
+    if (!piece || !Array.isArray(piece.outline) || !piece.outline.length || !res) fail("invalid-piece");
+    var bust = opts.bustWidthCm, extra = opts.hemExtraCm;
+    if (typeof bust !== "number" || !isFinite(bust) || !(bust > 0)) fail("invalid-bust-width", bust);
+    if (typeof extra !== "number" || !isFinite(extra) || extra < 0) fail("invalid-hem-extra", extra);
+    var dartSpread = res.spreadCm;
+    if (typeof dartSpread !== "number" || !isFinite(dartSpread) || !(dartSpread > 0)) fail("invalid-dart-spread", dartSpread);
+    var formulaCm = bust - (extra + dartSpread);
+    var clamped = formulaCm > dartSpread;                       // «■ 까지가 최대» 가 산식보다 우선
+    var chord = Math.min(formulaCm, dartSpread);
+    if (!(chord > 1e-6)) fail("slash-not-positive", { bustWidthCm: bust, hemExtraCm: extra, dartSpreadCm: dartSpread, formulaCm: formulaCm });
+
+    var segs = t.outlinePrimsToSegs(piece.outline);
+    var R = Jn.buildClosedRing(segs); if (!R.ok) fail("ring-failed", R.reason);
+    var C = Jn.canonicalRing(R.chain);
+    var ring = C.chain.map(function (s) { return { seg: s, source: "outline" }; });
+
+    // 절개 방향 = 원본 수직선이 Ⓖ 회전으로 놓인 방향. 기준점 = 도해의 «진동 가장 안쪽».
+    var rt = res.rotationRad;
+    if (typeof rt !== "number" || !isFinite(rt)) fail("invalid-rotation", rt);
+    var dir = { x: -Math.sin(rt), y: Math.cos(rt) };
+    var arm = C.chain.filter(function (s) { return outEdge(s) === "armhole"; });
+    var ctr = C.chain.filter(function (s) { return outEdge(s) === "center"; });
+    if (!arm.length || !ctr.length) fail("slash-edges-missing");
+    var onArmhole = res.mouthEdges && res.mouthEdges.every(function (e) { return e === "armhole"; });
+    var pivot, rule;
+    if (onArmhole) { pivot = { x: res.mouth.x, y: res.mouth.y }; rule = "dart-mouth"; }       // 앞: 도해 화살표 = AH 다트의 닫힌 입구
+    else {                                                                                  // 뒤: 어깨 다트라 입구가 진동에 없다 → 진동 곡선의 중심 쪽 극점
+      var meanX = 0, cnt = 0; arm.forEach(function (s) { meanX += s.from.x + s.to.x; cnt += 2; }); meanX /= cnt;
+      var sgn = ctr[0].from.x >= meanX ? 1 : -1;
+      var nIn = { x: sgn * Math.cos(rt), y: sgn * Math.sin(rt) };                           // 중심 쪽 단위 방향을 Ⓖ 회전만큼 돌린 것
+      pivot = armholeInnermost(arm, nIn); rule = "armhole-innermost";
+    }
+    // 절개 끝 = 기준점에서 dir 로 내려 밑단 직선 모서리와 처음 만나는 점
+    var foot = null, footEdge = null, bestT = Infinity;
+    C.chain.forEach(function (s) {
+      t.flattenLine([s]).forEach(function (ab) {
+        var ex = ab[1].x - ab[0].x, ey = ab[1].y - ab[0].y, den = dir.x * ey - dir.y * ex;
+        if (Math.abs(den) < 1e-12) return;
+        var wx = ab[0].x - pivot.x, wy = ab[0].y - pivot.y;
+        var tr = (wx * ey - wy * ex) / den, us = (wx * dir.y - wy * dir.x) / den;
+        if (tr > 1e-3 && us >= -1e-9 && us <= 1 + 1e-9 && tr < bestT) { bestT = tr; foot = { x: pivot.x + dir.x * tr, y: pivot.y + dir.y * tr }; footEdge = s; }
+      });
+    });
+    if (!foot) fail("slash-foot-not-found");
+    if (outEdge(footEdge) !== "hem" || footEdge.kind !== "line") fail("slash-foot-not-hem-line", outEdge(footEdge));
+
+    var pj0 = t.projectOntoRing(pivot, ring), pj1 = t.projectOntoRing(foot, ring);
+    if (pj0.dist > 0.02) fail("slash-pivot-off-boundary", pj0.dist);
+    if (pj1.dist > 0.02) fail("slash-foot-off-boundary", pj1.dist);
+    var arcF = t.extractArcTagged(ring, pj0, pj1).map(function (o) { return o.seg; });
+    var arcB = t.extractArcTagged(ring, pj1, pj0).map(function (o) { return o.seg; });
+    if (!arcF.length || !arcB.length) fail("degenerate-split");
+    var legFwd = { kind: "line", from: { x: pj0.point.x, y: pj0.point.y }, to: { x: pj1.point.x, y: pj1.point.y } };   // 기준점 → 밑단
+    var legRev = { kind: "line", from: { x: pj1.point.x, y: pj1.point.y }, to: { x: pj0.point.x, y: pj0.point.y } };
+    var hasCtr = function (arc) { return arc.some(function (s) { return outEdge(s) === "center"; }); };
+    if (hasCtr(arcF) === hasCtr(arcB)) fail("center-edge-ambiguous");
+    // 앞·뒤중심을 품은 쪽이 고정(Ⓖ 와 같은 규약) · 다른 쪽(옆선)이 기준점을 축으로 벌어진다.
+    var fixedIsF = hasCtr(arcF);
+    var fixedArc = fixedIsF ? arcF : arcB, moveArc = fixedIsF ? arcB : arcF;
+    if (!moveArc.some(function (s) { return outEdge(s) === "side-seam"; })) fail("slash-side-missing");
+    var fixedLeg = fixedIsF ? legRev : legFwd, moveLeg = fixedIsF ? legFwd : legRev;   // 각 조각을 닫는 방향의 절개 다리
+    var PID = "slash";
+    var tagFirst = "join:" + PID + ":first", tagSecond = "join:" + PID + ":second";
+    fixedLeg.edge = tagFirst; moveLeg.edge = tagSecond;
+    var partFixed = fixedArc.concat([fixedLeg]), partMove = moveArc.concat([moveLeg]);
+
+    // construction — 절개선이 가르는 대로 나눈다(가로지르는 직선은 교점에서 둘로). 옮겨진 쪽은 buttSpread 가 같이 돌린다.
+    var cutFlat = [[pj0.point, pj1.point]];
+    var sideOf = function (p) { return (pj1.point.x - pj0.point.x) * (p.y - pj0.point.y) - (pj1.point.y - pj0.point.y) * (p.x - pj0.point.x); };
+    var mvSample = moveArc[0], mvP = { x: (mvSample.from.x + mvSample.to.x) / 2, y: (mvSample.from.y + mvSample.to.y) / 2 };
+    var moveSign = Math.sign(sideOf(mvP)) || 1;
+    var conFixed = [], conMove = [];
+    (piece.construction || []).forEach(function (cs) {
+      var c = clone(cs);
+      var mpOf = function (q) { return { x: (q.from.x + q.to.x) / 2, y: (q.from.y + q.to.y) / 2 }; };
+      var put = function (q) { (Math.sign(sideOf(mpOf(q))) === moveSign ? conMove : conFixed).push(q); };
+      if (c.kind !== "line") { if (!c.from) fail("slash-construction-unsupported", c.kind); put(c); return; }
+      var x = t.segCross(c.from, c.to, pj0.point, pj1.point), len = Math.hypot(c.to.x - c.from.x, c.to.y - c.from.y);
+      var u = x && len > 0 ? Math.hypot(x.x - c.from.x, x.y - c.from.y) / len : null;
+      // 가로지르는 직선은 교점에서 둘로 나눈다 — subSegment 가 boundary·dart 의미 구간을 같이 잘라 준다(좌표만 자르면 attach 가 어긋난다).
+      if (u !== null && u > 1e-9 && u < 1 - 1e-9) { put(t.subSegment(c, 0, u)); put(t.subSegment(c, u, 1)); }
+      else put(c);
+    });
+
+    var toPrims = function (arr) { return arr.map(Jn.toGeomPrim); };
+    var fixedPiece = { outline: toPrims(partFixed), construction: conFixed };
+    var movePiece = { outline: toPrims(partMove), construction: conMove };
+    var legEnds = function (pc, tag) {
+      var rr = Jn.buildClosedRing(t.outlinePrimsToSegs(pc.outline));
+      if (!rr.ok) fail(rr.reason, tag);
+      var cc = Jn.canonicalRing(rr.chain), hit = cc.chain.filter(function (sg) { return sg.edge === tag; });
+      if (hit.length !== 1) fail("join-leg-not-found", { tag: tag, count: hit.length });
+      return { start: { x: hit[0].from.x, y: hit[0].from.y }, end: { x: hit[0].to.x, y: hit[0].to.y } };
+    };
+    var ea = legEnds(fixedPiece, tagFirst), eb = legEnds(movePiece, tagSecond);
+    var out;
+    try {
+      out = Jn.buttSpread({ joinPairId: PID,
+        a: { piece: fixedPiece, pairId: PID, start: ea.start, end: ea.end },
+        b: { piece: movePiece, pairId: PID, start: eb.start, end: eb.end },
+        spread: { pivot: { x: pj0.point.x, y: pj0.point.y }, chordCm: chord } },
+        { bridge: "smooth", bridgeEdge: "hem" });
+    } catch (e) { fail("slash-spread-failed", e.reason || e.message); }
+
+    return {
+      outline: out.outline, construction: out.construction,
+      slash: {
+        rule: rule,
+        pivot: { x: pj0.point.x, y: pj0.point.y }, foot: { x: pj1.point.x, y: pj1.point.y },
+        cutLenCm: Math.hypot(pj1.point.x - pj0.point.x, pj1.point.y - pj0.point.y),
+        bustWidthCm: bust, hemExtraCm: extra, dartSpreadCm: dartSpread, formulaCm: formulaCm, chordCm: chord, clamped: clamped,
+        angleDeg: out.spread.angleDeg, wedgeAreaCm2: out.spread.wedgeAreaCm2, bridgeChordCm: out.spread.bridgeChordCm,
+        bridgeLenCm: out.spread.bridgeLenCm, areaDeltaCm2: out.areaDeltaCm2, residualGapCm: out.residualGapCm,
+        seamLenCm: out.seamLenACm
+      }
     };
   }
 
@@ -277,7 +449,7 @@
   }
 
   window.designFlare = Object.freeze({
-    closeDartSpread: closeDartSpread,
+    closeDartSpread: closeDartSpread, slashSpread: slashSpread, bustWidthCm: bustWidthCm,
     tangentAtEnd: tangentAtEnd, tangentAtStart: tangentAtStart, fairBridge: fairBridge
   });
 })();

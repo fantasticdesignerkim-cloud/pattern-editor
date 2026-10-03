@@ -702,6 +702,11 @@
     //   총량/목표는 그 배분을 유지한 채 전체 크기를 맞춘다.
     var applyFlare = (flare === true || (flare && typeof flare === "object"));
     if (flare != null && flare !== false && !applyFlare) fail("invalid-body-flare", flare);
+    // 플레어 Ⓗ(P.21·P.163) — Ⓖ 에 «진동 가장 안쪽 → 밑단» 수직 절개를 하나 더 넣어 벌린다. 순수 연산은 `designFlare.slashSpread`(buttSpread 재사용). flare 가 전제.
+    var flareSlash = body.flareSlash;
+    var applySlash = (flareSlash === true);
+    if (flareSlash != null && flareSlash !== false && !applySlash) fail("invalid-body-flare-slash", flareSlash);
+    if (applySlash && !applyFlare) fail("flare-slash-needs-flare");
     var applySeam = (waistSeam === true);
     var peplumFlare = body.peplumFlare;   // Ⓝ(P.27) — 페플럼을 맞대면서 플레어 분량을 벌린다(158). waistSeam 이 전제.
     if (waistSeam != null && waistSeam !== false && !applySeam) fail("invalid-body-waist-seam", waistSeam);
@@ -834,13 +839,21 @@
       if (!DF || typeof DF.closeDartSpread !== "function") fail("designFlare-missing");
       var fopts = (flare === true) ? {} : flare;
       [[fPiece, "front"], [bPiece, "back"]].forEach(function (pair) {
-        var res;
-        try { res = DF.closeDartSpread(pair[0], fopts); }
+        var res, sres = null;
+        try {
+          var bustW = applySlash ? DF.bustWidthCm(pair[0]) : null;   // 벌리기 전(Ⓖ 이전) 가슴선 폭 ●
+          res = DF.closeDartSpread(pair[0], fopts);
+          if (applySlash) {
+            if (typeof DF.slashSpread !== "function") fail("designFlare-missing");
+            sres = DF.slashSpread({ outline: res.outline, construction: res.construction }, res, { bustWidthCm: bustW, hemExtraCm: hOff });
+          }
+        }
         catch (e) { fail("flare-failed", pair[1] + ": " + (e.reason || e.message)); }
-        pair[0].outline = res.outline;
-        pair[0].construction = res.construction;
+        pair[0].outline = sres ? sres.outline : res.outline;
+        pair[0].construction = sres ? sres.construction : res.construction;
         pair[0].flareCm = { spread: res.spreadCm, wedgeArea: res.wedgeAreaCm2,
                             dartAngleRad: res.dartAngleRad, residualSliverCm: res.residualSliverCm };
+        if (sres) pair[0].flareCm.slash = sres.slash;   // Ⓗ 에만 — 없으면 Ⓖ 와 바이트 동일
       });
     }
     var outGeom = {

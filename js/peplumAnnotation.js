@@ -216,8 +216,53 @@
       totalCm: null, finishedWaistCm: null };
   }
 
+  // ── 플레어 Ⓗ(P.21 · P.163) 표시 모델 ──
+  // 의미는 좌표 추측이 아니라 `flareCm.slash` 메타(기준점·밑단 끝·∅·■·●)와 geometry 의 edge 태그(hem cubic 이음)에서만 읽는다.
+  // ∅ 이음 = 끝점 하나가 메타의 foot(고정 쪽)과 일치하는 hem cubic — ∅ = ■ 로 잘린 경우에도 짝이 모호하지 않다.
+  function buildFlareSlashSide(key, label, cfName, piece) {
+    var m = piece && piece.flareCm && piece.flareCm.slash;
+    if (!piece || !Array.isArray(piece.outline) || !m || !m.pivot || !m.foot || !num(m.chordCm) || !num(m.bustWidthCm) || !num(m.dartSpreadCm)) return null;
+    var out = piece.outline;
+    var centers = by(out, "center"), sides = by(out, "side-seam"), hems = by(out, "hem");
+    if (!centers.length || !sides.length || !hems.length) return null;
+    var longest = function (arr) { return arr.slice().sort(function (a, b) { var ea = ends(a), eb = ends(b); return dist(eb.from, eb.to) - dist(ea.from, ea.to); })[0]; };
+    var cm = mid(longest(centers)), sm = mid(longest(sides)), hm = mid(longest(hems.filter(function (h) { return !isCurved(h); })));
+    var u = unit({ x: sm.x - cm.x, y: sm.y - cm.y }); if (!u) return null;
+    var bridge = null;
+    hems.filter(isCurved).forEach(function (b) {
+      var e = ends(b); if (!e) return;
+      if (dist(e.from, m.foot) < 1e-6) bridge = { b: b, fixed: e.from, moved: e.to };
+      else if (dist(e.to, m.foot) < 1e-6) bridge = { b: b, fixed: e.to, moved: e.from };
+    });
+    if (!bridge) return null;                                   // 짝을 확인하지 못하면 안내선을 지어내지 않는다
+    var xs = [], ys = [];
+    out.forEach(function (sg) { ctrl(sg).forEach(function (q) { xs.push(q.x); ys.push(q.y); }); });
+    var below = { x: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2, y: Math.max.apply(null, ys) };
+    var lines = [];
+    var add = function (id, at, dx, dy, anchor, text, cls) { lines.push({ id: id, at: P(at), px: { dx: dx, dy: dy }, anchor: anchor, text: text, cls: cls }); };
+    add("title", below, 0, 40, "middle", label + " · 플레어 Ⓗ", "title");
+    add("amount", below, 0, 54, "middle", "절개 벌림 ∅ " + fmt1(m.chordCm) + "cm = " + (m.clamped ? "■ 상한(산식 " + fmt1(m.formulaCm) + " > ■)" : "● " + fmt1(m.bustWidthCm) + " − (" + fmt1(m.hemExtraCm) + " + ■ " + fmt1(m.dartSpreadCm) + ")"), "note");
+    add("rule", below, 0, 67, "middle", "∅ = min(●×1 − (밑단 옆 " + fmt1(m.hemExtraCm) + " + ■), ■) · ● 가슴선 폭 " + fmt1(m.bustWidthCm) + " · ■ 다트 닫음 " + fmt1(m.dartSpreadCm) + " · 각도 " + fmt1(Math.abs(m.angleDeg)) + "°", "note");
+    add("basis", below, 0, 80, "middle", "절개: " + (m.rule === "dart-mouth" ? "AH 다트 입구" : "진동 가장 안쪽") + "(고정점)에서 밑단까지 · 교재 P.163 기준점 고정 벌림", "note");
+    add("center", cm, -u.x * 8, 3, -u.x >= 0 ? "start" : "end", cfName, "edge");
+    add("side", sm, u.x * 8, 3, u.x >= 0 ? "start" : "end", "옆선", "edge");
+    add("hem", hm, 0, 16, "middle", "밑단선", "edge");
+    add("pivot", m.pivot, 0, -9, "middle", "고정점", "cut");
+    var bm = mid(bridge.b);
+    add("amt", bm, 0, 14, "middle", "∅ " + fmt1(m.chordCm), "amount");
+    return { key: key, title: label, lines: lines,
+      legs: [{ id: "slash-a", from: P(m.pivot), to: P(bridge.fixed) }, { id: "slash-b", from: P(m.pivot), to: P(bridge.moved) }],
+      wedges: [{ id: "slash", pts: [P(m.pivot), P(bridge.fixed), P(bridge.moved)] }],
+      notches: [{ id: "slash", at: P(m.pivot) }],
+      cuts: [{ id: "slash", symbol: null, chordCm: m.chordCm, angleDeg: m.angleDeg, pivot: P(m.pivot), matched: true }],
+      totalCm: m.chordCm, finishedWaistCm: null };
+  }
+
   function buildModel(geometry, body) {
     var g = geometry, ws = g && g.waistSeam;
+    if (g && !ws && body && body.flareSlash === true) {   // Ⓗ — 파라미터가 말할 때만(메타만으로 식별하지 않는다)
+      return { front: buildFlareSlashSide("front", "앞몸판", "앞중심(CF)", g.front), back: buildFlareSlashSide("back", "뒤몸판", "뒤중심(CB)", g.back) };
+    }
     if (g && !ws) {
       var v = identifyBoxy(body) || identifyShaped(body);
       if (!v) return { front: null, back: null };

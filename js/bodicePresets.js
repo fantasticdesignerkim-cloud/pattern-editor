@@ -48,6 +48,7 @@
     { key: "waistDartScales", label: "허리 다트 배분", unit: "" },
     { key: "waistDartExtraCm", label: "허리 다트 폭 추가(절대 cm)", unit: "cm" },
     { key: "flare", label: "다트를 닫아 밑단 벌리기", unit: "" },
+    { key: "flareSlash", label: "진동 가장 안쪽 수직 절개로 플레어 더 벌리기", unit: "" },
     { key: "waistSeam", label: "허리 이음선(상·하 조각 분리)", unit: "" },
     { key: "peplumFlare", label: "페플럼 맞대면서 플레어 벌리기", unit: "" },
     { key: "peplumCut", label: "페플럼 WL 등분 수직 절개로 벌리기", unit: "" },
@@ -94,13 +95,11 @@
       ] },
     { id: "flare-line", order: 4, label: "플레어 라인", symbol: "G", page: 20,
       availability: "available", note: null,
-      familyNote: "다트를 닫아 그 반동으로 밑단을 벌린다(처리 방법 161).",
+      familyNote: "다트를 닫아 그 반동으로 밑단을 벌린다(처리 방법 161). Ⓗ 는 거기에 진동 가장 안쪽 기준점의 수직 절개를 더해 기준점을 잡고 벌린다(처리 방법 163).",
       variants: [
         availVariant("bunka-bodice-G", "G", "G · 밑단 폭 3cm 추가 · 다트를 닫아 밑단을 벌린다", 20),
-        pendingVariant("bunka-bodice-H", "H", "H · 플레어 분량을 더 넣는다", 21,
-          "Ⓖ 의 꼬리말이 «플레어를 더 넣고 싶은 경우 Ⓗ 를 참조» 라고 가리킨다",
-          "다트를 닫아 얻는 분량에는 상한이 있다(다트각 만큼). 그 이상은 **처리 방법 162(평행으로 잘라서 벌린다)** 로 넣는데 그 연산이 아직 없다. P.21 미판독.")
-      ] },
+        availVariant("bunka-bodice-H", "H", "H · Ⓖ 방법 + 진동 가장 안쪽에서 밑단까지 수직 절개를 넣어 플레어 분량을 더 벌린다", 21)
+     ] },
     { id: "neck-tuck", order: 5, label: "목둘레에 턱을 넣는다", symbol: "I", page: 22,
       availability: "pending-op", note: PENDING_NOTE,
       familyNote: "다트를 닫아 그 반동으로 목둘레를 벌려 턱을 만든다.",
@@ -186,6 +185,15 @@
       //   봉제 허리다트가 남아 있으면 거부하므로 여기서 함께 지정한다.
       body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 3,
               waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, flare: true }
+    },
+    {
+      id: "bunka-bodice-H", label: "교재 H 플레어 + 절개", familyId: "flare-line", symbol: "H", page: 21,
+      description: "Ⓖ 방법 + 진동 가장 안쪽 기준점에서 밑단까지 수직 절개 1개(앞·뒤) · 벌림 ∅ = min(●−(3+■), ■) · 허리 다트 없음",
+      source: "[패턴학교] 플레어 라인 Ⓗ(P.21) · 처리 방법 닫는다·벌린다(P.161) · 기준점을 잡고 잘라서 벌린다(P.163)",
+      baseMethod: "bunka-bodice-H-v1",
+      // Ⓖ 와 같은 몸판(허리 다트 0 · 밑단 +3 · 다트 닫기) + flareSlash. ∅ 는 교재 «■ 까지가 최대» 를 산식보다 우선해 clamp 한다(사용자 확정).
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 3,
+              waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, flare: true, flareSlash: true }
     },
     {
       id: "bunka-bodice-M", label: "교재 M 허리 이음선", familyId: "waist-seam", symbol: "M", page: 26,
@@ -332,6 +340,7 @@
         return;
       }
       if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
+      if (k === "flareSlash") { if (v !== true) fail("invalid-body", id + ".flareSlash"); if (body.flare !== true) fail("flare-slash-needs-flare", id); return; }
       if (k === "waistSeam") { if (v !== true) fail("invalid-body", id + ".waistSeam"); return; }
       if (k === "yokeSeam") {
         if (v !== true && v !== "S" && v !== "T" && v !== "U" && v !== "V") fail("invalid-body", id + ".yokeSeam");   // true = Ⓠ·Ⓡ(P.30–31) · "S" = Ⓢ(P.32) · "T" = Ⓣ(P.33) · "U" = Ⓤ(P.34)
