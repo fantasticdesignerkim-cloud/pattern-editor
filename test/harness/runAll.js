@@ -74,6 +74,7 @@ const suites = [
   { file: "princessPresetCheck.js",     golden: false },
   { file: "princessFPresetCheck.js",    golden: false },
   { file: "flareSlashPresetCheck.js",   golden: false },
+  { file: "neckTuckPresetCheck.js",     golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },

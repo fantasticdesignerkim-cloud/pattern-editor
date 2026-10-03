@@ -433,6 +433,143 @@
     };
   }
 
+  // ── Ⓘ(P.22) — 목둘레 턱: 다트를 닫고 그 반동으로 목둘레의 **절개 2곳**을 벌린다(처리 방법 161) ─────────────────────────
+  // 책은 절개 위치·분량 배분·턱 깊이를 수치로 주지 않는다(P.22 «원하는 목둘레의 위치»). 사용자 확정(2026-10-03):
+  //   · 절개선 = 다트 꼭짓점(앞 BP · 뒤 어깨 다트 apex)에서 목둘레 호의 1/3·2/3 지점으로 가는 직선 2개
+  //   · 닫는 다트각 θ 를 두 절개가 **균등(각 θ/2)** 으로 나눠 벌린다 — 중심을 품은 조각 고정, 어깨 쪽 조각 θ, 가운데 조각 θ/2 (강체 회전)
+  //   · 박기 끝 = 절개 다리를 따라 목둘레에서 2cm 아래(표시 전용 — geometry 에 만들어 넣지 않는다)
+  // 결과 외곽은 **절개 틈이 apex 까지 열린 V 두 개**를 가진다(열린 다트 = 현재 외곽선 · 젤리 모델). 면적은 강체라 정확히 보존된다.
+  var TUCK_AT = [1 / 3, 2 / 3];
+  var TUCK_DEPTH_CM = 2;
+  function neckTuck(piece, opts) {
+    opts = opts || {};
+    var t = T();
+    if (!piece || !Array.isArray(piece.outline) || !piece.outline.length) fail("invalid-piece");
+    var depth = opts.depthCm == null ? TUCK_DEPTH_CM : opts.depthCm;
+    if (typeof depth !== "number" || !isFinite(depth) || !(depth > 0)) fail("invalid-tuck-depth", depth);
+    var outSegs = t.outlinePrimsToSegs(piece.outline);
+    var constr = (piece.construction || []).filter(function (s) { return s && s.kind === "line"; });
+    var R = t.buildPieceRing(outSegs, constr);
+    if (!R.ok) fail("ring-failed", R.reason);
+    var ring = R.ring, n = ring.length;
+    var dIdx = [];
+    ring.forEach(function (r, i) { if (r.source === "dartleg") dIdx.push(i); });
+    if (dIdx.length !== 2) fail("unsupported-dart-legs", dIdx.length);
+    var apex = ring[dIdx[0]].seg.to, mouth1 = ring[dIdx[0]].seg.from, mouth0 = ring[dIdx[1]].seg.to;
+    var th = Math.atan2(mouth1.y - apex.y, mouth1.x - apex.x) - Math.atan2(mouth0.y - apex.y, mouth0.x - apex.x);
+    if (!isFinite(th) || Math.abs(th) < 1e-9) fail("degenerate-dart", th);
+
+    // 목둘레 연속 구간(ring 순서)과 그 위의 1/3·2/3 지점 — 호 길이 기준, 곡선은 정확 분할 위에서 이분 탐색.
+    var isNeck = function (k) { return ring[k].source === "outline" && ring[k].seg.edge === "neckline"; };
+    var first = -1;
+    for (var k0 = 0; k0 < n; k0++) if (isNeck(k0) && !isNeck((k0 + n - 1) % n)) { first = k0; break; }
+    if (first < 0) fail("no-neckline-edge");
+    var run = [], total = 0;
+    for (var q = first; isNeck(q % n) && run.length < n; q++) { var L = segLen(ring[q % n].seg); run.push({ i: q % n, len: L }); total += L; }
+    if (!(total > 1e-6)) fail("neckline-too-short", total);
+    var pos = function (frac) {
+      var want = total * frac, acc = 0;
+      for (var r = 0; r < run.length; r++) {
+        if (want <= acc + run[r].len + 1e-12) {
+          var seg = ring[run[r].i].seg, need = want - acc, lo = 0, hi = 1;
+          for (var it = 0; it < 80; it++) { var mid = (lo + hi) / 2; if (segLen(t.subSegment(seg, 0, mid)) < need) lo = mid; else hi = mid; }
+          var u = (lo + hi) / 2;
+          return { i: run[r].i, t: u, point: t.subSegment(seg, 0, u).to, arcCm: want, frac: frac };
+        }
+        acc += run[r].len;
+      }
+      fail("neckline-position-failed", frac);
+    };
+    var cuts = TUCK_AT.map(pos);
+    // apex 에서 앞으로 나아가는 순서(L2 → … → L1)로 정렬 — 중심을 품은 쪽이 고정이 된다.
+    var rel = function (p) { return ((p.i - (dIdx[0] + 1) + 2 * n) % n) + p.t; };
+    cuts.sort(function (a, b) { return rel(a) - rel(b); });
+    var apexPos = { i: dIdx[0], t: 1, point: apex };
+    var A0 = extractArc(ring, apexPos, cuts[0]), A1 = extractArc(ring, cuts[0], cuts[1]), A2 = extractArc(ring, cuts[1], apexPos);
+    if (A0.length < 2 || !A1.length || A2.length < 2) fail("degenerate-split");
+    var hasCenter = function (segs) { return segs.some(function (s) { return s.edge === "center"; }); };
+    if (hasCenter(A1)) fail("center-in-middle-piece");
+    var fixedFirst = hasCenter(A0);
+    if (fixedFirst === hasCenter(A2)) fail("center-edge-ambiguous");
+    var rot = fixedFirst ? [0, -th / 2, -th] : [th, th / 2, 0];       // 조각별 회전각(apex 기준) — 가운데는 정확히 절반
+    var K0 = A0.slice(1), K2 = A2.slice(0, -1);                          // L2 · L1 제거(닫힌 다트)
+    var R0 = K0.map(function (s) { return rotSeg(s, apex, rot[0]); });
+    var R1 = A1.map(function (s) { return rotSeg(s, apex, rot[1]); });
+    var R2 = K2.map(function (s) { return rotSeg(s, apex, rot[2]); });
+    var first0 = R0[0].from, last2 = R2[R2.length - 1].to;
+    var sliver = Math.hypot(last2.x - first0.x, last2.y - first0.y);
+    var last0 = R0[R0.length - 1].to, first1 = R1[0].from, last1 = R1[R1.length - 1].to, first2 = R2[0].from;
+    var legs = function (a, b) { return [line(a, apex), line(apex, b)]; };
+    var slitA = legs(last0, first1), slitB = legs(last1, first2);
+    // 틈의 두 다리는 apex 로 모이는 **열린 V**(현재 외곽선)다 — 체크포인트의 외곽 연결성 판정이 읽는 «선언된 다리»(dart.id·apexAt)를 붙인다.
+    // edge 이름은 주지 않는다: designRenderer 의 EDGE_PLACEMENT 는 닫힌 어휘라 새 이름이 `bad-edge` 로 렌더를 깬다(헤드리스에선 안 보이고 브라우저에서만 터진 사고).
+    [[slitA, 1], [slitB, 2]].forEach(function (pr) {
+      pr[0].forEach(function (s, k) { s.dart = { id: "neck-tuck-" + pr[1], boundary: "neckline", apexAt: k === 0 ? "to" : "from" }; });
+    });
+    var outline = R0.concat(slitA, R1, slitB, R2);
+    if (sliver > SLIVER_EPS) outline = outline.concat([line(last2, first0)]);
+    for (var i = 0; i < outline.length; i++) {
+      var a = outline[i], b = outline[(i + 1) % outline.length];
+      if (Math.hypot(a.to.x - b.from.x, a.to.y - b.from.y) > CLOSE_EPS) fail("outline-discontinuous", i);
+    }
+    if (selfIntersects(outline)) fail("self-intersection");
+    var areaBefore = Math.abs(signedArea(ring.map(function (r) { return r.seg; })));
+    var areaAfter = Math.abs(signedArea(outline));
+    if (!(Math.abs(areaAfter - areaBefore) < 1)) fail("area-not-preserved", areaAfter - areaBefore);   // 강체 → 같다(뒤 sliver 잔여만 허용)
+
+    // construction — 조각에 실린 대로 돈다. 닫힌 다리(L1·L2)는 입구 끝점으로, 나머지는 조각 다각형 안/밖으로 판정(밖이면 고정 조각).
+    var near = function (u, v) { return Math.hypot(u.x - v.x, u.y - v.y) < 1e-6; };
+    var polyOf = function (arc) { return flatPts(arc.concat([line(arc[arc.length - 1].to, arc[0].from)])); };
+    var polys = [polyOf(A0), polyOf(A1), polyOf(A2)];
+    var inPoly = function (p, poly) {
+      var inside = false;
+      for (var a = 0, b = poly.length - 1; a < poly.length; b = a++) {
+        if ((poly[a].y > p.y) !== (poly[b].y > p.y) && p.x < (poly[b].x - poly[a].x) * (p.y - poly[a].y) / (poly[b].y - poly[a].y) + poly[a].x) inside = !inside;
+      }
+      return inside;
+    };
+    var fixedIdx = fixedFirst ? 0 : 2;
+    var cutLines = cuts.map(function (c) { return [apex, c.point]; });
+    var construction = (piece.construction || []).map(function (s) {
+      if (s && s.kind === "line") cutLines.forEach(function (cl) {
+        var x = t.segCross(s.from, s.to, cl[0], cl[1]);
+        if (x && !(near(x, apex))) fail("tuck-construction-crosses-cut");
+      });
+      var g;
+      if (s && s.kind === "line" && ((near(s.from, apex) && near(s.to, mouth1)) || (near(s.to, apex) && near(s.from, mouth1)))) g = 2;
+      else if (s && s.kind === "line" && ((near(s.from, apex) && near(s.to, mouth0)) || (near(s.to, apex) && near(s.from, mouth0)))) g = 0;
+      else {
+        var mp = s && s.from && s.to ? { x: (s.from.x + s.to.x) / 2, y: (s.from.y + s.to.y) / 2 } : null;
+        g = fixedIdx;
+        if (mp) for (var gi = 0; gi < 3; gi++) if (inPoly(mp, polys[gi])) { g = gi; break; }
+      }
+      return toGeomPrim(g === fixedIdx ? clone(s) : rotSeg(s, apex, rot[g]));
+    });
+
+    // 절개별 메타 — 틈(neck 에서의 현) · 박기 끝(다리를 따라 depth 만큼 아래). 표시·체크포인트용이고 geometry 는 바꾸지 않는다.
+    var neckAt = [{ before: last0, after: first1 }, { before: last1, after: first2 }];
+    var tuckCuts = neckAt.map(function (na, ci) {
+      var dir = function (p) { var u = unit(sub(apex, p)); return u; };
+      var ua = dir(na.before), ub = dir(na.after);
+      var len = Math.hypot(na.before.x - apex.x, na.before.y - apex.y);
+      var d = Math.min(depth, len * 0.5);
+      return {
+        index: ci + 1, frac: cuts[ci].frac, arcFromCenterOrShoulderCm: cuts[ci].arcCm,
+        neckBefore: { x: na.before.x, y: na.before.y }, neckAfter: { x: na.after.x, y: na.after.y },
+        endBefore: { x: na.before.x + ua.x * d, y: na.before.y + ua.y * d }, endAfter: { x: na.after.x + ub.x * d, y: na.after.y + ub.y * d },
+        lenCm: len, gapChordCm: Math.hypot(na.after.x - na.before.x, na.after.y - na.before.y), angleRad: Math.abs(th) / 2, depthCm: d
+      };
+    });
+    return {
+      outline: outline.map(toGeomPrim), construction: construction,
+      meta: {
+        apex: { x: apex.x, y: apex.y }, dartAngleRad: th, perCutAngleRad: th / 2, neckLenCm: total,
+        cuts: tuckCuts, depthCm: depth, residualSliverCm: sliver, areaBeforeCm2: areaBefore, areaAfterCm2: areaAfter,
+        fixedSide: fixedFirst ? "A" : "B", tuckDirection: "outward"
+      }
+    };
+  }
+
   // 절개선(apex→H)의 어느 쪽인가 — 외적 부호로 판정한다. 회전 조각 쪽이면 true.
   function inRotatedPart(seg, apex, H, rotateB, ring, dIdx) {
     var p = seg && (seg.from || (seg.commands && seg.commands[0] && seg.commands[0].points[0]));
@@ -449,7 +586,7 @@
   }
 
   window.designFlare = Object.freeze({
-    closeDartSpread: closeDartSpread, slashSpread: slashSpread, bustWidthCm: bustWidthCm,
+    closeDartSpread: closeDartSpread, slashSpread: slashSpread, neckTuck: neckTuck, bustWidthCm: bustWidthCm,
     tangentAtEnd: tangentAtEnd, tangentAtStart: tangentAtStart, fairBridge: fairBridge
   });
 })();

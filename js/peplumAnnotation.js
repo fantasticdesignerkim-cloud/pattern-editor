@@ -19,6 +19,7 @@
   var dist = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y); };
   var unit = function (v) { var l = Math.hypot(v.x, v.y); return l > 1e-12 ? { x: v.x / l, y: v.y / l } : null; };
   var fmt1 = function (v) { return (Math.round(v * 10) / 10).toFixed(1); };
+  var fmt2 = function (v) { return (Math.round(v * 100) / 100).toFixed(2); };
 
   function ctrl(prim) {
     if (!prim) return [];
@@ -258,8 +259,46 @@
       totalCm: m.chordCm, finishedWaistCm: null };
   }
 
+  // ── 목둘레 턱 Ⓘ(P.22 · P.161) 표시 모델 ──
+  // 의미는 `neckTuck` 메타(절개 틈 양 끝·박기 끝·각·현)에서만 읽는다 — 좌표를 추측하지 않는다. 절개 위치·배분·깊이는 책에 수치가 없어 사용자 확정값이다.
+  function buildNeckTuckSide(key, label, cfName, piece) {
+    var m = piece && piece.neckTuck;
+    if (!piece || !Array.isArray(piece.outline) || !m || !m.apex || !Array.isArray(m.cuts) || m.cuts.length !== 2 || !num(m.dartAngleRad) || !num(m.depthCm)) return null;
+    var centers = by(piece.outline, "center"), necks = by(piece.outline, "neckline");
+    if (!centers.length || !necks.length) return null;
+    var xs = [], ys = [];
+    piece.outline.forEach(function (sg) { ctrl(sg).forEach(function (q) { xs.push(q.x); ys.push(q.y); }); });
+    var below = { x: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2, y: Math.max.apply(null, ys) };
+    var lines = [], legs = [], wedges = [], notches = [], cuts = [];
+    var add = function (id, at, dx, dy, anchor, text, cls) { lines.push({ id: id, at: P(at), px: { dx: dx, dy: dy }, anchor: anchor, text: text, cls: cls }); };
+    var deg = Math.abs(m.dartAngleRad) * 180 / Math.PI, total = 0;
+    m.cuts.forEach(function (c) { total += c.gapChordCm; });
+    add("title", below, 0, 40, "middle", label + " · 목둘레 턱 Ⓘ", "title");
+    add("amount", below, 0, 54, "middle", "턱 2개 · 목둘레 벌림 " + m.cuts.map(function (c) { return fmt1(c.gapChordCm); }).join(" + ") + " = " + fmt1(total) + "cm", "amount");
+    add("rule", below, 0, 67, "middle", "닫는 다트 " + fmt2(deg) + "° 를 절개 둘이 균등 분배(각 " + fmt2(deg / 2) + "°) · 목둘레 호 1/3·2/3 · 교재 P.161", "note");
+    add("basis", below, 0, 80, "middle", "턱은 바깥쪽으로 꺾는다 · 박기 끝 = 목둘레에서 " + fmt1(m.depthCm) + "cm 아래(절개 위치·배분·깊이는 책에 수치가 없어 확정값)", "note");
+    m.cuts.forEach(function (c) {
+      var id = "tuck" + c.index;
+      wedges.push({ id: id, pts: [P(c.neckBefore), P(c.neckAfter), P(m.apex)] });
+      legs.push({ id: id + "-a", from: P(c.neckBefore), to: P(c.endBefore) });
+      legs.push({ id: id + "-b", from: P(c.neckAfter), to: P(c.endAfter) });
+      notches.push({ id: id + "-end-a", at: P(c.endBefore) });
+      notches.push({ id: id + "-end-b", at: P(c.endAfter) });
+      add(id, { x: (c.neckBefore.x + c.neckAfter.x) / 2, y: (c.neckBefore.y + c.neckAfter.y) / 2 }, 0, -9, "middle", "턱" + (c.index === 1 ? "①" : "②") + " " + fmt1(c.gapChordCm), "amount");
+      add(id + "-end", { x: (c.endBefore.x + c.endAfter.x) / 2, y: (c.endBefore.y + c.endAfter.y) / 2 }, 0, 12, "middle", "박기 끝", "cut");
+      cuts.push({ id: id, symbol: null, chordCm: c.gapChordCm, angleDeg: c.angleRad * 180 / Math.PI, pivot: P(m.apex), matched: true });
+    });
+    notches.push({ id: "apex", at: P(m.apex) });
+    var cm = mid(centers[0]);
+    add("center", cm, -8, 3, "end", cfName, "edge");
+    return { key: key, title: label, lines: lines, legs: legs, wedges: wedges, notches: notches, cuts: cuts, totalCm: total, finishedWaistCm: null };
+  }
+
   function buildModel(geometry, body) {
     var g = geometry, ws = g && g.waistSeam;
+    if (g && !ws && body && body.neckTuck === true) {   // Ⓘ — 파라미터가 말할 때만
+      return { front: buildNeckTuckSide("front", "앞몸판", "앞중심(CF)", g.front), back: buildNeckTuckSide("back", "뒤몸판", "뒤중심(CB)", g.back) };
+    }
     if (g && !ws && body && body.flareSlash === true) {   // Ⓗ — 파라미터가 말할 때만(메타만으로 식별하지 않는다)
       return { front: buildFlareSlashSide("front", "앞몸판", "앞중심(CF)", g.front), back: buildFlareSlashSide("back", "뒤몸판", "뒤중심(CB)", g.back) };
     }

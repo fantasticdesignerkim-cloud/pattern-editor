@@ -49,6 +49,7 @@
     { key: "waistDartExtraCm", label: "허리 다트 폭 추가(절대 cm)", unit: "cm" },
     { key: "flare", label: "다트를 닫아 밑단 벌리기", unit: "" },
     { key: "flareSlash", label: "진동 가장 안쪽 수직 절개로 플레어 더 벌리기", unit: "" },
+    { key: "neckTuck", label: "다트를 닫아 목둘레 절개 2곳 벌리기(턱)", unit: "" },
     { key: "waistSeam", label: "허리 이음선(상·하 조각 분리)", unit: "" },
     { key: "peplumFlare", label: "페플럼 맞대면서 플레어 벌리기", unit: "" },
     { key: "peplumCut", label: "페플럼 WL 등분 수직 절개로 벌리기", unit: "" },
@@ -101,13 +102,11 @@
         availVariant("bunka-bodice-H", "H", "H · Ⓖ 방법 + 진동 가장 안쪽에서 밑단까지 수직 절개를 넣어 플레어 분량을 더 벌린다", 21)
      ] },
     { id: "neck-tuck", order: 5, label: "목둘레에 턱을 넣는다", symbol: "I", page: 22,
-      availability: "pending-op", note: PENDING_NOTE,
-      familyNote: "다트를 닫아 그 반동으로 목둘레를 벌려 턱을 만든다.",
+      availability: "available", note: null,
+      familyNote: "다트를 닫아 그 반동으로 목둘레를 벌려 턱을 만든다(처리 방법 161). Ⓘ = 목둘레 호 1/3·2/3 두 절개에 닫는 다트각을 균등하게 나눠 벌린다.",
       variants: [
-        pendingVariant("bunka-bodice-I", "I", "I · 밑단 폭 1cm 추가 · 다트를 닫아 목둘레를 벌린다", 22,
-          "원하는 목둘레 위치에 절개선을 넣어 벌린다. 꼬리말: 닫는다·벌린다 P.161",
-          "**처리 방법 161** + 목둘레 절개 위치 지정이 필요하다(플레어 G 와 같은 계열)."),
-        pendingVariant("bunka-bodice-J", "J", "J · 턱 변형", 23, null, "I 와 같은 이유(미판독).")
+        availVariant("bunka-bodice-I", "I", "I · 밑단 폭을 1cm 추가 · 다트를 닫아 목둘레를 벌린다", 22),
+        pendingVariant("bunka-bodice-J", "J", "J · 턱 변형", 23, null, "Ⓘ 는 구현됐지만 Ⓙ(P.23)는 아직 판독하지 않았다.")
       ] },
     { id: "neck-gather", order: 6, label: "목둘레에 개더를 넣는다", symbol: "K", page: 24,
       availability: "pending-op", note: PENDING_NOTE,
@@ -194,6 +193,14 @@
       // Ⓖ 와 같은 몸판(허리 다트 0 · 밑단 +3 · 다트 닫기) + flareSlash. ∅ 는 교재 «■ 까지가 최대» 를 산식보다 우선해 clamp 한다(사용자 확정).
       body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 3,
               waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, flare: true, flareSlash: true }
+    },
+    {
+      id: "bunka-bodice-I", label: "교재 I 목둘레 턱", familyId: "neck-tuck", symbol: "I", page: 22,
+      description: "Ⓑ 몸판(허리 다트 없음 · 밑단 +1) · 앞 AH·뒤 어깨 다트를 닫아 목둘레 호 1/3·2/3 두 절개를 균등(각 θ/2)으로 벌린다 · 턱은 바깥쪽 · 박기 끝 2cm",
+      source: "[패턴학교] 목둘레 턱 Ⓘ(P.22) · 처리 방법 닫는다·벌린다(P.161) — 절개 위치·배분·깊이는 사용자 확정(책에 수치 없음)",
+      baseMethod: "bunka-bodice-I-v1",
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1,
+              waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, neckTuck: true }
     },
     {
       id: "bunka-bodice-M", label: "교재 M 허리 이음선", familyId: "waist-seam", symbol: "M", page: 26,
@@ -341,6 +348,7 @@
       }
       if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
       if (k === "flareSlash") { if (v !== true) fail("invalid-body", id + ".flareSlash"); if (body.flare !== true) fail("flare-slash-needs-flare", id); return; }
+      if (k === "neckTuck") { if (v !== true) fail("invalid-body", id + ".neckTuck"); return; }
       if (k === "waistSeam") { if (v !== true) fail("invalid-body", id + ".waistSeam"); return; }
       if (k === "yokeSeam") {
         if (v !== true && v !== "S" && v !== "T" && v !== "U" && v !== "V") fail("invalid-body", id + ".yokeSeam");   // true = Ⓠ·Ⓡ(P.30–31) · "S" = Ⓢ(P.32) · "T" = Ⓣ(P.33) · "U" = Ⓤ(P.34)

@@ -1590,6 +1590,68 @@
     return out;
   }
 
+  // ── 목둘레 턱 Ⓘ(P.22 · 처리 방법 P.161): 다트를 닫고 목둘레 절개 2곳을 균등하게 벌린다 ──
+  //   파라미터(body.neckTuck·waistDartScales 0)가 규칙이고, geometry.*.neckTuck 메타는 **신뢰하지 않는다** — 출력 외곽을 **그린 순서 그대로** 읽어
+  //   (apex 에 선이 넷 모이므로 순서 재구성을 하지 않는다) 절개 틈 두 쌍(dart.id neck-tuck-1·2 의 열린 V)의 현·각을 직접 재고, 두 각이 같고(균등)
+  //   그 합이 메타의 닫는 다트각과 같은지, 외곽이 닫혀 있고 자기교차가 없는지, 목둘레 호 길이가 메타와 같은지(절개는 길이를 안 바꾼다) 대조한다.
+  //   미적용(다른 라인)이면 null.
+  var NECK_TUCK_EPS = 1e-6;
+  function neckTuckState(proj) {
+    var g = proj && proj.working && proj.working.geometry;
+    if (!g || !g.front || !g.back) return null;
+    var pb = proj.working.parameters && proj.working.parameters.body;
+    var wants = !!(pb && pb.neckTuck != null);
+    var has = !!(g.front.neckTuck || g.back.neckTuck);
+    if (!wants && !has) return null;
+    var out = { front: { reason: null }, back: { reason: null }, ok: false, reason: null };
+    var bad = function (reason, side) { out.ok = false; out.reason = reason; if (side && out[side]) out[side].reason = reason; return out; };
+    if (!pb || pb.neckTuck !== true || pb.flare || pb.waistSeam || pb.yokeSeam || pb.yokeGather || pb.princess || pb.peplumFlare || pb.peplumCut) return bad("neck-tuck-mismatch");   // false 는 «없음»(다른 프리셋 검사가 명시 false 를 얹기도 한다)
+    var sc = pb.waistDartScales;
+    if (!sc || ["a", "b", "d", "e"].some(function (k) { return sc[k] !== 0; })) return bad("neck-tuck-waist-darts");   // Ⓘ 는 허리 다트 없는 몸판(사용자 확정)
+    if (g.frontPeplum || g.backPeplum || g.frontYoke || g.backYoke || g.shoulderYoke || g.frontCenter || g.backCenter) return bad("neck-tuck-mismatch");
+    var sides = ["front", "back"];
+    for (var i = 0; i < sides.length; i++) {
+      var side = sides[i], pc = g[side], m = pc.neckTuck, row = out[side];
+      if (!m || !Array.isArray(m.cuts) || m.cuts.length !== 2) return bad("neck-tuck-missing", side);
+      if ([m.dartAngleRad, m.perCutAngleRad, m.neckLenCm, m.areaBeforeCm2, m.areaAfterCm2].some(function (v) { return typeof v !== "number" || !isFinite(v); })) return bad("neck-tuck-mismatch", side);
+      var segs = [];   // ringSegs 는 edge·dart 를 버리므로 태그를 다시 붙인다(순서 그대로).
+      (pc.outline || []).forEach(function (o) { ringSegs([o]).forEach(function (r) { r.edge = o.edge; r.dart = o.dart; segs.push(r); }); });
+      var n = segs.length, closed = n > 2;
+      for (var k = 0; k < n && closed; k++) if (Math.hypot(segs[k].to.x - segs[(k + 1) % n].from.x, segs[k].to.y - segs[(k + 1) % n].from.y) > 1e-4) closed = false;
+      if (!closed) return bad("neck-tuck-open", side);
+      var met = yokeRingMetrics(segs);
+      if (met.selfIntersects || !(met.areaCm2 > 0)) return bad("neck-tuck-self-intersection", side);
+      // 절개 틈 = 연속한 tuck-slit 두 선(목둘레 → apex → 목둘레). 정확히 두 쌍이어야 한다.
+      var slitIdx = [];
+      segs.forEach(function (sg, ix) { if (sg.dart && /^neck-tuck-[12]$/.test(sg.dart.id) && sg.dart.boundary === "neckline") slitIdx.push(ix); });
+      if (slitIdx.length !== 4) return bad("neck-tuck-slit-count", side);
+      var gaps = [];
+      for (var q = 0; q < 4; q += 2) {
+        var a = segs[slitIdx[q]], b = segs[slitIdx[q + 1]];
+        if (slitIdx[q + 1] !== (slitIdx[q] + 1) % n || Math.hypot(a.to.x - b.from.x, a.to.y - b.from.y) > 1e-6) return bad("neck-tuck-slit-pair", side);
+        var la = Math.hypot(a.from.x - a.to.x, a.from.y - a.to.y), lb = Math.hypot(b.from.x - b.to.x, b.from.y - b.to.y);
+        if (Math.abs(la - lb) > 1e-6) return bad("neck-tuck-slit-unequal", side);   // 강체 회전이라 두 다리는 같은 길이
+        var chord = Math.hypot(a.from.x - b.to.x, a.from.y - b.to.y);
+        gaps.push({ chordCm: chord, lenCm: la, angleRad: 2 * Math.asin(chord / (2 * la)) });
+      }
+      if (Math.abs(gaps[0].angleRad - gaps[1].angleRad) > NECK_TUCK_EPS) return bad("neck-tuck-unequal-split", side);                       // 균등
+      if (Math.abs(gaps[0].angleRad + gaps[1].angleRad - Math.abs(m.dartAngleRad)) > NECK_TUCK_EPS) return bad("neck-tuck-angle-mismatch", side);   // 합 = 닫는 다트각
+      if (Math.abs(m.perCutAngleRad * 2 - m.dartAngleRad) > NECK_TUCK_EPS) return bad("neck-tuck-mismatch", side);
+      for (var c = 0; c < 2; c++) if (Math.abs(m.cuts[c].gapChordCm - gaps[c].chordCm) > NECK_TUCK_EPS || Math.abs(m.cuts[c].lenCm - gaps[c].lenCm) > NECK_TUCK_EPS) return bad("neck-tuck-gap-mismatch", side);
+      // 목둘레 호 길이 — 세 조각의 neckline 모서리 합 = 메타(절개가 길이를 바꾸지 않는다).
+      var neckLen = 0;
+      segs.forEach(function (sg) { if (sg.edge === "neckline") yokeFlatSeg(sg).forEach(function (ab) { neckLen += Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y); }); });
+      if (Math.abs(neckLen - m.neckLenCm) > 1e-3) return bad("neck-tuck-neckline-length", side);
+      if (Math.abs(m.areaAfterCm2 - m.areaBeforeCm2) > 1) return bad("neck-tuck-area", side);
+      row.dartAngleDeg = round4(Math.abs(m.dartAngleRad) * 180 / Math.PI);
+      row.gapChordsCm = gaps.map(function (x) { return round4(x.chordCm); });
+      row.perCutAngleDeg = round4(gaps[0].angleRad * 180 / Math.PI);
+      row.neckLenCm = round4(neckLen); row.areaCm2 = round4(met.areaCm2); row.depthCm = round4(m.depthCm);
+    }
+    out.ok = true;
+    return out;
+  }
+
   function check(proj) {
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
@@ -1634,6 +1696,9 @@
     // 플레어 Ⓗ(있을 때만): ∅ 산식·상한·밑단 이음 현·폐곡선을 출력 geometry 에서 다시 계산한다.
     var flareSlash = flareSlashState(proj);
     if (flareSlash && !flareSlash.ok) fails.push(flareSlash.reason);
+    // 목둘레 턱 Ⓘ(있을 때만): 절개 틈 두 쌍의 현·각·균등·합을 출력 geometry 에서 다시 잰다.
+    var neckTuck = neckTuckState(proj);
+    if (neckTuck && !neckTuck.ok) fails.push(neckTuck.reason);
 
     var out = {
       ok: fails.length === 0,
@@ -1649,6 +1714,7 @@
     };
     if (yokeSeam) out.yokeSeam = yokeSeam;   // 요크 이음선 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
     if (princess) out.princess = princess;   // 프린세스 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
+    if (neckTuck) out.neckTuck = neckTuck;   // 목둘레 턱 Ⓘ 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
     if (flareSlash) out.flareSlash = flareSlash;   // 플레어 Ⓗ 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
     return out;
   }
@@ -1763,5 +1829,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, princessState: princessState, flareSlashState: flareSlashState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, princessState: princessState, flareSlashState: flareSlashState, neckTuckState: neckTuckState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

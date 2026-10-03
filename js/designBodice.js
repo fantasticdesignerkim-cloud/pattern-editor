@@ -707,6 +707,10 @@
     var applySlash = (flareSlash === true);
     if (flareSlash != null && flareSlash !== false && !applySlash) fail("invalid-body-flare-slash", flareSlash);
     if (applySlash && !applyFlare) fail("flare-slash-needs-flare");
+    // 목둘레 턱 Ⓘ(P.22·P.161) — 다트를 닫아 그 반동으로 목둘레 절개 2곳을 벌린다(`designFlare.neckTuck`). 플레어·이음선·요크·프린세스와 함께 쓰지 않는다(한 번에 한 가지 처리).
+    var neckTuck = body.neckTuck, applyTuck = (neckTuck === true);
+    if (neckTuck != null && neckTuck !== false && !applyTuck) fail("invalid-body-neck-tuck", neckTuck);
+    if (applyTuck && (applyFlare || waistSeam === true || body.yokeSeam || body.yokeGather || body.princess || body.peplumFlare || body.peplumCut)) fail("neck-tuck-conflict");
     var applySeam = (waistSeam === true);
     var peplumFlare = body.peplumFlare;   // Ⓝ(P.27) — 페플럼을 맞대면서 플레어 분량을 벌린다(158). waistSeam 이 전제.
     if (waistSeam != null && waistSeam !== false && !applySeam) fail("invalid-body-waist-seam", waistSeam);
@@ -854,6 +858,20 @@
         pair[0].flareCm = { spread: res.spreadCm, wedgeArea: res.wedgeAreaCm2,
                             dartAngleRad: res.dartAngleRad, residualSliverCm: res.residualSliverCm };
         if (sres) pair[0].flareCm.slash = sres.slash;   // Ⓗ 에만 — 없으면 Ⓖ 와 바이트 동일
+      });
+    }
+    // ★ 목둘레 턱 Ⓘ — 플레어와 같은 자리(맨 마지막, 형상 확정 뒤). 실패는 그대로 올린다(부분 적용 금지).
+    if (applyTuck) {
+      var DFt = (typeof window !== "undefined") && window.designFlare;
+      if (!DFt || typeof DFt.neckTuck !== "function") fail("designFlare-missing");
+      [[fPiece, "front"], [bPiece, "back"]].forEach(function (pair) {
+        var tr;
+        try { tr = DFt.neckTuck({ outline: pair[0].outline, construction: pair[0].construction }); }
+        catch (e) { fail("neck-tuck-failed", pair[1] + ": " + (e.reason || e.message)); }
+        pair[0].outline = tr.outline;
+        pair[0].construction = tr.construction;
+        pair[0].neckTuck = tr.meta;   // Ⓘ 에만 — 없으면 다른 라인과 바이트 동일
+        pair[0].necklineLenCm = tr.meta.neckLenCm;   // 봉제 목둘레 = 세 조각의 neckline 호 합(틈은 접혀 사라진다) — 계측·칼라가 한 조각만 재지 않게
       });
     }
     var outGeom = {
