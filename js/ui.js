@@ -428,6 +428,7 @@
   //   예외는 **다트 배분**(waistDartScales) — 입력칸이 없어 parameters 에만 산다.
   let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
   let pendingFlare;        // 〃 (true = 다트를 닫아 밑단 벌리기)
+  let pendingFlareSlash;   // 〃 (true = 진동 가장 안쪽 수직 절개로 플레어 더 벌리기, 프리셋 Ⓗ — flare 전제)
   let pendingWaistSeam;    // 〃 (true = 허리 이음선 — 상·하 조각 분리, 프리셋 Ⓜ)
   let pendingPeplumCut;    // 〃 (true = 페플럼 WL 등분 수직 절개 벌림, 프리셋 Ⓞ — waistSeam 전제)
   let pendingPeplumFlare;  // 〃 (true = 페플럼을 맞대면서 플레어 벌리기, 프리셋 Ⓝ — waistSeam 전제)
@@ -507,6 +508,7 @@
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     pendingDartScales = body.waistDartScales ? structuredClone(body.waistDartScales) : null;
     pendingFlare = body.flare === true ? true : null;
+    pendingFlareSlash = body.flareSlash === true ? true : null;   // Ⓖ 로 바꾸면 해제 → 추가 절개 없는 플레어
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
     pendingPeplumCut = (body.peplumCut === true || body.peplumCut === "P") ? body.peplumCut : null;
@@ -636,7 +638,10 @@
     if (!f && !b) return "";
     const one = (x, k) => x ? `${k} 벌어짐 ${fmtL(x.spread)}cm` : "";
     const sliver = (b && b.residualSliverCm > 0.001) ? ` · 뒤 어깨 잔여 ${fmtL(b.residualSliverCm)}cm(패턴선 확정에서 정리)` : "";
-    return "플레어 · " + [one(f, "앞"), one(b, "뒤")].filter(Boolean).join(" · ") + sliver;
+    // Ⓗ: 추가 절개 ∅(산식 ●−(3+■) 이 ■ 를 넘으면 ■ 로 자른다) — 메타를 읽기만 한다.
+    const sl = (x, k) => (x && x.slash) ? `${k} 절개 ∅ ${fmtL(x.slash.chordCm)}cm${x.slash.clamped ? "(■ 상한)" : ""}` : "";
+    const slash = [sl(f, "앞"), sl(b, "뒤")].filter(Boolean).join(" · ");
+    return "플레어 · " + [one(f, "앞"), one(b, "뒤")].filter(Boolean).join(" · ") + (slash ? " · " + slash : "") + sliver;
   }
   function bodyStatusNote(E, L, W, H, Cv, neckType, Dt, Wt, DtActual) {
     const parts = [];
@@ -2274,6 +2279,10 @@
       if (pendingFlare) nextParameters.body.flare = true; else delete nextParameters.body.flare;
       pendingFlare = undefined;
     }
+    if (pendingFlareSlash !== undefined) {
+      if (pendingFlareSlash) nextParameters.body.flareSlash = true; else delete nextParameters.body.flareSlash;
+      pendingFlareSlash = undefined;
+    }
     if (pendingWaistSeam !== undefined) {
       if (pendingWaistSeam) nextParameters.body.waistSeam = true; else delete nextParameters.body.waistSeam;
       pendingWaistSeam = undefined;
@@ -2353,6 +2362,7 @@
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     pendingDartScales = null;   // 원형 다트 배분으로 복귀
     pendingFlare = null;        // 플레어 해제
+    pendingFlareSlash = null;   // 플레어 추가 절개 해제
     pendingWaistSeam = null;    // 허리 이음선 해제(페플럼 제거)
     pendingPeplumFlare = null;  // 페플럼 플레어 해제
     pendingPeplumCut = null;    // 페플럼 절개 벌림 해제
