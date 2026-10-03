@@ -428,7 +428,7 @@
   //   예외는 **다트 배분**(waistDartScales) — 입력칸이 없어 parameters 에만 산다.
   let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
   let pendingFlare;        // 〃 (true = 다트를 닫아 밑단 벌리기)
-  let pendingNeckTuck;     // 〃 (true = 다트를 닫아 목둘레 절개 2곳 벌리기, 프리셋 Ⓘ — 플레어·이음선과 함께 쓰지 않는다)
+  let pendingNeckTuck;     // 〃 (true = 다트를 닫아 목둘레 절개 2곳 벌리기, 프리셋 Ⓘ · "J" = Ⓘ + 중심 평행 띠, 프리셋 Ⓙ — 플레어·이음선과 함께 쓰지 않는다)
   let pendingFlareSlash;   // 〃 (true = 진동 가장 안쪽 수직 절개로 플레어 더 벌리기, 프리셋 Ⓗ — flare 전제)
   let pendingWaistSeam;    // 〃 (true = 허리 이음선 — 상·하 조각 분리, 프리셋 Ⓜ)
   let pendingPeplumCut;    // 〃 (true = 페플럼 WL 등분 수직 절개 벌림, 프리셋 Ⓞ — waistSeam 전제)
@@ -509,7 +509,7 @@
     ["inpBodyWaistDartTotal", "inpBodyWaistTarget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
     pendingDartScales = body.waistDartScales ? structuredClone(body.waistDartScales) : null;
     pendingFlare = body.flare === true ? true : null;
-    pendingNeckTuck = body.neckTuck === true ? true : null;   // 다른 프리셋으로 바꾸면 해제 → 턱 사라짐
+    pendingNeckTuck = (body.neckTuck === true || body.neckTuck === "J") ? body.neckTuck : null;   // 다른 프리셋으로 바꾸면 해제 → 턱 사라짐
     pendingFlareSlash = body.flareSlash === true ? true : null;   // Ⓖ 로 바꾸면 해제 → 추가 절개 없는 플레어
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
     pendingPeplumFlare = body.peplumFlare === true ? true : null;   // Ⓜ 로 바꾸면 해제 → 플레어 없는 맞댐 페플럼
@@ -578,6 +578,13 @@
       el.setAttribute("data-ok", "0");
       return;
     }
+    // ★ 목둘레 턱 Ⓙ: 중심 평행 띠(턱 분량)가 외곽 폭에 들어 있다 — 턱을 접기 전 폭이라 착용 둘레가 아니다. 수치를 내놓지 않고 이유를 말한다.
+    if (gg && ((gg.front && gg.front.neckTuck && gg.front.neckTuck.centerBand) || (gg.back && gg.back.neckTuck && gg.back.neckTuck.centerBand))) {
+      el.textContent = "목둘레 턱 Ⓙ 적용 — 가슴·허리 수평 계측이 유효하지 않습니다(중심 평행 띠 "
+        + fmtL(gg.front.neckTuck.centerBand.widthCm) + "cm 는 턱으로 접히는 분량이라 외곽 폭이 착용 둘레가 아닙니다)";
+      el.setAttribute("data-ok", "0");
+      return;
+    }
     // ★ 허리 이음선 Ⓜ: 조각이 상·하로 분리돼 허리가 **단일 outline 이 아니다** — 수평 폭 계측이 뜻을 잃는다.
     //   수치를 지어내지 않고 분리 상태와 상·하 허리 이음 길이 검산을 정직하게 보여 준다.
     const ws = (project && window.bodiceCheckpoint && window.bodiceCheckpoint.waistSeamState) ? window.bodiceCheckpoint.waistSeamState(project) : null;
@@ -641,7 +648,8 @@
     const tf = g && g.front && g.front.neckTuck, tb = g && g.back && g.back.neckTuck;
     if (tf || tb) {
       const tk = (x, k) => x ? `${k} 목둘레 ${x.cuts.map(c => fmtL(c.gapChordCm)).join("+")}cm(다트 ${fmtL(Math.abs(x.dartAngleRad) * 180 / Math.PI)}° 균등 분배)` : "";
-      return "목둘레 턱 · " + [tk(tf, "앞"), tk(tb, "뒤")].filter(Boolean).join(" · ") + (tb && tb.residualSliverCm > 0.001 ? ` · 뒤 어깨 잔여 ${fmtL(tb.residualSliverCm)}cm(패턴선 확정에서 정리)` : "");
+      const band = (tf && tf.centerBand) ? ` · 중심 평행 띠 ${fmtL(tf.centerBand.widthCm)}cm(앞·뒤 공통 = 앞 목둘레 틈 합) · 턱은 중심 쪽` : "";
+      return "목둘레 턱 · " + [tk(tf, "앞"), tk(tb, "뒤")].filter(Boolean).join(" · ") + band + (tb && tb.residualSliverCm > 0.001 ? ` · 뒤 어깨 잔여 ${fmtL(tb.residualSliverCm)}cm(패턴선 확정에서 정리)` : "");
     }
     if (!f && !b) return "";
     const one = (x, k) => x ? `${k} 벌어짐 ${fmtL(x.spread)}cm` : "";
@@ -2291,7 +2299,7 @@
       pendingFlare = undefined;
     }
     if (pendingNeckTuck !== undefined) {
-      if (pendingNeckTuck) nextParameters.body.neckTuck = true; else delete nextParameters.body.neckTuck;
+      if (pendingNeckTuck) nextParameters.body.neckTuck = pendingNeckTuck; else delete nextParameters.body.neckTuck;
       pendingNeckTuck = undefined;
     }
     if (pendingFlareSlash !== undefined) {
