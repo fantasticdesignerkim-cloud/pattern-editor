@@ -39,7 +39,8 @@
     neckline: { outline: 1 },
     shoulder: { outline: 1 },
     armhole: { outline: 1 },
-    "yoke-seam": { outline: 1 }   // 요크 이음선 Ⓠ — 요크·몸판 조각의 잘린 변(outline 에만)
+    "yoke-seam": { outline: 1 },  // 요크 이음선 Ⓠ — 요크·몸판 조각의 잘린 변(outline 에만)
+    "princess-seam": { outline: 1 }   // 프린세스 라인 Ⓔ — 중심·옆 조각의 잘린 변(outline 에만)
   };
   // 고정 순회 순서(deterministic).
   const ORDER = [
@@ -50,13 +51,17 @@
   ];
   // 허리 이음선 Ⓜ 의 페플럼 — **선택 조각**(있을 때만 검증·렌더). 앞/뒤판과 같은 edge 규칙을 따른다.
   //   요크 이음선 Ⓠ 의 요크·몸판(frontYoke/frontBody/backYoke/backBody)도 같은 방식의 선택 조각이다.
-  const EXTRA = { frontPeplum: "front", backPeplum: "back", frontYoke: "front", frontBody: "front", backYoke: "back", backBody: "back", shoulderYoke: "back" };   // shoulderYoke = Ⓤ 어깨 요크 한 장(좌표계 = 뒤)
+  const EXTRA = { frontPeplum: "front", backPeplum: "back", frontYoke: "front", frontBody: "front", backYoke: "back", backBody: "back", shoulderYoke: "back",
+    frontCenter: "front", frontSide: "front", backCenter: "back", backSide: "back" };   // 프린세스 Ⓔ 의 중심·옆 조각 네 장
+  //   shoulderYoke = Ⓤ 어깨 요크 한 장(좌표계 = 뒤).
   const EXTRA_ORDER = [
     ["frontPeplum", "outline"], ["frontPeplum", "construction"],
     ["backPeplum", "outline"], ["backPeplum", "construction"],
     ["frontYoke", "outline"], ["frontYoke", "construction"], ["frontBody", "outline"], ["frontBody", "construction"],
     ["backYoke", "outline"], ["backYoke", "construction"], ["backBody", "outline"], ["backBody", "construction"],
-    ["shoulderYoke", "outline"], ["shoulderYoke", "construction"]
+    ["shoulderYoke", "outline"], ["shoulderYoke", "construction"],
+    ["frontCenter", "outline"], ["frontCenter", "construction"], ["frontSide", "outline"], ["frontSide", "construction"],
+    ["backCenter", "outline"], ["backCenter", "construction"], ["backSide", "outline"], ["backSide", "construction"]
   ];
 
   function fail(reason, detail) {

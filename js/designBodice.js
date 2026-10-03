@@ -729,6 +729,10 @@
     if (applyGather && !applyYoke) fail("yoke-gather-needs-yoke-seam");
     if (applyYoke && applySeam) fail("yoke-seam-waist-seam-conflict");
     if (applyYoke && applyFlare) fail("yoke-seam-flare-conflict");
+    // 프린세스 라인 Ⓔ(P.18) — 앞·뒤를 중심·옆 조각으로 가른다(순수 연산은 `js/designPrincess.js`). front/back 은 전체 몸판 그대로 두고 네 슬롯만 추가한다.
+    var princess = body.princess, applyPrincess = (princess === "E");
+    if (princess != null && princess !== false && !applyPrincess) fail("invalid-body-princess", princess);
+    if (applyPrincess && (applySeam || applyYoke || applyFlare)) fail("princess-conflict");   // 허리 이음선·요크·플레어와 함께 쓸 수 없다(한 번에 한 가지 조각 분리)
     if (applySeam && !(L > 0)) fail("waist-seam-needs-hem");   // 밑단(엉덩이 길이)이 없으면 페플럼이 없다
     var applyScales = (dartScales != null);
     if (applyScales) {
@@ -842,6 +846,17 @@
         outGeom.backYoke = yk.backYoke; outGeom.backBody = yk.backBody;
       }
       outGeom.yokeSeam = yk.meta;
+    }
+    // ★ 프린세스 라인 Ⓔ 도 맨 마지막(형상 확정 뒤). front/back 은 바이트 불변, 네 슬롯과 검산 메타만 추가한다. 실패는 그대로 올린다(부분 결과 없음).
+    if (applyPrincess) {
+      var DP = (typeof window !== "undefined") && window.designPrincess;
+      if (!DP || typeof DP.split !== "function") fail("designPrincess-missing");
+      var pr;
+      try { pr = DP.split({ front: fPiece, back: bPiece }); }
+      catch (e) { fail("princess-failed", (e.reason || e.message) + (e.detail !== undefined ? " " + JSON.stringify(e.detail) : "")); }
+      outGeom.frontCenter = pr.frontCenter; outGeom.frontSide = pr.frontSide;
+      outGeom.backCenter = pr.backCenter; outGeom.backSide = pr.backSide;
+      outGeom.princess = pr.meta;
     }
     return outGeom;
   }

@@ -27,7 +27,7 @@ const sandbox = {
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 const load = (f) => vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "..", "js", f), "utf8"), sandbox, { filename: f });
-["designLineTool.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designBodice.js", "bodicePresets.js", "designYokeSeam.js"].forEach(load);
+["designLineTool.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designBodice.js", "bodicePresets.js", "designYokeSeam.js", "designPrincess.js"].forEach(load);
 const W = sandbox.window, DB = W.designBodice, DY = W.designYokeSeam, T = W.designLineTool;
 const REF = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "blockReferenceGeometry.json"), "utf8"));
 const SNAP = J(REF);

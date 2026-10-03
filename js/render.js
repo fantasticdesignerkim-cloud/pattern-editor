@@ -442,6 +442,26 @@ function _appendPeplumAnnotation(grp, model, dy){
 
 // 요크 이음선 Ⓠ 제작 정보(표시 전용): 조각명 넷 + «이음선» 글자. 수치는 만들지 않는다. geometry·hit·계측·hash 무관.
 function _yokeModeOf(g){ return !!(g && g.frontBody && g.backBody && ((g.frontYoke && g.backYoke) || g.shoulderYoke)); }   // Ⓠ~Ⓣ = 요크 둘 · Ⓤ = 어깨 요크 한 장
+// 프린세스 라인 Ⓔ: 중심·옆 조각 네 장(전체 앞/뒤판은 그리지 않는다). 패턴선 도구는 요크 모드와 같은 이유로 잠긴다.
+function _princessModeOf(g){ return !!(g && g.frontCenter && g.frontSide && g.backCenter && g.backSide); }
+function _appendPrincessAnnotation(grp, model, pc){
+  if(!model) return;
+  const g=E("g",{ "data-design-princess":"annotation", "data-anno-piece":pc, class:"yoke-anno" });
+  model.labels.filter(l=>l.piece===pc).forEach(l=>{
+    const [x,y]=c2p(l.at.x,l.at.y);
+    g.appendChild(E("text",{ x, y, class:"yoke-anno-title", "text-anchor":"middle", "data-anno-text":l.key }, l.text));
+  });
+  model.seams.filter(l=>l.piece===pc).forEach(l=>{
+    const [x,y]=c2p(l.at.x,l.at.y);
+    g.appendChild(E("text",{ x, y:y-5, class:"yoke-anno-seam", "text-anchor":"middle", "data-anno-text":l.key+"-seam" }, l.text));
+  });
+  (model.notes||[]).filter(l=>l.piece===pc).forEach(l=>{
+    const [x,y]=c2p(l.at.x,l.at.y);
+    g.appendChild(E("circle",{ cx:x, cy:y, r:3, class:"yoke-anno-seam", "data-anno-text":l.key+"-dot" }));
+    g.appendChild(E("text",{ x:x+8, y:y+4, class:"yoke-anno-seam", "text-anchor":"start", "data-anno-text":l.key }, l.text));
+  });
+  grp.appendChild(g);
+}
 function _appendYokeAnnotation(grp, model, pc){
   if(!model) return;
   const g=E("g",{ "data-design-yoke":"annotation", "data-anno-piece":pc, class:"yoke-anno" });
@@ -544,10 +564,14 @@ function render(){
     };
     // Ⓤ: 어깨 요크는 한 장이고 좌표계가 뒤(back) 쪽이다 → 뒤 서브셋이 어깨 요크 + 뒤 몸판을, 앞 서브셋은 앞 몸판만 그린다.
     const bodyOnly = (g, side) => { const sub = { front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }; const bd = window.designLayout ? window.designLayout.peplumDisplayPiece(g, side + "Body") : null; if (bd) sub[side + "Body"] = bd; return sub; };
-    const frontSub  = (g) => g.shoulderYoke && g.frontBody ? bodyOnly(g, "front")
+    // 프린세스 Ⓔ: 중심·옆 조각 네 장을 **좌표 그대로**(표시 내림 없음) 앞/뒤 서브셋에 나눠 담는다.
+    const princessSub = (g, side) => ({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY, [side + "Center"]: g[side + "Center"], [side + "Side"]: g[side + "Side"] });
+    const frontSub  = (g) => _princessModeOf(g) ? princessSub(g, "front")
+      : g.shoulderYoke && g.frontBody ? bodyOnly(g, "front")
       : g.frontYoke && g.frontBody ? withYoke({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }, g, "front")
       : withPep({ front: g.front, back: EMPTY, shared: g.shared, sleeve: EMPTY }, g, "frontPeplum");
-    const backSub   = (g) => g.shoulderYoke && g.backBody ? (() => { const sub = bodyOnly(g, "back"); sub.shoulderYoke = g.shoulderYoke; return sub; })()
+    const backSub   = (g) => _princessModeOf(g) ? princessSub(g, "back")
+      : g.shoulderYoke && g.backBody ? (() => { const sub = bodyOnly(g, "back"); sub.shoulderYoke = g.shoulderYoke; return sub; })()
       : g.backYoke && g.backBody ? withYoke({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: EMPTY }, g, "back")
       : withPep({ front: EMPTY, back: g.back, shared: EMPTY, sleeve: EMPTY }, g, "backPeplum");
     const sleeveSub = (g) => ({ front: EMPTY, back: EMPTY, shared: EMPTY, sleeve: g.sleeve });
@@ -576,7 +600,8 @@ function render(){
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
       // 요크 모드에서는 패턴선 도구가 꺼져 있고, 기존 패턴선은 **전체 몸판 좌표**라 요크·몸판 표시와 어긋나므로 그리지 않는다
       //   (데이터는 그대로 — 다른 프리셋으로 돌아가면 다시 보인다).
-      if (!_yokeModeOf(dp.working.geometry)) _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
+      if (!_yokeModeOf(dp.working.geometry) && !_princessModeOf(dp.working.geometry)) _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
+      if (_princessModeOf(dp.working.geometry)) _appendPrincessAnnotation(grp, window.designLayout && window.designLayout.princessLabels(dp.working.geometry), pc);
       if (_yokeModeOf(dp.working.geometry)) _appendYokeAnnotation(grp, window.designLayout && window.designLayout.yokeLabels(dp.working.geometry), pc);
       if (_pepOn && _pepAll[pc]) _appendPeplumAnnotation(grp, _pepAll[pc], dp.working.geometry.waistSeam ? window.designLayout.peplumDrop(dp.working.geometry, pc + "Peplum") : 0);
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)

@@ -51,7 +51,8 @@
     { key: "peplumFlare", label: "페플럼 맞대면서 플레어 벌리기", unit: "" },
     { key: "peplumCut", label: "페플럼 WL 등분 수직 절개로 벌리기", unit: "" },
     { key: "yokeSeam", label: "요크 이음선(요크·몸판 조각 분리)", unit: "" },
-    { key: "yokeGather", label: "요크 이음선 아래 몸판 중심 개더 띠", unit: "" }
+    { key: "yokeGather", label: "요크 이음선 아래 몸판 중심 개더 띠", unit: "" },
+    { key: "princess", label: "프린세스 이음선(앞·뒤 중심·옆 조각 분리)", unit: "" }
   ];
   var BODY_KEYS = BODY_FIELDS.map(function (f) { return f.key; });
   var DART_SYMBOLS = ["a", "b", "d", "e"];   // [패턴학교]가 쓰는 봉제 허리다트 넷
@@ -84,14 +85,12 @@
         availVariant("bunka-bodice-D", "D", "D · 다트 a·b·d(½)·e · 옆선 −1.5 · 밑단 +1", 17)
       ] },
     { id: "princess-line", order: 3, label: "프린세스 라인", symbol: "E", page: 18,
-      availability: "pending-op", note: PENDING_NOTE,
-      familyNote: "이음선으로 조각을 나누고 앞 AH 다트를 닫는다.",
+      availability: "available", note: null,
+      familyNote: "어깨(뒤는 다트 입구)에서 밑단까지 이음선으로 앞·뒤를 중심·옆 조각으로 나눈다. 앞 AH 다트는 BP 를 축으로 닫고, 허리 다트 a·e 는 이음선의 마름모가 된다(처리 방법 P.160).",
       variants: [
-        pendingVariant("bunka-bodice-E", "E", "E · 허리 다트 1개 이용 · 옆선 −1 · 밑단 +1", 18,
-          "다트 a·e 를 쓰되 e 를 옆쪽으로 이동. 앞 AH 다트를 닫는다(0.5). 앞·옆 조각으로 분리",
-          "이음선으로 **조각을 실제로 분리**하고 AH 다트를 닫아야 한다(처리 방법 160). 현재 절개·파트 분리는 파생 미리보기(working.parts)일 뿐 디자인 결과로 확정되지 않고, 디자인 단계에서 다트를 닫는 경로가 없다."),
+        availVariant("bunka-bodice-E", "E", "E · 프린세스 이음선(앞·뒤 중심/옆 4조각) · 다트 a·e · 옆선 −1 · 밑단 +1", 18),
         pendingVariant("bunka-bodice-F", "F", "F · 프린세스 라인 변형", 19, null,
-          "E 와 같은 이유(미판독 — E 착수 시 함께 읽는다).")
+          "미판독 — E 의 이음선 규칙(P.18)만 확정했다. F(P.19)는 별도 판독·승인 후 착수한다.")
       ] },
     { id: "flare-line", order: 4, label: "플레어 라인", symbol: "G", page: 20,
       availability: "available", note: null,
@@ -289,6 +288,16 @@
       body: { hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 0, d: 0, e: 1 } }
     },
     {
+      id: "bunka-bodice-E", label: "교재 E 프린세스 라인", familyId: "princess-line", symbol: "E", page: 18,
+      description: "허리 다트 a·e 를 이음선으로 · 옆선 1cm 줄임 · 밑단 1cm 추가 · 앞 AH 다트는 BP 를 축으로 닫는다 · 앞·뒤 각각 중심·옆 2조각(총 4조각)",
+      source: "[패턴학교] 프린세스 라인 Ⓔ(P.18) · 처리 방법 닫는다(P.160)",
+      baseMethod: "bunka-bodice-E-v1",
+      // 사용자 확정(2026-10-03, 도해 실측 기준 A안): 앞 어깨 절개 시작점 = 목점에서 어깨 호길이 50% · 어깨→BP 이음선 = 기준 직선에서 진동 쪽으로 최대 0.5cm 곡선 ·
+      //   뒤 = 기존 어깨 다트 입구에서 시작 · 허리 다트 a·e 마름모는 이음선 축(위쪽 다트 끝 x)에 맞춘다 · 앞 AH 다트만 BP 고정 기본각으로 닫는다 ·
+      //   어깨는 강체 회전이라 길이·직선 연속 보존. 몸판 파라미터는 Ⓒ 와 같다.
+      body: { hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 0, d: 0, e: 1 }, princess: "E" }
+    },
+    {
       id: "bunka-bodice-D", label: "교재 D 셰이프트(다트 4개)", familyId: "shaped-line", symbol: "D", page: 17,
       description: "허리 다트 a·b·d·e 전부 사용(단 d 는 ½) · 옆선 1.5cm 줄임 · 밑단 1cm 추가",
       source: "[패턴학교] 셰이프트 라인 Ⓓ(P.17)",
@@ -319,6 +328,11 @@
         if (v !== true && v !== "S" && v !== "T" && v !== "U" && v !== "V") fail("invalid-body", id + ".yokeSeam");   // true = Ⓠ·Ⓡ(P.30–31) · "S" = Ⓢ(P.32) · "T" = Ⓣ(P.33) · "U" = Ⓤ(P.34)
         if (body.waistSeam === true) fail("yoke-seam-waist-seam-conflict", id);
         if (body.flare != null) fail("yoke-seam-flare-conflict", id);
+        return;
+      }
+      if (k === "princess") {
+        if (v !== "E") fail("invalid-body", id + ".princess");   // "E" = Ⓔ(P.18)
+        if (body.waistSeam === true || body.yokeSeam != null || body.flare != null) fail("princess-conflict", id);
         return;
       }
       if (k === "yokeGather") {

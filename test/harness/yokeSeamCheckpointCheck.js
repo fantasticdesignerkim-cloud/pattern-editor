@@ -25,7 +25,7 @@ sandbox.window.designWorkflow = { current: () => PROJECT };
 // designSleeve 는 프로덕션 모듈이 UI 결합이라 cap 측정만 스텁(sleeveCheckpointCheck 와 같은 방식). 나머지는 실제 모듈.
 let PRIM = null;
 sandbox.window.designSleeve = { capPrimitives: () => PRIM, sleeveOutlineSelfIntersects: () => false };
-["designLineTool.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designYokeSeam.js", "designBodice.js", "bodicePresets.js",
+["designLineTool.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designYokeSeam.js", "designPrincess.js", "designBodice.js", "bodicePresets.js",
   "bodiceCheckpoint.js", "sleeveCheckpoint.js", "designCollar.js", "collarCheckpoint.js", "designResult.js"].forEach(load);
 const W = sandbox.window, DB = W.designBodice, BP = W.bodicePresets, BC = W.bodiceCheckpoint, SC = W.sleeveCheckpoint, DC = W.designCollar, CC = W.collarCheckpoint, DR = W.designResult;
 const REF = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "blockReferenceGeometry.json"), "utf8"));

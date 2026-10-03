@@ -30,16 +30,18 @@
   //   허리 이음선 Ⓜ 의 페플럼(frontPeplum/backPeplum)은 **그 짝(앞/뒤판)의 offset 을 따른다** — 별도 드래그 조각이
   //   아니라 한 벌로 움직이고, 겹치지 않도록 표시만 허리 아래로 내린다(아래 peplumDrop). 형상 좌표는 불변.
   const PIECE_KEYS = {
-    front: ["front", "shared", "frontPeplum", "frontYoke", "frontBody"],
-    back: ["back", "backPeplum", "backYoke", "backBody", "shoulderYoke"],   // Ⓤ 어깨 요크 한 장은 좌표계가 뒤(back) 쪽이라 뒤 피스가 호스트다
+    front: ["front", "shared", "frontPeplum", "frontYoke", "frontBody", "frontCenter", "frontSide"],
+    back: ["back", "backPeplum", "backYoke", "backBody", "shoulderYoke", "backCenter", "backSide"],   // Ⓤ 어깨 요크 한 장은 좌표계가 뒤(back) 쪽이라 뒤 피스가 호스트다
     sleeve: ["sleeve"],
-    body: ["front", "back", "shared", "frontPeplum", "backPeplum", "frontYoke", "frontBody", "backYoke", "backBody", "shoulderYoke"]   // 하위호환(앞+뒤 묶음)
+    body: ["front", "back", "shared", "frontPeplum", "backPeplum", "frontYoke", "frontBody", "backYoke", "backBody", "shoulderYoke", "frontCenter", "frontSide", "backCenter", "backSide"]   // 하위호환(앞+뒤 묶음)
   };
   //   요크 이음선 Ⓠ: 요크가 있으면 **전체 앞/뒤판은 표시하지 않는다**(요크+몸판이 대신 그려진다) → bbox 에서도 뺀다.
   //   hit rect 는 여전히 앞/뒤 피스 하나(요크 ∪ 내려 그린 몸판)이고 좌표(geometry)는 불변이다.
   const YOKE_HOST_OF = { front: "frontYoke", shared: "frontYoke", back: "backYoke" };
   //   Ⓤ(P.34): 요크가 한 장(`shoulderYoke`)이면 앞·뒤 전체판이 그 한 장을 호스트로 삼아 숨고, 앞·뒤 몸판은 그 아래로 내려 그린다.
-  const yokeHosted = (geometry, pc) => !!YOKE_HOST_OF[pc] && !!(geometry[YOKE_HOST_OF[pc]] || geometry.shoulderYoke);
+  //   프린세스 Ⓔ(P.18): 중심·옆 조각 네 장이 있으면 전체 앞/뒤판은 그리지 않는다(조각이 그 자리를 그대로 대신한다 — 좌표 불변, 표시 내림 없음).
+  const princessMode = (geometry) => !!(geometry && geometry.frontCenter && geometry.frontSide && geometry.backCenter && geometry.backSide);
+  const yokeHosted = (geometry, pc) => (!!YOKE_HOST_OF[pc] && !!(geometry[YOKE_HOST_OF[pc]] || geometry.shoulderYoke)) || (princessMode(geometry) && (pc === "front" || pc === "shared" || pc === "back"));
   const PEPLUM_GAP = 3;        // 몸판(upper) 아래 끝과 페플럼 위 끝 사이 표시 간격(도안 cm)
   //   요크 모드에서는 **몸판이 요크 아래로** 내려간다(호스트 = 요크): 요크 아래 끝 + PEPLUM_GAP 아래에 몸판 위 끝.
   const PEPLUM_OF = { frontPeplum: "front", backPeplum: "back", frontBody: "frontYoke", backBody: "backYoke" };   // 조각 → 위쪽 짝
@@ -126,6 +128,33 @@
       return { key, piece, text: "개더 +" + (Math.round(gm.addedCm * 10) / 10) + "cm", addedCm: gm.addedCm, at: { x: (gm.centerX + gm.newCenterX) / 2, y: minY } };
     }).filter(Boolean);
     return gathers.length ? { labels, seams, gathers } : { labels, seams };
+  }
+  // 프린세스 Ⓔ 제작 정보(표시 전용, 순수): 조각명 넷 + 이음선 글자 + 핵심 수치(닫는 각·어깨 시작점·허리 다트). 좌표는 geometry 그대로(표시 내림 없음).
+  //   수치는 geometry.princess 메타의 값이며 체크포인트가 독립 재계산으로 검증한다. 프린세스가 아니면 null.
+  function princessLabels(geometry) {
+    if (!princessMode(geometry)) return null;
+    const pm = geometry.princess || {}, fm = pm.front, bm = pm.back, r2 = (v) => Math.round(v * 100) / 100, r1 = (v) => Math.round(v * 10) / 10;
+    const ptsOf = (b) => { const pts = []; (b.outline || []).forEach(p => pointsOfPrim(p, pts)); return pts; };
+    const mid = (pts) => { const xs = pts.map(q => q.x), ys = pts.map(q => q.y); return { x: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2, y: (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2 }; };
+    const defs = [["frontCenter", "앞 중심", "front"], ["frontSide", "앞 옆", "front"], ["backCenter", "뒤 중심", "back"], ["backSide", "뒤 옆", "back"]];
+    const labels = defs.map(([key, text, piece]) => ({ key, text, piece, at: mid(ptsOf(geometry[key])) }));
+    const seams = [["frontCenter", "front"], ["backCenter", "back"]].map(([key, piece]) => {
+      const ls = (geometry[key].outline || []).filter(p => p.edge === "princess-seam" && p.kind === "line");
+      if (!ls.length) return null;
+      const seg = ls.reduce((a, b) => (Math.hypot(b.to.x - b.from.x, b.to.y - b.from.y) > Math.hypot(a.to.x - a.from.x, a.to.y - a.from.y) ? b : a));
+      return { key, piece, text: "이음선", at: { x: (seg.from.x + seg.to.x) / 2, y: (seg.from.y + seg.to.y) / 2 } };
+    }).filter(Boolean);
+    const notes = [];
+    if (fm) {
+      notes.push({ key: "frontAh", piece: "front", at: fm.seamPoints.bp, text: "AH 다트 " + r2(fm.closedDart.angleDeg) + "° 닫음(BP 고정)" });
+      notes.push({ key: "frontShoulder", piece: "front", at: fm.seamPoints.shoulder, text: "어깨 " + Math.round(fm.shoulderRatio * 100) + "%(" + r1(fm.shoulderFromNpCm) + "cm)" });
+      notes.push({ key: "frontWaist", piece: "front", at: fm.seamPoints.waistApex, text: "다트 a " + r2(fm.waistDart.widthCm) + "cm → 이음선" });
+    }
+    if (bm) {
+      notes.push({ key: "backDart", piece: "back", at: bm.seamPoints.shoulderApex, text: "어깨 다트 " + r1(bm.absorbedDart.mouthWidthCm) + "cm → 이음선" });
+      notes.push({ key: "backWaist", piece: "back", at: bm.seamPoints.waistApex, text: "다트 e " + r2(bm.waistDart.widthCm) + "cm → 이음선" });
+    }
+    return { labels, seams, notes };
   }
   function bboxFromKeys(geometry, keys, roles) {
     const pts = [];
@@ -464,7 +493,7 @@
 
   window.designLayout = Object.freeze({
     // 순수(harness)
-    bboxOf, outlineBBoxOf, autoLayout, peplumDrop, peplumDisplayPiece, yokeLabels, sideSeamUnderarm, ensureLayout, bboxOfStand, collarAutoOffset,
+    bboxOf, outlineBBoxOf, autoLayout, peplumDrop, peplumDisplayPiece, yokeLabels, princessLabels, sideSeamUnderarm, ensureLayout, bboxOfStand, collarAutoOffset,
     // DOM 연동
     enterDesign, centerBody, placeSleeveRight, resetLayout, refreshAutoLayout, afterBodyLength, afterCollar, resetViewForDesign,
     cancelLayoutDrag   // 모드 전환 시 진행 중 배치 드래그 취소(designLineTool.setMode 에서 호출)

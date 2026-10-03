@@ -1306,11 +1306,210 @@
   }
   function yokeCanon(proj) {
     var g = proj && proj.working && proj.working.geometry;
+    if (princessMode(g)) return princessCanon(proj);   // 프린세스 Ⓔ: 중심·옆 네 조각(요크 키와 겹치지 않는다)
     if (g && g.shoulderYoke && g.frontBody && g.backBody) return { sy: canonOutline(g.shoulderYoke.outline), syc: canonOutline(g.shoulderYoke.construction || []), fb: canonOutline(g.frontBody.outline), fbc: canonOutline(g.frontBody.construction || []), bb: canonOutline(g.backBody.outline), bbc: canonOutline(g.backBody.construction || []) };   // Ⓤ: 어깨 요크 한 장
     if (!g || !g.frontYoke || !g.frontBody || !g.backYoke || !g.backBody) return null;
     var o = { fy: canonOutline(g.frontYoke.outline), fb: canonOutline(g.frontBody.outline), by: canonOutline(g.backYoke.outline), bb: canonOutline(g.backBody.outline) };
     if (g.backYoke.construction && g.backYoke.construction.length) o.byc = canonOutline(g.backYoke.construction);   // Ⓢ: 요크에 남는 열린 다트 다리 — 없으면 Ⓠ·Ⓡ hash 불변
     return o;
+  }
+
+  // ── 프린세스 라인 Ⓔ(P.18): 중심·옆 조각 네 장 ──
+  //   geometry.frontCenter/frontSide/backCenter/backSide(있을 때만). **geometry.princess 메타는 신뢰하지 않는다** — 폐곡선·연속성·자기교차·다트 흔적·
+  //   이음선 위치(어깨 50%·BP·다트 입구)·최대 0.5cm 곡선·BP 회전(AH 다트각)·이음 길이·어깨 직선 연속·면적 보존·조각 겹침을 출력 geometry 와 전체 몸판(front/back)에서
+  //   **전부 다시 계산**한다. 위반하면 완료를 막는다.
+  var PRINCESS_POS_EPS = 1e-4;      // 점 위치(cm)
+  var PRINCESS_SEAM_EPS = 1e-4;     // 앞 이음 길이 정합(cm) — 강체 회전이라 실제 오차는 ≈1e-13
+  var PRINCESS_LEG_EPS = 0.2;       // 뒤 이음 길이 차 상한(cm) = 어깨 다트 두 다리 길이 차(문서화된 ≈0.10)
+  var PRINCESS_BULGE_EPS = 2e-3;    // 최대 편차 0.5cm 허용(cm)
+  var PRINCESS_KINK_EPS = 1e-4;     // 봉제 정렬 프레임에서 어깨선 꺾임(도)
+  var PRINCESS_AREA_EPS = 0.05;
+  var PRINCESS_DARTS = ["front-bust", "front-waist-a", "back-shoulder", "back-waist-e"];
+  function princessMode(g) { return !!(g && g.frontCenter && g.frontSide && g.backCenter && g.backSide); }
+  function princessFlat(segs) { var L = 0, pts = []; segs.forEach(function (sg) { yokeFlatSeg(sg).forEach(function (ab) { L += Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y); }); }); return L; }
+  function princessPts(ring) { var pts = []; ring.forEach(function (sg) { yokeFlatSeg(sg).forEach(function (ab) { if (!pts.length) pts.push(ab[0]); pts.push(ab[1]); }); }); return pts; }
+  function princessOnEdge(p, pts) {
+    for (var i = 0; i < pts.length; i++) {
+      var a = pts[i], b = pts[(i + 1) % pts.length], dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+      var u = L2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2)) : 0;
+      if (Math.hypot(p.x - (a.x + u * dx), p.y - (a.y + u * dy)) <= 1e-5) return true;
+    }
+    return false;
+  }
+  function princessInside(p, pts) {
+    if (princessOnEdge(p, pts)) return false;
+    var inside = false;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var a = pts[i], b = pts[j];
+      if (((a.y > p.y) !== (b.y > p.y)) && (p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)) inside = !inside;
+    }
+    return inside;
+  }
+  // 두 폐곡선이 겹치는가(변이 가로지르거나 한쪽 점이 다른 쪽 엄격히 안쪽). 경계 접촉(이음선·점)은 겹침이 아니다.
+  function princessOverlap(ra, rb) {
+    var fa = [], fb = []; ra.forEach(function (sg) { yokeFlatSeg(sg).forEach(function (ab) { fa.push(ab); }); }); rb.forEach(function (sg) { yokeFlatSeg(sg).forEach(function (ab) { fb.push(ab); }); });
+    var o = function (p, q, r) { return (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x); };
+    var same = function (p, q) { return Math.hypot(p.x - q.x, p.y - q.y) < 1e-6; };
+    for (var i = 0; i < fa.length; i++) for (var j = 0; j < fb.length; j++) {
+      var A = fa[i][0], B = fa[i][1], C = fb[j][0], D = fb[j][1];
+      if (same(A, C) || same(A, D) || same(B, C) || same(B, D)) continue;
+      if (o(A, B, C) * o(A, B, D) < 0 && o(C, D, A) * o(C, D, B) < 0) return true;
+    }
+    var pa = princessPts(ra), pb = princessPts(rb);
+    return pa.some(function (q) { return princessInside(q, pb); }) || pb.some(function (q) { return princessInside(q, pa); });
+  }
+  function princessRot(p, o, th) { var c = Math.cos(th), s = Math.sin(th), dx = p.x - o.x, dy = p.y - o.y; return { x: o.x + dx * c - dy * s, y: o.y + dx * s + dy * c }; }
+  function princessRotSeg(sg, o, th) { var q = { kind: sg.kind, from: princessRot(sg.from, o, th), to: princessRot(sg.to, o, th) }; if (sg.kind === "cubic") { q.c1 = princessRot(sg.c1, o, th); q.c2 = princessRot(sg.c2, o, th); } return q; }
+  function princessSameSeg(a, b, eps) { return a.kind === b.kind && ["from", "to", "c1", "c2"].every(function (k) { return !a[k] || Math.hypot(a[k].x - b[k].x, a[k].y - b[k].y) <= eps; }); }
+  function princessState(proj) {
+    var g = proj && proj.working && proj.working.geometry;
+    if (!g) return null;
+    var wantsPrincess = !!(proj.working.parameters && proj.working.parameters.body && proj.working.parameters.body.princess === "E");
+    if (!wantsPrincess && !(g.frontCenter || g.frontSide || g.backCenter || g.backSide || g.princess)) return null;   // 파라미터가 프린세스를 말하는데 조각이 없으면 "없다"로 거부한다
+    var out = { variant: "E", front: { side: "front", reason: null }, back: { side: "back", reason: null }, ok: false, reason: null };
+    var bad = function (reason, side) { out.ok = false; out.reason = reason; if (side && out[side]) out[side].reason = reason; return out; };
+    var pbody = proj.working.parameters && proj.working.parameters.body;
+    var okPiece = function (pc) { return pc && Array.isArray(pc.outline) && pc.outline.length >= 3; };
+    var FC = g.frontCenter, FS = g.frontSide, BC = g.backCenter, BS = g.backSide, wF = g.front, wB = g.back;
+    if (!pbody || pbody.princess !== "E") return bad("princess-variant-mismatch");   // 파라미터가 말하는 규칙이 우선 — 메타로 다른 규칙을 고르지 않는다
+    if (!okPiece(FC) || !okPiece(FS) || !okPiece(BC) || !okPiece(BS) || !okPiece(wF) || !okPiece(wB) || !g.princess || g.princess.variant !== "E") return bad("princess-missing");
+    if (g.frontYoke || g.backYoke || g.shoulderYoke || g.frontBody || g.backBody || g.frontPeplum || g.backPeplum) return bad("princess-missing");   // 한 번에 한 가지 조각 분리
+    var rings = {}, mets = {};
+    var pieces = { frontCenter: FC, frontSide: FS, backCenter: BC, backSide: BS };
+    var keys = Object.keys(pieces);
+    for (var ki = 0; ki < keys.length; ki++) {
+      var r = yokeOrderRing(ringSegs(pieces[keys[ki]].outline));
+      if (!r) return bad("princess-open", keys[ki].indexOf("front") === 0 ? "front" : "back");
+      rings[keys[ki]] = r; mets[keys[ki]] = yokeRingMetrics(r);
+      if (mets[keys[ki]].selfIntersects || !(mets[keys[ki]].areaCm2 > 0)) return bad("princess-self-intersection", keys[ki].indexOf("front") === 0 ? "front" : "back");
+    }
+    // 흡수·닫은 다트는 어느 조각에도 남지 않는다(닫힌 다트 = 과거 흔적).
+    var hasDart = function (pc) { return pc.outline.concat(pc.construction || []).some(function (sg) { return sg && sg.dart && PRINCESS_DARTS.indexOf(sg.dart.id) >= 0; }); };
+    if (keys.some(function (k) { return hasDart(pieces[k]); })) return bad("princess-dart-open");
+    var wholeLegs = function (pc, id) { return (pc.construction || []).filter(function (sg) { return sg && sg.kind === "line" && sg.dart && sg.dart.id === id; }); };
+    var apexOfLeg = function (sg) { return sg.dart.apexAt === "to" ? sg.to : sg.from; }, footOfLeg = function (sg) { return sg.dart.apexAt === "to" ? sg.from : sg.to; };
+    var seamOf = function (pc) { return pc.outline.filter(function (sg) { return sg && sg.edge === "princess-seam"; }); };
+    var cxOf = function (pc) { return pc.outline.filter(function (sg) { return sg && sg.edge === "center"; }).map(function (sg) { return sg.from.x; })[0]; };
+    var lenSeg = function (sg) { return princessFlat([sg]); };
+    var hemWidth = function (pc) { var L = 0; pc.outline.forEach(function (sg) { if (sg && sg.edge === "hem") L += Math.hypot(sg.to.x - sg.from.x, sg.to.y - sg.from.y); }); return L; };
+    var hemY = wF.outline.filter(function (sg) { return sg && sg.edge === "hem"; }).map(function (sg) { return sg.from.y; })[0];
+
+    // ── 앞 ──
+    var fSeamC = ringSegs(seamOf(FC)), fSeamS = ringSegs(seamOf(FS));
+    if (fSeamC.length !== 4 || fSeamS.length !== 4) return bad("princess-seam-missing", "front");
+    var lenFC = princessFlat(fSeamC), lenFS = princessFlat(fSeamS);
+    out.front.seamLenCenterCm = round4(lenFC); out.front.seamLenSideCm = round4(lenFS); out.front.deltaCm = round4(lenFC - lenFS);
+    if (!(Math.abs(lenFC - lenFS) <= PRINCESS_SEAM_EPS)) return bad("princess-seam-length-mismatch", "front");
+    var ahLegs = wholeLegs(wF, "front-bust"), waLegs = wholeLegs(wF, "front-waist-a");
+    if (ahLegs.length !== 2 || waLegs.length !== 2) return bad("princess-seam-missing", "front");
+    var BP = apexOfLeg(ahLegs[0]);
+    var shSegs = wF.outline.filter(function (sg) { return sg && sg.edge === "shoulder"; });
+    var neckSegs = wF.outline.filter(function (sg) { return sg && sg.edge === "neckline"; });
+    if (shSegs.length !== 1 || !neckSegs.length) return bad("princess-shoulder-missing", "front");
+    var shE = endpointsOf(shSegs[0]), neckPts = []; neckSegs.forEach(function (sg) { endpointsOf(sg).forEach(function (q) { neckPts.push(q); }); });
+    var nearAny = function (q) { return neckPts.some(function (n) { return Math.hypot(n.x - q.x, n.y - q.y) < 1e-3; }); };
+    var NP = nearAny(shE[0]) ? shE[0] : shE[1], SP = NP === shE[0] ? shE[1] : shE[0];
+    var S0 = { x: NP.x + (SP.x - NP.x) * 0.5, y: NP.y + (SP.y - NP.y) * 0.5 };                 // 목점에서 어깨 호길이 50%(직선)
+    var seamTop = fSeamC.filter(function (sg) { return sg.kind === "cubic"; });
+    if (seamTop.length !== 1) return bad("princess-seam-missing", "front");
+    var CC = seamTop[0];
+    var dFrom = Math.hypot(CC.from.x - S0.x, CC.from.y - S0.y), dTo = Math.hypot(CC.to.x - S0.x, CC.to.y - S0.y);
+    if (Math.min(dFrom, dTo) > PRINCESS_POS_EPS) return bad("princess-seam-position-mismatch", "front");   // 어깨 시작점 = 목점에서 어깨 호길이 50%
+    var Cs = dFrom <= dTo ? CC : { kind: "cubic", from: CC.to, c1: CC.c2, c2: CC.c1, to: CC.from };   // S0→BP 방향
+    if (Math.hypot(Cs.to.x - BP.x, Cs.to.y - BP.y) > PRINCESS_POS_EPS) return bad("princess-seam-position-mismatch", "front");
+    // 최대 0.5cm 곡선: 기준 직선에서 앞중심 반대(진동) 쪽으로 볼록, 반대편 편차 0
+    var cxF = cxOf(wF), dx = BP.x - S0.x, dy = BP.y - S0.y, Lc = Math.hypot(dx, dy), nx = -dy / Lc, ny = dx / Lc;
+    if (nx * (cxF - S0.x) > 0) { nx = -nx; ny = -ny; }
+    var dMax = -Infinity, dMin = Infinity;
+    for (var bi = 0; bi <= 200; bi++) {
+      var bt = bi / 200, bu = 1 - bt;
+      var bx = bu * bu * bu * Cs.from.x + 3 * bu * bu * bt * Cs.c1.x + 3 * bu * bt * bt * Cs.c2.x + bt * bt * bt * Cs.to.x, by = bu * bu * bu * Cs.from.y + 3 * bu * bu * bt * Cs.c1.y + 3 * bu * bt * bt * Cs.c2.y + bt * bt * bt * Cs.to.y;
+      var dv = (bx - S0.x) * nx + (by - S0.y) * ny; if (dv > dMax) dMax = dv; if (dv < dMin) dMin = dv;
+    }
+    out.front.bulgeMaxCm = round4(dMax);
+    if (!(Math.abs(dMax - 0.5) <= PRINCESS_BULGE_EPS) || !(dMin >= -1e-9)) return bad("princess-seam-bulge", "front");
+    // 옆 조각 윗부분 = 중심 곡선을 BP 축으로 AH 다트각만큼 회전(닫는다). 각은 전체 몸판의 두 다리에서 다시 계산한다.
+    var farOf = function (sg) { return sg.dart.apexAt === "to" ? sg.from : sg.to; };
+    var m0 = { x: farOf(ahLegs[0]).x - BP.x, y: farOf(ahLegs[0]).y - BP.y }, m1 = { x: farOf(ahLegs[1]).x - BP.x, y: farOf(ahLegs[1]).y - BP.y };
+    var ang = Math.atan2(m0.x * m1.y - m0.y * m1.x, m0.x * m1.x + m0.y * m1.y), angAbs = Math.abs(ang);
+    out.front.angleDeg = round4(angAbs * 180 / Math.PI);
+    var sTop = fSeamS.filter(function (sg) { return sg.kind === "cubic"; });
+    if (sTop.length !== 1) return bad("princess-seam-missing", "front");
+    var sSegS = sTop[0];
+    var sFwd = Math.hypot(sSegS.to.x - BP.x, sSegS.to.y - BP.y) <= PRINCESS_POS_EPS ? sSegS : { kind: "cubic", from: sSegS.to, c1: sSegS.c2, c2: sSegS.c1, to: sSegS.from };   // S0'→BP
+    var theta = null;
+    [angAbs, -angAbs].forEach(function (th) { if (theta == null && princessSameSeg(princessRotSeg(Cs, BP, th), sFwd, 1e-6)) theta = th; });
+    if (theta == null) return bad("princess-ah-not-closed", "front");
+    out.front.closedAngleDeg = round4(Math.abs(theta) * 180 / Math.PI);
+    // 허리 다트 a: 마름모 — 축 x = BP.x, 폭 = 전체 몸판 a 의 폭, 끝 y = 전체 a 의 끝 y, 밑단 점 = (축, 밑단 y)
+    var fa1 = footOfLeg(waLegs[0]), fa2 = footOfLeg(waLegs[1]), widthA = Math.abs(fa1.x - fa2.x), apexA = apexOfLeg(waLegs[0]);
+    var linesC = fSeamC.filter(function (sg) { return sg.kind === "line"; }), linesS = fSeamS.filter(function (sg) { return sg.kind === "line"; });
+    if (linesC.length !== 3 || linesS.length !== 3) return bad("princess-seam-missing", "front");
+    var pointsOf = function (ls) { var o = []; ls.forEach(function (sg) { o.push(sg.from, sg.to); }); return o; };
+    var footAt = function (ls) { var p = pointsOf(ls).filter(function (q) { return Math.abs(q.y - fa1.y) <= PRINCESS_POS_EPS; }); return p[0]; };
+    var fC = footAt(linesC), fS = footAt(linesS);
+    var Hc = pointsOf(linesC).filter(function (q) { return Math.abs(q.y - hemY) <= PRINCESS_POS_EPS; })[0], Hs = pointsOf(linesS).filter(function (q) { return Math.abs(q.y - hemY) <= PRINCESS_POS_EPS; })[0];
+    if (!fC || !fS || !Hc || !Hs) return bad("princess-waist-dart-mismatch", "front");
+    if (!(Math.abs(Math.abs(fC.x - fS.x) - widthA) <= PRINCESS_POS_EPS) || !(Math.abs((fC.x + fS.x) / 2 - BP.x) <= PRINCESS_POS_EPS) || !(Math.abs(Hc.x - BP.x) <= PRINCESS_POS_EPS) || !(Math.abs(Hs.x - BP.x) <= PRINCESS_POS_EPS)) return bad("princess-waist-dart-mismatch", "front");
+    if (!pointsOf(linesC).concat(pointsOf(linesS)).some(function (q) { return Math.abs(q.x - BP.x) <= PRINCESS_POS_EPS && Math.abs(q.y - apexA.y) <= PRINCESS_POS_EPS; })) return bad("princess-waist-dart-mismatch", "front");
+    out.front.waistDartCm = round4(widthA);
+    // 어깨: 봉제 정렬 프레임(옆 조각 윗부분을 BP 축으로 되돌림)에서 중심·옆 어깨선이 한 직선, 길이 합 = 전체 어깨
+    var shC = FC.outline.filter(function (sg) { return sg && sg.edge === "shoulder"; }), shS = FS.outline.filter(function (sg) { return sg && sg.edge === "shoulder"; });
+    if (shC.length !== 1 || shS.length !== 1) return bad("princess-shoulder-missing", "front");
+    var sb0 = princessRot(shS[0].from, BP, -theta), sb1 = princessRot(shS[0].to, BP, -theta);
+    var uC = { x: shC[0].to.x - shC[0].from.x, y: shC[0].to.y - shC[0].from.y }, uS = { x: sb1.x - sb0.x, y: sb1.y - sb0.y };
+    var kinkDeg = Math.abs(Math.atan2(uC.x * uS.y - uC.y * uS.x, uC.x * uS.x + uC.y * uS.y)) * 180 / Math.PI; if (kinkDeg > 90) kinkDeg = 180 - kinkDeg;
+    var shLenC = Math.hypot(uC.x, uC.y), shLenS = Math.hypot(shS[0].to.x - shS[0].from.x, shS[0].to.y - shS[0].from.y), shWhole = Math.hypot(SP.x - NP.x, SP.y - NP.y);
+    out.front.shoulderKinkDeg = round4(kinkDeg); out.front.shoulderTotalCm = round4(shLenC + shLenS);
+    if (!(kinkDeg <= PRINCESS_KINK_EPS) || !(Math.abs(shLenC + shLenS - shWhole) <= 1e-6)) return bad("princess-shoulder-kink", "front");
+    // 밑단 폭 보존 · 면적 보존 · 겹침 없음
+    if (!(Math.abs(hemWidth(FC) + hemWidth(FS) - hemWidth(wF)) <= 1e-6)) return bad("princess-hem-changed", "front");
+    var rwF = yokeOrderRing(ringSegs(wF.outline).concat(ahLegs.map(function (sg) { return { kind: "line", from: cp(sg.from), to: cp(sg.to) }; })), YOKE_WHOLE_EPS);
+    if (!rwF) return bad("princess-seam-missing", "front");
+    var aWF = yokeRingMetrics(rwF).areaCm2, dF = 0.5 * widthA * (hemY - apexA.y);
+    out.front.areaDeltaCm2 = round4(mets.frontCenter.areaCm2 + mets.frontSide.areaCm2 - (aWF - dF));
+    if (!(Math.abs(out.front.areaDeltaCm2) <= PRINCESS_AREA_EPS)) return bad("princess-area-mismatch", "front");
+    if (princessOverlap(rings.frontCenter, rings.frontSide)) return bad("princess-pieces-overlap", "front");
+
+    // ── 뒤 ──
+    var bSeamC = ringSegs(seamOf(BC)), bSeamS = ringSegs(seamOf(BS));
+    if (bSeamC.length !== 4 || bSeamS.length !== 4 || !bSeamC.concat(bSeamS).every(function (sg) { return sg.kind === "line"; })) return bad("princess-seam-missing", "back");
+    var shLegs = wholeLegs(wB, "back-shoulder"), weLegs = wholeLegs(wB, "back-waist-e");
+    if (shLegs.length !== 2 || weLegs.length !== 2) return bad("princess-seam-missing", "back");
+    var A1 = apexOfLeg(shLegs[0]), mouths = shLegs.map(farOf), cxB = cxOf(wB);
+    var Mb = Math.abs(mouths[0].x - cxB) <= Math.abs(mouths[1].x - cxB) ? mouths[0] : mouths[1], Ma = Mb === mouths[0] ? mouths[1] : mouths[0];
+    var endsOf = function (ls) { var o = []; ls.forEach(function (sg) { o.push(sg.from, sg.to); }); return o; };
+    var hasPt = function (ls, q) { return endsOf(ls).some(function (e) { return Math.hypot(e.x - q.x, e.y - q.y) <= PRINCESS_POS_EPS; }); };
+    if (!hasPt(bSeamC, Mb) || !hasPt(bSeamS, Ma) || !hasPt(bSeamC, A1) || !hasPt(bSeamS, A1)) return bad("princess-seam-position-mismatch", "back");   // 어깨 다트 입구에서 시작
+    var lenBC = princessFlat(bSeamC), lenBS = princessFlat(bSeamS), legDiff = Math.abs(Math.hypot(Ma.x - A1.x, Ma.y - A1.y) - Math.hypot(Mb.x - A1.x, Mb.y - A1.y));
+    out.back.seamLenCenterCm = round4(lenBC); out.back.seamLenSideCm = round4(lenBS); out.back.deltaCm = round4(lenBC - lenBS);
+    if (!(Math.abs(Math.abs(lenBC - lenBS) - legDiff) <= PRINCESS_SEAM_EPS) || !(legDiff <= PRINCESS_LEG_EPS)) return bad("princess-seam-length-mismatch", "back");
+    var fe1 = footOfLeg(weLegs[0]), fe2 = footOfLeg(weLegs[1]), widthE = Math.abs(fe1.x - fe2.x), apexE = apexOfLeg(weLegs[0]);
+    var footAtB = function (ls) { return endsOf(ls).filter(function (q) { return Math.abs(q.y - fe1.y) <= PRINCESS_POS_EPS; })[0]; };
+    var eC = footAtB(bSeamC), eS = footAtB(bSeamS);
+    var HcB = endsOf(bSeamC).filter(function (q) { return Math.abs(q.y - hemY) <= PRINCESS_POS_EPS; })[0], HsB = endsOf(bSeamS).filter(function (q) { return Math.abs(q.y - hemY) <= PRINCESS_POS_EPS; })[0];
+    if (!eC || !eS || !HcB || !HsB) return bad("princess-waist-dart-mismatch", "back");
+    if (!(Math.abs(Math.abs(eC.x - eS.x) - widthE) <= PRINCESS_POS_EPS) || !(Math.abs((eC.x + eS.x) / 2 - A1.x) <= PRINCESS_POS_EPS) || !(Math.abs(HcB.x - A1.x) <= PRINCESS_POS_EPS) || !(Math.abs(HsB.x - A1.x) <= PRINCESS_POS_EPS)) return bad("princess-waist-dart-mismatch", "back");   // e 마름모는 이음선 축(어깨 다트 끝 x)에 맞춘다
+    if (!hasPt(bSeamC, { x: A1.x, y: apexE.y }) || !hasPt(bSeamS, { x: A1.x, y: apexE.y })) return bad("princess-waist-dart-mismatch", "back");
+    out.back.waistDartCm = round4(widthE); out.back.waistShiftCm = round4(A1.x - (fe1.x + fe2.x) / 2);
+    if (!(Math.abs(hemWidth(BC) + hemWidth(BS) - hemWidth(wB)) <= 1e-6)) return bad("princess-hem-changed", "back");
+    var shLenOf = function (pc) { var L = 0; pc.outline.forEach(function (sg) { if (sg && sg.edge === "shoulder") L += Math.hypot(sg.to.x - sg.from.x, sg.to.y - sg.from.y); }); return L; };
+    out.back.shoulderTotalCm = round4(shLenOf(BC) + shLenOf(BS));
+    if (!(Math.abs(shLenOf(BC) + shLenOf(BS) - shLenOf(wB)) <= 1e-6)) return bad("princess-shoulder-kink", "back");
+    var rwB = yokeOrderRing(ringSegs(wB.outline).concat(shLegs.map(function (sg) { return { kind: "line", from: cp(sg.from), to: cp(sg.to) }; })), YOKE_WHOLE_EPS);
+    if (!rwB) return bad("princess-seam-missing", "back");
+    var aWB = yokeRingMetrics(rwB).areaCm2, dB = 0.5 * widthE * (hemY - apexE.y);
+    out.back.areaDeltaCm2 = round4(mets.backCenter.areaCm2 + mets.backSide.areaCm2 - (aWB - dB));
+    if (!(Math.abs(out.back.areaDeltaCm2) <= PRINCESS_AREA_EPS)) return bad("princess-area-mismatch", "back");
+    if (princessOverlap(rings.backCenter, rings.backSide)) return bad("princess-pieces-overlap", "back");
+    out.ok = true; out.reason = null;
+    return out;
+  }
+  function princessCanon(proj) {
+    var g = proj && proj.working && proj.working.geometry;
+    if (!princessMode(g)) return null;
+    var o = {}; ["frontCenter", "frontSide", "backCenter", "backSide"].forEach(function (k) { o[k] = canonOutline(g[k].outline); o[k + "c"] = canonOutline(g[k].construction || []); });
+    return { pr: o };
   }
 
   // ── 검사 ──
@@ -1352,6 +1551,9 @@
     // 요크 이음선 Ⓠ(있을 때만): 네 조각을 출력 geometry 에서 재계산해 위반 시 완료를 막는다.
     var yokeSeam = yokeSeamState(proj);
     if (yokeSeam && !yokeSeam.ok) fails.push(yokeSeam.reason);
+    // 프린세스 Ⓔ(있을 때만): 네 조각을 출력 geometry 에서 재계산해 위반 시 완료를 막는다.
+    var princess = princessState(proj);
+    if (princess && !princess.ok) fails.push(princess.reason);
 
     var out = {
       ok: fails.length === 0,
@@ -1366,6 +1568,7 @@
       waistSeam: waistSeam            // null = 허리 이음선 미적용(기존 몸판)
     };
     if (yokeSeam) out.yokeSeam = yokeSeam;   // 요크 이음선 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
+    if (princess) out.princess = princess;   // 프린세스 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
     return out;
   }
 
@@ -1423,6 +1626,12 @@
       });
       result.yokeSeam = g.yokeSeam ? clone(g.yokeSeam) : null;
     }
+    if (princessMode(g)) {   // 프린세스 Ⓔ: 중심·옆 네 조각·메타를 동결 복제 보존(없으면 키 자체를 두지 않는다 — 기존 완료본 바이트 동일)
+      ["frontCenter", "frontSide", "backCenter", "backSide"].forEach(function (k) {
+        result[k] = { outline: clone(g[k].outline), construction: clone(g[k].construction || []) };
+      });
+      result.princess = g.princess ? clone(g.princess) : null;
+    }
     deepFreeze(result);
     proj.working.bodiceResult = result;   // 세션 전용(reload 시 소멸). reference·원본 불변.
     return { ok: true, result: result, check: c };
@@ -1450,7 +1659,11 @@
       { front: res.armholeLengths.front, back: res.armholeLengths.back },
       { half: res.necklineLengths.half }, res.placket ? res.placket.parameters : null,
       (res.frontPeplum && res.backPeplum) ? { f: canonOutline(res.frontPeplum.outline), b: canonOutline(res.backPeplum.outline) } : null,
-      (res.shoulderYoke && res.frontBody && res.backBody) ? { sy: canonOutline(res.shoulderYoke.outline), syc: canonOutline(res.shoulderYoke.construction || []), fb: canonOutline(res.frontBody.outline), fbc: canonOutline(res.frontBody.construction || []), bb: canonOutline(res.backBody.outline), bbc: canonOutline(res.backBody.construction || []) }
+      (res.frontCenter && res.frontSide && res.backCenter && res.backSide) ? (function () {
+        var o = {}; ["frontCenter", "frontSide", "backCenter", "backSide"].forEach(function (k) { o[k] = canonOutline(res[k].outline); o[k + "c"] = canonOutline(res[k].construction || []); });
+        return { pr: o };
+      })()
+      : (res.shoulderYoke && res.frontBody && res.backBody) ? { sy: canonOutline(res.shoulderYoke.outline), syc: canonOutline(res.shoulderYoke.construction || []), fb: canonOutline(res.frontBody.outline), fbc: canonOutline(res.frontBody.construction || []), bb: canonOutline(res.backBody.outline), bbc: canonOutline(res.backBody.construction || []) }
       : (res.frontYoke && res.frontBody && res.backYoke && res.backBody) ? (function () {
         var o = { fy: canonOutline(res.frontYoke.outline), fb: canonOutline(res.frontBody.outline), by: canonOutline(res.backYoke.outline), bb: canonOutline(res.backBody.outline) };
         if (res.backYoke.construction && res.backYoke.construction.length) o.byc = canonOutline(res.backYoke.construction);
@@ -1469,5 +1682,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, princessState: princessState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();
