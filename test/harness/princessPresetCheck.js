@@ -66,14 +66,13 @@ const M = GE.princess;   // 메타(선언값 — 아래는 출력 geometry 에�
 // ── 1. 카탈로그·파라미터 계약 ──
 ok(BP.resolve("princess-line", "bunka-bodice-E").ok, "1: Ⓔ 해석 성공(실행 가능)");
 ok(BP.variant("princess-line", "bunka-bodice-E").availability === "available" && BP.variant("princess-line", "bunka-bodice-E").page === 18, "1: Ⓔ available · P.18");
-ok(BP.variant("princess-line", "bunka-bodice-F").availability === "pending-op" && typeof BP.variant("princess-line", "bunka-bodice-F").blockedBy === "string" && BP.variant("princess-line", "bunka-bodice-F").blockedBy.length > 0, "1: Ⓕ 는 blockedBy 와 함께 보류");
-ok(BP.resolve("princess-line", "bunka-bodice-F").reason === "bodice-preset-unavailable", "1: Ⓕ 는 명시적 거부(다른 프리셋으로 대체 안 함)");
+ok(BP.variant("princess-line", "bunka-bodice-F").availability === "available" && BP.resolve("princess-line", "bunka-bodice-F").presetId === "bunka-bodice-F", "1: Ⓕ 는 P.19 판독 후 실행 가능(princessFPresetCheck 가 전용 검증)");
 ok(BP.family("princess-line").availability === "available", "1: 프린세스 라인 활성");
 ok(J(E_BODY) === J(Object.assign({}, C_BODY, { princess: "E" })), "1: Ⓔ 파라미터 = Ⓒ(다트 a·e · 옆선 −1 · 밑단 +1) + princess:E");
 throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, E_BODY, { waistSeam: true }) }), "princess-conflict", "1: 프린세스+허리 이음선 거부");
 throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, E_BODY, { yokeSeam: "U" }) }), "princess-conflict", "1: 프린세스+요크 이음선 거부");
 throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, E_BODY, { flare: true }) }), "princess-conflict", "1: 프린세스+플레어 거부");
-throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, E_BODY, { princess: "F" }) }), "invalid-body-princess", "1: 알 수 없는 princess 값 거부");
+throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, E_BODY, { princess: "G" }) }), "invalid-body-princess", "1: 알 수 없는 princess 값 거부");
 throwsReason(() => DB.computeGeometry(REF, { body: Object.assign({}, E_BODY, { waistDartScales: { a: 0, e: 0, b: 0, d: 0 } }) }), "princess-failed", "1: 허리 다트 a·e 없으면 거부(마름모를 만들 다트가 없다)");
 ok(J(DB.computeGeometry(REF, { body: E_BODY })) === J(GE), "1: 결정론(같은 입력 → 바이트 동일)");
 ok(J(REF) === SNAP, "1: 입력 reference 불변");

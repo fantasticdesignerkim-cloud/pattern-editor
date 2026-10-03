@@ -72,6 +72,7 @@ const suites = [
   { file: "yokeSeamVCheck.js",          golden: false },
   // 프린세스 라인 Ⓔ(P.18·P.160) — 앞 어깨 50%·최대 0.5cm 곡선·BP 18.25° 닫음·뒤 어깨 다트 입구·a·e 마름모·4조각 물리·체크포인트 재계산·변조 거부·표시·A~Ⓥ 15종 바이트 불변.
   { file: "princessPresetCheck.js",     golden: false },
+  { file: "princessFPresetCheck.js",    golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },

@@ -469,13 +469,15 @@
     };
   }
 
-  // split({front, back}, opts) → { frontCenter, frontSide, backCenter, backSide, meta:{ variant:"E", front, back } }
+  // split({front, back}, opts) → { frontCenter, frontSide, backCenter, backSide, meta:{ variant:"E"|"F", front, back } }
   // 원자적: 앞·뒤 중 하나라도 실패하면 아무것도 반환하지 않는다. 입력은 변형하지 않는다.
   function split(geometry, opts) {
     if (!geometry || typeof geometry !== "object" || !geometry.front || !geometry.back) fail("invalid-geometry");
+    var variant = (opts && opts.variant != null) ? opts.variant : "E";   // 표식만 다르다 — Ⓕ(P.19) 는 «Ⓔ 와 같은 방법», 폭 차이는 입력 몸판(a·e 폭)에서 온다
+    if (variant !== "E" && variant !== "F") fail("invalid-variant", variant);
     var f = splitFront(deepClone(geometry.front), opts);
     var b = splitBack(deepClone(geometry.back), opts);
-    return { frontCenter: f.center, frontSide: f.side, backCenter: b.center, backSide: b.side, meta: { variant: "E", front: f.meta, back: b.meta } };
+    return { frontCenter: f.center, frontSide: f.side, backCenter: b.center, backSide: b.side, meta: { variant: variant, front: f.meta, back: b.meta } };
   }
 
   window.designPrincess = Object.freeze({ split: split, splitFront: splitFront, splitBack: splitBack,

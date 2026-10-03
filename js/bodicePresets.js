@@ -46,6 +46,7 @@
     { key: "hemSideOffsetCm", label: "밑단 옆선 이동", unit: "cm" },
     { key: "sideSeamCurve", label: "옆선 곡선화", unit: "" },
     { key: "waistDartScales", label: "허리 다트 배분", unit: "" },
+    { key: "waistDartExtraCm", label: "허리 다트 폭 추가(절대 cm)", unit: "cm" },
     { key: "flare", label: "다트를 닫아 밑단 벌리기", unit: "" },
     { key: "waistSeam", label: "허리 이음선(상·하 조각 분리)", unit: "" },
     { key: "peplumFlare", label: "페플럼 맞대면서 플레어 벌리기", unit: "" },
@@ -89,8 +90,7 @@
       familyNote: "어깨(뒤는 다트 입구)에서 밑단까지 이음선으로 앞·뒤를 중심·옆 조각으로 나눈다. 앞 AH 다트는 BP 를 축으로 닫고, 허리 다트 a·e 는 이음선의 마름모가 된다(처리 방법 P.160).",
       variants: [
         availVariant("bunka-bodice-E", "E", "E · 프린세스 이음선(앞·뒤 중심/옆 4조각) · 다트 a·e · 옆선 −1 · 밑단 +1", 18),
-        pendingVariant("bunka-bodice-F", "F", "F · 프린세스 라인 변형", 19, null,
-          "미판독 — E 의 이음선 규칙(P.18)만 확정했다. F(P.19)는 별도 판독·승인 후 착수한다.")
+        availVariant("bunka-bodice-F", "F", "F · 프린세스 이음선 · 다트 a +1 · e +1.5 · 옆선 −1.5 · 밑단 +1", 19)
       ] },
     { id: "flare-line", order: 4, label: "플레어 라인", symbol: "G", page: 20,
       availability: "available", note: null,
@@ -298,6 +298,15 @@
       body: { hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 0, d: 0, e: 1 }, princess: "E" }
     },
     {
+      id: "bunka-bodice-F", label: "교재 F 프린세스 라인(더 줄임)", familyId: "princess-line", symbol: "F", page: 19,
+      description: "Ⓔ 와 같은 이음선·닫기 · 앞 다트 a + 1cm · 뒤 다트 e + 1.5cm · 옆선 각 1.5cm 줄임 · 밑단 1cm 추가(1개 이음선에서 줄일 수 있는 최대) · 앞·뒤 각각 중심·옆 2조각(총 4조각)",
+      source: "[패턴학교] 프린세스 라인 Ⓕ(P.19) · Ⓔ(P.18) · 처리 방법 닫는다(P.160)",
+      baseMethod: "bunka-bodice-F-v1",
+      // 책 문장: «Ⓔ 와 같은 방법으로 더 줄인 디자인. 앞은 다트 a + 1cm, 뒤는 다트 e + 1.5cm, 옆선에서 각각 1.5cm 줄인다.» 도해 실측(마름모 폭 ≈ a+1 · e+1.5)이 «폭에 더한다»로 읽힘을 확인.
+      //   다트 폭 +cm 는 마름모를 이음선 축 둘레 대칭으로 키운다(Ⓔ 의 잠긴 마름모 규칙 그대로). 어깨·BP·닫기 규칙은 Ⓔ 와 동일. 문서: docs/book/P019.md
+      body: { hemExtensionBelowWaistCm: 20, waistSideOffsetCm: -1.5, hemSideOffsetCm: 1, waistDartScales: { a: 1, b: 0, d: 0, e: 1 }, waistDartExtraCm: { a: 1, e: 1.5 }, princess: "F" }
+    },
+    {
       id: "bunka-bodice-D", label: "교재 D 셰이프트(다트 4개)", familyId: "shaped-line", symbol: "D", page: 17,
       description: "허리 다트 a·b·d·e 전부 사용(단 d 는 ½) · 옆선 1.5cm 줄임 · 밑단 1cm 추가",
       source: "[패턴학교] 셰이프트 라인 Ⓓ(P.17)",
@@ -330,8 +339,16 @@
         if (body.flare != null) fail("yoke-seam-flare-conflict", id);
         return;
       }
+      if (k === "waistDartExtraCm") {
+        if (!v || typeof v !== "object" || Array.isArray(v)) fail("invalid-body", id + "." + k);
+        Object.keys(v).forEach(function (sym) {
+          if (DART_SYMBOLS.indexOf(sym) < 0) fail("unknown-dart-symbol", id + "." + k + "." + sym);
+          if (!isNum(v[sym]) || v[sym] < 0) fail("invalid-body", id + "." + k + "." + sym);
+        });
+        return;
+      }
       if (k === "princess") {
-        if (v !== "E") fail("invalid-body", id + ".princess");   // "E" = Ⓔ(P.18)
+        if (v !== "E" && v !== "F") fail("invalid-body", id + ".princess");   // "E" = Ⓔ(P.18) · "F" = Ⓕ(P.19)
         if (body.waistSeam === true || body.yokeSeam != null || body.flare != null) fail("princess-conflict", id);
         return;
       }

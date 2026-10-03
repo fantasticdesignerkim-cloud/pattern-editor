@@ -676,6 +676,7 @@
     var dartTot = body.waistDartTotalCm;                               // 봉제 허리다트(a·b·d·e) 합. 미지정=원형 그대로
     var waistTarget = body.targetFinishedWaistCm;                      // 목표 완성 허리(전체 둘레). 미지정=미사용
     var dartScales = body.waistDartScales;                             // 다트별 배분 {a,b,d,e} (1=원형, 0=미사용). 미지정=전부 1
+    var dartExtra = body.waistDartExtraCm;                             // 다트별 폭 **절대 증가량**(cm) {a,b,d,e}. 배분(배율) 뒤에 더한다. 미지정=미사용 — 프린세스 Ⓕ(P.19 «다트 a + 1cm»)
     // 처리 방법 161「닫는다·벌린다」 — 다트를 닫아 밑단을 벌린다(플레어 라인 Ⓖ).
     //   `js/designFlare.js` 의 순수 연산에 위임한다. **호출 시점에 해석**하므로 로드 순서와 무관하고,
     //   미지정이면 그 모듈이 없어도 된다(이 파일 단독 하네스가 계속 돈다).
@@ -730,7 +731,7 @@
     if (applyYoke && applySeam) fail("yoke-seam-waist-seam-conflict");
     if (applyYoke && applyFlare) fail("yoke-seam-flare-conflict");
     // 프린세스 라인 Ⓔ(P.18) — 앞·뒤를 중심·옆 조각으로 가른다(순수 연산은 `js/designPrincess.js`). front/back 은 전체 몸판 그대로 두고 네 슬롯만 추가한다.
-    var princess = body.princess, applyPrincess = (princess === "E");
+    var princess = body.princess, applyPrincess = (princess === "E" || princess === "F");
     if (princess != null && princess !== false && !applyPrincess) fail("invalid-body-princess", princess);
     if (applyPrincess && (applySeam || applyYoke || applyFlare)) fail("princess-conflict");   // 허리 이음선·요크·플레어와 함께 쓸 수 없다(한 번에 한 가지 조각 분리)
     if (applySeam && !(L > 0)) fail("waist-seam-needs-hem");   // 밑단(엉덩이 길이)이 없으면 페플럼이 없다
@@ -743,6 +744,15 @@
         if (typeof v !== "number" || !isFinite(v) || v < 0) fail("invalid-waist-dart-scales", k);
       });
     }
+    var applyExtra = (dartExtra != null);
+    if (applyExtra) {
+      if (typeof dartExtra !== "object" || Array.isArray(dartExtra)) fail("invalid-waist-dart-extra", dartExtra);
+      Object.keys(dartExtra).forEach(function (k) {
+        if (!/^[a-z]$/.test(k)) fail("invalid-waist-dart-extra", k);
+        var v = dartExtra[k];
+        if (typeof v !== "number" || !isFinite(v) || v < 0) fail("invalid-waist-dart-extra", k);
+      });
+    }
     // 네크라인(parametric). mode==="manual" / type==="original" / 없음이면 미적용(원본 목선 유지).
     var neckline = (opts && opts.neckline) || null;
     var applyNeck = !!(neckline && neckline.mode === "parametric" && NECK_TYPES[neckline.type]);
@@ -750,7 +760,7 @@
       var np = neckline.parameters || {};
       ["neckWidthCm", "frontDepthCm", "backDepthCm", "vPointDepthCm", "squareWidthCm", "cornerRadiusCm", "curveAmountNorm"].forEach(function (k) { var v = np[k]; if (v != null && (typeof v !== "number" || !isFinite(v))) fail("invalid-neckline-param", k); });
     }
-    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck && !applyDarts && !applyTarget && !applyScales && !applyFlare && !applySeam) return deepClone(referenceGeometry);
+    if (L === 0 && E === 0 && wOff === 0 && hOff === 0 && curve === 0 && !applyNeck && !applyDarts && !applyTarget && !applyScales && !applyExtra && !applyFlare && !applySeam) return deepClone(referenceGeometry);
     // referenceGeometry 를 clone 한 작업본에서만 변환(입력 불변·비누적).
     var delta = E / 4;   // 전체 가슴둘레 여유량 → 각 옆선 E/4 (앞반쪽 + 뒤반쪽, ×2측 = E)
     var src = deepClone(referenceGeometry);
@@ -776,6 +786,24 @@
       };
       scaleSewnWaistDarts(fPiece, scaleOf); scaleSewnWaistDarts(bPiece, scaleOf);
     }
+    // ①' 폭 증가(절대 cm): 배분 뒤의 현재 입 폭에 더한다(입 중점 고정 — 배율과 같은 방식). 적용한 다트의 전·후 폭을 메타로 남겨 체크포인트가 대조한다.
+    var dartExtraMeta = null;
+    if (applyExtra) {
+      dartExtraMeta = { front: {}, back: {} };
+      var widthOf = function (g) { var a = dartMouthPt(g.segs[0]), b = dartMouthPt(g.segs[1]); return Math.hypot(b.x - a.x, b.y - a.y); };
+      [["front", fPiece], ["back", bPiece]].forEach(function (pr) {
+        var before = {};
+        sewnWaistDartGroups(pr[1]).forEach(function (g) { before[g.id] = widthOf(g); });
+        scaleSewnWaistDarts(pr[1], function (g) {
+          var sym = dartSymbol(g.id), ex = (sym != null && Object.prototype.hasOwnProperty.call(dartExtra, sym)) ? dartExtra[sym] : 0;
+          return ex > 0 ? (before[g.id] + ex) / before[g.id] : 1;
+        });
+        sewnWaistDartGroups(pr[1]).forEach(function (g) {
+          var sym = dartSymbol(g.id);
+          if (sym != null && Object.prototype.hasOwnProperty.call(dartExtra, sym) && dartExtra[sym] > 0) dartExtraMeta[pr[0]][sym] = { id: g.id, beforeCm: before[g.id], extraCm: dartExtra[sym], afterCm: widthOf(g) };
+        });
+      });
+    }
     // ② 크기: 남은 다트의 합을 총량/목표에 맞춘다(배분 비율은 유지).
     if (applyDarts || applyTarget) {
       var blockTotal = sewnWaistDartTotal(fPiece) + sewnWaistDartTotal(bPiece);
@@ -794,7 +822,7 @@
       var uniform = function () { return sD; };
       scaleSewnWaistDarts(fPiece, uniform); scaleSewnWaistDarts(bPiece, uniform);
     }
-    if (applyScales || applyDarts || applyTarget) {
+    if (applyScales || applyExtra || applyDarts || applyTarget) {
       checkWaistDarts(fPiece, "front"); checkWaistDarts(bPiece, "back");
     }
 
@@ -852,10 +880,11 @@
       var DP = (typeof window !== "undefined") && window.designPrincess;
       if (!DP || typeof DP.split !== "function") fail("designPrincess-missing");
       var pr;
-      try { pr = DP.split({ front: fPiece, back: bPiece }); }
+      try { pr = DP.split({ front: fPiece, back: bPiece }, { variant: princess }); }
       catch (e) { fail("princess-failed", (e.reason || e.message) + (e.detail !== undefined ? " " + JSON.stringify(e.detail) : "")); }
       outGeom.frontCenter = pr.frontCenter; outGeom.frontSide = pr.frontSide;
       outGeom.backCenter = pr.backCenter; outGeom.backSide = pr.backSide;
+      if (dartExtraMeta) pr.meta.waistDartExtra = dartExtraMeta;   // Ⓕ: 적용한 다트의 전·후 폭 — 체크포인트가 파라미터·출력 geometry 와 대조한다
       outGeom.princess = pr.meta;
     }
     return outGeom;

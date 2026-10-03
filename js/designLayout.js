@@ -148,11 +148,11 @@
     if (fm) {
       notes.push({ key: "frontAh", piece: "front", at: fm.seamPoints.bp, text: "AH 다트 " + r2(fm.closedDart.angleDeg) + "° 닫음(BP 고정)" });
       notes.push({ key: "frontShoulder", piece: "front", at: fm.seamPoints.shoulder, text: "어깨 " + Math.round(fm.shoulderRatio * 100) + "%(" + r1(fm.shoulderFromNpCm) + "cm)" });
-      notes.push({ key: "frontWaist", piece: "front", at: fm.seamPoints.waistApex, text: "다트 a " + r2(fm.waistDart.widthCm) + "cm → 이음선" });
+      notes.push({ key: "frontWaist", piece: "front", at: fm.seamPoints.waistApex, text: "다트 a " + r2(fm.waistDart.widthCm) + "cm" + (pm.waistDartExtra && pm.waistDartExtra.front && pm.waistDartExtra.front.a ? "(+" + r2(pm.waistDartExtra.front.a.extraCm) + ")" : "") + " → 이음선" });
     }
     if (bm) {
       notes.push({ key: "backDart", piece: "back", at: bm.seamPoints.shoulderApex, text: "어깨 다트 " + r1(bm.absorbedDart.mouthWidthCm) + "cm → 이음선" });
-      notes.push({ key: "backWaist", piece: "back", at: bm.seamPoints.waistApex, text: "다트 e " + r2(bm.waistDart.widthCm) + "cm → 이음선" });
+      notes.push({ key: "backWaist", piece: "back", at: bm.seamPoints.waistApex, text: "다트 e " + r2(bm.waistDart.widthCm) + "cm" + (pm.waistDartExtra && pm.waistDartExtra.back && pm.waistDartExtra.back.e ? "(+" + r2(pm.waistDartExtra.back.e.extraCm) + ")" : "") + " → 이음선" });
     }
     return { labels, seams, notes };
   }

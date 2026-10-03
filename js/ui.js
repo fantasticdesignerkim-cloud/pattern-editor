@@ -433,7 +433,8 @@
   let pendingPeplumFlare;  // 〃 (true = 페플럼을 맞대면서 플레어 벌리기, 프리셋 Ⓝ — waistSeam 전제)
   let pendingYokeSeam;     // 〃 (true = 요크 이음선 — 요크·몸판 조각 분리, 프리셋 Ⓠ·Ⓡ / "S" = 요크 이음선 ② Ⓢ)
   let pendingYokeGather;   // 〃 (true = 이음선 아래 몸판 중심 개더 띠, 프리셋 Ⓡ — yokeSeam 전제)
-  let pendingPrincess;     // 〃 ("E" = 프린세스 이음선 — 앞·뒤 중심·옆 조각 분리, 프리셋 Ⓔ)
+  let pendingPrincess;     // 〃 ("E"·"F" = 프린세스 이음선 — 앞·뒤 중심·옆 조각 분리, 프리셋 Ⓔ·Ⓕ)
+  let pendingDartExtra;    // 〃 (객체 {a,e} = 다트 폭 절대 증가 cm, 프리셋 Ⓕ — princess 전제)
   function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
   function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
   function rebuildBodiceFamilyOptions() {
@@ -480,6 +481,7 @@
     if (v && v.availability === "available" && v.presetId === "bunka-bodice-C") parts.push("다트 a·e 유지, b·d 제거 · 옆선 WL −1cm · 밑단 +1cm");
     // 프린세스 Ⓔ: 이음선 규칙(사용자 확정 2026-10-03, 도해 실측 기준)과 조각 구성을 한 줄로.
     if (v && v.availability === "available" && v.presetId === "bunka-bodice-E") parts.push("앞 어깨 절개 시작점 = 목점에서 어깨 50% · 어깨→BP 이음선 최대 0.5cm 곡선 · 뒤는 어깨 다트 입구에서 시작 · 다트 a·e 는 이음선 마름모 · 앞 AH 다트는 BP 고정 기본각으로 닫음 · 옆선 WL −1cm · 밑단 +1cm · 중심·옆 4조각");
+    if (v && v.availability === "available" && v.presetId === "bunka-bodice-F") parts.push("Ⓔ 와 같은 이음선 규칙(어깨 50% · 0.5cm 곡선 · BP 고정 기본각으로 AH 닫음) · 다트 a +1cm · e +1.5cm(마름모가 이음선 축 둘레로 커짐) · 옆선 WL −1.5cm · 밑단 +1cm · 1개 이음선에서 줄일 수 있는 최대 · 중심·옆 4조각");
     if (v && v.availability === "available" && v.presetId === "bunka-bodice-D") parts.push("다트 a·b·e 유지, d는 절반 · 옆선 WL −1.5cm · 밑단 +1cm");
     if (v && v.availability === "available" && (v.presetId === "bunka-bodice-C" || v.presetId === "bunka-bodice-D")) parts.push("※ 원형 차이(c·f 포함)로 교재 허리 여유와 다릅니다(교재 " + (v.presetId === "bunka-bodice-C" ? "17" : "7.8") + "cm / 우리 " + (v.presetId === "bunka-bodice-C" ? "15.4" : "5.3") + "cm) — 남은 원인은 미확정");
     el.textContent = parts.join(" · ");
@@ -510,7 +512,8 @@
     pendingPeplumCut = (body.peplumCut === true || body.peplumCut === "P") ? body.peplumCut : null;
     pendingYokeSeam = (body.yokeSeam === true || body.yokeSeam === "S" || body.yokeSeam === "T" || body.yokeSeam === "U" || body.yokeSeam === "V") ? body.yokeSeam : null;   // true = Ⓠ·Ⓡ · "S" = Ⓢ · "T" = Ⓣ · "U" = Ⓤ. 다른 프리셋으로 바꾸면 해제 → 요크·몸판 조각 사라짐
     pendingYokeGather = body.yokeGather === true ? true : null;   // Ⓠ 로 바꾸면 해제 → 개더 띠 없는 요크
-    pendingPrincess = body.princess === "E" ? "E" : null;         // 다른 프리셋으로 바꾸면 해제 → 중심·옆 조각 사라짐
+    pendingPrincess = (body.princess === "E" || body.princess === "F") ? body.princess : null;   // 다른 프리셋으로 바꾸면 해제 → 중심·옆 조각 사라짐
+    pendingDartExtra = body.waistDartExtraCm ? structuredClone(body.waistDartExtraCm) : null;     // Ⓕ 가 아니면 해제 → 다트 폭 추가 사라짐
     onApplyBodyLength();
   }
   function bodiceSelectionStr(reason) {
@@ -536,7 +539,7 @@
   //   어긋난다. 어긋난 곳에 선이 그려지는 일을 막기 위해 도구를 끄고 이유를 보인다. 다른 프리셋으로 돌아가면 다시 켠다.
   const YOKE_TOOL_IDS = ["btnDesignLine", "btnDesignSelect"];
   const yokeLockMsg = (sym) => "요크 이음선 " + sym + " 적용 중에는 패턴선 도구를 쓸 수 없습니다(화면이 요크·몸판 조각이라 전체 몸판 좌표와 다릅니다) — 다른 몸판 라인을 적용하면 다시 켜집니다";
-  const PRINCESS_LOCK_MSG = "프린세스 라인 Ⓔ 적용 중에는 패턴선 도구를 쓸 수 없습니다(화면이 중심·옆 조각이라 전체 몸판 좌표와 어긋납니다) — 다른 몸판 라인을 적용하면 다시 켜집니다";
+  const PRINCESS_LOCK_MSG = "프린세스 라인 Ⓔ·Ⓕ 적용 중에는 패턴선 도구를 쓸 수 없습니다(화면이 중심·옆 조각이라 전체 몸판 좌표와 어긋납니다) — 다른 몸판 라인을 적용하면 다시 켜집니다";
   const yokeCircled = (s) => /^[A-Z]$/.test(s || "") ? String.fromCodePoint(0x24B6 + s.charCodeAt(0) - 65) : "Ⓠ";
   function syncYokeToolLock(project) {
     const g = project && project.working && project.working.geometry;
@@ -2291,6 +2294,10 @@
       if (pendingPrincess) nextParameters.body.princess = pendingPrincess; else delete nextParameters.body.princess;
       pendingPrincess = undefined;
     }
+    if (pendingDartExtra !== undefined) {
+      if (pendingDartExtra) nextParameters.body.waistDartExtraCm = structuredClone(pendingDartExtra); else delete nextParameters.body.waistDartExtraCm;
+      pendingDartExtra = undefined;
+    }
     if (pendingYokeGather !== undefined) {
       if (pendingYokeGather) nextParameters.body.yokeGather = true; else delete nextParameters.body.yokeGather;
       pendingYokeGather = undefined;
@@ -2352,6 +2359,7 @@
     pendingYokeSeam = null;     // 요크 이음선 해제(요크·몸판 조각 제거)
     pendingYokeGather = null;   // 개더 띠 해제
     pendingPrincess = null;     // 프린세스 이음선 해제(중심·옆 조각 제거)
+    pendingDartExtra = null;    // 다트 폭 추가 해제
     setNeckType("original");
     onApplyBodyLength();   // 전부 0 · 원형 유지 적용(원형 복원)
   }

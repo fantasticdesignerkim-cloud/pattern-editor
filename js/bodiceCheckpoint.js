@@ -1361,18 +1361,28 @@
   function princessRot(p, o, th) { var c = Math.cos(th), s = Math.sin(th), dx = p.x - o.x, dy = p.y - o.y; return { x: o.x + dx * c - dy * s, y: o.y + dx * s + dy * c }; }
   function princessRotSeg(sg, o, th) { var q = { kind: sg.kind, from: princessRot(sg.from, o, th), to: princessRot(sg.to, o, th) }; if (sg.kind === "cubic") { q.c1 = princessRot(sg.c1, o, th); q.c2 = princessRot(sg.c2, o, th); } return q; }
   function princessSameSeg(a, b, eps) { return a.kind === b.kind && ["from", "to", "c1", "c2"].every(function (k) { return !a[k] || Math.hypot(a[k].x - b[k].x, a[k].y - b[k].y) <= eps; }); }
+  var PRINCESS_F_EXTRA = { a: 1, e: 1.5 };   // Ⓕ(P.19) 인쇄값 — 책이 정한 절대 증가량(cm)
   function princessState(proj) {
     var g = proj && proj.working && proj.working.geometry;
     if (!g) return null;
-    var wantsPrincess = !!(proj.working.parameters && proj.working.parameters.body && proj.working.parameters.body.princess === "E");
+    var wantsPrincess = !!(proj.working.parameters && proj.working.parameters.body && proj.working.parameters.body.princess != null && (proj.working.parameters.body.princess === "E" || proj.working.parameters.body.princess === "F"));
     if (!wantsPrincess && !(g.frontCenter || g.frontSide || g.backCenter || g.backSide || g.princess)) return null;   // 파라미터가 프린세스를 말하는데 조각이 없으면 "없다"로 거부한다
-    var out = { variant: "E", front: { side: "front", reason: null }, back: { side: "back", reason: null }, ok: false, reason: null };
-    var bad = function (reason, side) { out.ok = false; out.reason = reason; if (side && out[side]) out[side].reason = reason; return out; };
     var pbody = proj.working.parameters && proj.working.parameters.body;
+    var pv = (pbody && (pbody.princess === "E" || pbody.princess === "F")) ? pbody.princess : "E";   // Ⓔ(P.18) · Ⓕ(P.19) — 같은 규칙, Ⓕ 만 다트 폭 추가
+    var out = { variant: pv, front: { side: "front", reason: null }, back: { side: "back", reason: null }, ok: false, reason: null };
+    var bad = function (reason, side) { out.ok = false; out.reason = reason; if (side && out[side]) out[side].reason = reason; return out; };
     var okPiece = function (pc) { return pc && Array.isArray(pc.outline) && pc.outline.length >= 3; };
     var FC = g.frontCenter, FS = g.frontSide, BC = g.backCenter, BS = g.backSide, wF = g.front, wB = g.back;
-    if (!pbody || pbody.princess !== "E") return bad("princess-variant-mismatch");   // 파라미터가 말하는 규칙이 우선 — 메타로 다른 규칙을 고르지 않는다
-    if (!okPiece(FC) || !okPiece(FS) || !okPiece(BC) || !okPiece(BS) || !okPiece(wF) || !okPiece(wB) || !g.princess || g.princess.variant !== "E") return bad("princess-missing");
+    if (!pbody || (pbody.princess !== "E" && pbody.princess !== "F")) return bad("princess-variant-mismatch");   // 파라미터가 말하는 규칙이 우선 — 메타로 다른 규칙을 고르지 않는다
+    if (!okPiece(FC) || !okPiece(FS) || !okPiece(BC) || !okPiece(BS) || !okPiece(wF) || !okPiece(wB) || !g.princess) return bad("princess-missing");
+    if (g.princess.variant !== pv) return bad("princess-variant-mismatch");
+    // 다트 폭 추가는 Ⓕ 에만 있다(P.19 «앞은 다트 a + 1cm, 뒤는 다트 e + 1.5cm»). 파라미터가 말하는 값이 우선이고 메타는 출력 geometry 와 대조만 한다.
+    var xp = pbody.waistDartExtraCm, pxm = g.princess.waistDartExtra;
+    if (pv === "E") { if (xp != null || pxm != null) return bad("princess-dart-extra-mismatch"); }
+    else {
+      if (!xp || typeof xp !== "object" || Object.keys(xp).sort().join() !== "a,e" || xp.a !== PRINCESS_F_EXTRA.a || xp.e !== PRINCESS_F_EXTRA.e) return bad("princess-dart-extra-mismatch");
+      if (!pxm || !pxm.front || !pxm.back || !pxm.front.a || !pxm.back.e || Object.keys(pxm.front).length !== 1 || Object.keys(pxm.back).length !== 1) return bad("princess-dart-extra-mismatch");
+    }
     if (g.frontYoke || g.backYoke || g.shoulderYoke || g.frontBody || g.backBody || g.frontPeplum || g.backPeplum) return bad("princess-missing");   // 한 번에 한 가지 조각 분리
     var rings = {}, mets = {};
     var pieces = { frontCenter: FC, frontSide: FS, backCenter: BC, backSide: BS };
@@ -1452,6 +1462,11 @@
     if (!fC || !fS || !Hc || !Hs) return bad("princess-waist-dart-mismatch", "front");
     if (!(Math.abs(Math.abs(fC.x - fS.x) - widthA) <= PRINCESS_POS_EPS) || !(Math.abs((fC.x + fS.x) / 2 - BP.x) <= PRINCESS_POS_EPS) || !(Math.abs(Hc.x - BP.x) <= PRINCESS_POS_EPS) || !(Math.abs(Hs.x - BP.x) <= PRINCESS_POS_EPS)) return bad("princess-waist-dart-mismatch", "front");
     if (!pointsOf(linesC).concat(pointsOf(linesS)).some(function (q) { return Math.abs(q.x - BP.x) <= PRINCESS_POS_EPS && Math.abs(q.y - apexA.y) <= PRINCESS_POS_EPS; })) return bad("princess-waist-dart-mismatch", "front");
+    if (pv === "F") {
+      var xa = pxm.front.a;
+      if (!(xa.beforeCm > 0) || Math.abs(xa.extraCm - PRINCESS_F_EXTRA.a) > 1e-9 || Math.abs(xa.afterCm - xa.beforeCm - PRINCESS_F_EXTRA.a) > PRINCESS_POS_EPS || Math.abs(widthA - xa.afterCm) > PRINCESS_POS_EPS) return bad("princess-dart-extra-mismatch", "front");
+      out.front.waistDartExtraCm = round4(widthA - xa.beforeCm); out.front.waistDartBeforeCm = round4(xa.beforeCm);
+    }
     out.front.waistDartCm = round4(widthA);
     // 어깨: 봉제 정렬 프레임(옆 조각 윗부분을 BP 축으로 되돌림)에서 중심·옆 어깨선이 한 직선, 길이 합 = 전체 어깨
     var shC = FC.outline.filter(function (sg) { return sg && sg.edge === "shoulder"; }), shS = FS.outline.filter(function (sg) { return sg && sg.edge === "shoulder"; });
@@ -1491,6 +1506,11 @@
     if (!eC || !eS || !HcB || !HsB) return bad("princess-waist-dart-mismatch", "back");
     if (!(Math.abs(Math.abs(eC.x - eS.x) - widthE) <= PRINCESS_POS_EPS) || !(Math.abs((eC.x + eS.x) / 2 - A1.x) <= PRINCESS_POS_EPS) || !(Math.abs(HcB.x - A1.x) <= PRINCESS_POS_EPS) || !(Math.abs(HsB.x - A1.x) <= PRINCESS_POS_EPS)) return bad("princess-waist-dart-mismatch", "back");   // e 마름모는 이음선 축(어깨 다트 끝 x)에 맞춘다
     if (!hasPt(bSeamC, { x: A1.x, y: apexE.y }) || !hasPt(bSeamS, { x: A1.x, y: apexE.y })) return bad("princess-waist-dart-mismatch", "back");
+    if (pv === "F") {
+      var xe = pxm.back.e;
+      if (!(xe.beforeCm > 0) || Math.abs(xe.extraCm - PRINCESS_F_EXTRA.e) > 1e-9 || Math.abs(xe.afterCm - xe.beforeCm - PRINCESS_F_EXTRA.e) > PRINCESS_POS_EPS || Math.abs(widthE - xe.afterCm) > PRINCESS_POS_EPS) return bad("princess-dart-extra-mismatch", "back");
+      out.back.waistDartExtraCm = round4(widthE - xe.beforeCm); out.back.waistDartBeforeCm = round4(xe.beforeCm);
+    }
     out.back.waistDartCm = round4(widthE); out.back.waistShiftCm = round4(A1.x - (fe1.x + fe2.x) / 2);
     if (!(Math.abs(hemWidth(BC) + hemWidth(BS) - hemWidth(wB)) <= 1e-6)) return bad("princess-hem-changed", "back");
     var shLenOf = function (pc) { var L = 0; pc.outline.forEach(function (sg) { if (sg && sg.edge === "shoulder") L += Math.hypot(sg.to.x - sg.from.x, sg.to.y - sg.from.y); }); return L; };
