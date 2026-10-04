@@ -76,6 +76,7 @@ const suites = [
   { file: "flareSlashPresetCheck.js",   golden: false },
   { file: "neckTuckPresetCheck.js",     golden: false },
   { file: "neckTuckJPresetCheck.js",    golden: false },
+  { file: "neckGatherPresetCheck.js",   golden: false },
   { file: "peplumAnnotationCheck.js",   golden: false },
   { file: "boxyAnnotationCheck.js",     golden: false },
   { file: "shapedAnnotationCheck.js",   golden: false },

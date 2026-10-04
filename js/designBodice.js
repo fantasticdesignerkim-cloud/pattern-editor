@@ -712,6 +712,10 @@
     var neckTuck = body.neckTuck, applyBand = (neckTuck === "J"), applyTuck = (neckTuck === true || applyBand);
     if (neckTuck != null && neckTuck !== false && !applyTuck) fail("invalid-body-neck-tuck", neckTuck);
     if (applyTuck && (applyFlare || waistSeam === true || body.yokeSeam || body.yokeGather || body.princess || body.peplumFlare || body.peplumCut)) fail("neck-tuck-conflict");
+    // 목둘레 개더 Ⓚ(P.24·P.161) — 다트를 닫아 절개 **1곳**을 벌리고 그 틈을 개더로 줄인다(`designFlare.neckGather`). 턱(neckTuck)과는 별개 키·별개 메타 — 한 번에 한 가지 처리.
+    var neckGatherP = body.neckGather, applyNeckGather = (neckGatherP === true);
+    if (neckGatherP != null && neckGatherP !== false && !applyNeckGather) fail("invalid-body-neck-gather", neckGatherP);
+    if (applyNeckGather && (applyTuck || applyFlare || waistSeam === true || body.yokeSeam || body.yokeGather || body.princess || body.peplumFlare || body.peplumCut)) fail("neck-gather-conflict");
     var applySeam = (waistSeam === true);
     var peplumFlare = body.peplumFlare;   // Ⓝ(P.27) — 페플럼을 맞대면서 플레어 분량을 벌린다(158). waistSeam 이 전제.
     if (waistSeam != null && waistSeam !== false && !applySeam) fail("invalid-body-waist-seam", waistSeam);
@@ -889,6 +893,20 @@
           pair[0].neckTuck.centerBand = br.meta;
         });
       }
+    }
+    // ★ 목둘레 개더 Ⓚ — 턱과 같은 자리(맨 마지막, 형상 확정 뒤). 실패는 그대로 올린다(부분 적용 금지).
+    if (applyNeckGather) {
+      var DFg = (typeof window !== "undefined") && window.designFlare;
+      if (!DFg || typeof DFg.neckGather !== "function") fail("designFlare-missing");
+      [[fPiece, "front"], [bPiece, "back"]].forEach(function (pair) {
+        var gr, rule = DFg.NECK_GATHER[pair[1]];
+        try { gr = DFg.neckGather({ outline: pair[0].outline, construction: pair[0].construction }, { cutArcCm: rule.cutArcCm, ratio: rule.ratio }); }
+        catch (e) { fail("neck-gather-failed", pair[1] + ": " + (e.reason || e.message)); }
+        pair[0].outline = gr.outline;
+        pair[0].construction = gr.construction;
+        pair[0].neckGather = gr.meta;   // Ⓚ 에만 — 없으면 다른 라인과 바이트 동일
+        pair[0].necklineLenCm = gr.meta.gather.sewnNeckLenCm;   // 봉제 목둘레 = 개더로 줄인 뒤 길이 — 칼라가 이 길이에 붙는다
+      });
     }
     var outGeom = {
       front: fPiece, back: bPiece,

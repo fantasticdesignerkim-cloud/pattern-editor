@@ -570,6 +570,133 @@
     };
   }
 
+  // ── Ⓚ(P.24) — 목둘레 개더: 다트를 닫고 그 반동으로 목둘레의 **절개 1곳**을 벌린다(처리 방법 161) ───────────────────────
+  // 턱(neckTuck)과 달리 절개는 하나이고 닫는 다트각 θ 전부가 그 한 곳으로 간다. 책(P.24)이 수치로 준 것:
+  //   · 절개 위치 = SNP 에서 목둘레 호를 따라 앞 4cm · 뒤 3cm («4»·«3» 지시선이 절개가 목둘레에 닿는 지점에서 끝난다)
+  //   · 개더 분량 = 앞 ●(벌어진 치수)×1 · 뒤 ∅×0.5 («개더 분량은 뒤는 ∅의 약 0.5배, 앞은 ●의 약 1배»)
+  // 사용자 확정(2026-10-04): 개더 구간 = 절개 지점(어깨 쪽 다리 끝)부터 앞·뒤중심까지 전부, SNP 쪽 4/3cm 만 제외.
+  // 개더는 geometry 가 아니다 — 외곽은 틈이 apex 까지 열린 V 하나(열린 다트 = 현재 외곽선)이고, 개더 구간·줄이는 분량은 메타(표시·검산)에만 둔다.
+  // 봉제 목둘레 = (원래 목둘레 호 합) + 틈 현 − 줄이는 분량.
+  var NECK_GATHER = Object.freeze({ front: Object.freeze({ cutArcCm: 4, ratio: 1 }), back: Object.freeze({ cutArcCm: 3, ratio: 0.5 }) });   // P.24 «4»·«3» / 앞 ●×1 · 뒤 ∅×0.5
+  function neckGather(piece, opts) {
+    opts = opts || {};
+    var t = T();
+    if (!piece || !Array.isArray(piece.outline) || !piece.outline.length) fail("invalid-piece");
+    var cutArc = opts.cutArcCm, ratio = opts.ratio;
+    if (typeof cutArc !== "number" || !isFinite(cutArc) || !(cutArc > 0)) fail("invalid-gather-cut", cutArc);
+    if (typeof ratio !== "number" || !isFinite(ratio) || !(ratio > 0)) fail("invalid-gather-ratio", ratio);
+    var outSegs = t.outlinePrimsToSegs(piece.outline);
+    var constr = (piece.construction || []).filter(function (s) { return s && s.kind === "line"; });
+    var R = t.buildPieceRing(outSegs, constr);
+    if (!R.ok) fail("ring-failed", R.reason);
+    var ring = R.ring, n = ring.length;
+    var dIdx = [];
+    ring.forEach(function (r, i) { if (r.source === "dartleg") dIdx.push(i); });
+    if (dIdx.length !== 2) fail("unsupported-dart-legs", dIdx.length);
+    var apex = ring[dIdx[0]].seg.to, mouth1 = ring[dIdx[0]].seg.from, mouth0 = ring[dIdx[1]].seg.to;
+    var th = Math.atan2(mouth1.y - apex.y, mouth1.x - apex.x) - Math.atan2(mouth0.y - apex.y, mouth0.x - apex.x);
+    if (!isFinite(th) || Math.abs(th) < 1e-9) fail("degenerate-dart", th);
+
+    var isNeck = function (k) { return ring[k].source === "outline" && ring[k].seg.edge === "neckline"; };
+    var first = -1;
+    for (var k0 = 0; k0 < n; k0++) if (isNeck(k0) && !isNeck((k0 + n - 1) % n)) { first = k0; break; }
+    if (first < 0) fail("no-neckline-edge");
+    var run = [], total = 0;
+    for (var q = first; isNeck(q % n) && run.length < n; q++) { var L = segLen(ring[q % n].seg); run.push({ i: q % n, len: L }); total += L; }
+    if (!(total > 1e-6)) fail("neckline-too-short", total);
+    // SNP 쪽 끝 = 이웃이 어깨선인 끝, 중심 쪽 끝 = 이웃이 중심선인 끝. 둘 다 확인한다(추측 금지).
+    var prevEdge = ring[(first + n - 1) % n].seg.edge, nextEdge = ring[(first + run.length) % n].seg.edge;
+    var snpAtStart;
+    if (prevEdge === "shoulder" && nextEdge === "center") snpAtStart = true;
+    else if (prevEdge === "center" && nextEdge === "shoulder") snpAtStart = false;
+    else fail("neckline-ends-unknown", prevEdge + "|" + nextEdge);
+    if (!(cutArc < total - 1e-6)) fail("gather-cut-beyond-neckline", cutArc);
+    var want = snpAtStart ? cutArc : total - cutArc, acc = 0, cut = null;
+    for (var r = 0; r < run.length && !cut; r++) {
+      if (want <= acc + run[r].len + 1e-12) {
+        var seg = ring[run[r].i].seg, need = want - acc, lo = 0, hi = 1;
+        for (var it = 0; it < 80; it++) { var mid = (lo + hi) / 2; if (segLen(t.subSegment(seg, 0, mid)) < need) lo = mid; else hi = mid; }
+        var u = (lo + hi) / 2;
+        cut = { i: run[r].i, t: u, point: t.subSegment(seg, 0, u).to };
+      }
+      acc += run[r].len;
+    }
+    if (!cut) fail("neckline-position-failed", cutArc);
+    var apexPos = { i: dIdx[0], t: 1, point: apex };
+    var A0 = extractArc(ring, apexPos, cut), A1 = extractArc(ring, cut, apexPos);
+    if (A0.length < 2 || A1.length < 2) fail("degenerate-split");
+    var hasCenter = function (segs) { return segs.some(function (s) { return s.edge === "center"; }); };
+    var fixedFirst = hasCenter(A0);
+    if (fixedFirst === hasCenter(A1)) fail("center-edge-ambiguous");
+    var rot = fixedFirst ? [0, -th] : [th, 0];
+    var K0 = A0.slice(1), K1 = A1.slice(0, -1);                          // 닫힌 다트 다리 제거
+    var R0 = K0.map(function (s) { return rotSeg(s, apex, rot[0]); });
+    var R1 = K1.map(function (s) { return rotSeg(s, apex, rot[1]); });
+    var first0 = R0[0].from, last1 = R1[R1.length - 1].to;
+    var sliver = Math.hypot(last1.x - first0.x, last1.y - first0.y);
+    var last0 = R0[R0.length - 1].to, first1 = R1[0].from;
+    var slit = [line(last0, apex), line(apex, first1)];
+    slit.forEach(function (s, k) { s.dart = { id: "neck-gather-1", boundary: "neckline", apexAt: k === 0 ? "to" : "from" }; });   // edge 이름은 주지 않는다(렌더러 어휘 bad-edge)
+    var outline = R0.concat(slit, R1);
+    if (sliver > SLIVER_EPS) outline = outline.concat([line(last1, first0)]);
+    for (var i = 0; i < outline.length; i++) {
+      var a = outline[i], b = outline[(i + 1) % outline.length];
+      if (Math.hypot(a.to.x - b.from.x, a.to.y - b.from.y) > CLOSE_EPS) fail("outline-discontinuous", i);
+    }
+    if (selfIntersects(outline)) fail("self-intersection");
+    var areaBefore = Math.abs(signedArea(ring.map(function (r) { return r.seg; })));
+    var areaAfter = Math.abs(signedArea(outline));
+    if (!(Math.abs(areaAfter - areaBefore) < 1)) fail("area-not-preserved", areaAfter - areaBefore);
+
+    var near = function (u, v) { return Math.hypot(u.x - v.x, u.y - v.y) < 1e-6; };
+    var polyOf = function (arc) { return flatPts(arc.concat([line(arc[arc.length - 1].to, arc[0].from)])); };
+    var polys = [polyOf(A0), polyOf(A1)];
+    var inPoly = function (p, poly) {
+      var inside = false;
+      for (var a = 0, b = poly.length - 1; a < poly.length; b = a++) {
+        if ((poly[a].y > p.y) !== (poly[b].y > p.y) && p.x < (poly[b].x - poly[a].x) * (p.y - poly[a].y) / (poly[b].y - poly[a].y) + poly[a].x) inside = !inside;
+      }
+      return inside;
+    };
+    var fixedIdx = fixedFirst ? 0 : 1;
+    var construction = (piece.construction || []).map(function (s) {
+      if (s && s.kind === "line") {
+        var x = t.segCross(s.from, s.to, apex, cut.point);
+        if (x && !near(x, apex)) fail("gather-construction-crosses-cut");
+      }
+      var g;
+      if (s && s.kind === "line" && ((near(s.from, apex) && near(s.to, mouth1)) || (near(s.to, apex) && near(s.from, mouth1)))) g = 1;
+      else if (s && s.kind === "line" && ((near(s.from, apex) && near(s.to, mouth0)) || (near(s.to, apex) && near(s.from, mouth0)))) g = 0;
+      else {
+        var mp = s && s.from && s.to ? { x: (s.from.x + s.to.x) / 2, y: (s.from.y + s.to.y) / 2 } : null;
+        g = fixedIdx;
+        if (mp) for (var gi = 0; gi < 2; gi++) if (inPoly(mp, polys[gi])) { g = gi; break; }
+      }
+      return toGeomPrim(g === fixedIdx ? clone(s) : rotSeg(s, apex, rot[g]));
+    });
+
+    // 메타 — 틈(현·각) · 개더 구간(어깨 쪽 다리 끝 → 중심) · 줄이는 분량 · 봉제 목둘레. geometry 는 바꾸지 않는다.
+    var chord = Math.hypot(first1.x - last0.x, first1.y - last0.y);
+    var legLen = Math.hypot(last0.x - apex.x, last0.y - apex.y);
+    // 어깨 쪽 조각 = 중심이 없는 조각. A0 가 어깨 쪽이면 틈의 어깨 쪽 끝은 last0, 아니면 first1.
+    var shoulderPtIsLast0 = !fixedFirst;
+    var shoulderEnd = shoulderPtIsLast0 ? last0 : first1, centerEnd = shoulderPtIsLast0 ? first1 : last0;
+    var reduce = ratio * chord;
+    var zoneNeckArc = total - cutArc;   // 중심 쪽 조각의 neckline 호 길이
+    var zoneRaw = chord + zoneNeckArc;
+    return {
+      outline: outline.map(toGeomPrim), construction: construction,
+      meta: {
+        apex: { x: apex.x, y: apex.y }, dartAngleRad: th, neckLenCm: total,
+        cut: { arcFromShoulderCm: cutArc, lenCm: legLen, gapChordCm: chord, angleRad: Math.abs(th),
+               shoulderEnd: { x: shoulderEnd.x, y: shoulderEnd.y }, centerEnd: { x: centerEnd.x, y: centerEnd.y } },
+        gather: { ratio: ratio, excludedShoulderArcCm: cutArc, zoneNeckArcCm: zoneNeckArc, zoneLenCm: zoneRaw, reduceCm: reduce,
+                  zoneSewnCm: zoneRaw - reduce, sewnNeckLenCm: total + chord - reduce },
+        residualSliverCm: sliver, areaBeforeCm2: areaBefore, areaAfterCm2: areaAfter, fixedSide: fixedFirst ? "A" : "B"
+      }
+    };
+  }
+
   // ── Ⓙ(P.23 · 처리 방법 P.162) — 중심선 평행 띠: Ⓘ 로 목둘레를 벌린 뒤, 앞·뒤 중심에 «턱 분량»을 **평행으로 추가**한다 ──
   // 중심선(edge:"center")을 **자기 방향에 직각 바깥쪽**으로 widthCm 만큼 옮기고, 목둘레 끝점·밑단 끝점과 옮긴 중심선을 수평 직선 둘로 잇는다
   // (책 도해: 띠 윗변은 목둘레 높이로 수평 · 밑단도 수평). 연결선은 edge 이름이 없다 — 렌더러의 edge 어휘는 닫혀 있고(`bad-edge`),
@@ -650,7 +777,7 @@
   }
 
   window.designFlare = Object.freeze({
-    closeDartSpread: closeDartSpread, slashSpread: slashSpread, neckTuck: neckTuck, centerBand: centerBand, bustWidthCm: bustWidthCm,
+    closeDartSpread: closeDartSpread, slashSpread: slashSpread, neckTuck: neckTuck, neckGather: neckGather, NECK_GATHER: NECK_GATHER, centerBand: centerBand, bustWidthCm: bustWidthCm,
     tangentAtEnd: tangentAtEnd, tangentAtStart: tangentAtStart, fairBridge: fairBridge
   });
 })();

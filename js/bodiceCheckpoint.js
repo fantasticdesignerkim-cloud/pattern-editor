@@ -1681,6 +1681,77 @@
     return out;
   }
 
+  // ── 목둘레 개더 Ⓚ(P.24) — 다트를 닫아 목둘레 절개 **1곳**을 벌리고 틈을 개더로 줄인다 ──────────────────────────────────
+  //   파라미터(body.neckGather·waistDartScales 0)가 규칙이고 geometry.*.neckGather 메타는 **신뢰하지 않는다** — 출력 외곽을 그린 순서대로 읽어
+  //   틈 한 쌍(dart.id neck-gather-1)의 현·각(= 닫는 다트각 전부), SNP 쪽 목둘레 호(앞 4 · 뒤 3), 목둘레 호 합, 개더 분량(앞 ●×1 · 뒤 ∅×0.5), 봉제 목둘레
+  //   (= 호 합 + 틈 현 − 줄이는 분량)을 다시 계산해 메타·`necklineLenCm` 과 대조한다. 턱(neckTuckState)과 키·메타를 섞지 않는다. 미적용이면 null.
+  var NECK_GATHER_EPS = 1e-6;
+  function neckGatherState(proj) {
+    var g = proj && proj.working && proj.working.geometry;
+    if (!g || !g.front || !g.back) return null;
+    var pb = proj.working.parameters && proj.working.parameters.body;
+    var wants = !!(pb && pb.neckGather != null && pb.neckGather !== false);
+    var has = !!(g.front.neckGather || g.back.neckGather);
+    if (!wants && !has) return null;
+    var out = { front: { reason: null }, back: { reason: null }, ok: false, reason: null };
+    var bad = function (reason, side) { out.ok = false; out.reason = reason; if (side && out[side]) out[side].reason = reason; return out; };
+    if (!pb || pb.neckGather !== true || pb.neckTuck || pb.flare || pb.waistSeam || pb.yokeSeam || pb.yokeGather || pb.princess || pb.peplumFlare || pb.peplumCut) return bad("neck-gather-mismatch");
+    var sc = pb.waistDartScales;
+    if (!sc || ["a", "b", "d", "e"].some(function (k) { return sc[k] !== 0; })) return bad("neck-gather-waist-darts");   // Ⓚ 는 Ⓘ 와 같이 허리 다트 없는 몸판
+    if (g.frontPeplum || g.backPeplum || g.frontYoke || g.backYoke || g.shoulderYoke || g.frontCenter || g.backCenter) return bad("neck-gather-mismatch");
+    var DFx = window.designFlare, rules = (DFx && DFx.NECK_GATHER) || { front: { cutArcCm: 4, ratio: 1 }, back: { cutArcCm: 3, ratio: 0.5 } };
+    var sides = ["front", "back"];
+    for (var i = 0; i < sides.length; i++) {
+      var side = sides[i], pc = g[side], m = pc.neckGather, row = out[side], rule = rules[side];
+      if (g[side].neckTuck) return bad("neck-gather-mismatch", side);
+      if (!m || !m.cut || !m.gather) return bad("neck-gather-missing", side);
+      if ([m.dartAngleRad, m.neckLenCm, m.areaBeforeCm2, m.areaAfterCm2, m.cut.gapChordCm, m.cut.lenCm, m.gather.reduceCm, m.gather.sewnNeckLenCm, m.gather.zoneNeckArcCm].some(function (v) { return typeof v !== "number" || !isFinite(v); })) return bad("neck-gather-mismatch", side);
+      var segs = [];
+      (pc.outline || []).forEach(function (o) { ringSegs([o]).forEach(function (r) { r.edge = o.edge; r.dart = o.dart; segs.push(r); }); });
+      var n = segs.length, closed = n > 2;
+      for (var k = 0; k < n && closed; k++) if (Math.hypot(segs[k].to.x - segs[(k + 1) % n].from.x, segs[k].to.y - segs[(k + 1) % n].from.y) > 1e-4) closed = false;
+      if (!closed) return bad("neck-gather-open", side);
+      var met = yokeRingMetrics(segs);
+      if (met.selfIntersects || !(met.areaCm2 > 0)) return bad("neck-gather-self-intersection", side);
+      var slitIdx = [];
+      segs.forEach(function (sg, ix) { if (sg.dart && sg.dart.id === "neck-gather-1" && sg.dart.boundary === "neckline") slitIdx.push(ix); });
+      if (slitIdx.length !== 2 || slitIdx[1] !== (slitIdx[0] + 1) % n) return bad("neck-gather-slit-count", side);
+      var a = segs[slitIdx[0]], b = segs[slitIdx[1]];
+      if (Math.hypot(a.to.x - b.from.x, a.to.y - b.from.y) > 1e-6) return bad("neck-gather-slit-pair", side);
+      var la = Math.hypot(a.from.x - a.to.x, a.from.y - a.to.y), lb = Math.hypot(b.from.x - b.to.x, b.from.y - b.to.y);
+      if (Math.abs(la - lb) > 1e-6) return bad("neck-gather-slit-unequal", side);
+      var chord = Math.hypot(a.from.x - b.to.x, a.from.y - b.to.y), ang = 2 * Math.asin(chord / (2 * la));
+      if (Math.abs(ang - Math.abs(m.dartAngleRad)) > NECK_GATHER_EPS) return bad("neck-gather-angle-mismatch", side);   // 닫는 다트각 전부가 이 한 곳으로 간다
+      if (Math.abs(m.cut.gapChordCm - chord) > NECK_GATHER_EPS || Math.abs(m.cut.lenCm - la) > NECK_GATHER_EPS) return bad("neck-gather-gap-mismatch", side);
+      // 목둘레 호 — 합은 메타와 같고(절개가 길이를 안 바꾼다), SNP 쪽 조각의 호는 책의 «4»·«3» 이다.
+      var arcOf = function (idxs) { var s = 0; idxs.forEach(function (ix) { yokeFlatSeg(segs[ix]).forEach(function (ab) { s += Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y); }); }); return s; };
+      var neckLen = 0;
+      segs.forEach(function (sg) { if (sg.edge === "neckline") yokeFlatSeg(sg).forEach(function (ab) { neckLen += Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y); }); });
+      if (Math.abs(neckLen - m.neckLenCm) > 1e-3) return bad("neck-gather-neckline-length", side);
+      var before = [], afterRun = [];
+      for (var p = (slitIdx[0] + n - 1) % n, cnt = 0; segs[p].edge === "neckline" && cnt < n; p = (p + n - 1) % n, cnt++) before.push(p);
+      for (var p2 = (slitIdx[1] + 1) % n, cnt2 = 0; segs[p2].edge === "neckline" && cnt2 < n; p2 = (p2 + 1) % n, cnt2++) afterRun.push(p2);
+      if (!before.length || !afterRun.length) return bad("neck-gather-neckline-split", side);
+      var farOf = function (run, dir) { var last = run[run.length - 1]; return segs[(last + dir + n) % n].edge; };   // 호의 바깥쪽 끝 이웃
+      var beforeFar = farOf(before, -1), afterFar = farOf(afterRun, 1);
+      var shoulderRun = (beforeFar === "shoulder" && afterFar === "center") ? before : (afterFar === "shoulder" && beforeFar === "center") ? afterRun : null;
+      if (!shoulderRun) return bad("neck-gather-neckline-split", side);
+      var shoulderArc = arcOf(shoulderRun);
+      if (Math.abs(shoulderArc - rule.cutArcCm) > 1e-3 || Math.abs(m.cut.arcFromShoulderCm - rule.cutArcCm) > 1e-9) return bad("neck-gather-cut-position", side);
+      // 개더 분량 · 봉제 목둘레(출력에서 잰 틈 현으로 다시 계산)
+      var reduce = rule.ratio * chord, sewn = m.neckLenCm + chord - reduce;   // 호 합은 위에서 출력과 1e-3 대조했다 — 평탄화 해상도 차이를 봉제 길이에 다시 싣지 않는다
+      if (Math.abs(m.gather.ratio - rule.ratio) > 1e-12 || Math.abs(m.gather.reduceCm - reduce) > 1e-6) return bad("neck-gather-amount", side);
+      if (Math.abs(m.gather.sewnNeckLenCm - sewn) > 1e-6 || typeof pc.necklineLenCm !== "number" || Math.abs(pc.necklineLenCm - sewn) > 1e-6) return bad("neck-gather-sewn-length", side);
+      if (Math.abs(m.gather.zoneNeckArcCm - (neckLen - rule.cutArcCm)) > 1e-3) return bad("neck-gather-zone", side);
+      if (Math.abs(m.areaAfterCm2 - m.areaBeforeCm2) > 1) return bad("neck-gather-area", side);
+      row.dartAngleDeg = round4(Math.abs(m.dartAngleRad) * 180 / Math.PI);
+      row.gapChordCm = round4(chord); row.cutArcCm = round4(shoulderArc); row.ratio = rule.ratio;
+      row.reduceCm = round4(reduce); row.sewnNeckLenCm = round4(sewn); row.neckLenCm = round4(neckLen); row.areaCm2 = round4(met.areaCm2);
+    }
+    out.ok = true;
+    return out;
+  }
+
   function check(proj) {
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
@@ -1728,6 +1799,9 @@
     // 목둘레 턱 Ⓘ(있을 때만): 절개 틈 두 쌍의 현·각·균등·합을 출력 geometry 에서 다시 잰다.
     var neckTuck = neckTuckState(proj);
     if (neckTuck && !neckTuck.ok) fails.push(neckTuck.reason);
+    // 목둘레 개더 Ⓚ(있을 때만): 틈 현·각·SNP 쪽 호·개더 분량·봉제 목둘레를 출력 geometry 에서 다시 계산한다.
+    var neckGather = neckGatherState(proj);
+    if (neckGather && !neckGather.ok) fails.push(neckGather.reason);
 
     var out = {
       ok: fails.length === 0,
@@ -1743,6 +1817,7 @@
     };
     if (yokeSeam) out.yokeSeam = yokeSeam;   // 요크 이음선 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
     if (princess) out.princess = princess;   // 프린세스 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
+    if (neckGather) out.neckGather = neckGather;   // 목둘레 개더 Ⓚ 적용 시에만 — 미적용이면 키 자체가 없다
     if (neckTuck) out.neckTuck = neckTuck;   // 목둘레 턱 Ⓘ 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
     if (flareSlash) out.flareSlash = flareSlash;   // 플레어 Ⓗ 적용 시에만 — 미적용이면 키 자체가 없다(기존 출력 바이트 동일)
     return out;
@@ -1858,5 +1933,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, princessState: princessState, flareSlashState: flareSlashState, neckTuckState: neckTuckState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, princessState: princessState, flareSlashState: flareSlashState, neckTuckState: neckTuckState, neckGatherState: neckGatherState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();

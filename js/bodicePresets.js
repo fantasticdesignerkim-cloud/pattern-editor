@@ -50,6 +50,7 @@
     { key: "flare", label: "다트를 닫아 밑단 벌리기", unit: "" },
     { key: "flareSlash", label: "진동 가장 안쪽 수직 절개로 플레어 더 벌리기", unit: "" },
     { key: "neckTuck", label: "다트를 닫아 목둘레 절개 2곳 벌리기(턱)", unit: "" },
+    { key: "neckGather", label: "다트를 닫아 목둘레 절개 1곳 벌리고 개더로 줄이기", unit: "" },
     { key: "waistSeam", label: "허리 이음선(상·하 조각 분리)", unit: "" },
     { key: "peplumFlare", label: "페플럼 맞대면서 플레어 벌리기", unit: "" },
     { key: "peplumCut", label: "페플럼 WL 등분 수직 절개로 벌리기", unit: "" },
@@ -109,12 +110,11 @@
         availVariant("bunka-bodice-J", "J", "J · 밑단 폭 1cm 추가 · 다트를 닫아 목둘레를 벌리고 중심에 턱 분량(평행 띠)을 추가", 23)
       ] },
     { id: "neck-gather", order: 6, label: "목둘레에 개더를 넣는다", symbol: "K", page: 24,
-      availability: "pending-op", note: PENDING_NOTE,
-      familyNote: "턱 대신 개더로 분량을 소화한다.",
+      availability: "available", note: null,
+      familyNote: "턱 대신 개더로 분량을 소화한다. Ⓚ = 다트를 닫아 목둘레 절개 1곳(SNP 에서 호를 따라 앞 4cm · 뒤 3cm)을 벌리고, 틈을 개더로 줄인다(앞 ●×1 · 뒤 ∅×0.5). 개더 구간은 절개 지점부터 앞·뒤중심까지(SNP 쪽 4/3cm 제외). 개더는 표시이며 geometry 는 열린 V 하나다.",
       variants: [
-        pendingVariant("bunka-bodice-K", "K", "K · 목둘레 개더", 24, null,
-          "턱(I·J)과 같은 계열로 추정 — **미판독**. 착수 시 P.24–25 를 읽고 확정한다."),
-        pendingVariant("bunka-bodice-L", "L", "L · 목둘레 개더 변형", 25, null, "K 와 같은 이유(미판독).")
+        availVariant("bunka-bodice-K", "K", "K · 밑단 폭을 1cm 추가 · 다트를 닫아 목둘레를 벌리고 개더로 줄인다", 24),
+        pendingVariant("bunka-bodice-L", "L", "L · 목둘레 개더 변형", 25, null, "P.25 미판독 — 착수 시 읽고 확정한다.")
       ] },
     { id: "waist-seam", order: 7, label: "허리 이음선", symbol: "M", page: 26,
       availability: "available", note: null,
@@ -209,6 +209,14 @@
       baseMethod: "bunka-bodice-J-v1",
       body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1,
               waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, neckTuck: "J" }
+    },
+    {
+      id: "bunka-bodice-K", label: "교재 K 목둘레 개더", familyId: "neck-gather", symbol: "K", page: 24,
+      description: "Ⓑ 몸판(허리 다트 없음 · 밑단 +1) · 앞 AH·뒤 어깨 다트를 전부 닫아 목둘레 절개 1곳(SNP 에서 앞 4cm · 뒤 3cm)을 벌린다 · 개더 분량 앞 ●×1 · 뒤 ∅×0.5 · 개더 구간 = 절개 지점부터 중심까지",
+      source: "[패턴학교] 목둘레 개더 Ⓚ(P.24) · 처리 방법 닫는다·벌린다(P.161) — 개더 구간은 사용자 확정(2026-10-04, 책에 양끝 수치 없음)",
+      baseMethod: "bunka-bodice-K-v1",
+      body: { hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1,
+              waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, neckGather: true }
     },
     {
       id: "bunka-bodice-M", label: "교재 M 허리 이음선", familyId: "waist-seam", symbol: "M", page: 26,
@@ -356,6 +364,7 @@
       }
       if (k === "flare") { if (v !== true) fail("invalid-body", id + ".flare"); return; }
       if (k === "flareSlash") { if (v !== true) fail("invalid-body", id + ".flareSlash"); if (body.flare !== true) fail("flare-slash-needs-flare", id); return; }
+      if (k === "neckGather") { if (v !== true) fail("invalid-body", id + ".neckGather"); return; }   // true = Ⓚ(P.24)
       if (k === "neckTuck") { if (v !== true && v !== "J") fail("invalid-body", id + ".neckTuck"); return; }   // true = Ⓘ(P.22) · "J" = Ⓙ(P.23)
       if (k === "waistSeam") { if (v !== true) fail("invalid-body", id + ".waistSeam"); return; }
       if (k === "yokeSeam") {
