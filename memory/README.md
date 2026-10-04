@@ -75,3 +75,6 @@
 | CLAUDE.md § 패턴 제작 7단계 · § Design 3단계 | "지금 다음 작업 = ② 몸판 / 코딩하지 않는다", "현재 = 몸판 모양 단계"는 STATUS 의 ②~⑤ 완료와 충돌. "아래에서 구현"은 가리킬 곳이 없다 |
 | docs/STATUS.md | "위 '…' 섹션 참고"가 13회이나 그 섹션들은 이 파일에 없다(history·CLAUDE.md 로 이동). 다음 후보 1번 "남은 것 = UI 연결…"은 상단 표의 "161 완료"와 충돌. 하단(약 215~227줄)의 "② 몸판 착수 전" 서술도 낡았다 |
 | docs/spec/dart-engine-layering.md | 제목이 "아직 착수 전"이나 C0~C7 완료. ③ 이름 `findApplicableIntervals` 는 코드에서 `findMaxApplicableMagnitude` 로 바뀌었고 원 함수는 삭제됨 |
+
+- **처리 (2026-10-04, 2단계, A안)**: CLAUDE.md 두 행은 원문 보존 + `> ⏱ 상태:` 주석 + [decisions.md](decisions.md) 로그 #1–#4 로,
+  STATUS 행은 링크 교정·완료 항목 접기로 처리했다. **spec 행은 미처리**(다음 패스).

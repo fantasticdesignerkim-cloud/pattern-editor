@@ -48,8 +48,8 @@
 (`bodiceResult`/`sleeveResult`/`collarResult`), 셋을 `designResult` 로 묶는다. 몸판에는
 여유량·길이·옆선·곡선화·네크라인·앞여밈·허리 다트 재배분·목표 완성 허리가 있고, 패턴선 도구
 (직선·곡선·선택·편집·snap·역할·절개선 검증·파트 분리·외곽 대체선 합성)가 붙어 있다.
-2026-09 에 **몸판 라인 카탈로그**([패턴학교] P.14–35, 라인 10 · 변형 22)를 추가해 박시 A·B·
-셰이프트 C·D 가 실행되고 나머지 18개는 `blockedBy` 로 보류 중이다.
+2026-09 에 **몸판 라인 카탈로그**([패턴학교] P.14–35, 라인 10 · 변형 22)를 추가했다 — 변형별
+실행·보류 현황은 [docs/STATUS.md](docs/STATUS.md) § 몸판 라인 카탈로그가 소유한다.
 
 **다음 후보와 열린 이슈는 [docs/STATUS.md](docs/STATUS.md) 에 있다 — 세션을 시작할 때 그걸 먼저 읽는다.**
 
@@ -80,6 +80,9 @@
 `cut → rotate → bake → normalize → validate → render`. 델타 안전망은 문지기로 유지
 (normalize=청소기, 게이트=문지기).
 
+> ⏱ 상태: 위 「아래 "normalizeBakedSegments 구현" 섹션」은 이 파일에 없다 — 원문은
+> [docs/history/dart-engine.md](docs/history/dart-engine.md) § normalizeBakedSegments 구현 (D-001).
+
 ### 5개 핵심 "심장" 함수
 - `splitFrontOutline` / `splitBackOutline` — 1차 다트: 원본 도안 기준 분할
 - `splitBakedOutline` — 2차 이상: baked 결과 기준 분할
@@ -89,6 +92,14 @@
 - `bakeFromSplitPieces` — 회전 후 최종 외곽선 재조립. **normalize는 아직 이 안에 없음.**
 - (조력) `findMaxSafeAngle`(각도 배리어 `rotationLegBarrier` 포함) / `findRotationCollisions`
   / `findSelfIntersections(segs, pivot)` — 회전 한계·겹침 판정 (2026-07-07 섹션 참고)
+
+> ⏱ 상태 (2026-10-04, 관찰 HEAD `87cb7a2`): ① `choosePhysicalCloseAngle` 의 부호 결정 권한은
+> **대체됨** — 최종 부호는 C4 `selectRotationSign` 이 정하고 이 함수는 gen-0 기하 힌트(동률 tie-breaker)다
+> (D-113 → `superseded_by` D-010, [memory/decisions.md](memory/decisions.md) 로그 #4).
+> ② `normalizeBakedSegments` 는 `bakeFromSplitPieces` 안이 아니라 `evaluateEndpoint` 가 bake 직후 호출한다(구현 완료).
+> ③ `findMaxSafeAngle` 은 삭제됐다(C5d) — 회전 한계는 `findPhysicalSweepLimit`(내부에 `rotationLegBarrier`)가 맡는다.
+> ④ 「2026-07-07 섹션」 = [docs/history/dart-engine.md](docs/history/dart-engine.md) § 최근 해결된 핵심 버그 (2026-07-07 세션).
+> 현재형 계약은 [memory/dart-engine.md](memory/dart-engine.md).
 
 ### 상태 구조
 - `appliedFront` / `appliedBack` 각각: `bakedSegments`, `pivot`, `cutPoint`, `angle`, `side`
@@ -128,9 +139,21 @@
   풀 기본각이고(끝까지 드래그 = 전체 다트를 그 위치로 relocate), 여러 다트를 동시에
   열려면 **부분 드래그**로 예산을 나눠 쓴다.
 
+> ⏱ 상태 (2026-10-04, 관찰 HEAD `87cb7a2`): 첫 줄 «`closeAngle`은 계산값(`choosePhysicalCloseAngle`)» 과
+> «부호만 `choosePhysicalCloseAngle`이 최종 결정» 은 **대체됨** — `closeAngle` 은 C4 가 고른 부호 × 최대 적용 크기
+> (`prepareDartMoveCandidate` 의 `closeAngleRad`)이고 그 값이 `baseAngle` 이 된다
+> (D-113 → `superseded_by` D-010, [memory/decisions.md](memory/decisions.md) 로그 #4). «자동 적용 안 함»·
+> «userAngle 0 시작»·기본 다트량 공식이 크기의 원천이라는 것·예산 사후 게이트(D-104)는 유효하다.
+> 「아래 "다트 예산 게이트" 섹션」 = [docs/history/dart-engine.md](docs/history/dart-engine.md) § 다트 예산 게이트.
+
 ### 파일 분리 / 클래스화
 - `dartGeometry.js`/`dartState.js`/`dartInteraction.js` 분리: 엔진 안정화 전까지 보류
 - `DartMoveEngine` 클래스화: 버그 해결 전까지 금지
+
+> ⏱ 상태 (2026-10-04): **scoped** — "분리·클래스화하지 않는다" 방향은 유효하다. 해제 조건
+> «엔진 안정화 전까지 / 버그 해결 전까지» 는 C0~C7 완료로 충족됐고, 이후의 재검토 조건은
+> [docs/STATUS.md](docs/STATUS.md) § 다음에 확인할 것 «파일 분리 타당성 감사 — 4파일 분리 기각» 이 정한다
+> (D-105, [memory/decisions.md](memory/decisions.md) 로그 #3).
 
 ## 작업 파일 범위
 
@@ -142,6 +165,9 @@
   - 예외 기록: 2026-07 캔버스 중심 UI 개편은 승인 하에 `index.html`(마크업 재배치·
     inline 색 제거·캐시 버전)과 `css/style.css`를 수정함. **JS는 무변경**
     (아래 "캔버스 중심 UI 개편 완료" 섹션의 불변식 준수).
+
+> ⏱ 상태: 「아래 "캔버스 중심 UI 개편 완료" 섹션」은 이 파일에 없다 — 원문은
+> [docs/history/ui-workspace.md](docs/history/ui-workspace.md) § 캔버스 중심 UI 개편 완료 (D-005).
 
 ## 개발 서버 / 실행
 
@@ -239,7 +265,7 @@ localStorage에만** 저장된다 — 저장소엔 없다. 그래서 PC/브라�
   `dbg()`를 불러야 한다(가드 없이 넘기면 꺼져 있어도 매번 순회 비용이 든다).
 - `[pivotCheck]`/`[cutSegCheck]`/`[splitBaked piece summary]`/`[splitBaked pieceA/B pts]`/
   `[bake old-leg check]`(전부 "TEMP DEBUG, 원인 확정되면 제거"로 표시돼 있던 것들)는
-  뒤판 검증(위 "헤드리스 회귀 테스트 하네스" 섹션, 128/128+600세대)으로 안정성이
+  뒤판 검증([docs/TESTING.md](docs/TESTING.md) § 헤드리스 회귀 테스트 하네스, 128/128+600세대)으로 안정성이
   충분히 확인돼 **전부 삭제 완료**. 나머지(`[splitBaked]`, `[notchInstanceTag]`,
   `[apply]`, `[closeAngle]`, `[afterBake]` 등)는 `dbg()`로 남겨둠 — 필요하면
   `DEBUG_DART_MOVE=true`로 다시 켜서 볼 수 있음.
@@ -252,6 +278,11 @@ localStorage에만** 저장된다 — 저장소엔 없다. 그래서 PC/브라�
 **결정**: 전체 패턴 제작 흐름은 7단계지만 **UI 는 기존 4 stage(원형/디자인/재단/출력)에
 묶는다** — 상단에 7개 탭을 만들지 않는다. 아래는 기록만이고 **지금 코딩하지 않는다.**
 `uiState.stage ∈ {draft, design}` 두 값 모델(위 CAD workspace 계약)은 그대로 유지한다.
+
+> ⏱ 상태 (2026-10-04): «지금 코딩하지 않는다» 는 **소진** — ②~⑤ 가 구현·완료됐다
+> ([docs/STATUS.md](docs/STATUS.md) § 지금 서 있는 곳). 7단계 틀·4 UI stage 매핑·단계별 책임은 유효하다
+> (D-002 **scoped**, [memory/decisions.md](memory/decisions.md) 로그 #1). 「위 CAD workspace 계약」 =
+> [docs/history/ui-workspace.md](docs/history/ui-workspace.md) § CAD workspace 불변식.
 
 **7단계 → 4 UI stage 매핑**
 
@@ -283,6 +314,11 @@ localStorage에만** 저장된다 — 저장소엔 없다. 그래서 PC/브라�
 ③ 소매·④ 칼라가 정확해진다. **첫 블라우스 몸판 사양은 별도로 정한 뒤 착수**하며,
 그 전까지 코드·shape 골든·다트 엔진·새 UI stage 를 건드리지 않는다.
 
+> ⏱ 상태 (2026-10-04): 이 문단(«지금 다음 작업 = ②» 와 «그 전까지 … 건드리지 않는다»)은 **소진** —
+> 다섯 항목이 확정·구현되고 ②~⑤ 가 완료됐다(D-234·D-235·D-236, [docs/STATUS.md](docs/STATUS.md) § 지금 서 있는 곳).
+> 원칙 «② 를 ③·④ 보다 먼저» 는 유효하다(D-002 **scoped**, [memory/decisions.md](memory/decisions.md) 로그 #1).
+> 위 1·6번의 「위 "어깨 길이 보정"」 은 실제로 **아래** § 어깨 길이 보정의 단계 책임 경계다.
+
 ## Design 3단계 작업 순서 (2026-08, 사용자 확정) — 몸판 → 소매 → 카라
 
 **지배 결정**: Design 단계 **안의 작업 순서**를 `몸판 → 소매 → 카라` 로 둔다. **상단 큰 UI
@@ -297,6 +333,11 @@ stage 를 늘리지 않는다**(기존 4 stage 원형/디자인/재단/출력 �
 **현재 = 몸판 모양 단계.** 앞중심 여밈·카라로 넘어가지 않는다. 기존 도구 매핑: 블라우스 길이=
 DB1 hem 연장 / 옆선·밑단·네크라인=boundary 대체선 / 다트·절개=cut+파트분리 / 합성=designOutline.
 **빠진 매개변수 컨트롤은 품·여유량뿐 → 아래에서 구현.**
+
+> ⏱ 상태 (2026-10-04): «현재 = 몸판 모양 단계 … 넘어가지 않는다» 는 **소진** — 몸판·소매·카라가 모두
+> 완료됐다(D-235·D-247·D-248, [docs/STATUS.md](docs/STATUS.md) § 지금 서 있는 곳). 순서 몸판 → 소매 → 카라와
+> «앞 단계 결과를 바꾸지 않는다» 는 유효하다(D-003 **scoped**, [memory/decisions.md](memory/decisions.md) 로그 #2).
+> 「아래에서 구현」 = [docs/history/design-bodice.md](docs/history/design-bodice.md) § ✅ Design 품·여유량(ease) (D-226).
 
 ## 어깨 길이 보정의 단계 책임 경계 (2026-07, 사용자 확정) — 조사 중단
 
@@ -328,6 +369,8 @@ DB1 hem 연장 / 옆선·밑단·네크라인=boundary 대체선 / 다트·절�
 > 참고: 뒤판 `back-shoulder-dart` 비대칭에서 나오는 ~0.1cm 잔여 sliver(위 "뒤판 검증"
 > 소견)는 이 경계에 따라 **패턴선 확정 단계에서 흡수될 사항**이며, 다트이동 엔진의
 > 버그가 아니다.
+
+> ⏱ 상태: 「위 "뒤판 검증" 소견」 = [docs/TESTING.md](docs/TESTING.md) «뒤판(pivot=E) 검증 결과» 의 알려진 소견 (D-004).
 
 ## 토큰 절약 규칙 (세션 비용 — 위반 금지)
 
@@ -370,7 +413,7 @@ DB1 hem 연장 / 옆선·밑단·네크라인=boundary 대체선 / 다트·절�
 | **[docs/RECIPE.md](docs/RECIPE.md)** | **교재의 새 라인·변형을 기능으로 만들 때(반복 절차)** |
 | [docs/book/README.md](docs/book/README.md) | **교재를 볼 때 — 출처가 둘이라 여기부터** |
 | [docs/book/INDEX.md](docs/book/INDEX.md) | 교재 쪽 → 판독 노트 고르기 |
-| [docs/spec/dart-engine-layering.md](docs/spec/dart-engine-layering.md) | 형상 엔진 계층화에 착수할 때(미착수) |
+| [docs/spec/dart-engine-layering.md](docs/spec/dart-engine-layering.md) | 형상 엔진 계층화(C0~C7 완료)의 설계 의도·완료 기록을 볼 때 |
 | `docs/history/dart-engine.md` | 다트 엔진이 왜 지금 모양인지 파고들 때 |
 | `docs/history/ui-workspace.md` | UI 배치·시각 계약의 근거를 찾을 때 |
 | `docs/history/block-and-draft.md` | 원형 완료본·SV2 edge·draft 배치 |

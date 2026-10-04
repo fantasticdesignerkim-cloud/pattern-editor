@@ -3,7 +3,7 @@
 > **CLAUDE.md 가 "무엇을 지켜야 하는가"라면 이 문서는 "지금 어디이고 다음이 무엇인가"다.**
 > 작업이 끝날 때마다 여기를 갱신한다 — 완료 상세는 `docs/history/` 로 보내고 여기엔 **현재와 다음만** 둔다.
 
-*마지막 갱신: 2026-10-04 (목둘레 개더 Ⓛ 구현)*
+*마지막 갱신: 2026-10-04 (목둘레 개더 Ⓛ 구현 · 낡은 참조 정리)*
 
 ## 지금 서 있는 곳
 
@@ -35,10 +35,8 @@
 - **목둘레 개더 Ⓛ**(P.25 — Ⓚ + 앞·뒤 중심 **평행 띠** ☒ = 총 개더 분량 − 쐐기 틈 = 앞 ●(6.752) · 뒤 0.5∅(1.005) · 총 분량 앞 ●×2(13.504) · 뒤 ∅×1.5(3.014) · 봉제 목둘레 = 원래 목둘레(앞 11.13 · 뒤 7.69) · **■ = 쐐기 틈은 사용자 확정, 뒤 도해 «5 정도» 는 산식과 양립 불가한 미해결 개략 표기** — [노트](book/P025.md)) — `designFlare.neckGatherBand` / `body.neckGatherBand:true` (Ⓚ 키와 분리)
 - **보류**: 없음 — 몸판 카탈로그 22 변형(A~V) 전부 실행 가능
 
-★ **보류 항목이 전부 같은 것 때문에 막혀 있다** — [패턴학교] 「처리 방법」(P.157–163) 중
-**157·158·159(맞댄다 계열)와 162(평행 절개)** 가 없다. 우리가 가진 160·161·163(`dartMove` 계열)은
-**원형 단계에만** 연결돼 있고 디자인 단계에서 호출할 경로가 없다. 자세한 대응표는
-[docs/book/P157.md](book/P157.md).
+★ [패턴학교] 「처리 방법」(P.157–163) 7연산의 대응표는 [docs/book/P157.md](book/P157.md).
+디자인 단계 연결 현황(157·158·161·163)은 위 「지금 서 있는 곳」 표가 소유한다. 159·162 는 이 문서에서 따로 확인하지 않았다.
 
 ### 허리 이음선 Ⓜ (2026-09-28, `js/designWaistSeam.js` → 프리셋 연결)
 
@@ -116,8 +114,7 @@ body = Ⓜ + `peplumFlare:true`(waistSeam 전제). 몸판(upper)은 Ⓜ 과 **�
    `designLineTool` 의 검증된 ring/분할 재사용). 실제 앞·뒤판 실측: 앞 다트각 −18.25°·쐐기
    117.412(해석값 일치)·연결오차 3.6e-15 / 뒤 11.38°·157.852·**잔여 sliver 0.1029cm**(문서화된
    어깨다트 비대칭, 명시 세그먼트로 기록).
-   **남은 것 = UI 연결 + 플레어 Ⓖ·Ⓗ 프리셋 해제**(별도 커밋 — 엔진·UI 안 섞는다). 그때 정할 것:
-   **밑단 fairing** — v1 은 직선이고 교재는 «완만한 곡선»이다(P.157 전 연산 공통 불변식).
+   ~~남은 것 = UI 연결 + 플레어 Ⓖ·Ⓗ 프리셋 해제, 밑단 fairing 결정~~ → **✅ 완료**(위 표 「처리 방법 161」 — 밑단 곡선 이음·Ⓖ·Ⓗ 프리셋·UI).
    **목둘레 턱 Ⓘ 는 ✅ 완료**(`designFlare.neckTuck` — 절개 여러 개 부채꼴을 한 번에 처리, [P022](book/P022.md)). **Ⓙ(P.23) ✅ 완료**(Ⓘ + `designFlare.centerBand`, [P023](book/P023.md)).
 2. ~~`157 맞댄다` 순수 연산~~ → **✅ `js/designJoin.js` 구현 완료**(`buttJoin`). 두 폐곡선 +
    `joinPairId` + 양쪽 맞댐 구간 → B 를 강체 역방향 일치 → 중복 맞댐선 제거 → 한 장. 검산으로
@@ -127,12 +124,12 @@ body = Ⓜ + `peplumFlare:true`(waistSeam 전제). 몸판(upper)은 Ⓜ 과 **�
    (b) ~~UI·프리셋 연결~~ → **Ⓜ 로 완료**(범용 맞댐 도구는 만들지 않음).
    (c) **맞닿는 경계**(홈을 정확히 메우는 배치)는 self-intersection 으로 거부된다 — 요크·이음선
    같은 변 대 변 맞댐엔 문제없지만, 정식 처리는 별도 설계. 하네스 9(d)에 고정해 뒀다.
-   → 이게 풀리면 요크·허리 이음선·프린세스, 하이넥 n·후드 e·숄 안단이 열린다.
+   → 요크·허리 이음선·프린세스는 이미 실행된다(위 「몸판 라인 카탈로그」). 이게 풀리면 열릴 남은 대상: 하이넥 n·후드 e·숄 안단.
 3. **가슴 쪽 마무리** — `목표 완성 가슴`(여유량 역산). 작다. 다만 **"완성"(다트 닫은 뒤 91.1)과
    "외곽"(제도 폭 95) 중 무엇을 목표로 삼을지** 먼저 정해야 한다.
 4. **엉덩이선 여유 검사** — [패턴학교] P.15 가 *"오버 블라우스는 엉덩이선에 8cm 이상"* 이라고
    검증 기준을 준다. 우리에겐 **엉덩이둘레 실측 입력이 없다**(치수 UI 추가 필요 → 원형 stage 영역).
-5. **실사용 검증** — CLAUDE.md 가 반복해 적은 원칙: *UI 기능 추가가 아니라 실제 사용 검증.
+5. **실사용 검증** — 아래 「다음에 확인할 것」에 적힌 원칙: *UI 기능 추가가 아니라 실제 사용 검증.
    반복적으로 확인되는 불편만 후속 수정.* 김이 첫 블라우스를 끝까지 만들어 보는 것.
 
 ## 미확정으로 남긴 것 (지어내지 않았다)
@@ -150,32 +147,32 @@ body = Ⓜ + `peplumFlare:true`(waistSeam 전제). 몸판(upper)은 Ⓜ 과 **�
 
 ## 다음에 확인할 것 (열려있는 이슈)
 
-- **✅ (완료, 2026-07-08) `normalizeBakedSegments`** — 위 "normalizeBakedSegments 구현"
-  섹션 참고. 파이프라인 `cut→rotate→bake→normalize→validate→render`, 단일 불변식
+- **✅ (완료, 2026-07-08) `normalizeBakedSegments`** — [history/dart-engine.md](history/dart-engine.md)
+  § normalizeBakedSegments 구현 참고. 파이프라인 `cut→rotate→bake→normalize→validate→render`, 단일 불변식
   (면적 0 서브패스 제거), ε=0.05cm 실측 확정, 다중다트 보존 검증 완료.
 - **(다음 작업 후보) split/bake 아티팩트 근본 제거** — normalize는 사후 청소만 한다.
   `bakeFromSplitPieces`가 닫힌 흔적을 재분할로 재개방하는 것 자체를 막으려면
   split/bake가 열린 다트를 강체로 이고 가도록 재설계. 의도적 3개+ 다중다트 부채꼴
   워크플로우가 필요해지면 착수.
-- **✅ (완료, 2026-07) 뒤판(back) 스트레스 검증** — 위 "헤드리스 회귀 테스트 하네스"
-  섹션 참고. 결정론적 128/128 PASS + 무작위 600세대 이상 없음. back-shoulder-dart
+- **✅ (완료, 2026-07) 뒤판(back) 스트레스 검증** — [TESTING.md](TESTING.md) § 헤드리스 회귀 테스트 하네스
+  참고. 결정론적 128/128 PASS + 무작위 600세대 이상 없음. back-shoulder-dart
   비대칭 잔여 sliver(~0.1cm)는 사용자 확인 결과 버그 아님(아래 항목 참고).
 - **(신규 기능 후보, 다트이동과 별개 단계) 뒤어깨선 재봉선 정리 + 앞/뒤 어깨 길이
   맞춤** — 실제 패턴 작업에서 뒤판 다트이동 후 패턴사가 bSNP-bSP를 직선으로
-  재작도하고 앞어깨 길이와 비교해 bSP를 조정하는 단계. 위 "뒤판 검증" 소견의
+  재작도하고 앞어깨 길이와 비교해 bSP를 조정하는 단계. [TESTING.md](TESTING.md) «뒤판(pivot=E) 검증 결과» 소견의
   sliver는 이 단계가 구현되면 자연히 흡수된다 — 다트이동 엔진 자체를 건드릴
   필요는 없음.
   **→ 2026-07 확정: 조사 중단. 이 보정은 원형·디자인이 아니라 "패턴선 확정"
-  단계의 책임이다 — 위 "어깨 길이 보정의 단계 책임 경계" 섹션 참고.**
-- 위 "알려진 사소한 관찰" 항목이 실제로 문제가 되는지 지켜보기
-- **✅ (완료, 2026-07) 디버그 로그 정리** — 위 "디버그 플래그" 섹션 참고. TEMP DEBUG
+  단계의 책임이다 — [CLAUDE.md](../CLAUDE.md) § 어깨 길이 보정의 단계 책임 경계 참고.**
+- [history/dart-engine.md](history/dart-engine.md) § 최근 해결된 핵심 버그 (2026-07-03 세션)의 «알려진 사소한 관찰» 항목이 실제로 문제가 되는지 지켜보기
+- **✅ (완료, 2026-07) 디버그 로그 정리** — [CLAUDE.md](../CLAUDE.md) § 디버그 플래그 참고. TEMP DEBUG
   전수 삭제, 나머지는 `dbg()` 한 함수로 통합, `DEBUG_DART_MOVE` 기본 `false`,
   캐시 버전 `?v=2026070732`. 실제 브라우저에서 뒤판 다트이동 재검증 완료(콘솔 오류 0).
-- **✅ (완료, 2026-07) 앞판 다중다트 회귀 고정** — 위 "헤드리스 회귀 테스트 하네스"
-  섹션 참고. 결정론 60 + 다중다트 49 + 오래된 다트 2층 감사 83 PASS, 골든 3종
+- **✅ (완료, 2026-07) 앞판 다중다트 회귀 고정** — [TESTING.md](TESTING.md) § 헤드리스 회귀 테스트 하네스
+  참고. 결정론 60 + 다중다트 49 + 오래된 다트 2층 감사 83 PASS, 골든 3종
   (`front/multidart/oldest_retarget.json`). 리팩터 착수 전 안전망 완성.
-- **✅ (완료, 2026-07) 형상 엔진 재설계 순서 ③ — C0~C7 전부 완료** — 위 "형상 엔진 재설계
-  스펙" + 각 "C_ 완료" 섹션 참고. ①(`evaluateEndpoint`)·②(`findPhysicalSweepLimit`)·부호
+- **✅ (완료, 2026-07) 형상 엔진 재설계 순서 ③ — C0~C7 전부 완료** — [spec/dart-engine-layering.md](spec/dart-engine-layering.md)
+  § 형상 엔진 재설계 스펙 + 각 「✅ C_ 완료」 참고. ①(`evaluateEndpoint`)·②(`findPhysicalSweepLimit`)·부호
   (`selectRotationSign`)·④(`resolveRequestedAngle`)가 배선됐고, preview·apply는
   `evaluation.shape`를 `getCurrentDartEvaluation()`로 공유하며(C6), apply 안전성은
   **`evaluation.valid` 단일 진실**로 축소됐다(C7, `7e0dafd`). legacy 부호 체인·③ 구간
@@ -196,32 +193,30 @@ body = Ⓜ + `peplumFlare:true`(waistSeam 전제). 몸판(upper)은 Ⓜ 과 **�
   - **재검토 조건**(셋 중 하나 발생 시에만): ES 모듈 전환 / geometry 헬퍼의 실제 외부
     소비자 발생 / bake 재설계(순서 ⑥) 완료. **bake/normalize 재설계는 자동 착수하지 않고
     실제 요구 + 별도 승인 후 진행한다.**
-- **✅ (완료, 2026-07) 캔버스 중심 UI 개편** — 위 "캔버스 중심 UI 개편 완료" 섹션 참고.
+- **✅ (완료, 2026-07) 캔버스 중심 UI 개편** — [history/ui-workspace.md](history/ui-workspace.md) § 캔버스 중심 UI 개편 완료 참고.
   사이드바 제거·상단 레일·팝오버·floating context strip·블루프린트 시각 체계까지 완료
   (커밋 `97586c7`→`fbb1c69`). JS·엔진·골든 무변경.
 - **(다음 단계) UI 기능 추가가 아니라 실제 사용 검증** — 엔진은 C0~C7 완료, UI는 캔버스
   중심 개편 완료 상태다. 다음은 김이 실제로 써 보고 **반복되는 불편만** 후속 수정한다.
   새 UI 부품·기능을 선제적으로 추가하지 않는다.
-- **✅ (완료, 2026-07) 원형 완료 기반 S1~S3** — 위 "✅ 원형 완료 기반 S1~S3 구현 완료"
-  섹션 참고. geometry 의미 표식(`bb05836`)·`captureBlockSnapshot`(`aff2baf`)·도구를 draft
+- **✅ (완료, 2026-07) 원형 완료 기반 S1~S3** — [history/block-and-draft.md](history/block-and-draft.md)
+  § ✅ 원형 완료 기반 S1~S3 구현 완료 참고. geometry 의미 표식(`bb05836`)·`captureBlockSnapshot`(`aff2baf`)·도구를 draft
   로 이동(`82ece4a`)·`window.blockWorkflow` 세션 완료본(`884c4ca`)·`원형 완료` 최소
   UI(`634acab`). blockMasterCheck 64 / blockWorkflowCheck 52 / runAll 통과 / 골든 diff 0.
   (테스트 수 SV2 `a278865` 반영.)
   (S1 시점 "design stage 는 계속 disabled"는 D1~D3b 에서 정정 — 아래 항목.)
 - ~~**(다음 단계) designProject + reference renderer + 디자인 시작** → design stage 를
-  정직하게 활성화(현재 disabled 유지)~~ → **✅ (완료, D1~D3b, 2026-07)**: 아래 "✅ 원형
-  완료 → 디자인 복사 (D1~D3b) 구현 완료" 섹션 참고. 로컬 5커밋(`ee417f5`→`854b3b5`→
+  정직하게 활성화(현재 disabled 유지)~~ → **✅ (완료, D1~D3b, 2026-07)**: [history/design-bodice.md](history/design-bodice.md) § ✅ 원형
+  완료 → 디자인 복사 (D1~D3b) 구현 완료 참고. 로컬 5커밋(`ee417f5`→`854b3b5`→
   `b6d0a2e`→`7c7f027`→`ae5c255`). design 은 hasProject 게이트로 활성화, `디자인 시작`
   버튼으로만 project 생성, 완료본 version pinning.
-- **(그다음 기능 방향) ② 디자인 몸판 제도** — 위 "패턴 제작 7단계 책임 경계" 섹션 참고.
-  design stage 활성화(✅ 완료)는 됐고, 이제 design 안의 **편집 도구가 없는 상태**다(현재
-  view-only). 칼라·소매보다 먼저 **블라우스 여유량 / 완성
-  길이 / 옆선 실루엣 / 네크라인 / 앞중심 여밈** 다섯을 확정한다. **첫 블라우스 몸판 사양
-  확정 + 별도 승인 후 착수** — 그 전까지 코드·shape 골든·다트 엔진·새 UI stage 무변경.
+- ~~**(그다음 기능 방향) ② 디자인 몸판 제도**~~ → **✅ (완료)** — ②~⑤ 현황은 위 「지금 서 있는 곳」 표.
+  다섯 항목(여유량·완성 길이·옆선 실루엣·네크라인·앞중심 여밈)의 구현 기록은
+  [history/design-bodice.md](history/design-bodice.md), 순서 원칙은 [CLAUDE.md](../CLAUDE.md) § 패턴 제작 7단계 책임 경계.
 - ~~**(그다음 기능 후보) 뒤어깨선 정리 + 앞/뒤 어깨 길이 맞춤**~~ — **2026-07 조사 중단
   확정**: 원형·디자인 단계의 책임이 아니라 **"패턴선 확정"(디자인 → 재단 경계) 단계**에서
-  다룬다. 위 "어깨 길이 보정의 단계 책임 경계" 섹션 참고.
+  다룬다. [CLAUDE.md](../CLAUDE.md) § 어깨 길이 보정의 단계 책임 경계 참고.
 - **✅ legacy 순수 삭제 완료** — `chooseSignedBaseAngle`·`budgetMaxAngle`·
   `applyTimeSafeAngle`·`findMaxSafeAngle`·`findApplicableIntervals`는 C5d에서, apply의
-  self-intersection/budget 게이트·C1 블록은 C7에서 삭제. 위 "Dead code 감사"의
+  self-intersection/budget 게이트·C1 블록은 C7에서 삭제. [history/ui-workspace.md](history/ui-workspace.md) § Dead code 감사의
   `calc*CloseAngleByRotateHit` 3종은 이미 프로덕션에 없음(실측 확인).

@@ -121,6 +121,7 @@
 | D-110 | — | 안전 계약(커밋·변경 경계) | [CLAUDE.md](../CLAUDE.md) `### 커밋·변경 경계` L212 | — |
 | D-111 | — | 안전 계약(검증) | [CLAUDE.md](../CLAUDE.md) `### 검증` L224 | [TESTING.md](../docs/TESTING.md) |
 | D-112 | — | 자율 진행 규칙(멈춤 조건) | [CLAUDE.md](../CLAUDE.md) `## 자율 진행 규칙` L400 | — |
+| D-113 | 2026-07-07 | 부호·closeAngle 권한 = `choosePhysicalCloseAngle`(구형) | [CLAUDE.md](../CLAUDE.md) `### 5개 핵심 "심장" 함수` L86 · `### closeAngle / userAngle` L113 L120 | [dart-engine.md §4](dart-engine.md) |
 
 ## 상태 변경 로그 (append-only — 행을 추가만 한다)
 
@@ -129,6 +130,10 @@
 | 로그# | ID | 일자 | 새 상태 | superseded_by | 사유 | 확인자 |
 |---|---|---|---|---|---|---|
 | (없음 — 2026-10-04 시점 전 항목 active) | | | | | | |
+| 1 | D-002 | 2026-10-04 | scoped | — | 7단계 틀·4 UI stage 매핑·단계별 책임·«② 를 ③·④ 보다 먼저» 는 active. 시점 문장 «지금 코딩하지 않는다»(L253)·«지금 다음 작업 = ② … 그 전까지 … 건드리지 않는다»(L281–284)는 ②~⑤ 완료로 소진(D-234·D-235·D-236, STATUS § 지금 서 있는 곳). 원문 보존, CLAUDE.md ⏱ 주석 2곳 | 김 (2026-10-04, A안) |
+| 2 | D-003 | 2026-10-04 | scoped | — | 순서 몸판 → 소매 → 카라·«앞 단계 결과를 바꾸지 않는다» 는 active. «현재 = 몸판 모양 단계 … 넘어가지 않는다 … 아래에서 구현»(L297–299)은 소진(D-226·D-235·D-247·D-248, STATUS § 지금 서 있는 곳). 원문 보존, CLAUDE.md ⏱ 주석 | 김 (2026-10-04, A안) |
+| 3 | D-105 | 2026-10-04 | scoped | — | "분리·클래스화하지 않는다" 방향은 active. 해제 조건 «엔진 안정화 전까지 / 버그 해결 전까지» 는 C0~C7 완료로 충족됐고, 이후 재검토 조건은 STATUS § 다음에 확인할 것 «파일 분리 타당성 감사 — 4파일 분리 기각». 원문 보존, CLAUDE.md ⏱ 주석 | 김 (2026-10-04, A안) |
+| 4 | D-113 | 2026-10-04 | superseded | D-010 | 최종 부호·`closeAngle` 은 C4 가 정한다(`selectRotationSign` → `prepareDartMoveCandidate` 의 `closeAngleRad` = 부호 × 최대 적용 크기 → `baseAngle`). `choosePhysicalCloseAngle` 은 gen-0 기하 힌트(동률 tie-breaker). 관찰 `js/dartMove.js` L1539·L1554·L2837 @`87cb7a2`. 원문 보존, CLAUDE.md ⏱ 주석 2곳 | 김 (2026-10-04, A안) |
 
 ### 상태 값
 
