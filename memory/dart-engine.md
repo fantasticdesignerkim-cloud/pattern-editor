@@ -2,7 +2,8 @@
 
 > **이 파일이 소유하는 것**: `js/dartMove.js` 가 **지금** 하는 일(파이프라인·계층·세그먼트 규칙·상수).
 > **소유하지 않는 것**: 왜 이렇게 됐는지(연대기 → [`docs/history/dart-engine.md`](../docs/history/dart-engine.md)),
-> 착수 전 설계 의도([`docs/spec/dart-engine-layering.md`](../docs/spec/dart-engine-layering.md)),
+> 계층화 설계 의도와 C0~C7 완료 기록(역사적 설계 기록 — [`docs/spec/dart-engine-layering.md`](../docs/spec/dart-engine-layering.md),
+> 옛 이름 → 현행 이름은 그 문서 § ⏱ 현행 이름 매핑),
 > 사용자 확정 결정의 원문([decisions.md](decisions.md) → CLAUDE.md).
 > 소유권·링크 규칙은 [README.md](README.md).
 
