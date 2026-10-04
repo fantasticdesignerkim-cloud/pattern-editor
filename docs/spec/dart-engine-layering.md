@@ -1,10 +1,10 @@
-# 형상 엔진 계층화 스펙 (미착수)
+# 형상 엔진 계층화 스펙 (C0~C7 완료 · 역사적 설계 기록)
 
-> **아직 착수하지 않은 설계 스펙이다.** 그 작업을 실제로 할 때만 읽는다.
-> 착수는 별도 승인 후. 완료된 C0~C7 기록은 이 문서 안에 함께 있다.
+> ⏱ 상태 (2026-10-04, 관찰 HEAD `b0f2dbe`): **C0~C7 은 2026-07 에 전부 완료됐다.** 이 문서는 착수 전 설계(위쪽)와 ✅ 완료 기록을 함께 담은 **역사적 설계 기록**이다 — 본문의 "아직 착수 전"·"현재"·옛 함수명은 작성 시점 표기로 보존하고, 현행 이름은 맨 아래 § ⏱ 현행 이름 매핑에 둔다.
+> 이후 순서 ④(파일 추출)는 자동 착수하지 않으며 4파일 분리는 기각됐다([../STATUS.md](../STATUS.md) § 다음에 확인할 것 «파일 분리 타당성 감사»). 엔진의 현재형 계약은 [../../memory/dart-engine.md](../../memory/dart-engine.md).
 > 살아있는 계약은 [../../CLAUDE.md](../../CLAUDE.md).
 
-## 형상 엔진 재설계 스펙 (2026-07 합의, 아직 착수 전) — `dartMove.js` 계층화
+## 형상 엔진 재설계 스펙 (2026-07 합의, 아직 착수 전) — `dartMove.js` 계층화 · ⏱ 이후 C0~C7 완료(아래 ✅ 절)
 
 **방향(사용자 확정)**: `dartMove.js`를 "다트 전용 기능"이 아니라 **현재 패턴 조각을
 자르고 회전하고 다시 합치는 형상 엔진**으로 만든다. 다트는 그 엔진이 만들어내는 열린
@@ -17,7 +17,7 @@ V 노치일 뿐. `dartId`는 작업 기록으로만 남기고 물리 계산엔 �
 ```
 evaluateEndpoint(ctx, θ)              // ① 끝점 원자: 그 각도의 최종 형상만 평가
 findPhysicalSweepLimit(ctx, θ)        // ② 스윕: 고정×회전 조각의 실제 이동 경로 충돌
-findApplicableIntervals(ctx, limit)   // ③ ② 한계 내부에서 ①을 스캔 → 안전"구간 목록"
+findApplicableIntervals(ctx, limit)   // ③ ② 한계 내부에서 ①을 스캔 → 안전"구간 목록"  ⏱ C3 신설·C5d 삭제 → 현행 findMaxApplicableMagnitude
 resolveRequestedAngle(intervals, req) // ④ 요청각을 구간에 맞춤
 ```
 **비단조라 "최대 안전각 하나"로는 부족하다** — 5°는 불가능하고 18°는 다시 가능할 수
@@ -455,3 +455,29 @@ post-normalize를 잠그되 **영구 정답이 아니라 리팩터 기간의 호
 **교훈(다음 단계에 적용)**: 재배치를 먼저 하면 diff가 커져 진짜 동작 변경을 못 찾는다 —
 **추출 → 전환 → (안정 확인) → 재배치** 순서를 지킬 것. 매 커밋마다 `git diff --check` +
 `node test/harness/runAll.js` + **골든 JSON 무변경**을 확인했다.
+
+## ⏱ 현행 이름 매핑 (2026-10-04 추가, 관찰 HEAD `b0f2dbe`)
+
+> 위 본문은 **작성 시점 그대로** 둔다(삭제·재서술 없음). 이 절은 옛 표기 → 현행 코드 이름의 대조표다.
+> 코드 사실은 `js/dartMove.js` 의 `function` 정의로 확인했다. 엔진의 현재형 계약 소유자는
+> [../../memory/dart-engine.md](../../memory/dart-engine.md) § 3 평가 4계층 · § 부재 목록이다 — 이 표와 어긋나면 그쪽과 코드를 따른다.
+
+| 본문 표기 (위치) | 현행 | 비고 |
+|---|---|---|
+| 제목 «(미착수)» · § 형상 엔진 재설계 스펙 «아직 착수 전» | **C0~C7 완료** (2026-07) | ✅ C7 절 «C0~C7 완료 = 4계층 `evaluateMove` 통합 단계 종료» |
+| ① `evaluateEndpoint(ctx, θ)` | `evaluateEndpoint(ctx, angleRad)` | 이름·역할 동일 |
+| ② `findPhysicalSweepLimit(ctx, θ)` | `findPhysicalSweepLimit(fixedSegsRaw, rotateSegsRaw, pivot, targetAngle, cutPoint)` | 이름 동일, 인자는 ctx 가 아니라 조각·pivot 직접. 내부에 `rotationLegBarrier` 포함 |
+| ③ `findApplicableIntervals(ctx, limit)` → 구간 목록 `applicableIntervals` | **`findMaxApplicableMagnitude(ctx, limitRad)`** → `{ maxMagRad, valid, reason, scan }` | C3 신설 → C4 에서 "열거 대신 위→아래 탐색"으로 대체 → **C5d 삭제**(`applicableIntervals.js` 포함). 구간 목록 API 는 없다 |
+| (부호) `chooseSignedBaseAngle` · `choosePhysicalCloseAngle` 부호 권한 | `selectRotationSign(ctx, { baseMagRad, cutPoint, geomSign })` | C4. `choosePhysicalCloseAngle` 은 gen-0 기하 힌트로만 남음([../../memory/decisions.md](../../memory/decisions.md) 로그 #4) |
+| ④ `resolveRequestedAngle(intervals, req)` | `resolveRequestedAngle(ctx, requestedRad, limitRad)` | 이름 동일, 구간 목록이 아니라 ctx·한계를 받는다(C5a) |
+| `findMaxSafeAngle` · `budgetMaxAngle` · `applyTimeSafeAngle` (본문의 "현재 …") | 없음 — **C5d 삭제** | 역할은 ②·③·① 로 흡수. `test/harness/endpointEquivalence.js` 의 `legacyGates` 가 독립 재구현으로 동치를 감시 |
+| `evaluateMove(4계층)` | 함수 아님 — 위 ①②(부호)③④ 묶음의 **개념 이름** | `function evaluateMove` 정의 없음(주석에만 등장) |
+| `prepareDartMoveCandidate` 반환 `requestedAngleRad` · `limits:{physicalRad,budgetRad,applySafeRad}` (§ 순서 ② 1번) | 반환 `{ closeAngleRad, sourceNotch, sourceApertureBeforeRad, selection, evalCtx, valid, reason }` | `limits` → `selection` 대체(C4 절 «남긴 것»). `selection` = `selectRotationSign` 반환 |
+| 데이터 모델·API `PatternShape` / `NotchInstance` / `SplitResult` / `Piece` · `deriveNotches` / `splitShape` / `commitMove` / `validateShape` | **미구현** | 순서 ④ 이후 제안이었다. 코드에 해당 이름 0건 |
+| 파일 4개 `dartGeometry.js` / `dartTopology.js` / `dartEngine.js` / `dartMove.js` | **`js/dartMove.js` 한 파일 유지** (구역 배너로만 경계) | 4파일 분리 기각 — [../STATUS.md](../STATUS.md) § 다음에 확인할 것 «파일 분리 타당성 감사» · [../../memory/decisions.md](../../memory/decisions.md) 로그 #3(D-105) |
+
+- **유지되는 원칙**: § C0 «`findApplicableIntervals`는 … 최종 안전 판정 기관이 될 수 없다» 의 규칙
+  (`resolved angle → evaluateEndpoint → ev.valid`)은 이름만 바뀌어 그대로 유효하다 — 현행은 ③·④ 스캔 뒤
+  정확한 요청각의 `evaluateEndpoint` 결과(`evaluation.valid`)가 유일한 apply 판정이다(C7).
+- **코드 주석에 옛 이름이 남아 있다**(`js/dartMove.js` ② 머리 주석·`prepareDartMoveCandidate` 머리 주석의
+  `findApplicableIntervals`, `[findMaxSafeAngle]` dbg 태그). 동작과 무관하며 이 정리 범위(문서만)에서는 고치지 않았다.
