@@ -761,6 +761,34 @@
     };
   }
 
+  // ── Ⓛ(P.25) — Ⓚ 방법 + 앞·뒤 중심에 개더 분량을 **평행으로 추가** ──
+  // «Ⓚ 와 같은 방법으로 다트를 닫아 목둘레를 벌리고, 다시 앞뒤 중심에 개더 분량을 평행으로 추가한다. 개더 분량은 뒤는 ∅의 1.5배, 앞은 ●의 2배.»
+  // 책 산식: 앞 중심 추가량(☒) = ●×2 − ■. ■ = 그 쐐기의 틈(사용자 확정 2026-10-04 A안) → ☒ = 총 개더 분량 − 쐐기 틈 = (ratio − 1)·틈 현.
+  //   앞 ●×2−● = ● · 뒤 ∅×1.5−∅ = 0.5∅. 도해의 «5 정도»(뒤)는 이 산식·총 분량과 양립하지 않아 확정 수치로 쓰지 않는다(미해결 개략 표기).
+  // 새 엔진이 아니다 — neckGather(절개 1곳·ratio 만 2/1.5) 결과에 centerBand(폭 ☒)를 이어 붙이는 접착 코드. 총 개더 분량 보존이 우선:
+  //   줄이는 분량 = 틈 현 + 띠 폭, 개더 구간 = 절개 지점(SNP 쪽 다리 끝) → 새 중심(띠 윗변 포함), 봉제 목둘레 = 원래 목둘레 호 합.
+  var NECK_GATHER_BAND = Object.freeze({ front: Object.freeze({ cutArcCm: 4, ratio: 2 }), back: Object.freeze({ cutArcCm: 3, ratio: 1.5 }) });   // P.25 «4»·«3» / 앞 ●×2 · 뒤 ∅×1.5
+  function neckGatherBand(piece, opts) {
+    opts = opts || {};
+    var ratio = opts.ratio;
+    if (typeof ratio !== "number" || !isFinite(ratio) || !(ratio > 1)) fail("invalid-gather-band-ratio", ratio);
+    var g = neckGather(piece, opts);
+    var chord = g.meta.cut.gapChordCm, w = (ratio - 1) * chord;
+    var b = centerBand({ outline: g.outline, construction: g.construction }, { widthCm: w });
+    var gm = g.meta.gather, reduce = ratio * chord;
+    var meta = clone(g.meta);
+    meta.gather = {
+      ratio: ratio, excludedShoulderArcCm: gm.excludedShoulderArcCm, zoneNeckArcCm: gm.zoneNeckArcCm,
+      totalAmountCm: reduce, gapChordCm: chord, bandWidthCm: w,
+      zoneLenCm: gm.zoneLenCm + w, reduceCm: reduce, zoneSewnCm: gm.zoneLenCm + w - reduce,
+      sewnNeckLenCm: g.meta.neckLenCm + chord + w - reduce
+    };
+    meta.band = b.meta;
+    meta.areaBeforeCm2 = g.meta.areaBeforeCm2;
+    meta.areaAfterCm2 = b.meta.areaAfterCm2;
+    return { outline: b.outline, construction: b.construction, meta: meta };
+  }
+
   // 절개선(apex→H)의 어느 쪽인가 — 외적 부호로 판정한다. 회전 조각 쪽이면 true.
   function inRotatedPart(seg, apex, H, rotateB, ring, dIdx) {
     var p = seg && (seg.from || (seg.commands && seg.commands[0] && seg.commands[0].points[0]));
@@ -777,7 +805,7 @@
   }
 
   window.designFlare = Object.freeze({
-    closeDartSpread: closeDartSpread, slashSpread: slashSpread, neckTuck: neckTuck, neckGather: neckGather, NECK_GATHER: NECK_GATHER, centerBand: centerBand, bustWidthCm: bustWidthCm,
+    closeDartSpread: closeDartSpread, slashSpread: slashSpread, neckTuck: neckTuck, neckGather: neckGather, NECK_GATHER: NECK_GATHER, neckGatherBand: neckGatherBand, NECK_GATHER_BAND: NECK_GATHER_BAND, centerBand: centerBand, bustWidthCm: bustWidthCm,
     tangentAtEnd: tangentAtEnd, tangentAtStart: tangentAtStart, fairBridge: fairBridge
   });
 })();

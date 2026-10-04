@@ -429,6 +429,7 @@
   let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
   let pendingFlare;        // 〃 (true = 다트를 닫아 밑단 벌리기)
   let pendingNeckTuck;     // 〃 (true = 다트를 닫아 목둘레 절개 2곳 벌리기, 프리셋 Ⓘ · "J" = Ⓘ + 중심 평행 띠, 프리셋 Ⓙ — 플레어·이음선과 함께 쓰지 않는다)
+  let pendingNeckGatherBand;   // 〃 (true = Ⓚ 방법 + 앞·뒤 중심 평행 띠, 프리셋 Ⓛ — Ⓚ 키와 별개, 턱·플레어·이음선과 함께 쓰지 않는다)
   let pendingNeckGather;   // 〃 (true = 다트를 닫아 목둘레 절개 1곳 벌리고 개더로 줄이기, 프리셋 Ⓚ — 턱·플레어·이음선과 함께 쓰지 않는다)
   let pendingFlareSlash;   // 〃 (true = 진동 가장 안쪽 수직 절개로 플레어 더 벌리기, 프리셋 Ⓗ — flare 전제)
   let pendingWaistSeam;    // 〃 (true = 허리 이음선 — 상·하 조각 분리, 프리셋 Ⓜ)
@@ -511,6 +512,7 @@
     pendingDartScales = body.waistDartScales ? structuredClone(body.waistDartScales) : null;
     pendingFlare = body.flare === true ? true : null;
     pendingNeckTuck = (body.neckTuck === true || body.neckTuck === "J") ? body.neckTuck : null;   // 다른 프리셋으로 바꾸면 해제 → 턱 사라짐
+    pendingNeckGatherBand = body.neckGatherBand === true ? true : null;   // 다른 프리셋으로 바꾸면 해제 → 띠·개더 사라짐
     pendingNeckGather = body.neckGather === true ? true : null;   // 다른 프리셋으로 바꾸면 해제 → 개더 사라짐
     pendingFlareSlash = body.flareSlash === true ? true : null;   // Ⓖ 로 바꾸면 해제 → 추가 절개 없는 플레어
     pendingWaistSeam = body.waistSeam === true ? true : null;   // 다른 프리셋(A 등)으로 바꾸면 해제 → 페플럼 사라짐
@@ -646,6 +648,12 @@
   function flareNote(project) {
     const g = project && project.working && project.working.geometry;
     const f = g && g.front && g.front.flareCm, b = g && g.back && g.back.flareCm;
+    // Ⓛ(P.25): Ⓚ + 중심 평행 띠 — `neckGatherBand` 메타만 읽는다(Ⓚ 문구와 섞지 않는다).
+    const lf = g && g.front && g.front.neckGatherBand, lb = g && g.back && g.back.neckGatherBand;
+    if (lf || lb) {
+      const lk = (x, k, sym) => x ? `${k} 목둘레 ${sym}${fmtL(x.cut.gapChordCm)}cm + 중심 띠 ☒${fmtL(x.gather.bandWidthCm)}cm = 개더 ${sym}×${x.gather.ratio}=${fmtL(x.gather.reduceCm)}cm 줄임(봉제 목둘레 ${fmtL(x.gather.sewnNeckLenCm)}cm)` : "";
+      return "목둘레 개더+중심 띠 · " + [lk(lf, "앞", "●"), lk(lb, "뒤", "∅")].filter(Boolean).join(" · ") + " · ☒ = 총 개더 분량 − 쐐기 틈" + (lf ? ` · 절개 SNP 에서 앞 ${fmtL(lf.cut.arcFromShoulderCm)}cm` : "") + (lb ? ` · 뒤 ${fmtL(lb.cut.arcFromShoulderCm)}cm` : "") + (lb && lb.residualSliverCm > 0.001 ? ` · 뒤 어깨 잔여 ${fmtL(lb.residualSliverCm)}cm(패턴선 확정에서 정리)` : "");
+    }
     // Ⓚ(P.24): 목둘레 개더 — 절개 한 곳의 틈(●/∅)과 개더로 줄이는 분량·봉제 목둘레. 메타를 읽기만 한다(턱과 문구를 섞지 않는다).
     const gf = g && g.front && g.front.neckGather, gb = g && g.back && g.back.neckGather;
     if (gf || gb) {
@@ -695,6 +703,9 @@
     if (reason === "invalid-body-waist-seam") return "허리 이음선 설정이 올바르지 않습니다";
     if (reason && reason.indexOf("waist-seam-failed") === 0) return "허리 이음선을 적용할 수 없습니다 · " + String(detail || "");
     if (reason === "neck-gather-conflict") return "목둘레 개더는 턱·플레어·허리 이음선·요크·프린세스와 함께 쓸 수 없습니다";
+    if (reason === "neck-gather-band-conflict") return "목둘레 개더(중심 띠)는 턱·플레어·허리 이음선·요크·프린세스·Ⓚ 와 함께 쓸 수 없습니다";
+    if (reason === "invalid-body-neck-gather-band") return "목둘레 개더(중심 띠) 설정이 올바르지 않습니다";
+    if (reason && reason.indexOf("neck-gather-band-failed") === 0) return "목둘레 개더(중심 띠)를 적용할 수 없습니다 · " + String(detail || "");
     if (reason === "invalid-body-neck-gather") return "목둘레 개더 설정이 올바르지 않습니다";
     if (reason && reason.indexOf("neck-gather-failed") === 0) return "목둘레 개더를 적용할 수 없습니다 · " + String(detail || "");
     if (reason === "neck-tuck-conflict") return "목둘레 턱은 플레어·허리 이음선·요크·프린세스와 함께 쓸 수 없습니다";
@@ -2313,6 +2324,10 @@
       if (pendingNeckTuck) nextParameters.body.neckTuck = pendingNeckTuck; else delete nextParameters.body.neckTuck;
       pendingNeckTuck = undefined;
     }
+    if (pendingNeckGatherBand !== undefined) {
+      if (pendingNeckGatherBand) nextParameters.body.neckGatherBand = true; else delete nextParameters.body.neckGatherBand;
+      pendingNeckGatherBand = undefined;
+    }
     if (pendingNeckGather !== undefined) {
       if (pendingNeckGather) nextParameters.body.neckGather = true; else delete nextParameters.body.neckGather;
       pendingNeckGather = undefined;
@@ -2402,6 +2417,7 @@
     pendingFlare = null;        // 플레어 해제
     pendingNeckTuck = null;     // 목둘레 턱 해제
     pendingNeckGather = null;   // 목둘레 개더 해제
+    pendingNeckGatherBand = null;   // 목둘레 개더(중심 띠) 해제
     pendingFlareSlash = null;   // 플레어 추가 절개 해제
     pendingWaistSeam = null;    // 허리 이음선 해제(페플럼 제거)
     pendingPeplumFlare = null;  // 페플럼 플레어 해제

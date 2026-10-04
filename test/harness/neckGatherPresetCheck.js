@@ -89,7 +89,7 @@ const neckSum = (pc) => lenOf(segsOf(pc.outline.filter(p => p.edge === "neckline
   ok(fam && fam.availability === "available", "1: 목둘레 개더 라인 활성");
   const vK = fam.variants.find(v => v.symbol === "K"), vL = fam.variants.find(v => v.symbol === "L");
   ok(vK && vK.availability === "available" && vK.presetId === "bunka-bodice-K", "1: Ⓚ 실행 가능");
-  ok(vL && vL.availability !== "available" && vL.presetId === null && typeof vL.blockedBy === "string" && vL.blockedBy.length > 0, "1: Ⓛ 는 보류 + blockedBy");
+  ok(vL && vL.availability === "available" && vL.presetId === "bunka-bodice-L", "1: Ⓛ 는 별도 프리셋으로 실행 가능(neckGatherBand 키 — Ⓚ 와 분리)");
   ok(BP.resolve("neck-gather", "bunka-bodice-K").presetId === "bunka-bodice-K", "1: resolve Ⓚ");
   ok(J(K_BODY) === J({ hemExtensionBelowWaistCm: 20, hemSideOffsetCm: 1, waistDartScales: { a: 0, b: 0, d: 0, e: 0 }, neckGather: true }), "1: Ⓚ = Ⓑ 몸판 + neckGather(턱 키 없음)");
   ok(!("neckTuck" in K_BODY), "1: 턱 키를 섞지 않는다");
@@ -166,7 +166,7 @@ ok(near(GK.back.neckGather.residualSliverCm, GI.back.neckTuck.residualSliverCm, 
   throwsReason(bad({ cutArcCm: 4, ratio: 0 }), "invalid-gather-ratio", "6: 분량 비 0 거부");
   throwsReason(bad({ cutArcCm: 50, ratio: 1 }), "gather-cut-beyond-neckline", "6: 목둘레보다 긴 호 거부");
   throwsReason(() => DF.neckGather({ outline: GK.front.outline, construction: GK.front.construction }, { cutArcCm: 4, ratio: 1 }), "ring-failed", "6: 이미 닫은 몸판에 다시 적용하면 거부");
-  ok(BP.get("bunka-bodice-L") === null, "6: 보류 Ⓛ 는 레코드 없음");
+  ok(!("neckGather" in BP.bodyParams("bunka-bodice-L")) && !("neckGatherBand" in K_BODY), "6: Ⓚ·Ⓛ 키 분리(Ⓛ 는 neckGather 키 없음)");
   const before = J(REF); DB.computeGeometry(REF, { body: K_BODY }); ok(J(REF) === before, "6: 입력 참조 불변");
 }
 

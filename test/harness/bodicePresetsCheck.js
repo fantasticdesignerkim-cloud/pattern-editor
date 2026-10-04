@@ -43,17 +43,17 @@ const BP = sandbox.window.bodicePresets, DB = sandbox.window.designBodice;
 {
   const F = BP.families();
   const avail = F.flatMap(f => f.variants).filter(v => v.availability === "available");
-  ok(J(avail.map(v => v.symbol)) === J(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V"]), "2: 실행 가능 = 박시 A·B + 셰이프트 C·D + 프린세스 E·F + 플레어 G·H + 목둘레 턱 I·J + 목둘레 개더 K + 허리 이음선 M·N·O·P + 요크 이음선 Q·R·S·T·U·V");
+  ok(J(avail.map(v => v.symbol)) === J(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V"]), "2: 실행 가능 = 박시 A·B + 셰이프트 C·D + 프린세스 E·F + 플레어 G·H + 목둘레 턱 I·J + 목둘레 개더 K·L + 허리 이음선 M·N·O·P + 요크 이음선 Q·R·S·T·U·V");
   ok(avail.every(v => v.presetId === v.id && BP.get(v.presetId)), "2: 실행 슬롯은 레코드를 가리킨다");
   const pend = F.flatMap(f => f.variants).filter(v => v.availability !== "available");
-  ok(pend.length === 1 && pend[0].symbol === "L" && pend.every(v => v.presetId === null), "2: 보류 1개(L)는 레코드 없음");
+  ok(pend.length === 0, "2: 보류 0개(Ⓛ 까지 22개 전부 실행 가능 — 보류 메커니즘은 pendingVariant 로 남아 있다)");
   // ★ 보류는 **왜 못 그리는지**를 반드시 들고 있다 — 없으면 "그냥 아직 안 함"과 구별이 안 된다
   ok(pend.every(v => typeof v.blockedBy === "string" && v.blockedBy.length > 0), "2: 보류 전부 blockedBy 기록");
-  ok(BP.familyOptions().filter(o => !o.available).length === 0, "2: 비활성 라인 0개(목둘레 개더 라인은 Ⓚ 가 실행 가능해 활성 — 보류는 Ⓛ 하나)");
-  ok(BP.resolve("neck-gather", "bunka-bodice-L").reason === "bodice-preset-unavailable", "2: 보류는 명시적 거부");
+  ok(BP.familyOptions().filter(o => !o.available).length === 0, "2: 비활성 라인 0개(목둘레 개더 라인은 Ⓚ·Ⓛ 가 실행 가능)");
+  ok(BP.resolve("neck-gather", "bunka-bodice-L").presetId === "bunka-bodice-L", "2: Ⓛ 실행 가능(resolve)");
   ok(BP.resolve("nope", "x").reason === "unknown-bodice-family" && BP.get("nope") === null, "2: 알 수 없는 선택 거부");
   // 절대 다른 프리셋으로 대체하지 않는다
-  ok(BP.resolve("neck-gather", "bunka-bodice-L").presetId === undefined, "2: 거부 시 presetId 없음");
+  ok(BP.resolve("neck-gather", "bunka-bodice-ZZ").reason === "unknown-bodice-variant" && BP.resolve("neck-gather", "bunka-bodice-ZZ").presetId === undefined, "2: 알 수 없는 변형은 거부 · presetId 없음");
 }
 
 // ── 3. 레코드 = body 파라미터 묶음(형상 데이터 없음) ──

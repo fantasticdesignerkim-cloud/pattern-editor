@@ -332,8 +332,10 @@
     }
     return out;
   }
-  function buildNeckGatherSide(key, label, cfName, piece, sym) {
-    var m = piece && piece.neckGather;
+  // Ⓛ(P.25) 는 같은 모델에 «중심 평행 띠»를 더한다 — 의미는 별도 `neckGatherBand` 메타에서만 읽는다(Ⓚ 메타와 섞지 않는다).
+  function buildNeckGatherSide(key, label, cfName, piece, sym, isBand) {
+    var m = piece && (isBand ? piece.neckGatherBand : piece.neckGather);
+    if (isBand && m && (!m.band || !m.band.oldCenter || !m.band.newCenter || !m.gather || !num(m.gather.bandWidthCm))) return null;
     if (!piece || !Array.isArray(piece.outline) || !m || !m.apex || !m.cut || !m.gather || !m.cut.shoulderEnd || !m.cut.centerEnd || !num(m.dartAngleRad) || !num(m.gather.reduceCm)) return null;
     var centers = by(piece.outline, "center"), necks = by(piece.outline, "neckline");
     if (!centers.length || !necks.length) return null;
@@ -343,10 +345,12 @@
     var lines = [], legs = [], wedges = [], notches = [], cuts = [];
     var add = function (id, at, dx, dy, anchor, text, cls) { lines.push({ id: id, at: P(at), px: { dx: dx, dy: dy }, anchor: anchor, text: text, cls: cls }); };
     var deg = Math.abs(m.dartAngleRad) * 180 / Math.PI, c = m.cut, g = m.gather;
-    add("title", below, 0, 40, "middle", label + " · 목둘레 개더 Ⓚ", "title");
-    add("amount", below, 0, 54, "middle", "절개 1곳 · 목둘레 벌림 " + sym + " " + fmt1(c.gapChordCm) + "cm · 개더 분량 " + sym + "×" + g.ratio + " = " + fmt1(g.reduceCm) + "cm 줄임", "amount");
-    add("rule", below, 0, 67, "middle", "닫는 다트 " + fmt2(deg) + "° 전부를 절개 한 곳으로 벌림 · SNP 에서 목둘레 호 " + fmt1(c.arcFromShoulderCm) + "cm 지점 · 교재 P.24·P.161", "note");
-    add("basis", below, 0, 80, "middle", "개더 구간 = 절개 지점부터 " + cfName + "까지 " + fmt1(g.zoneLenCm) + "cm → " + fmt1(g.zoneSewnCm) + "cm (SNP 쪽 " + fmt1(g.excludedShoulderArcCm) + "cm 제외) · 봉제 목둘레 " + fmt1(g.sewnNeckLenCm) + "cm(개더 구간 양끝은 책에 수치가 없어 확정값)", "note");
+    add("title", below, 0, 40, "middle", label + (isBand ? " · 목둘레 개더 Ⓛ" : " · 목둘레 개더 Ⓚ"), "title");
+    add("amount", below, 0, 54, "middle", isBand
+      ? "절개 1곳 · 목둘레 벌림 " + sym + " " + fmt1(c.gapChordCm) + "cm + 중심 평행 띠 ☒ " + fmt1(g.bandWidthCm) + "cm = 총 개더 분량 " + sym + "×" + g.ratio + " = " + fmt1(g.reduceCm) + "cm 줄임"
+      : "절개 1곳 · 목둘레 벌림 " + sym + " " + fmt1(c.gapChordCm) + "cm · 개더 분량 " + sym + "×" + g.ratio + " = " + fmt1(g.reduceCm) + "cm 줄임", "amount");
+    add("rule", below, 0, 67, "middle", "닫는 다트 " + fmt2(deg) + "° 전부를 절개 한 곳으로 벌림 · SNP 에서 목둘레 호 " + fmt1(c.arcFromShoulderCm) + "cm 지점 · 교재 " + (isBand ? "P.25" : "P.24") + "·P.161", "note");
+    add("basis", below, 0, 80, "middle", "개더 구간 = 절개 지점부터 " + cfName + "까지 " + fmt1(g.zoneLenCm) + "cm → " + fmt1(g.zoneSewnCm) + "cm (SNP 쪽 " + fmt1(g.excludedShoulderArcCm) + "cm 제외) · 봉제 목둘레 " + fmt1(g.sewnNeckLenCm) + "cm(개더 구간 양끝은 책에 수치가 없어 확정값)" + (isBand ? " · ☒ = 총 개더 분량 − 쐐기 틈(●×2−●)" : ""), "note");
     wedges.push({ id: "gap", pts: [P(c.shoulderEnd), P(c.centerEnd), P(m.apex)] });
     notches.push({ id: "apex", at: P(m.apex) });
     notches.push({ id: "zone-start", at: P(c.shoulderEnd) });
@@ -354,7 +358,12 @@
     legs.push({ id: "zone-gap", from: P(c.shoulderEnd), to: P(c.centerEnd) });
     var poly = neckPolyline(necks, c.centerEnd);
     for (var i = 1; i < poly.length; i++) legs.push({ id: "zone-" + i, from: poly[i - 1], to: poly[i] });
-    if (poly.length > 1) notches.push({ id: "zone-end", at: poly[poly.length - 1] });
+    if (isBand) {   // 띠(원래 중심 → 새 중심) — 개더 구간은 띠 윗변을 지나 새 중심까지 이어진다(표시 전용)
+      var oc = m.band.oldCenter, nc = m.band.newCenter, oUp = oc.from.y <= oc.to.y ? oc.from : oc.to, nUp = nc.from.y <= nc.to.y ? nc.from : nc.to;
+      wedges.push({ id: "band", pts: [P(oc.from), P(nc.from), P(nc.to), P(oc.to)] });
+      legs.push({ id: "zone-band", from: P(oUp), to: P(nUp) });
+      notches.push({ id: "zone-end", at: P(nUp) });
+    } else if (poly.length > 1) notches.push({ id: "zone-end", at: poly[poly.length - 1] });
     add("zone", { x: (c.shoulderEnd.x + c.centerEnd.x) / 2, y: (c.shoulderEnd.y + c.centerEnd.y) / 2 }, 0, -9, "middle", "개더 " + fmt1(g.reduceCm) + "cm 줄임", "amount");
     cuts.push({ id: "gather", symbol: null, chordCm: c.gapChordCm, angleDeg: deg, pivot: P(m.apex), matched: true });
     var cm = mid(centers[0]);
@@ -364,6 +373,9 @@
 
   function buildModel(geometry, body) {
     var g = geometry, ws = g && g.waistSeam;
+    if (g && !ws && body && body.neckGatherBand === true) {   // Ⓛ — 파라미터가 말할 때만(Ⓚ 와 키·메타 분리)
+      return { front: buildNeckGatherSide("front", "앞몸판", "앞중심(CF)", g.front, "●", true), back: buildNeckGatherSide("back", "뒤몸판", "뒤중심(CB)", g.back, "∅", true) };
+    }
     if (g && !ws && body && body.neckGather === true) {   // Ⓚ — 파라미터가 말할 때만
       return { front: buildNeckGatherSide("front", "앞몸판", "앞중심(CF)", g.front, "●"), back: buildNeckGatherSide("back", "뒤몸판", "뒤중심(CB)", g.back, "∅") };
     }
