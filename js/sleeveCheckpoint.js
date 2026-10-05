@@ -25,6 +25,9 @@
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
     var fails = [];
+    // 소매 Ⓐ(sleeveAApply)는 working.sleeveA + geometry.sleeve 만 쓰고 sleeveDraft 는 모른다 — 완료본이 Ⓐ 형상을 기본 소매
+    // 파라미터로 잘못 서명하지 않도록 Ⓐ 가 켜져 있는 동안은 완료를 막는다(Ⓐ 완료·통합은 별도 연결).
+    if (proj.working.sleeveA) fails.push("sleeve-preset-not-linked");
     var BC = window.bodiceCheckpoint, DS = window.designSleeve;
     var bodice = BC && BC.latest(proj);
     if (!bodice) fails.push("no-bodice");

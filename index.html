@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026100111">
+<link rel="stylesheet" href="css/style.css?v=2026100501">
 </head>
 <body>
 
@@ -252,6 +252,13 @@
              소매산·앞뒤 이세 관계 불변. 기준값 = 완료 원형 소매(referenceGeometry.sleeve). 몸판 stale 이면
              편집 차단. 결과는 working.geometry.sleeve 로 덮어씀(파생, body apply 후 재파생). -->
         <div class="subtab-panel" data-subtab="sleeve" hidden>
+          <!-- 소매 라인 카탈로그([패턴학교] P.36–). «원형 소매 기준»(기본) = 아래 입력으로 원형 소매를 파생하는 기존 경로.
+               Ⓐ = 완성 몸판의 진동둘레에서 소매산을 제도(소매길이만 입력). 몸판 bodiceResult 는 읽기만 한다. -->
+          <div class="row row-stack"><label for="selSleeveFamily">소매 라인</label><select id="selSleeveFamily"></select></div>
+          <div class="row row-stack"><label for="selSleevePreset">세부 제도</label><select id="selSleevePreset"></select></div>
+          <div class="row"><button type="button" class="btn" id="btnApplySleevePreset">라인 적용</button></div>
+          <div class="row note" id="designSleeveLineNote" aria-live="polite"></div>
+          <div class="row note sleeve-a-info" id="designSleeveAInfo" aria-live="polite" hidden></div>
           <div class="row"><label for="inpSleeveLength">소매길이 (cm)</label><input id="inpSleeveLength" type="number" min="10" max="90" step="0.1"></div>
           <div class="row"><label for="inpSleeveCuff">소매부리 완성둘레 (cm)</label><input id="inpSleeveCuff" type="number" min="8" max="60" step="0.1"></div>
           <div class="row"><label for="selSleeveSide">옆선</label>
@@ -445,7 +452,11 @@
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
 <script src="js/sleeveMeasure.js?v=2026082011"></script>
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
-<script src="js/sleeveCheckpoint.js?v=2026082041"></script>
+<script src="js/sleeveCheckpoint.js?v=2026100501"></script>
+<!-- 소매 Ⓐ(P.137–139 타입 4): window.designSleeveA 엔진 코어 · window.sleevePresets 카탈로그 · window.sleeveAApply 상태 연결(전부 순수·DOM 미접근). -->
+<script src="js/designSleeveA.js?v=2026100501"></script>
+<script src="js/sleevePresets.js?v=2026100501"></script>
+<script src="js/sleeveAApply.js?v=2026100501"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
 <script src="js/designCollar.js?v=2026092520"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
@@ -460,7 +471,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026100404"></script>
+<script src="js/ui.js?v=2026100501"></script>
 
 </body>
 </html>

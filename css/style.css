@@ -272,6 +272,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .insp-body .row label~.btn{width:auto;padding:5px 10px;white-space:nowrap}
 .insp-title{font-size:11px;font-weight:500;color:var(--navy);letter-spacing:.04em}
 .note{font-size:11px;color:var(--muted)}
+/* 소매 Ⓐ 확인 정보: 한 줄씩 쌓는다(패턴명·소매산/소매폭·AH·목표/실제 이세). 값은 ui.js 가 sleeveAApply.infoLines 로 채운다. */
+.sleeve-a-info{flex-direction:column;align-items:flex-start;gap:2px}
+.sleeve-a-info[data-blocked="1"]{color:var(--danger,#b3261e)}
 /* 원형 완료(세션 전용): 패턴 생성과 시각적으로 구분되는 조용한 navy 실행 블록. orange 아님. */
 .completion-note{margin-top:6px;padding-top:8px;border-top:1px solid var(--border)}
 #btnCompleteDraft:not(:disabled){border-color:var(--navy)}
