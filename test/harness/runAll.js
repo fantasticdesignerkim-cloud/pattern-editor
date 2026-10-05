@@ -102,6 +102,8 @@ const suites = [
   { file: "designSleeveCheck.js",       golden: false },
   // 소매 Ⓐ 엔진 코어([패턴학교] P.137–139 타입 4): 진동 읽기·제도·이세 ⑧·bodiceResult 불변(UI·프리셋 미연결).
   { file: "designSleeveACheck.js",      golden: false },
+  // 소매 Ⓑ 엔진 코어(P.41 타이트 슬리브): Ⓐ 읽기 전용 → 소맷부리 W×3/4 · 절개축 2개 강체 회전 · 길이/이세 보존 · 손바닥 경고 · 입력 불변(UI 미연결).
+  { file: "designSleeveBCheck.js",      golden: false },
   // 소매 Ⓐ UI/프리셋 연결: 카탈로그(sleevePresets)·적용 상태(sleeveAApply)·차단 사유·재제도 훅·표시 줄·완료 연결 차단·index/ui 배선.
   { file: "sleeveAUICheck.js",          golden: false },
   { file: "sleeveAResultCheck.js",      golden: false },
