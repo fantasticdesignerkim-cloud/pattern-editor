@@ -6,8 +6,8 @@
 //   · working.geometry.sleeve (render/layout 미러 — render.js 무변경, 기존 소매와 같은 자리)
 // 에 쓴다. bodiceResult·sourceBlock·referenceGeometry·working.sleeveDraft·working.sleeveResult 는 건드리지 않는다.
 //
-// ★ 기존 소매 경로(designSleeve 파생·소매산 편집·소매 모양 완료)와 **별개**다. Ⓐ 가 켜져 있는 동안 소매 모양 완료는
-//   sleeveCheckpoint 가 `sleeve-preset-not-linked` 로 막는다 — Ⓐ 결과의 완료본·Design 통합은 아직 연결하지 않았다.
+// ★ 기존 소매 경로(designSleeve 파생·소매산 편집)와 **별개**다. 소매 모양 완료는 sleeveCheckpoint 가 `working.sleeveA` 를 보고
+//   Ⓐ 전용 분기(origin·inputs·meta 를 든 완료본)로 처리하고, 거기서 `draft()` 로 현재 geometry 를 재검증한다.
 // ★ 실패하면 이전 상태를 그대로 둔다. 지원하지 않는 몸판에 추측 폴백(기본 소매·다른 규칙)을 쓰지 않고 사유만 낸다.
 // ══════════════════════════════════════════════
 (function () {

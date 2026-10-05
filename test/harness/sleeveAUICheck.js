@@ -8,7 +8,7 @@
 //   (3) 차단: 몸판 없음·지원 밖 몸판(Ⓖ·Ⓗ·Ⓜ·Ⓝ)·잘못된 소매길이 → 정확한 사유 문구, 이전 상태 그대로(폴백 없음).
 //   (4) 재제도(refreshSleeve 훅): 새 몸판 hash 로 갱신 / 지원 밖 몸판이면 blocked 만 표시하고 geometry 는 건드리지 않음 / Ⓐ 꺼짐이면 무동작.
 //   (5) 표시: 패턴명·소매산 높이·소매폭·앞뒤 AH·목표/실제 이세 줄.
-//   (6) 완료 연결 차단: Ⓐ 가 켜져 있는 동안 sleeveCheckpoint 는 sleeve-preset-not-linked 로 완료를 거부한다(기본 소매는 그대로 완료).
+//   (6) 완료 연결: Ⓐ 도 sleeveCheckpoint 로 완료된다(sleeve-preset-not-linked 차단 제거 — 완료본 상세는 sleeveAResultCheck).
 //   (7) 배선: index.html 스크립트 순서·캐시 버전·DOM id, ui.js 가 기존 소매 경로 함수를 보존하고 Ⓐ 분기를 갖는다.
 //   node test/harness/sleeveAUICheck.js
 // ══════════════════════════════════════════════
@@ -173,18 +173,18 @@ ok(Object.isFrozen(bodice), "2: bodiceResult 는 동결 객체");
   ok(SAA.infoLines({ working: {} }).length === 0 && SAA.infoLines(null).length === 0, "5: Ⓐ 꺼짐 → 빈 목록");
 }
 
-// ── 6. 완료 연결 차단 ──
+// ── 6. 완료 연결(Ⓐ 완료본은 sleeveAResultCheck 가 전담 — 여기선 차단이 풀렸는지만) ──
 {
   const Q = projectWithBodice("A");
   const before = SC.check(Q);
-  ok(!before.fails.includes("sleeve-preset-not-linked"), "6: Ⓐ 없음 → 차단 사유 없음(기존 판정 그대로: " + before.fails.join(",") + ")");
+  ok(!before.fails.includes("sleeve-preset-not-linked"), "6: Ⓐ 없음 → 기존 판정 그대로(" + before.fails.join(",") + ")");
   SAA.apply(Q, { sleeveLengthCm: 52 });
   const c = SC.check(Q);
-  ok(!c.ok && c.fails[0] === "sleeve-preset-not-linked", "6: Ⓐ 켜짐 → sleeve-preset-not-linked 가 첫 사유");
+  ok(c.ok && !c.fails.includes("sleeve-preset-not-linked"), "6: Ⓐ 켜짐 → 더는 sleeve-preset-not-linked 로 막지 않는다");
   const done = SC.complete(Q);
-  ok(!done.ok && done.reason === "sleeve-preset-not-linked" && Q.working.sleeveResult === undefined, "6: complete 거부 · sleeveResult 미생성");
+  ok(done.ok && Q.working.sleeveResult === done.result && done.result.origin.presetId === "bunka-sleeve-A", "6: Ⓐ 완료 → origin 이 bunka-sleeve-A 인 sleeveResult");
   SAA.clear(Q);
-  ok(!SC.check(Q).fails.includes("sleeve-preset-not-linked"), "6: Ⓐ 해제 → 차단 사유 사라짐");
+  ok(!SC.check(Q).ok && SC.check(Q).fails.includes("no-sleeve"), "6: Ⓐ 해제(기본 소매 없음) → 기존 판정(no-sleeve)");
 }
 
 // ── 7. 배선(정적) ──
@@ -193,7 +193,7 @@ ok(Object.isFrozen(bodice), "2: bodiceResult 는 동결 객체");
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f + "?v="));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(엔진 → 카탈로그 → 연결 → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(["designSleeveA.js", "sleevePresets.js", "sleeveAApply.js", "sleeveCheckpoint.js", "ui.js"].every(f => ver(f) === "2026100501"), "7: 캐시 버전 갱신(2026100501)");
+  ok(["designSleeveA.js", "sleevePresets.js"].every(f => ver(f) === "2026100501") && ["sleeveAApply.js", "sleeveCheckpoint.js", "ui.js"].every(f => ver(f) === "2026100502"), "7: 캐시 버전 갱신(변경 파일 2026100502)");
   ok(/css\/style\.css\?v=2026100501/.test(html), "7: css 캐시 버전 갱신");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo"].forEach(id => ok(new RegExp('id="' + id + '"').test(html) && ui.indexOf('"' + id + '"') > 0, "7: DOM id " + id + " 존재·ui.js 사용"));
   ["btnApplySleeve", "btnResetSleeve", "btnApplyCap", "btnSleeveCapManual", "btnSleeveCapRevert", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "selSleeveSide", "inpSleeveBicep", "inpSleeveCapHeight", "designSleeveNote", "designSleeveEaseNote", "designSleeveCheckNote", "designSleeveStatusNote"]

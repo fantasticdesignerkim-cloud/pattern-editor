@@ -1335,7 +1335,9 @@
     const m = { "no-bodice": "몸판 완료 필요", "bodice-stale": "몸판 변경됨 · 다시 완료 필요", "no-sleeve": "소매를 먼저 적용",
       "source-mismatch": "소매 출처가 몸판 완료본과 다름", "cap-invalid": "소매산 편집 무효", "manual-line-missing": "관리형 소매산 선 없음",
       "cap-unmeasured": "소매산 앞·뒤 분리 불가", "self-intersection": "소매 형상이 교차함", "ease-unmeasured": "이세 측정 불가", "no-project": "프로젝트 없음",
-      "sleeve-preset-not-linked": "소매 Ⓐ 는 아직 완료·Design 통합에 연결되지 않음(확인용) · 원형 소매 기준으로 돌아가면 완료 가능" };
+      "sleeve-a-blocked": "소매 Ⓐ 차단 중(위 사유 확인) · 몸판을 확인하거나 원형 소매로 돌아가기", "sleeve-preset-unsupported": "지원하지 않는 소매 라인",
+      "invalid-sleeve-length": "소매길이 값 확인", "sleeve-a-redraft-failed": "소매 Ⓐ 를 다시 제도할 수 없음", "sleeve-a-geometry-mismatch": "소매 형상이 Ⓐ 제도 결과와 다름 · 소매 라인 다시 적용",
+      "no-module": "소매 Ⓐ 모듈을 불러오지 못함" };
     return m[reason] || reason;
   }
   function updateSleeveCheckpointUI(project) {
@@ -1346,7 +1348,8 @@
     const c = window.sleeveCheckpoint.check(project);
     const sgn = v => (v >= 0 ? "+" : "") + fmtL(v);
     if (checkNote) {
-      if (c.capLengths && c.ease && !sleeveAOn(project)) checkNote.textContent = "소매산 앞 " + fmtL(c.capLengths.front) + "·뒤 " + fmtL(c.capLengths.back) + "·총 " + fmtL(c.capLengths.total) + "cm · 이세 앞 " + sgn(c.ease.front) + "·뒤 " + sgn(c.ease.back) + "·총 " + sgn(c.ease.total) + "cm";
+      if (c.capLengths && sleeveAOn(project) && c.ok) checkNote.textContent = "소매 Ⓐ · 소매산 앞 " + fmtL(c.capLengths.front) + "·뒤 " + fmtL(c.capLengths.back) + "·총 " + fmtL(c.capLengths.total) + "cm (이세는 위 Ⓐ 정보)";   // 이세 중복 표기 금지: Ⓐ 정보 줄이 목표/실제를 소유
+      else if (c.capLengths && c.ease && !sleeveAOn(project)) checkNote.textContent = "소매산 앞 " + fmtL(c.capLengths.front) + "·뒤 " + fmtL(c.capLengths.back) + "·총 " + fmtL(c.capLengths.total) + "cm · 이세 앞 " + sgn(c.ease.front) + "·뒤 " + sgn(c.ease.back) + "·총 " + sgn(c.ease.total) + "cm";
       else checkNote.textContent = c.fails.length ? "완료 전 검사: " + sleeveCPFailStr(c.fails[0]) : "";
     }
     if (btn) btn.disabled = !c.ok;
@@ -1355,7 +1358,7 @@
       if (!latest) statusNote.textContent = c.ok ? "완료 가능 · 세션 전용" : "완료 전 검사: " + sleeveCPFailStr(c.fails[0]);
       else if (window.sleeveCheckpoint.invalidatedByBodice(project)) statusNote.textContent = "몸판 변경으로 소매 무효 · 다시 완료 필요";
       else if (window.sleeveCheckpoint.isCurrentSleeveChanged(project)) statusNote.textContent = "소매 변경됨 · 다시 완료 필요 · 세션 전용";
-      else statusNote.textContent = "소매 완료됨(원형 v" + (latest.sourceBlock.version != null ? latest.sourceBlock.version : "?") + ") · 세션 전용";
+      else statusNote.textContent = (window.sleeveCheckpoint.kindOf(latest) === "preset" ? "소매 Ⓐ 완료됨(원형 v" : "소매 완료됨(원형 v") + (latest.sourceBlock.version != null ? latest.sourceBlock.version : "?") + ") · 세션 전용";
     }
     refreshCollarUI(project);   // 소매 완료/변경은 카라 탭 게이트에 영향 → 카라 UI 동기화(refresh 종점)
   }
@@ -1366,7 +1369,7 @@
     const statusNote = document.getElementById("designSleeveStatusNote");
     if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + sleeveCPFailStr(r.reason); updateSleeveCheckpointUI(project); return; }
     updateSleeveCheckpointUI(project);
-    if (statusNote) statusNote.textContent = "소매 완료됨(원형 v" + (r.result.sourceBlock.version != null ? r.result.sourceBlock.version : "?") + ") · 세션 전용";
+    if (statusNote) statusNote.textContent = (window.sleeveCheckpoint.kindOf(r.result) === "preset" ? "소매 Ⓐ 완료됨(원형 v" : "소매 완료됨(원형 v") + (r.result.sourceBlock.version != null ? r.result.sourceBlock.version : "?") + ") · 세션 전용";
   }
 
   // ── 카라 모양(C1: 2피스 셔츠 칼라의 칼라 스탠드) ── designCollar.computeStand(bodiceResult) →
