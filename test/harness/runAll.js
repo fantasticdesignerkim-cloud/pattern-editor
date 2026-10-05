@@ -100,6 +100,8 @@ const suites = [
   { file: "sleeveMeasureCheck.js",      golden: false },
   // 소매 모양 S1 파생: cap 고정·하부 실루엣·초기값 재현·착용 경고·실패/불변.
   { file: "designSleeveCheck.js",       golden: false },
+  // 소매 Ⓐ 엔진 코어([패턴학교] P.137–139 타입 4): 진동 읽기·제도·이세 ⑧·bodiceResult 불변(UI·프리셋 미연결).
+  { file: "designSleeveACheck.js",      golden: false },
   // 소매 모양 완료 체크포인트(S5): 완료 게이트·불변 스냅샷·형상전용 스테일·몸판 무효화(스텁 project).
   { file: "sleeveCheckpointCheck.js",   golden: false },
   // 카라 모양 C1(designCollar): bodiceResult → 칼라 스탠드 직선 스캐폴드 순수 파생·봉제/연장 분리.
