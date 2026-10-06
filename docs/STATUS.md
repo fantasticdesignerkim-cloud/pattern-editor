@@ -3,7 +3,7 @@
 > **CLAUDE.md 가 "무엇을 지켜야 하는가"라면 이 문서는 "지금 어디이고 다음이 무엇인가"다.**
 > 작업이 끝날 때마다 여기를 갱신한다 — 완료 상세는 `docs/history/` 로 보내고 여기엔 **현재와 다음만** 둔다.
 
-*마지막 갱신: 2026-10-06 (소매 Ⓑ UI·프리셋·체크포인트 연결)*
+*마지막 갱신: 2026-10-06 (TEMP 몸판 곡선 기본값 추가 · 소매 Ⓑ UI·프리셋·체크포인트 연결)*
 
 ## 지금 서 있는 곳
 
@@ -24,6 +24,14 @@
 | ⑦ 출력(PDF·DXF) | **미착수** |
 
 **세션 전용**: 완료본은 전부 메모리에만 있다 — **reload 하면 사라진다**(저장·복원 미구현).
+
+## ★ TEMP 몸판 곡선 기본값 (2026-10-06, 제거 대상 — `js/tempDefaultCurve.js`)
+
+B83/W64/BL38 에서 **저장값이 없을 때만** 쓰는 임시 기본 곡선. 출처 = 사용자 제공 `armhole_data_2026-07-16 (1).json` 을
+JSON 불러오기 했을 때 선택되는 마지막 기록(index 24, SL52/Hem30)의 몸판 필드(anchors·handles·fArmhole·bNeckline·fNeckline)뿐 —
+소매·capFormula·이력은 없다. 우선순위: ① localStorage 저장값/가져온 값 → ② 이 TEMP → ③ 공식 기본값(`initHandles`). SL/Hem 은 조건이 아니다.
+localStorage 에 쓰지 않는다(state 메모리만). **제거**: 파일 삭제 + `index.html` script 1줄 삭제(또는 `ENABLE_TEMP_DEFAULT_BODY_CURVE=false`).
+회귀: `tempDefaultCurveCheck`(원본 JSON 이 `~/Downloads` 에 있을 때 import 동등성까지 검증).
 
 ## 몸판 라인 카탈로그 (2026-09 신설, `js/bodicePresets.js`)
 
