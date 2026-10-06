@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════
 // designSleeveB.js — 소매 Ⓑ 엔진 코어([패턴학교] P.41 「타이트 슬리브 · 소맷부리 치수를 결정해 맞댄다」). 순수.
 //
-// ⚠️ 이번 묶음은 **엔진 코어만**이다 — UI·프리셋·체크포인트 연결 없음(index.html 미등록).
+// 엔진은 순수다. UI·프리셋·체크포인트 연결은 sleeveBApply.js · sleevePresets.js · sleeveCheckpoint.js 가 맡는다(2026-10-06).
 //    designSleeveA.js / designSleeve.js 는 건드리지 않는다. Ⓑ 는 완성된 Ⓐ geometry 를 **읽기 전용 출발 원형**으로 쓴다
 //    (입력은 draftSleeveA 반환 {geometry, meta} 또는 같은 모양의 sleeveResult. 쓰지 않는다 — 반환값은 전부 새 객체,
 //    입력 JSON hash 를 sourceSleeveAHash 로 복사만 한다).

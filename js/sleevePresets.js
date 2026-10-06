@@ -6,7 +6,8 @@
 // ★ 소매 10종류의 이름·시작 쪽·표지 기호는 P036 판독 표만 근거다. 아직 판독하지 않은 라인의 변형(Ⓑ 다음 기호 등)은
 //   **슬롯을 만들지 않는다** — 표지 대표 기호 하나만 «보류»로 두고, 왜 못 만드는지(blockedBy)를 들고 있게 한다.
 //
-// 지금 실행 가능한 것은 **스트레이트 Ⓐ 하나**다: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
+// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ 두 개**다. Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
+// 그중 Ⓐ 는: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
 //   (`designSleeveA.draftSleeveA`, [패턴학교] P.137–139 «타입 4»). 이 레코드는 수치를 갖지 않는다 — 소매 길이만
 //   사용자가 정하고 나머지는 전부 몸판에서 읽는다. 순수(DOM·storage 미접근).
 //
@@ -44,7 +45,12 @@
     { id: "bunka-sleeve-A", familyId: "straight-sleeve", symbol: "A",
       method: "bodice-armhole", methodPage: 137,
       // 사용자가 정하는 값(교재 수치 아님). 나머지는 몸판 진동둘레에서 읽는다.
-      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" }] }
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" }] },
+    // Ⓑ: 출발 Ⓐ 는 같은 소매길이로 몸판에서 제도한다. 손바닥 둘레는 선택 — 비면 기본 커프 W×3/4(경고만, 자동 보정 없음).
+    { id: "bunka-sleeve-B", familyId: "tight-sleeve", symbol: "B",
+      method: "tight-from-sleeve-A", methodPage: 41,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "palmCircumferenceCm", label: "손바닥 둘레(선택)", unit: "cm", optional: true }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -62,7 +68,12 @@
         { id: "bunka-sleeve-A", symbol: "A", label: "A · 기본 패턴(완성한 몸판의 진동둘레를 토대로 제도)", page: 40, methodPage: 137,
           availability: "available", presetId: "bunka-sleeve-A", note: null }
       ] },
-    pendingFamily("tight-sleeve", 2, "타이트 소매", "B", 41),
+    { id: "tight-sleeve", order: 2, label: "타이트 소매", symbol: "B", page: 41, availability: "available", note: null,
+      familyNote: "Ⓑ — 소매 Ⓐ 에서 소맷부리를 소매폭×3/4 로 정하고 앞·뒤 반폭 중점 2곳을 맞댄다(손바닥 둘레+3cm 미달은 경고만). Ⓒ(뒤 소맷부리 다트)는 준비 중.",
+      variants: [
+        { id: "bunka-sleeve-B", symbol: "B", label: "B · 소맷부리를 소매폭의 3/4 로 맞댐(소매 Ⓐ 기반)", page: 41, methodPage: 41,
+          availability: "available", presetId: "bunka-sleeve-B", note: null }
+      ] },
     pendingFamily("flare-sleeve", 3, "플레어 소매", "D", 42),
     pendingFamily("tuck-sleeve", 4, "턱 소매", "F", 43),
     pendingFamily("puff-sleeve", 5, "퍼프 소매", "H", 44),

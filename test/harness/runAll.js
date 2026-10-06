@@ -107,6 +107,9 @@ const suites = [
   // 소매 Ⓐ UI/프리셋 연결: 카탈로그(sleevePresets)·적용 상태(sleeveAApply)·차단 사유·재제도 훅·표시 줄·완료 연결 차단·index/ui 배선.
   { file: "sleeveAUICheck.js",          golden: false },
   { file: "sleeveAResultCheck.js",      golden: false },
+  // 소매 Ⓑ(P.41) UI/프리셋 연결 + 완료본·Design 통합: 카탈로그·sleeveBApply(손바닥 경고만)·차단·재제도·표시(지배 ease=geometry 실측)·배선 / origin·inputs·Ⓐ↔Ⓑ↔기본 전환·몸판 변경·게이트.
+  { file: "sleeveBUICheck.js",          golden: false },
+  { file: "sleeveBResultCheck.js",      golden: false },
   // 소매 모양 완료 체크포인트(S5): 완료 게이트·불변 스냅샷·형상전용 스테일·몸판 무효화(스텁 project).
   { file: "sleeveCheckpointCheck.js",   golden: false },
   // 카라 모양 C1(designCollar): bodiceResult → 칼라 스탠드 직선 스캐폴드 순수 파생·봉제/연장 분리.

@@ -3,7 +3,7 @@
 > **CLAUDE.md 가 "무엇을 지켜야 하는가"라면 이 문서는 "지금 어디이고 다음이 무엇인가"다.**
 > 작업이 끝날 때마다 여기를 갱신한다 — 완료 상세는 `docs/history/` 로 보내고 여기엔 **현재와 다음만** 둔다.
 
-*마지막 갱신: 2026-10-06 (소매 Ⓑ fairing)*
+*마지막 갱신: 2026-10-06 (소매 Ⓑ UI·프리셋·체크포인트 연결)*
 
 ## 지금 서 있는 곳
 
@@ -13,7 +13,7 @@
 | ② Design 몸판 | **완료** — 여유량·길이·옆선·곡선화·네크라인·앞여밈·허리 다트 재배분·목표 완성 허리 + `bodiceResult` |
 | ③ Design 소매 | **완료** — 하부 실루엣·위팔/소매산·직접 편집 + `sleeveResult` |
 | ③ Design 소매 — 소매 Ⓐ(P.137–139, 스트레이트) | **완료·Design 통합 연결** — `designSleeveA` 엔진 + `sleevePresets`(`bunka-sleeve-A`) + `sleeveAApply`. 소매 탭 «소매 라인»에서 적용 → «소매 모양 완료» 가 `sleeveResult` 에 **`origin`(preset·method bodice-armhole·P.137) · `inputs`(소매길이) · `meta`(AH·소매산·폭·목표/실제 이세) · 불변 geometry** 를 담는다(기본 소매 전용 `parameters` 는 없음 · 공통 `cap.lengths/ease/splitPoint` 는 geometry 실측 — **재단·물리 검증의 권위값은 이 `cap.ease`**, `meta.easeTarget/easeAfter` 는 엔진 기록(샘플링 차 ~0.001cm, 맞추지 않음)). 게이트 = 기본 소매 게이트 + 차단 아님·출처 hash·현재 geometry 가 Ⓐ 재제도와 일치. 카라·`designResult` 로 그대로 이어지고 기본↔Ⓐ 전환·몸판 변경은 «변경됨/무효 → 재완료». 기본 소매 완료본은 byte-equivalent. 회귀: `sleeveAResultCheck.js` |
-| ③ Design 소매 — 소매 Ⓑ(P.41, 타이트) | **엔진 코어 + fairing 완료(2026-10-06), UI·프리셋·체크포인트 미연결** — `designSleeveB`(Ⓐ 읽기 전용 → 소맷부리 W×3/4, 앞뒤 반폭 중점 절개 강체 닫힘 → 소매산 P 주변 Hermite·소맷부리 자연 Hermite 로 정리한 한 조각 outline). 편차 한계 0.46 등은 **책 수치가 아닌 sweep 실측 검증 공차**([노트](book/P041.md)). 하네스 `designSleeveBCheck` 111(1344 sweep, ≈50s). 다음: UI·프리셋·체크포인트 연결, Ⓒ |
+| ③ Design 소매 — 소매 Ⓑ(P.41, 타이트) | **완료·Design 통합 연결(2026-10-06)** — `designSleeveB`(Ⓐ 읽기 전용 → 소맷부리 W×3/4, 앞뒤 반폭 중점 절개 강체 닫힘 → 소매산 P 주변 Hermite·소맷부리 자연 Hermite 로 정리한 **한 조각 outline**; raw rigid 는 `meta.rigid` 감사용) + `sleevePresets`(`bunka-sleeve-B`, 타이트 소매 라인) + `sleeveBApply`(`working.sleeveB` · 출발 Ⓐ 는 같은 몸판·소매길이로 내부 제도 · Ⓐ/Ⓑ 배타). 소매 탭 «소매 라인»에서 적용 · 입력 = 소매길이 + 선택 손바닥 둘레(비면 W×3/4, 소맷부리 < 손바닥+3cm 는 **경고만·자동 보정 없음**). «소매 모양 완료» 가 `sleeveResult` 에 `origin`(P.41) · `inputs` · `sourceSleeveAHash` · `meta` · 불변 geometry 를 담고 카라·`designResult` 로 Ⓐ 와 같이 이어진다. **지배 ease = `cap.ease`(fairing 된 최종 geometry 실측)**, `meta.easeTarget/easeAfter` 는 감사 정보. 편차 한계 0.46 등은 **책 수치가 아닌 sweep 실측 검증 공차**([노트](book/P041.md)). 회귀: `designSleeveBCheck`(111, 1344 sweep ≈50s) · `sleeveBUICheck` · `sleeveBResultCheck`. 다음: Ⓒ(뒤 소맷부리 다트, 크롭 판독 필요) |
 | ④ Design 카라 | **완료** — 셔츠 칼라 스탠드·본체·직접 편집·교재 M형 기본형 + `collarResult` |
 | ⑤ Design 통합 | **완료** — `designResult`(세 완료본 + 절개선) |
 | 처리 방법 161 | **완료** — `designFlare` + 밑단 곡선 이음 + 플레어 Ⓖ·Ⓗ 프리셋·UI(`slashSpread` = Ⓖ 위 P.163 기준점 절개) |

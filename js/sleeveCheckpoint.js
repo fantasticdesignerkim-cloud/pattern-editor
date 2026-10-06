@@ -22,6 +22,13 @@
 //     두 값은 측정 방식(엔진 400분할 vs 소매산 60분할 flatten)이 달라 ~0.001cm 어긋난다 — 같게 맞추거나 반올림으로 덮어쓰지 않는다.
 //   게이트 ⑧(Ⓐ 전용): Ⓐ 상태가 차단(blocked)이 아니고, 출처 hash·지원 preset 이 맞고, 현재 geometry.sleeve 가 같은 몸판·소매길이로
 //   Ⓐ 를 다시 제도한 결과와 일치(= 다른 소매 형상이 Ⓐ 로 서명되지 않음).
+//
+// ── 소매 Ⓑ(`working.sleeveB`, bunka-sleeve-B, P.41 타이트) 완료 ──
+//   Ⓐ 와 같은 구조(origin·inputs·meta·불변 geometry·실측 cap.lengths/cap.ease). 입력 = 소매길이 + 선택 손바닥 둘레(없으면 null),
+//   출발 Ⓐ 의 출처 hash 는 `sourceSleeveAHash`. ★ 지배 ease 는 최종(fairing 된) geometry 를 직접 측정한 `cap.ease` — `meta.easeTarget/easeAfter`
+//   는 감사 정보다. 손바닥 경고(hem-below-palm-allowance)는 `warnings` 에만 남고 완료를 막지 않는다(자동 보정 없음).
+//   게이트 ⑧(Ⓑ 전용): 차단 아님 · 출처 hash · 현재 geometry·meta 가 같은 몸판·입력으로 Ⓑ 를 다시 제도한 결과와 일치.
+//   Ⓐ·Ⓑ 가 동시에 켜져 있으면(ui 가 배타를 지키므로 발생하지 않는다) `sleeve-line-conflict` 로 거부한다.
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
@@ -36,6 +43,8 @@
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
     // 소매 Ⓐ 는 working.sleeveA + geometry.sleeve 만 쓰고 sleeveDraft 는 모른다 — 기본 소매 파라미터로 서명하지 않도록 별도 분기.
+    if (proj.working.sleeveA && proj.working.sleeveB) return { ok: false, fails: ["sleeve-line-conflict"], capLengths: null, ease: null };
+    if (proj.working.sleeveB) return checkB(proj);
     if (proj.working.sleeveA) return checkA(proj);
     var fails = [];
     var BC = window.bodiceCheckpoint, DS = window.designSleeve;
@@ -113,6 +122,52 @@
     };
   }
 
+  // ── 소매 Ⓑ 분기 ──
+  var PRESET_B = "bunka-sleeve-B";
+  var B_ORIGIN = { kind: "preset", presetId: PRESET_B, method: "tight-from-sleeve-A", methodPage: 41 };
+  function checkB(proj) {
+    var fails = [];
+    var BC = window.bodiceCheckpoint, DS = window.designSleeve, SBA = window.sleeveBApply;
+    var b = proj.working.sleeveB;
+    var bodice = BC && BC.latest(proj);
+    if (!bodice) fails.push("no-bodice");
+    else if (BC.isCurrentBodiceChanged(proj)) fails.push("bodice-stale");
+    if (b.blocked) fails.push("sleeve-b-blocked");
+    if (b.presetId !== PRESET_B) fails.push("sleeve-preset-unsupported");
+    if (bodice && b.sourceBodiceHash !== bodice.hash) fails.push("source-mismatch");
+    var len = b.parameters && b.parameters.sleeveLengthCm, palm = b.parameters ? b.parameters.palmCircumferenceCm : null;
+    if (!fin(len) || !(len > 0)) fails.push("invalid-sleeve-length");
+    if (palm !== null && palm !== undefined && !(fin(palm) && palm > 0)) fails.push("invalid-palm-circumference");
+    var geom = proj.working.geometry && proj.working.geometry.sleeve;
+    var prim = (geom && DS) ? DS.capPrimitives(geom) : null;
+    if (!prim) fails.push("cap-unmeasured");
+    // ★ designSleeve.sleeveOutlineSelfIntersects 는 «소맷부리 = 직선 한 변» 을 전제로 하므로 소맷부리가 곡선(path)인 Ⓑ 에는 쓰지 않는다(항상 true 가 된다).
+    //   Ⓑ 의 자기교차 검사는 엔진이 flatten 한 폐곡선 전체로 이미 했고(meta.checks.selfIntersection), 아래 «재제도 일치» 게이트가 현재 geometry 가 그 결과와 같음을 보장한다.
+    if (prim && b.meta && b.meta.checks && b.meta.checks.selfIntersection !== false) fails.push("self-intersection");
+    // 현재 geometry.sleeve·meta 가 «같은 몸판·입력의 Ⓑ 재제도»와 일치해야 한다(다른 형상이 Ⓑ 로 서명되는 것 방지).
+    if (!fails.length) {
+      if (!SBA || !window.designSleeveB) fails.push("no-module");
+      else {
+        var r = SBA.draft(proj, len, palm === undefined ? null : palm);
+        if (!r.ok) fails.push("sleeve-b-redraft-failed");
+        else if (JSON.stringify(canonGeom(r.geometry)) !== JSON.stringify(canonGeom(geom)) || JSON.stringify(r.meta) !== JSON.stringify(b.meta)
+          || r.sourceSleeveAHash !== b.sourceSleeveAHash) fails.push("sleeve-b-geometry-mismatch");
+      }
+    }
+    var ease = null;
+    if (prim && bodice) {
+      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
+      else ease = { front: fe, back: be, total: fe + be };
+    }
+    return {
+      ok: fails.length === 0, fails: fails,
+      capLengths: prim ? prim.lengths : null, ease: ease,
+      lower: null, cap: null, mode: "preset", preset: PRESET_B, _prim: prim, _bodice: bodice, _a: b
+    };
+  }
+  function inputsB(b) { return { sleeveLengthCm: b.parameters.sleeveLengthCm, palmCircumferenceCm: b.parameters.palmCircumferenceCm === undefined ? null : b.parameters.palmCircumferenceCm }; }
+
   // 완료본 hash 용 signature(형상 전용: geometry·parameters·cap.mode·capLengths·sourceBodiceHash.
   //   completedAt·layout·선택·snap 제외).
   function signature(sleeveResult) {
@@ -139,6 +194,7 @@
     if (!proj) return { ok: false, reason: "no-project" };
     var c = check(proj);
     if (!c.ok) return { ok: false, reason: c.fails[0], check: c };
+    if (proj.working.sleeveB) return completeB(proj, c);
     if (proj.working.sleeveA) return completeA(proj, c);
     var d = proj.working.sleeveDraft, geom = proj.working.geometry.sleeve, prim = c._prim, bodice = c._bodice;
     var sb = proj.sourceBlock || {};
@@ -200,6 +256,26 @@
     return { ok: true, result: result, check: c };
   }
 
+  function completeB(proj, c) {
+    var b = c._a, sb = proj.sourceBlock || {};
+    var result = {
+      schemaVersion: 1,
+      origin: clone(B_ORIGIN),
+      sourceBodiceHash: b.sourceBodiceHash,
+      sourceSleeveAHash: b.sourceSleeveAHash,
+      sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+      inputs: inputsB(b),
+      geometry: clone(proj.working.geometry.sleeve),
+      meta: clone(b.meta), warnings: b.warnings.slice(),
+      cap: capBlock(c),
+      completedAt: Date.now()
+    };
+    result.hash = hashStr(signature(result));
+    deepFreeze(result);
+    proj.working.sleeveResult = result;
+    return { ok: true, result: result, check: c };
+  }
+
   function latest(proj) { proj = proj || project(); return (proj && proj.working.sleeveResult) || null; }
   // 완료본 없음 → true. 몸판 hash 가 완료본과 다르면 "몸판 변경으로 무효"(별도 함수). 여기선 소매 형상 변경.
   function isCurrentSleeveChanged(proj) {
@@ -207,6 +283,10 @@
     var res = proj.working.sleeveResult; if (!res) return true;
     var c = check(proj);
     if (!c.ok || !c._prim) return true;   // 현재 유효하지 않으면 변경으로 간주(재완료 필요)
+    if (proj.working.sleeveB) {   // 소매 Ⓑ: Ⓐ 와 같은 signature 형식(origin·inputs 가 다르면 Ⓐ↔Ⓑ 전환도 «변경»)
+      return signature({ origin: B_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsB(c._a),
+        geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);
+    }
     if (proj.working.sleeveA) {   // 소매 Ⓐ: 같은 signature 형식(origin 이 다르면 기본↔Ⓐ 전환도 «변경»)
       return signature({ origin: A_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: { sleeveLengthCm: c._a.parameters.sleeveLengthCm },
         geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);
