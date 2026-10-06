@@ -27,7 +27,8 @@ function boot(inputs, pre = {}, { withTemp = true } = {}) {
       removeItem: k => { delete store[k]; },
       get length() { return Object.keys(store).length; }
     },
-    document: { getElementById: () => null, createElement: () => ({}), body: {} },
+    document: { getElementById: id => (id === "selCapFormula" && inputs.cap ? { value: inputs.cap } : null),
+                createElement: () => ({}), body: {} },
     state: { armH: null, fArmH: null, bNeckH: null, fNeckH: null, sleeveH: null,
              armEditMode: false, neckEditMode: false, sleeveEditMode: false },
     alert() {}, render() {}, FileReader: function () {},
@@ -41,6 +42,10 @@ function boot(inputs, pre = {}, { withTemp = true } = {}) {
 const curve = sb => JSON.parse(JSON.stringify({
   armH: sb.state.armH, fArmH: sb.state.fArmH, bNeckH: sb.state.bNeckH, fNeckH: sb.state.fNeckH }));
 const M = (B, W, BL) => ({ inpB: B, inpW: W, inpBL: BL });
+const MS = (B, W, BL, SL = 52, Hem = 30, cap) => Object.assign(M(B, W, BL), { inpSL: SL, inpHem: Hem }, cap ? { cap } : {});
+// render 가 sleeve.js 에서 하는 호출을 그대로 흉내: sleeveH 가 비면 앵커 수로 복원 시도.
+const sleeveInit = sb => { if (!sb.state.sleeveH) sb.restoreSavedSleevePatternForAnchorCount(9); return sb.state.sleeveH; };
+const resetAll = sb => { sb.state.armH = sb.state.fArmH = sb.state.bNeckH = sb.state.fNeckH = sb.state.sleeveH = null; };
 
 // §1 처음 방문(storage 0) + 83/64/38 → TEMP 적용, localStorage 0키 유지
 {
@@ -118,16 +123,85 @@ if (fs.existsSync(USER_JSON)) {
   const imported = curve(imp.sb);
   const sel = imp.sb.findLastSavedForCurrentMeasurements();
   ok(same(sel, list[24]), "5: import 후 선택 기록 = index 24");
-  const tmp = boot(M(83, 64, 38));
+  const tmp = boot(MS(83, 64, 38));
   ok(same(curve(tmp.sb), imported), "5: TEMP 기본 곡선 데이터 == import 결과(armH·fArmH·bNeckH·fNeckH)");
+  const impSleeve = JSON.parse(JSON.stringify(imp.sb.state.sleeveH));
+  ok(same(impSleeve, list[24].sleevePattern), "5: import 후 sleeveH = index 24 sleevePattern");
+  ok(same(JSON.parse(JSON.stringify(sleeveInit(tmp.sb))), impSleeve), "5: TEMP 소매 == import 소매(anchorCount·segments·anchorOffsets)");
+  ok(list[24].capFormula === "culture" && +list[24].measurements.SL === 52 && +list[24].measurements.Hem === 30, "5: index 24 = SL52/Hem30/culture");
   // 멱등: 같은 파일 재 import → 변화 없음
   const r2 = imp.sb.importCurveEntries(JSON.parse(raw));
   ok(r2.imported === 0 && r2.duplicates === list.length, "5: import 멱등(재가져오기 0건)");
   ok(JSON.parse(imp.store.armhole_data).length === list.length, "5: 이력 25건 유지");
-  // TEMP 기본값은 JSON 전체가 아니라 index 24 의 필드에서만 왔는지 — 키 일치
-  ok(!/sleevePattern|capFormula/.test(TEMP.replace(/\/\/.*$/gm, "")), "5: 코드에 소매·이력 데이터 없음");
+  // 이력 24건을 복제하지 않았는지: 코드 안에 timestamp·measurements 항목이 index 24 한 건분(상수 1개)뿐
+  const code = TEMP.replace(/\/\/.*$/gm, "");
+  ok(!/timestamp/.test(code) && (code.match(/measurements:/g) || []).length === 1, "5: 이력 비복제(measurements 1건)");
 } else {
   console.log("SKIP §5 동등성: 사용자 JSON 없음 (" + USER_JSON + ")");
+}
+
+// §6 소매 TEMP(짝 세트): 조건·우선순위·깊은복사·storage 0키
+{
+  // (a) 정확 조건(83/64/38+SL52+Hem30+culture) → 적용, 0키
+  const a = boot(MS(83, 64, 38));
+  const sh = sleeveInit(a.sb);
+  ok(sh && sh.anchorCount === 9 && sh.segments.length === 8 && sh.anchorOffsets.length === 9, "6a: 소매 TEMP 적용(9/8/9)");
+  ok(sh.segments[0].c1.x === 6.819 && sh.anchorOffsets[1].dy === 0.178, "6a: index24 소매 값");
+  ok(Object.keys(a.store).length === 0, "6a: storage 0키");
+  // (b) 조건 불일치 → 소매 공식 그대로(sleeveH null 유지)
+  const cases = [["SL50", MS(83, 64, 38, 50, 30)], ["SL52.5", MS(83, 64, 38, 52.5, 30)], ["Hem28", MS(83, 64, 38, 52, 28)],
+                 ["recommend공식", MS(83, 64, 38, 52, 30, "recommend")], ["B85.5", MS(85.5, 64, 38)], ["W66", MS(83, 66, 38)], ["BL40", MS(83, 64, 40)]];
+  for (const [nm, inp] of cases) {
+    const b = boot(inp);
+    ok(sleeveInit(b.sb) === null, `6b: ${nm} → 소매 TEMP 미적용`);
+    ok(Object.keys(b.store).length === 0, `6b: ${nm} storage 0키`);
+  }
+  // (c) 앵커 수 불일치 호출 → 미적용
+  const c = boot(MS(83, 64, 38));
+  ok(c.sb.restoreSavedSleevePatternForAnchorCount(7) === false && c.sb.state.sleeveH === null, "6c: anchorCount≠9 미적용");
+  // (d) 몸판 TEMP 는 SL/Hem 무관 유지(SL50 에서도 몸판은 적용, 소매는 아님)
+  const d = boot(MS(83, 64, 38, 50, 30));
+  ok(d.sb.state.armH && d.sb.state.armH.a1.x === 19.585 && sleeveInit(d.sb) === null, "6d: SL50 = 몸판 TEMP 만");
+  // (e) 사용자 저장 소매(import) 우선
+  const userSleeve = { anchorCount: 9, segments: Array.from({ length: 8 }, () => ({ c1: { x: 1, y: 1 }, c2: { x: 2, y: 2 } })),
+                       anchorOffsets: Array.from({ length: 9 }, () => ({ dx: 0, dy: 0 })) };
+  const userEntry = { timestamp: "u", measurements: { B: 83, W: 64, BL: 38, SL: 52, Hem: 30 }, capFormula: "culture",
+    anchors: { a1: { x: 1, y: 1 }, a2: { x: 2, y: 2 }, a3: { x: 3, y: 3 } },
+    handles: { h0: { x: 9, y: 9 }, h1a: { x: 9, y: 9 }, h1b: { x: 9, y: 9 }, h2a: { x: 9, y: 9 }, h2b: { x: 9, y: 9 },
+               h3a: { x: 9, y: 9 }, h3b: { x: 9, y: 9 }, h4: { x: 9, y: 9 } },
+    fArmhole: { hGa: { x: 7, y: 7 } }, bNeckline: { h0: { x: 7, y: 7 } }, fNeckline: { h0: { x: 7, y: 7 } }, sleevePattern: userSleeve };
+  const e1 = boot(MS(83, 64, 38), { armhole_data_kv: JSON.stringify({ "83-64-38": userEntry }), armhole_data: JSON.stringify([userEntry]) });
+  e1.sb.state.sleeveH = null;
+  e1.sb.restoreSavedSleevePatternForAnchorCount(9);
+  ok(e1.sb.state.sleeveH.segments[0].c1.x === 1, "6e: 부팅 시 저장 소매 우선");
+  const e2 = boot(MS(83, 64, 38));
+  ok(sleeveInit(e2.sb).segments[0].c1.x === 6.819, "6e: import 전 TEMP");
+  e2.sb.importCurveEntries([userEntry]); resetAll(e2.sb);
+  e2.sb.loadSavedCurveForCurrentMeasurements(false);
+  ok(e2.sb.state.sleeveH.segments[0].c1.x === 1, "6e: import 소매가 TEMP 를 이김");
+  // (f) 저장 몸판 항목은 있으나 소매 없음 → TEMP 소매를 섞지 않는다(몸판+소매 한 세트 원칙)
+  const bodyOnly = Object.assign({}, userEntry); delete bodyOnly.sleevePattern; delete bodyOnly.capFormula;
+  const f = boot(MS(83, 64, 38), { armhole_data_kv: JSON.stringify({ "83-64-38": bodyOnly }), armhole_data: JSON.stringify([bodyOnly]) });
+  f.sb.state.sleeveH = null;
+  ok(sleeveInit(f.sb) === null, "6f: 사용자 몸판 저장 + 소매 없음 → TEMP 소매 미적용(공식)");
+  ok(f.sb.state.armH.a1.x === 1, "6f: 사용자 몸판 유지");
+  // (g) 치수 전환 resetCurveHandles 후 복귀(render.js 경로: restoreSavedSleevePatternForCurrentSleeve)
+  const g = boot(MS(85.5, 64, 38));
+  g.inputs.inpB = 83; resetAll(g.sb);
+  g.sb.loadSavedCurveForCurrentMeasurements(false);
+  g.sb.restoreSavedSleevePatternForCurrentSleeve(false);
+  ok(g.sb.state.sleeveH && g.sb.state.sleeveH.segments[0].c1.x === 6.819, "6g: 치수 전환 복귀 시 소매 TEMP");
+  g.inputs.inpSL = 50; g.sb.state.sleeveH = null;
+  ok(g.sb.restoreSavedSleevePatternForCurrentSleeve(false) === false && g.sb.state.sleeveH === null, "6g: SL 변경 시 공식으로");
+  g.inputs.inpSL = 52;
+  ok(g.sb.restoreSavedSleevePatternForCurrentSleeve(true) === false, "6g: 명시 호출(showAlert) 경로 반환 불변");
+  // (h) 깊은복사: 편집이 상수를 오염시키지 않는다
+  const h = boot(MS(83, 64, 38));
+  sleeveInit(h.sb).segments[0].c1.x = 999; h.sb.state.sleeveH.anchorOffsets[1].dx = 999;
+  h.sb.state.sleeveH = null;
+  const again = sleeveInit(h.sb);
+  ok(again.segments[0].c1.x === 6.819 && again.anchorOffsets[1].dx === 0.1017, "6h: 소매 상수 비오염");
+  ok(Object.keys(h.store).length === 0, "6h: storage 0키");
 }
 
 console.log(`tempDefaultCurveCheck: ${PASS} PASS, ${FAIL} FAIL`);

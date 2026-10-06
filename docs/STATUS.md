@@ -25,12 +25,14 @@
 
 **세션 전용**: 완료본은 전부 메모리에만 있다 — **reload 하면 사라진다**(저장·복원 미구현).
 
-## ★ TEMP 몸판 곡선 기본값 (2026-10-06, 제거 대상 — `js/tempDefaultCurve.js`)
+## ★ TEMP 몸판+짝 소매 곡선 세트 기본값 (2026-10-06, 제거 대상 — `js/tempDefaultCurve.js`)
 
-B83/W64/BL38 에서 **저장값이 없을 때만** 쓰는 임시 기본 곡선. 출처 = 사용자 제공 `armhole_data_2026-07-16 (1).json` 을
-JSON 불러오기 했을 때 선택되는 마지막 기록(index 24, SL52/Hem30)의 몸판 필드(anchors·handles·fArmhole·bNeckline·fNeckline)뿐 —
-소매·capFormula·이력은 없다. 우선순위: ① localStorage 저장값/가져온 값 → ② 이 TEMP → ③ 공식 기본값(`initHandles`). SL/Hem 은 조건이 아니다.
-localStorage 에 쓰지 않는다(state 메모리만). **제거**: 파일 삭제 + `index.html` script 1줄 삭제(또는 `ENABLE_TEMP_DEFAULT_BODY_CURVE=false`).
+B83/W64/BL38 에서 **저장값이 없을 때만** 쓰는 임시 기본 곡선 **세트**. 출처 = 사용자 제공 `armhole_data_2026-07-16 (1).json` 을
+JSON 불러오기 했을 때 선택되는 마지막 기록(index 24, SL52/Hem30/문화식)의 몸판 필드(anchors·handles·fArmhole·bNeckline·fNeckline) +
+짝 소매(sleevePattern 9앵커·8세그먼트·offsets) — 이력은 없다. 몸판만 쓰면 공식 소매와 짝이 어긋나 총 이세가 +4.05cm 커졌다.
+적용: 몸판 = B/W/BL 만 · 소매 = 추가로 SL52·Hem30·문화식 정확 일치 + 이 치수의 저장 항목 없음(아니면 기존 소매 공식).
+우선순위: ① localStorage 저장값/가져온 값 → ② 이 TEMP → ③ 공식 기본값. localStorage 에 쓰지 않는다(state 메모리만).
+**제거**: 파일 삭제 + `index.html` script 1줄 삭제(또는 `ENABLE_TEMP_DEFAULT_BODY_CURVE=false`).
 회귀: `tempDefaultCurveCheck`(원본 JSON 이 `~/Downloads` 에 있을 때 import 동등성까지 검증).
 
 ## 몸판 라인 카탈로그 (2026-09 신설, `js/bodicePresets.js`)
