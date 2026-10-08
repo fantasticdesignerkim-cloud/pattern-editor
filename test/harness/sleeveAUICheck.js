@@ -193,8 +193,8 @@ ok(Object.isFrozen(bodice), "2: bodiceResult 는 동결 객체");
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f + "?v="));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(엔진 → 카탈로그 → 연결 → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(ver("designSleeveA.js") === "2026100501" && ver("sleeveAApply.js") === "2026100502" && ["sleevePresets.js", "sleeveCheckpoint.js", "ui.js"].every(f => ver(f) === "2026100601"), "7: 캐시 버전 갱신(Ⓑ 연결로 변경된 파일 2026100601)");
-  ok(/css\/style\.css\?v=2026100501/.test(html), "7: css 캐시 버전 갱신");
+  ok(ver("designSleeveA.js") === "2026100501" && ver("sleeveAApply.js") === "2026100502" && ver("ui.js") === "2026100703" && ["sleevePresets.js", "sleeveCheckpoint.js"].every(f => ver(f) === "2026100701"), "7: 캐시 버전 갱신(Ⓒ 연결로 변경된 파일 2026100701)");
+  ok(/css\/style\.css\?v=2026100702/.test(html), "7: css 캐시 버전 갱신");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo"].forEach(id => ok(new RegExp('id="' + id + '"').test(html) && ui.indexOf('"' + id + '"') > 0, "7: DOM id " + id + " 존재·ui.js 사용"));
   ["btnApplySleeve", "btnResetSleeve", "btnApplyCap", "btnSleeveCapManual", "btnSleeveCapRevert", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "selSleeveSide", "inpSleeveBicep", "inpSleeveCapHeight", "designSleeveNote", "designSleeveEaseNote", "designSleeveCheckNote", "designSleeveStatusNote"]
     .forEach(id => ok(new RegExp('id="' + id + '"').test(html), "7: 기존 DOM id 보존 " + id));

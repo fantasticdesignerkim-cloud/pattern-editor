@@ -6,7 +6,7 @@
 // ★ 소매 10종류의 이름·시작 쪽·표지 기호는 P036 판독 표만 근거다. 아직 판독하지 않은 라인의 변형(Ⓑ 다음 기호 등)은
 //   **슬롯을 만들지 않는다** — 표지 대표 기호 하나만 «보류»로 두고, 왜 못 만드는지(blockedBy)를 들고 있게 한다.
 //
-// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ 두 개**다. Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
+// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ 세 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
 // 그중 Ⓐ 는: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
 //   (`designSleeveA.draftSleeveA`, [패턴학교] P.137–139 «타입 4»). 이 레코드는 수치를 갖지 않는다 — 소매 길이만
 //   사용자가 정하고 나머지는 전부 몸판에서 읽는다. 순수(DOM·storage 미접근).
@@ -50,7 +50,12 @@
     { id: "bunka-sleeve-B", familyId: "tight-sleeve", symbol: "B",
       method: "tight-from-sleeve-A", methodPage: 41,
       inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
-        { key: "palmCircumferenceCm", label: "손바닥 둘레(선택)", unit: "cm", optional: true }] }
+        { key: "palmCircumferenceCm", label: "손바닥 둘레(선택)", unit: "cm", optional: true }] },
+    // Ⓒ: Ⓑ 와 같은 출발 Ⓐ. 앞 겹침·뒤 열린 소맷부리 다트(EL 꼭짓점~소맷부리). EL = 팔꿈치 길이(SP 기준) 기본 31.4 — 사용자가 수정한다.
+    { id: "bunka-sleeve-C", familyId: "tight-sleeve", symbol: "C",
+      method: "tight-back-dart-from-sleeve-A", methodPage: 41,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "elbowLengthCm", label: "팔꿈치 길이 EL", unit: "cm", defaultValue: 31.4 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -69,10 +74,12 @@
           availability: "available", presetId: "bunka-sleeve-A", note: null }
       ] },
     { id: "tight-sleeve", order: 2, label: "타이트 소매", symbol: "B", page: 41, availability: "available", note: null,
-      familyNote: "Ⓑ — 소매 Ⓐ 에서 소맷부리를 소매폭×3/4 로 정하고 앞·뒤 반폭 중점 2곳을 맞댄다(손바닥 둘레+3cm 미달은 경고만). Ⓒ(뒤 소맷부리 다트)는 준비 중.",
+      familyNote: "Ⓑ — 소매 Ⓐ 에서 소맷부리를 소매폭×3/4 로 정하고 앞·뒤 반폭 중점 2곳을 맞댄다(손바닥 둘레+3cm 미달은 경고만). Ⓒ — 소맷부리 ●:2●:●(=1:2:1)로 팔 모양에 맞추고 뒤 소맷부리 다트(EL 꼭짓점~소맷부리, 열린 봉제 다트)를 둔다(EL 입력).",
       variants: [
         { id: "bunka-sleeve-B", symbol: "B", label: "B · 소맷부리를 소매폭의 3/4 로 맞댐(소매 Ⓐ 기반)", page: 41, methodPage: 41,
-          availability: "available", presetId: "bunka-sleeve-B", note: null }
+          availability: "available", presetId: "bunka-sleeve-B", note: null },
+        { id: "bunka-sleeve-C", symbol: "C", label: "C · 소맷부리 ●:2●:● + 뒤 소맷부리 다트(소매 Ⓐ 기반, EL 입력)", page: 41, methodPage: 41,
+          availability: "available", presetId: "bunka-sleeve-C", note: null }
       ] },
     pendingFamily("flare-sleeve", 3, "플레어 소매", "D", 42),
     pendingFamily("tuck-sleeve", 4, "턱 소매", "F", 43),

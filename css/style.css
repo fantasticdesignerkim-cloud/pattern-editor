@@ -390,3 +390,25 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .neck-card{flex:0 0 auto;padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:var(--surface);color:var(--navy);cursor:pointer}
 .neck-card:hover{border-color:var(--cyan)}
 .neck-card[aria-pressed="true"]{background:var(--cyan);border-color:var(--cyan);color:#fff;font-weight:600}
+
+/* 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보(표시 전용). 재단 외곽(남색 실선)과 구분: 설명용 = 청록 점선·가는 치수선·옅은 음영. 글자는 흰 후광. */
+.sleeve-anno{pointer-events:none}
+.sleeve-anno-zone{fill:rgba(14,116,144,.10);stroke:#0E7490;stroke-width:0.8;stroke-dasharray:1.5 3}
+.sleeve-anno-dim{stroke:#0E7490;stroke-width:0.9;fill:none}
+.sleeve-anno-ext{stroke:#0E7490;stroke-width:0.6;stroke-dasharray:2 2;fill:none;opacity:.8}
+.sleeve-anno-tick{stroke:#0E7490;stroke-width:1;fill:none}
+.sleeve-anno-leader{stroke:#0E7490;stroke-width:0.7;fill:none}
+.sleeve-anno-past{stroke:#94A3B8;stroke-width:0.8;stroke-dasharray:3 3;fill:none}
+.sleeve-anno-mark{fill:#fff;stroke:#0E7490;stroke-width:1}
+.sleeve-anno-text{font-size:9px;fill:#334155;paint-order:stroke;stroke:rgba(255,255,255,.95);stroke-width:3px;stroke-linejoin:round}
+.sleeve-anno-title{font-size:12px;font-weight:700;fill:#1E293B}
+.sleeve-anno-label{fill:#0F172A}
+.sleeve-anno-dim.sleeve-anno-text{fill:#0E7490;font-weight:600}
+.sleeve-anno-tag{fill:#0E7490;stroke:#fff;stroke-width:1}
+.sleeve-anno-tagtext{font-size:9px;font-weight:700;fill:#fff;stroke:none}
+.sleeve-anno-side{font-size:13px;font-weight:700;fill:#0E7490}
+.sleeve-anno-edge,.sleeve-anno-ref{fill:#475569}
+.sleeve-anno-note{font-size:8.5px;fill:#64748B}
+/* 소매 라인(Ⓐ/Ⓑ/Ⓒ)의 construction(중심선·EL 선·절개축 등)은 설명용 — 재단 외곽(남색 실선)과 구분되는 청록 점선. 기본 소매에는 적용하지 않는다. */
+.design-working [data-sleeve-line] [data-geometry-role="construction"],
+.design-working[data-sleeve-line] [data-geometry-role="construction"]{stroke:#0E7490;opacity:.7;stroke-dasharray:4 3}

@@ -440,6 +440,33 @@ function _appendPeplumAnnotation(grp, model, dy){
   grp.appendChild(g);
 }
 
+// 소매 제작 정보 오버레이(표시 전용): sleeveAnnotation 표시 모델(geometry 좌표)을 소매 피스 그룹에 동승시켜 그린다. geometry·hit·계측·hash 무관.
+//   재단 외곽(남색 실선)과 구분: 설명용 = 청록 점선/가는 치수선/옅은 음영. 선 굵기·글자 크기는 px 고정(줌 무관), 글자는 흰 후광으로 읽히게 한다.
+function _appendSleeveAnnotation(grp, model){
+  if(!model) return;
+  const g=E("g",{ "data-design-sleeve":"annotation", "data-sleeve-line":model.line, class:"sleeve-anno" });
+  const TICK=3.5, sc=Math.abs(c2p(1,0)[0]-c2p(0,0)[0]);
+  const LY=window.sleeveAnnotation.layout(model, sc);   // 화면 배율 기준 배치(겹치면 이동+리더선, 그래도 안 되면 번호 표식+번호 설명)
+  if(LY.compact) g.setAttribute("data-anno-compact","1");
+  (model.zones||[]).forEach(z=>g.appendChild(E("polygon",{ points:z.pts.map(p=>c2p(p.x,p.y).join(",")).join(" "), class:"sleeve-anno-"+z.cls, "data-anno":"zone-"+z.id })));
+  (model.refs||[]).forEach(r=>{ const [x1,y1]=c2p(r.from.x,r.from.y), [x2,y2]=c2p(r.to.x,r.to.y); g.appendChild(E("line",{ x1,y1,x2,y2, class:"sleeve-anno-"+r.cls, "data-anno":"ref-"+r.id })); });
+  (model.dims||[]).forEach(d=>{
+    const h=d.axis==="h";
+    const a=h?{x:d.from.x,y:d.at}:{x:d.at,y:d.from.y}, b=h?{x:d.to.x,y:d.at}:{x:d.at,y:d.to.y};
+    const [ax,ay]=c2p(a.x,a.y), [bx,by]=c2p(b.x,b.y), [fx,fy]=c2p(d.from.x,d.from.y), [tx,ty]=c2p(d.to.x,d.to.y);
+    g.appendChild(E("line",{ x1:fx,y1:fy,x2:ax,y2:ay, class:"sleeve-anno-ext", "data-anno":"ext-"+d.id+"-a" }));
+    g.appendChild(E("line",{ x1:tx,y1:ty,x2:bx,y2:by, class:"sleeve-anno-ext", "data-anno":"ext-"+d.id+"-b" }));
+    g.appendChild(E("line",{ x1:ax,y1:ay,x2:bx,y2:by, class:"sleeve-anno-dim", "data-anno":"dim-"+d.id }));
+    [[ax,ay],[bx,by]].forEach(([x,y])=>g.appendChild(h?E("line",{ x1:x,y1:y-TICK,x2:x,y2:y+TICK, class:"sleeve-anno-tick" }):E("line",{ x1:x-TICK,y1:y,x2:x+TICK,y2:y, class:"sleeve-anno-tick" })));
+  });
+  (model.leaders||[]).forEach(l=>{ const [x1,y1]=c2p(l.from.x,l.from.y), [x2,y2]=c2p(l.toAt.x,l.toAt.y); g.appendChild(E("line",{ x1,y1,x2:x2+l.toPx.dx,y2:y2+l.toPx.dy, class:"sleeve-anno-leader", "data-anno":"leader-"+l.id })); });
+  LY.leaders.forEach(l=>{ const [x1,y1]=c2p(l.at.x,l.at.y); g.appendChild(E("line",{ x1,y1,x2:x1+l.toPx.dx,y2:y1+l.toPx.dy, class:"sleeve-anno-leader", "data-anno":"moved-"+l.id })); });
+  (model.marks||[]).forEach(mk=>{ const [x,y]=c2p(mk.at.x,mk.at.y); g.appendChild(E("circle",{ cx:x, cy:y, r:2.6, class:"sleeve-anno-mark sleeve-anno-"+mk.cls, "data-anno":"mark-"+mk.id })); });
+  LY.items.forEach(t=>{ const [x,y]=c2p(t.at.x,t.at.y); g.appendChild(E("text",{ x:x+t.dx, y:y+t.dy, class:"sleeve-anno-text sleeve-anno-"+(t.dim?"dim":t.cls), "text-anchor":t.anchor, "data-anno-text":t.dim?"dim-"+t.id:t.id }, t.text)); });
+  LY.tags.forEach(t=>{ const [x,y]=c2p(t.at.x,t.at.y); g.appendChild(E("circle",{ cx:x+t.dx, cy:y+t.dy, r:6.5, class:"sleeve-anno-tag", "data-anno":"tag-"+t.n })); g.appendChild(E("text",{ x:x+t.dx, y:y+t.dy+3.2, class:"sleeve-anno-tagtext", "text-anchor":"middle", "data-anno-text":"tag-"+t.n }, t.label)); });
+  grp.appendChild(g);
+}
+
 // 요크 이음선 Ⓠ 제작 정보(표시 전용): 조각명 넷 + «이음선» 글자. 수치는 만들지 않는다. geometry·hit·계측·hash 무관.
 function _yokeModeOf(g){ return !!(g && g.frontBody && g.backBody && ((g.frontYoke && g.backYoke) || g.shoulderYoke)); }   // Ⓠ~Ⓣ = 요크 둘 · Ⓤ = 어깨 요크 한 장
 // 프린세스 라인 Ⓔ: 중심·옆 조각 네 장(전체 앞/뒤판은 그리지 않는다). 패턴선 도구는 요크 모드와 같은 이유로 잠긴다.
@@ -596,6 +623,7 @@ function render(){
     const _pepAll = (window.peplumAnnotation && dp.working.geometry) ? window.peplumAnnotation.buildModel(dp.working.geometry, dp.working.parameters && dp.working.parameters.body) : null;
     if(_pepRow) _pepRow.hidden = !(_pepAll && (_pepAll.front || _pepAll.back));
     const _pepOn = _pepAll && (!_pepChk || _pepChk.checked);
+    const _slvInfoChk = document.getElementById("chkSleeveInfo");   // 소매 제작 정보 표시 토글(기본 켜짐)
     SUBS.forEach(([pc, sub]) => {
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
       // 요크 모드에서는 패턴선 도구가 꺼져 있고, 기존 패턴선은 **전체 몸판 좌표**라 요크·몸판 표시와 어긋나므로 그리지 않는다
@@ -603,6 +631,10 @@ function render(){
       if (!_yokeModeOf(dp.working.geometry) && !_princessModeOf(dp.working.geometry)) _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
       if (_princessModeOf(dp.working.geometry)) _appendPrincessAnnotation(grp, window.designLayout && window.designLayout.princessLabels(dp.working.geometry), pc);
       if (_yokeModeOf(dp.working.geometry)) _appendYokeAnnotation(grp, window.designLayout && window.designLayout.yokeLabels(dp.working.geometry), pc);
+      if (pc === "sleeve" && window.sleeveAnnotation) {   // 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보(표시 전용). 기본 소매는 모델 없음 → 기존 표시 그대로. 토글은 설명 오버레이만 끈다.
+        const _sm = window.sleeveAnnotation.buildModel(dp);
+        if (_sm) { grp.setAttribute("data-sleeve-line", _sm.line); if (!_slvInfoChk || _slvInfoChk.checked) _appendSleeveAnnotation(grp, _sm); }
+      }
       if (_pepOn && _pepAll[pc]) _appendPeplumAnnotation(grp, _pepAll[pc], dp.working.geometry.waistSeam ? window.designLayout.peplumDrop(dp.working.geometry, pc + "Peplum") : 0);
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
       if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay

@@ -365,11 +365,25 @@
     }
   }
 
+  // 소매 제작 정보(표시 전용, window.sleeveAnnotationOverhang — ui.js)가 켜져 있으면 설명(제목·치수·리더선)이 소매 bbox 밖으로 나오는 px 여백을 fit 에 포함한다.
+  //   여백은 화면 px 이고 fit zoom 에 따라 달라지므로 zoom ↔ 여백을 몇 번 반복해 수렴시킨다. 훅이 없거나 토글 OFF/모델 없음이면 u 그대로(기존 fit 회귀 보존).
+  function withSleeveOverhang(u, geometry, L) {
+    const hook = window.sleeveAnnotationOverhang; if (typeof hook !== "function" || !u) return u;
+    const sb = unionOf(geometry, L, ["sleeve"]); if (!sb) return u;
+    let cur = u;
+    for (let i = 0; i < 4; i++) {
+      const s = SC * fitZoomForUnion(cur), oh = hook(s); if (!oh) return u;
+      cur = unionBB(u, { minX: sb.minX - oh.left / s, maxX: sb.maxX + oh.right / s, minY: sb.minY - oh.top / s, maxY: sb.maxY + oh.bottom / s });
+    }
+    return cur;
+  }
+
   // 세 피스 + 카라 union 중심을 viewport 중심에 두는 카메라 fit(형상·layout 불변). no render.
   function fitUnion() {
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
-    const u = unionBB(unionOf(p.working.geometry, L, PIECES), collarDispBBox(p, L)); if (!u) return;
+    let u = unionBB(unionOf(p.working.geometry, L, PIECES), collarDispBBox(p, L)); if (!u) return;
+    u = withSleeveOverhang(u, p.working.geometry, L);
     const uCx = (u.minX + u.maxX) / 2, uCy = (u.minY + u.maxY) / 2;
     const { W, H } = viewportWH();
     const z = fitZoomForUnion(u);

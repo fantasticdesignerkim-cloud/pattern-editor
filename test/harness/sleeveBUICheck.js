@@ -53,7 +53,7 @@ const segRoles = (g) => g.outline.map(s => s.role || s.edge || s.kind);
   const avail = fams.filter(f => f.availability === "available");
   ok(avail.map(f => f.id).join() === "straight-sleeve,tight-sleeve", "1: 실행 가능 = 스트레이트 Ⓐ + 타이트 Ⓑ");
   const t = SP.family("tight-sleeve");
-  ok(t.variants.length === 1 && t.variants[0].presetId === "bunka-sleeve-B" && t.variants[0].symbol === "B" && t.variants[0].page === 41, "1: 타이트 소매는 Ⓑ 하나(P.41) — Ⓒ 슬롯 없음(범위 밖)");
+  ok(t.variants.length === 2 && t.variants[0].presetId === "bunka-sleeve-B" && t.variants[0].symbol === "B" && t.variants[0].page === 41 && t.variants[1].presetId === "bunka-sleeve-C" && t.variants[1].symbol === "C", "1: 타이트 소매 = Ⓑ(P.41) + Ⓒ(뒤 소맷부리 다트, sleeveCUICheck 가 전담)");
   const rec = SP.get("bunka-sleeve-B");
   ok(rec.familyId === "tight-sleeve" && rec.method === "tight-from-sleeve-A" && rec.methodPage === 41, "1: 레코드 = 제도 방식·P.41");
   ok(rec.inputs.length === 2 && rec.inputs[0].key === "sleeveLengthCm" && rec.inputs[1].key === "palmCircumferenceCm" && rec.inputs[1].optional === true && !rec.inputs[0].optional, "1: 입력 = 소매길이 + 선택 손바닥 둘레");
@@ -208,13 +208,13 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/designSleeveB.js", "js/sleeveBApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f + "?v="));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(Ⓐ 모듈 → 엔진 Ⓑ → 연결 Ⓑ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(["designSleeveB.js", "sleeveBApply.js", "sleevePresets.js", "sleeveCheckpoint.js", "ui.js"].every(f => ver(f) === "2026100601"), "7: 캐시 버전 갱신(2026100601)");
+  ok(["designSleeveB.js", "sleeveBApply.js"].every(f => ver(f) === "2026100601") && ver("ui.js") === "2026100703" && ["sleevePresets.js", "sleeveCheckpoint.js"].every(f => ver(f) === "2026100701"), "7: 캐시 버전 갱신(Ⓑ 파일 2026100601 · Ⓒ 연결로 변경된 공용 파일 2026100701)");
   ok(/id="rowSleevePalm"[^>]*hidden/.test(html) && /id="inpSleevePalm"[^>]*type="number"/.test(html) && ui.indexOf('"inpSleevePalm"') > 0 && ui.indexOf('"rowSleevePalm"') > 0, "7: 손바닥 둘레 입력(DOM id·기본 숨김·ui.js 사용)");
   ok(html.indexOf('id="rowSleevePalm"') > html.indexOf('id="inpSleeveLength"') && html.indexOf('id="rowSleevePalm"') < html.indexOf('id="inpSleeveCuff"'), "7: 손바닥 입력은 소매길이 다음 줄");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo", "btnApplySleeve", "btnResetSleeve", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "designSleeveStatusNote"]
     .forEach(id => ok(new RegExp('id="' + id + '"').test(html), "7: 기존 DOM id 보존 " + id));
   ok(/if \(sleeveAOn\(project\)\) \{ window\.sleeveAApply\.rederive\(project\); relayoutSleeve\(\); return; \}/.test(ui) && /if \(sleeveBOn\(project\)\) \{ window\.sleeveBApply\.rederive\(project\); relayoutSleeve\(\); return; \}/.test(ui), "7: refreshSleeve 가 Ⓐ/Ⓑ 켜짐일 때만 각자 재제도로 분기");
-  ok(/window\.sleeveAApply\.clear\(project\);\s*\/\/ Ⓐ\/Ⓑ 배타/.test(ui) && /window\.sleeveBApply\.clear\(project\);\s*\/\/ Ⓐ\/Ⓑ 배타/.test(ui), "7: 적용 성공 시 상대 라인 해제(Ⓐ/Ⓑ 배타)");
+  ok(/clearOtherSleeveLines\(project, "B"\);\s*\/\/ 기본\/Ⓐ\/Ⓑ\/Ⓒ 배타/.test(ui) && /clearOtherSleeveLines\(project, "A"\);\s*\/\/ 기본\/Ⓐ\/Ⓑ\/Ⓒ 배타/.test(ui), "7: 적용 성공 시 상대 라인 해제(기본/Ⓐ/Ⓑ/Ⓒ 배타 — clearOtherSleeveLines)");
   ok(/function deriveSleeve\(project, lower, cap\)/.test(ui) && /computeSilhouette\(project\.referenceGeometry/.test(ui), "7: 기존 소매 파생 경로 보존");
   ok(!/\.innerHTML\s*=/.test(ui.slice(ui.indexOf("function sleeveBOn"), ui.indexOf("function applySleeveB"))) && !/\.innerHTML\s*=/.test(ui.slice(ui.indexOf("function rebuildSleeveFamilyOptions"), ui.indexOf("function onApplySleevePreset"))), "7: 소매 라인 UI 블록은 innerHTML 을 쓰지 않는다");
   ok(!/sleeveBApply\.[a-z]+\(project\.working/.test(ui), "7: ui.js 는 sleeveBApply 를 통해서만 상태를 쓴다");
