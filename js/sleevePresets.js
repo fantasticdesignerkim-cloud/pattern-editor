@@ -6,7 +6,7 @@
 // ★ 소매 10종류의 이름·시작 쪽·표지 기호는 P036 판독 표만 근거다. 아직 판독하지 않은 라인의 변형(Ⓑ 다음 기호 등)은
 //   **슬롯을 만들지 않는다** — 표지 대표 기호 하나만 «보류»로 두고, 왜 못 만드는지(blockedBy)를 들고 있게 한다.
 //
-// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ 세 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
+// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ 네 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
 // 그중 Ⓐ 는: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
 //   (`designSleeveA.draftSleeveA`, [패턴학교] P.137–139 «타입 4»). 이 레코드는 수치를 갖지 않는다 — 소매 길이만
 //   사용자가 정하고 나머지는 전부 몸판에서 읽는다. 순수(DOM·storage 미접근).
@@ -55,7 +55,11 @@
     { id: "bunka-sleeve-C", familyId: "tight-sleeve", symbol: "C",
       method: "tight-back-dart-from-sleeve-A", methodPage: 41,
       inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
-        { key: "elbowLengthCm", label: "팔꿈치 길이 EL", unit: "cm", defaultValue: 31.4 }] }
+        { key: "elbowLengthCm", label: "팔꿈치 길이 EL", unit: "cm", defaultValue: 31.4 }] },
+    // Ⓓ: 출발 Ⓐ 에서 앞·뒤 반폭 중점 절개 2개를 소매산 기준점 중심으로 벌림(플레어 = 소매폭×0.5, 책 산식). 입력은 소매길이만.
+    { id: "bunka-sleeve-D", familyId: "flare-sleeve", symbol: "D",
+      method: "flare-slash-spread-from-sleeve-A", methodPage: 42,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -81,7 +85,14 @@
         { id: "bunka-sleeve-C", symbol: "C", label: "C · 뒤 소맷부리 다트 + 앞 EL 절개(소매 Ⓐ 기반, EL 입력)", page: 41, methodPage: 41,
           availability: "available", presetId: "bunka-sleeve-C", note: null }
       ] },
-    pendingFamily("flare-sleeve", 3, "플레어 소매", "D", 42),
+    { id: "flare-sleeve", order: 3, label: "플레어 소매", symbol: "D", page: 42, availability: "available", note: null,
+      familyNote: "Ⓓ — 소매 Ⓐ 의 앞·뒤 반폭 중점에 절개 2개를 넣고, 소매산 기준점을 중심으로 옆 조각을 돌려 소맷부리에서 소매폭×0.5 를 벌린다(소매산 꺾임·소맷부리는 자연스러운 곡선으로).",
+      variants: [
+        { id: "bunka-sleeve-D", symbol: "D", label: "D · 절개 2개 · 플레어 소매폭×0.5(소매 Ⓐ 기반)", page: 42, methodPage: 42,
+          availability: "available", presetId: "bunka-sleeve-D", note: null },
+        { id: "bunka-sleeve-E", symbol: "E", label: "E · 절개 3개 · 플레어 소매폭×1", page: 42, availability: "pending-page", presetId: null,
+          blockedBy: "Ⓔ(소매 중심선 절개 포함)의 조각 구성·마무리를 김님과 확인하지 않음 — Ⓓ 와 같은 규칙으로 일반화하지 않는다", note: "확인 후 제공" }
+      ] },
     pendingFamily("tuck-sleeve", 4, "턱 소매", "F", 43),
     pendingFamily("puff-sleeve", 5, "퍼프 소매", "H", 44),
     pendingFamily("short-sleeve", 6, "반소매", "L", 46),

@@ -49,8 +49,9 @@
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
     // 소매 Ⓐ 는 working.sleeveA + geometry.sleeve 만 쓰고 sleeveDraft 는 모른다 — 기본 소매 파라미터로 서명하지 않도록 별도 분기.
-    var lineCount = (proj.working.sleeveA ? 1 : 0) + (proj.working.sleeveB ? 1 : 0) + (proj.working.sleeveC ? 1 : 0);
+    var lineCount = (proj.working.sleeveA ? 1 : 0) + (proj.working.sleeveB ? 1 : 0) + (proj.working.sleeveC ? 1 : 0) + (proj.working.sleeveD ? 1 : 0);
     if (lineCount > 1) return { ok: false, fails: ["sleeve-line-conflict"], capLengths: null, ease: null };
+    if (proj.working.sleeveD) return checkD(proj);
     if (proj.working.sleeveC) return checkC(proj);
     if (proj.working.sleeveB) return checkB(proj);
     if (proj.working.sleeveA) return checkA(proj);
@@ -218,6 +219,44 @@
       lower: null, cap: null, mode: "preset", preset: PRESET_C, _prim: prim, _bodice: bodice, _a: c
     };
   }
+  // ── 소매 Ⓓ 분기(P.42 플레어, bunka-sleeve-D) — Ⓒ 와 같은 결: 같은 몸판·입력(소매길이)의 재제도와 geometry·meta·construction 이 같아야 서명한다 ──
+  var PRESET_D = "bunka-sleeve-D";
+  var D_ORIGIN = { kind: "preset", presetId: PRESET_D, method: "flare-slash-spread-from-sleeve-A", methodPage: 42 };
+  function checkD(proj) {
+    var fails = [];
+    var BC = window.bodiceCheckpoint, DS = window.designSleeve, SDA = window.sleeveDApply;
+    var d = proj.working.sleeveD;
+    var bodice = BC && BC.latest(proj);
+    if (!bodice) fails.push("no-bodice");
+    else if (BC.isCurrentBodiceChanged(proj)) fails.push("bodice-stale");
+    if (d.blocked) fails.push("sleeve-d-blocked");
+    if (d.presetId !== PRESET_D) fails.push("sleeve-preset-unsupported");
+    if (bodice && d.sourceBodiceHash !== bodice.hash) fails.push("source-mismatch");
+    var len = d.parameters && d.parameters.sleeveLengthCm;
+    if (!fin(len) || !(len > 0)) fails.push("invalid-sleeve-length");
+    var geom = proj.working.geometry && proj.working.geometry.sleeve;
+    var prim = (geom && DS) ? DS.capPrimitives(geom) : null;
+    if (!prim) fails.push("cap-unmeasured");
+    if (prim && d.meta && d.meta.checks && (d.meta.checks.selfIntersection !== false || d.meta.checks.singlePiece !== true)) fails.push("self-intersection");
+    if (!fails.length) {
+      if (!SDA || !window.designSleeveD) fails.push("no-module");
+      else {
+        var r = SDA.draft(proj, len);
+        if (!r.ok) fails.push("sleeve-d-redraft-failed");
+        else if (JSON.stringify(canonGeom(r.geometry)) !== JSON.stringify(canonGeom(geom)) || JSON.stringify(r.meta) !== JSON.stringify(d.meta)
+          || JSON.stringify(r.geometry.construction) !== JSON.stringify(geom.construction) || r.sourceSleeveAHash !== d.sourceSleeveAHash) fails.push("sleeve-d-geometry-mismatch");
+      }
+    }
+    var ease = null;
+    if (prim && bodice) {
+      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
+      else ease = { front: fe, back: be, total: fe + be };
+    }
+    return { ok: fails.length === 0, fails: fails, capLengths: prim ? prim.lengths : null, ease: ease,
+      lower: null, cap: null, mode: "preset", preset: PRESET_D, _prim: prim, _bodice: bodice, _a: d };
+  }
+  function inputsD(d) { return { sleeveLengthCm: d.parameters.sleeveLengthCm }; }
   function inputsC(c) { return { sleeveLengthCm: c.parameters.sleeveLengthCm, elbowLengthCm: c.parameters.elbowLengthCm }; }
   function inputsB(b) { return { sleeveLengthCm: b.parameters.sleeveLengthCm, palmCircumferenceCm: b.parameters.palmCircumferenceCm === undefined ? null : b.parameters.palmCircumferenceCm }; }
 
@@ -247,6 +286,7 @@
     if (!proj) return { ok: false, reason: "no-project" };
     var c = check(proj);
     if (!c.ok) return { ok: false, reason: c.fails[0], check: c };
+    if (proj.working.sleeveD) return completeD(proj, c);
     if (proj.working.sleeveC) return completeC(proj, c);
     if (proj.working.sleeveB) return completeB(proj, c);
     if (proj.working.sleeveA) return completeA(proj, c);
@@ -350,6 +390,26 @@
     return { ok: true, result: result, check: c };
   }
 
+  function completeD(proj, c) {
+    var dd = c._a, sb = proj.sourceBlock || {};
+    var result = {
+      schemaVersion: 1,
+      origin: clone(D_ORIGIN),
+      sourceBodiceHash: dd.sourceBodiceHash,
+      sourceSleeveAHash: dd.sourceSleeveAHash,
+      sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+      inputs: inputsD(dd),
+      geometry: clone(proj.working.geometry.sleeve),
+      meta: clone(dd.meta), warnings: dd.warnings.slice(),
+      cap: capBlock(c),
+      completedAt: Date.now()
+    };
+    result.hash = hashStr(signature(result));
+    deepFreeze(result);
+    proj.working.sleeveResult = result;
+    return { ok: true, result: result, check: c };
+  }
+
   function latest(proj) { proj = proj || project(); return (proj && proj.working.sleeveResult) || null; }
   // 완료본 없음 → true. 몸판 hash 가 완료본과 다르면 "몸판 변경으로 무효"(별도 함수). 여기선 소매 형상 변경.
   function isCurrentSleeveChanged(proj) {
@@ -357,6 +417,10 @@
     var res = proj.working.sleeveResult; if (!res) return true;
     var c = check(proj);
     if (!c.ok || !c._prim) return true;   // 현재 유효하지 않으면 변경으로 간주(재완료 필요)
+    if (proj.working.sleeveD) {   // 소매 Ⓓ: 같은 signature 형식(입력 = 소매길이)
+      return signature({ origin: D_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsD(c._a),
+        geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);
+    }
     if (proj.working.sleeveC) {   // 소매 Ⓒ: Ⓑ 와 같은 signature 형식(입력 = 소매길이·EL — EL 변경도 «변경»)
       return signature({ origin: C_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsC(c._a),
         geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);

@@ -106,6 +106,7 @@ const suites = [
   { file: "designSleeveBCheck.js",      golden: false },
   // 소매 Ⓒ 엔진 코어 + 곡선 정리(P.41 하단): 최종 곡선 호 길이 cuff ●:2●:●·소매산 P_f/소맷부리 이음 G1·뒤 다트 닫힘 truing 정합·소매산 길이/이세 실측·독립 합집합·sweep 6720(UI 미연결, ≈50s).
   { file: "designSleeveCCheck.js",      golden: false },
+  { file: "designSleeveDCheck.js",      golden: false },
   // 소매 Ⓐ UI/프리셋 연결: 카탈로그(sleevePresets)·적용 상태(sleeveAApply)·차단 사유·재제도 훅·표시 줄·완료 연결 차단·index/ui 배선.
   { file: "sleeveAUICheck.js",          golden: false },
   { file: "sleeveAResultCheck.js",      golden: false },
@@ -114,6 +115,7 @@ const suites = [
   { file: "sleeveBResultCheck.js",      golden: false },
   // 소매 Ⓒ(P.41 하단) UI/프리셋 연결 + 완료본·Design 통합: 카탈로그·sleeveCApply(EL 검증·잘못된 입력 차단)·재제도·표시(앞/뒤·목표/실제·EL·뒤 다트·지배 ease=geometry 실측)·배선 / origin·inputs(EL)·변경 감지·전환·몸판 변경·게이트.
   { file: "sleeveCUICheck.js",          golden: false },
+  { file: "sleeveDUICheck.js",          golden: false },
   { file: "sleeveCResultCheck.js",      golden: false },
   // 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시(sleeveAnnotation): 라벨·치수가 실제 geometry/meta 와 일치(독립 실측)·EL 변경/라인 전환/몸판 변경 동기화·기본 소매 모델 없음·표시 전용(상태·hash 불변)·글자 겹침·렌더/CSS/토글 배선.
   { file: "sleeveAnnotationCheck.js",   golden: false },
