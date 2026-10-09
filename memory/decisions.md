@@ -104,6 +104,11 @@
 | D-252 | 2026-07 | 컨텍스추얼 CAD workspace 채택 (2026-07, 사용자 확정) — 위 U… | [history/ui-workspace.md](../docs/history/ui-workspace.md) `컨텍스추얼 CAD workspace 채택 (2026-07, 사` L99@c3f5954 | — |
 | D-253 | 2026-07 | 플로팅 컨텍스추얼 캔버스 툴바 채택 (2026-07, 사용자 확정) — 위 CAD … | [history/ui-workspace.md](../docs/history/ui-workspace.md) `플로팅 컨텍스추얼 캔버스 툴바 채택 (2026-07, 사용자` L286@c3f5954 | — |
 | D-254 | — | 실사용 근거 (실측) | [history/ui-workspace.md](../docs/history/ui-workspace.md) `실사용 근거 (실측)` (동명 제목 다수 — 줄 번호가 구분자) L563@c3f5954 | — |
+| D-255 | 2026-10-08 | 소매 Ⓒ 재해석 — 김님 확정 공정 (종이 강체 이동 · 중앙 고정 · 뒤 EL 맞댐 · 앞 EL 절개 · 소매구 연장 · 각 1=1cm · 같은 ⊠ · 최종 Ⓐ 소매산 유지) | [book/P041.md](../docs/book/P041.md) `## Ⓒ 재해석 — 현행 권위` | [pattern-rules.md](pattern-rules.md) |
+| D-256 | 2026-10-08 | 소매 Ⓒ 소매산 처리 최신 확정 — Ⓐ 는 출발 소매산, 맞댄 뒤 조금 찌그러진 결과를 자연스럽게 이어 다시 그린다 | [book/P041.md](../docs/book/P041.md) `## Ⓒ 재해석 — 현행 권위` (8번) | [pattern-rules.md](pattern-rules.md) |
+| D-257 | 2026-10-08 | 소매 Ⓒ 소매산 재제도 구간 ℓ=2cm 를 임시 시작 설정으로 적용·비교 조절 (책 치수·최종 정답 아님) | [book/P041.md](../docs/book/P041.md) `### 소매산 재제도` | — |
+| D-258 | 2026-10-08 | 소매 Ⓒ 뒤 다리끝 = 다리선과 Ⓐ 밑단 교점에서 수직 아래 1cm(각각) | [book/P041.md](../docs/book/P041.md) `### 뒤 쐐기·∅·교차점` | — |
+| D-259 | 2026-10-08 | 소매 Ⓒ 뒤 EL 쐐기 도식 — Q=뒤 절개축×EL · R=P_b→오른쪽 새 다리끝 직선×EL · D=QR · E/F=Q∓D/2 | [book/P041.md](../docs/book/P041.md) `### 뒤 쐐기·∅·교차점` | — |
 
 ### 🏛 constitution
 
@@ -134,6 +139,7 @@
 | 2 | D-003 | 2026-10-04 | scoped | — | 순서 몸판 → 소매 → 카라·«앞 단계 결과를 바꾸지 않는다» 는 active. «현재 = 몸판 모양 단계 … 넘어가지 않는다 … 아래에서 구현»(L297–299)은 소진(D-226·D-235·D-247·D-248, STATUS § 지금 서 있는 곳). 원문 보존, CLAUDE.md ⏱ 주석 | 김 (2026-10-04, A안) |
 | 3 | D-105 | 2026-10-04 | scoped | — | "분리·클래스화하지 않는다" 방향은 active. 해제 조건 «엔진 안정화 전까지 / 버그 해결 전까지» 는 C0~C7 완료로 충족됐고, 이후 재검토 조건은 STATUS § 다음에 확인할 것 «파일 분리 타당성 감사 — 4파일 분리 기각». 원문 보존, CLAUDE.md ⏱ 주석 | 김 (2026-10-04, A안) |
 | 4 | D-113 | 2026-10-04 | superseded | D-010 | 최종 부호·`closeAngle` 은 C4 가 정한다(`selectRotationSign` → `prepareDartMoveCandidate` 의 `closeAngleRad` = 부호 × 최대 적용 크기 → `baseAngle`). `choosePhysicalCloseAngle` 은 gen-0 기하 힌트(동률 tie-breaker). 관찰 `js/dartMove.js` L1539·L1554·L2837 @`87cb7a2`. 원문 보존, CLAUDE.md ⏱ 주석 2곳 | 김 (2026-10-04, A안) |
+| 5 | D-255 | 2026-10-08 | scoped | — | 공정(중앙 고정·종이 강체·뒤 EL 맞댐·앞 EL 절개·소매구 연장·각 1=1cm·같은 ⊠)은 active. 라벨의 «최종 Ⓐ 소매산 유지»(소매산 윤곽 완전 고정) 부분은 D-256 이 대체 — 소매산은 맞댄 뒤 자연스럽게 이어 다시 그린다 | 김님(2026-10-08 원문 «소매산은 조금 찌그러질 거야…») |
 
 ### 상태 값
 

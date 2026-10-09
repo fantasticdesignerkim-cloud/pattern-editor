@@ -93,11 +93,11 @@ let HASH_C, RES_C;
   ok(R.sourceSleeveAHash === P.working.sleeveC.sourceSleeveAHash && typeof R.sourceSleeveAHash === "string" && R.sourceSleeveAHash.length > 0, "1: 출발 Ⓐ hash 기록");
   ok(J(R.inputs) === J({ sleeveLengthCm: 52, elbowLengthCm: 31.4 }), "1: 입력 = 소매길이 + EL(31.4)");
   ok(R.parameters === undefined && R.cap.manualSource === null && R.cap.mode === "preset", "1: 기본 소매 전용 parameters 를 지어내지 않는다");
-  ok(J(R.geometry) === before.geom && R.geometry.outline.length === 11 && !J(R.geometry).includes('"rigid"'), "1: geometry 스냅샷 = 적용 시점 geometry.sleeve(정리된 한 조각 11 구간)");
+  ok(J(R.geometry) === before.geom && R.geometry.outline.length === 10 && R.geometry.outline[0].role === "cap" && !J(R.geometry).includes('"rigid"'), "1: geometry 스냅샷 = 적용 시점 geometry.sleeve(재제도된 한 조각 10 구간)");
   const m = R.meta;
-  ok(m.rule === "pattern-school-p41-tight-sleeve-C" && near(m.hemTargetCm, m.widthCm * 0.75, 1e-12) && near(m.hemCm, m.hemTargetCm, 1e-9) && m.sleeveLengthCm === 52 && m.elbowLengthCm === 31.4 && m.armholeCm.front > 0, "1: meta — 규칙·W×3/4 목표=실제(호 길이)·소매길이·EL·AH");
+  ok(m.rule === "pattern-school-p41-tight-sleeve-C-paper(2026-10-09)" && near(m.hemTargetCm, m.widthCm * 0.75, 1e-12) && Math.abs(m.hemCm - m.hemTargetCm) < 0.05 && m.sleeveLengthCm === 52 && m.elbowLengthCm === 31.4 && m.armholeCm.front > 0, "1: meta — 규칙·W×3/4 목표·실측(마무리 곡선)·소매길이·EL·AH");
   ok(J(R.meta) === J(P.working.sleeveC.meta) && J(R.warnings) === J(P.working.sleeveC.warnings), "1: meta·warnings = 상태 복사");
-  ok(near(m.sections.actual.backOuter, m.sections.unitCm, 1e-9) && near(m.sections.actual.center, 2 * m.sections.unitCm, 1e-9) && m.back.dartWidthAtHemCm > 1 && m.back.legLengthDiffCm === m.back.legLengthDiffCm && Math.abs(m.back.legLengthDiffCm) < 1e-9, "1: meta 에 소맷부리 세 구간 ●:2●:● · 뒤 열린 다트 · 두 다리 길이 같음");
+  ok(near(m.sections.white.backOuter, m.sections.unitCm, 1e-9) && near(m.sections.white.center, 2 * m.sections.unitCm, 1e-9) && near(m.sections.white.frontOuter, m.sections.unitCm, 1e-9) && m.back.dartOpenCm > 1 && Math.abs(m.back.legLengthDiffCm) < 1e-9 && m.front.extensionCm > 0, "1: meta 에 완성 가정선 구간 ●:2●:● · 뒤 열린 다트 · 두 다리 길이 같음 · 앞 소매구 연장");
   // 지배 ease = cap.ease(최종 geometry 실측)
   const bAH = P.working.bodiceResult.armholeLengths;
   ok(R.cap.ease.front === round4(R.cap.lengths.front - bAH.front) && R.cap.ease.back === round4(R.cap.lengths.back - bAH.back), "1: cap.ease = (완료본 geometry 에서 측정한 소매산 길이) − (몸판 AH) — 권위값");
@@ -124,14 +124,14 @@ let HASH_C, RES_C;
   ok(SC.isCurrentSleeveChanged(P) === true && SC.check(P).ok, "2: EL 31.4 → 30 : 변경됨·게이트 통과");
   const r30 = SC.complete(P).result;
   ok(r30.hash !== HASH_C && J(r30.inputs) === J({ sleeveLengthCm: 52, elbowLengthCm: 30 }) && r30.meta.elbowLengthCm === 30 && r30.meta.back.apex.y === 30 && SC.isCurrentSleeveChanged(P) === false, "2: EL 30 완료 — 새 hash·inputs·meta(EL·다트 꼭짓점)");
-  ok(near(r30.cap.lengths.total, RES_C.cap.lengths.total, 1e-6) && near(r30.cap.ease.total, RES_C.cap.ease.total, 1e-6), "2: EL 변경은 소매산 길이·이세를 바꾸지 않는다");
+  ok(near(r30.cap.lengths.total, RES_C.cap.lengths.total, 0.05) && near(r30.cap.ease.total, r30.cap.lengths.total - RES_C.cap.lengths.total + RES_C.cap.ease.total, 1e-3), "2: EL 변경 → 뒤 쐐기·소매산 재제도 재실측(이세 = 새 geometry 실측, 차 작음)");
   SCA.apply(P, { sleeveLengthCm: 52, elbowLengthCm: 31.4 });
   ok(SC.isCurrentSleeveChanged(P) === true && SC.complete(P).result.hash === HASH_C, "2: EL 31.4 로 되돌려 재완료 → 처음 hash");
   // 소매길이 변경
   SCA.apply(P, { sleeveLengthCm: 58, elbowLengthCm: 31.4 });
   ok(SC.isCurrentSleeveChanged(P) === true, "2: 소매길이 변경 → 변경됨");
   const r58 = SC.complete(P).result;
-  ok(r58.hash !== HASH_C && r58.inputs.sleeveLengthCm === 58 && near(r58.cap.ease.total, RES_C.cap.ease.total, 1e-6), "2: 소매길이 58 완료 — 새 hash · 이세 불변");
+  ok(r58.hash !== HASH_C && r58.inputs.sleeveLengthCm === 58 && near(r58.cap.ease.total, RES_C.cap.ease.total, 0.05), "2: 소매길이 58 완료 — 새 hash · 이세 재실측(소맷부리 사슬·쐐기 재계산)");
   SCA.apply(P, { sleeveLengthCm: 52, elbowLengthCm: 31.4 }); SC.complete(P);
   // geometry 변조 → 변경됨
   const g0 = J(P.working.geometry.sleeve);

@@ -45,6 +45,9 @@
   //   세그먼트. cap = 나머지(kind 무관 — gentle 옆선 cubic 도 hem 접점으로 걸러짐).
   function capSegsOf(sleeve) {
     var outline = (sleeve && sleeve.outline) || [];
+    // 소매산을 role 로 명시한 outline(소매 Ⓒ — 뒤 다리끝이 소맷부리선보다 1cm 아래라 «가장 낮은 끝점 = 소맷부리» 판정이 맞지 않는다)은 그 세그먼트를 그대로 쓴다.
+    var tagged = outline.filter(function (s) { return s && s.role === "cap"; });
+    if (tagged.length) return tagged;
     var hemY = -Infinity;
     outline.forEach(function (s) { endpointsOf(s).forEach(function (p) { if (p.y > hemY) hemY = p.y; }); });
     var atHem = function (p) { return Math.abs(p.y - hemY) < 0.5; };

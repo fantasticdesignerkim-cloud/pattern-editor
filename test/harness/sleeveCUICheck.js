@@ -70,13 +70,13 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   ok(J(S.meta) === J(c.meta) && S.meta !== c.meta, "2: meta = 엔진 meta 복사(공유 참조 없음)");
   ok(J(bodice) === snap.bodice && bodice.hash === snap.hash && Object.isFrozen(bodice) && J(P.sourceBlock) === snap.src && J(P.referenceGeometry) === snap.ref && J(P.working.parameters) === snap.body, "2: bodiceResult·sourceBlock·referenceGeometry·몸판 파라미터 불변");
   ok(P.working.sleeveA === undefined && P.working.sleeveB === undefined && P.working.sleeveDraft === undefined && P.working.sleeveResult === undefined, "2: Ⓐ·Ⓑ 상태·기존 소매 파생·완료본을 만들지 않는다(Ⓐ 는 내부 제도용)");
-  ok(g.outline.length === 11 && g.outline[0].kind === "path" && g.outline.filter(s => /^dart-leg-/.test(s.role || "")).length === 2, "2: UI geometry = 한 조각 outline 11 구간 · 뒤 열린 다트 두 다리 포함");
+  ok(g.outline.length === 10 && g.outline[0].kind === "path" && g.outline[0].role === "cap" && g.outline.filter(s => /^dart-leg-/.test(s.role || "")).length === 2, "2: UI geometry = 한 조각 outline 10 구간(소매산 role=cap) · 뒤 열린 다트 두 다리 포함");
   const roles = g.construction.map(s => s.role).sort().join();
-  ok(roles === "center-line,cut-axis-back,cut-axis-front,elbow-line", "2: 표시용 construction 은 중심선·EL 선·앞/뒤 절개축만(" + roles + ") — 겹침 내부선·절개변은 올리지 않는다");
+  ok(roles === "center-line,cut-axis-back,cut-axis-front,elbow-line,front-axis-lower", "2: 표시용 construction 은 중심선·EL 선·앞/뒤 맞댐선·앞 EL→소매구 맞댐선(" + roles + ") — 겹침 내부선·EL 절개변은 올리지 않는다");
   ok(!deepHas(g, "rigid") && !deepHas(g, "meta") && !deepHas(g, "fairing") && !J(g).includes("front-cut-edge") && !J(g).includes("lap"), "2: geometry 에 raw rigid/meta/fairing/겹침 내부선 없음(meta 에만)");
-  ok(S.meta.rigid && S.meta.rigid.cap && S.meta.fairing && S.meta.fairing.compensation, "2: raw·정리 기록은 meta(감사)에만 보존");
+  ok(S.meta.redraw && S.meta.derivation && S.meta.derivation.backWedge && !S.meta.rigid && !S.meta.fairing, "2: 재제도·유도 기록은 meta 에만(옛 rigid·fairing 기록 없음)");
   const aOnly = SA.draftSleeveA(bodice, { sleeveLengthCm: 52 }), prim = DS.capPrimitives(g), primA = DS.capPrimitives(aOnly.geometry);
-  ok(prim && near(prim.lengths.front, primA.lengths.front, 5e-3) && near(prim.lengths.back, primA.lengths.back, 5e-3), "2: DS.capPrimitives(Ⓒ geometry) 가 소매산 앞/뒤를 분리·측정한다(Ⓐ 와 같은 길이)");
+  ok(prim && primA && near(prim.lengths.front, S.meta.capLengths.front, 1e-3) && near(prim.lengths.back, S.meta.capLengths.back, 1e-3), "2: DS.capPrimitives(Ⓒ geometry) 가 소매산 앞/뒤를 분리·측정한다(최종 곡선 실측 — Ⓐ 와 같다고 가정하지 않음)");
   const r2 = SCA.apply(P, { sleeveLengthCm: 52, elbowLengthCm: 31.4 });
   ok(r2.ok && J(P.working.geometry.sleeve.outline) === J(c.geometry.outline), "2: 결정론(같은 입력 → 같은 결과)");
   const r3 = SCA.apply(P, { sleeveLengthCm: 52 });   // EL 생략 = 기본 31.4(UI 는 항상 명시값을 넘긴다)
@@ -84,7 +84,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const r4 = SCA.apply(P, { sleeveLengthCm: 52, elbowLengthCm: 29 }), c29 = SC.draftSleeveC(a, { elbowLengthCm: 29 });
   ok(r4.ok && P.working.sleeveC.parameters.elbowLengthCm === 29 && J(P.working.geometry.sleeve.outline) === J(c29.geometry.outline) && P.working.sleeveC.meta.back.apex.y === 29 && P.working.geometry.sleeve.construction.find(s => s.role === "elbow-line").from.y === 29, "2: EL 수정 → EL 선·다트 꼭짓점 이동");
   const r5 = SCA.apply(P, { sleeveLengthCm: 58, elbowLengthCm: 31.4 });
-  ok(r5.ok && near(P.working.sleeveC.meta.sleeveLengthCm, 58) && near(P.working.sleeveC.meta.capLengthsMeasured.front, S.meta.capLengthsMeasured.front, 1e-6), "2: 소매길이 변경 재적용 — 소매산 길이 불변");
+  ok(r5.ok && near(P.working.sleeveC.meta.sleeveLengthCm, 58) && P.working.sleeveC.parameters.sleeveLengthCm === 58 && near(P.working.sleeveC.meta.capLengths.front, S.meta.capLengths.front, 0.05), "2: 소매길이 변경 재적용 — 소맷부리 사슬·쐐기 재계산(소매산 길이는 재제도 실측)");
   SCA.apply(P, { sleeveLengthCm: 52, elbowLengthCm: 31.4 });
 }
 
@@ -102,15 +102,15 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   ok(!far1.ok && far1.reason === "elbow-above-underarm" && /EL 이 아랫점·절개축 소매산 교점보다 위/.test(far1.text) && /EL 을 늘리세요/.test(far1.text), "3: EL 8 → 아랫점·교점보다 위(이해되는 문구)");
   ok(J(Q.working.geometry.sleeve) === keepG && J(Q.working.sleeveC) === keepS, "3: 엔진 지원 범위 오류도 상태·형상을 바꾸지 않는다");
   // 지원 범위 밖(앞 겹침 음수) 치수: 앞 반폭 중점이 ● 보다 작은 Ⓐ 는 UI 에서 만들 수 없는 몸판도 있으므로 엔진 사유 문구만 확인
-  ok(/지원 범위 밖/.test(SCA.failText({ reason: "front-overlap-negative", detail: -0.4 })) && /\(-0\.40cm\)/.test(SCA.failText({ reason: "front-overlap-negative", detail: -0.4 })), "3: 겹침 음수 → «지원 범위 밖» 문구(수치 포함)");
-  ok(/EL 아래 길이가 짧습니다/.test(SCA.failText({ reason: "dart-angle-too-large" })) && /한계\(30°\)/.test(SCA.failText({ reason: "front-rotation-too-large" })), "3: 다트 꼭짓점각·앞 회전 한계 문구");
+  ok(/지원 범위 밖/.test(SCA.failText({ reason: "front-no-overlap", detail: -0.4 })) && /\(-0\.40cm\)/.test(SCA.failText({ reason: "front-no-overlap", detail: -0.4 })), "3: 앞 겹침 없음 → «지원 범위 밖» 문구(수치 포함)");
+  ok(/다트가 벌어지지 않습니다/.test(SCA.failText({ reason: "back-dart-not-open" })) && /완성 가정선을 그릴 수 없습니다/.test(SCA.failText({ reason: "cuff-chain-impossible" })) && /변곡/.test(SCA.failText({ reason: "redraw-extra-inflection" })), "3: 뒤 다트·소맷부리 사슬·재제도 변곡 문구");
   // 정리 단계 사유는 코드를 숨기지 않고 단계 설명 + 코드
   ok(/곡선 정리 단계/.test(SCA.failText({ reason: "fairing-cuff-deviation" })) && SCA.failText({ reason: "something-new" }).indexOf("something-new") >= 0, "3: 정리 단계·모르는 사유는 단계 설명 + 코드");
   // 엔진이 실제로 내는 reason 코드는 전부 한글 문구가 있다
   const src = fs.readFileSync(path.join(ROOT, "js", "designSleeveC.js"), "utf8");
-  const codes = Array.from(new Set((src.match(/reason: (?:apex0 > 0 \? )?"([a-z0-9-]+)"/g) || []).map(m => m.replace(/^.*"([a-z0-9-]+)"$/, "$1")))).filter(c => !/^fairing-cuff-(front|dart)-$/.test(c));
+  const codes = Array.from(new Set((src.match(/(?:reason: |fail\()"([a-z0-9-]+)"/g) || []).map(m => m.replace(/^.*"([a-z0-9-]+)"$/, "$1"))));
   const missing = codes.filter(c => SCA.failText({ reason: c }).indexOf("(" + c + ")") >= 0 && !/^fairing-/.test(c));
-  ok(codes.length > 20 && missing.length === 0, "3: 엔진 reason 코드 한글 문구 누락 없음(" + codes.length + "종) " + missing.join());
+  ok(codes.length > 15 && missing.length === 0, "3: 엔진 reason 코드 한글 문구 누락 없음(" + codes.length + "종) " + missing.join());
 }
 
 // ── 4. 차단: 몸판·소매길이·Ⓒ 켜진 상태의 실패 ──
@@ -170,17 +170,18 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const Q = projectWithBodice("A"); SCA.apply(Q, { sleeveLengthCm: 52, elbowLengthCm: 31.4 });
   const L = SCA.infoLines(Q), m = Q.working.sleeveC.meta;
   const AH = Q.working.bodiceResult.armholeLengths, prim = DS.capPrimitives(Q.working.geometry.sleeve);
-  ok(L.length === 9, "6: 표시 줄 9줄(디버그 값을 늘어놓지 않음): " + L.length);
+  ok(L.length === 10, "6: 표시 줄 10줄(디버그 값을 늘어놓지 않음): " + L.length);
   ok(L[0] === "타이트 소매 Ⓒ · 소매 Ⓐ 에서 소맷부리 W×3/4 + 뒤 소맷부리 다트 (P.41)", "6: 패턴명 줄");
-  ok(L[1] === "소맷부리 목표 " + f2(m.hemTargetCm) + " · 실제(호 길이) " + f2(m.hemCm) + " cm · 소매폭 " + f2(m.widthCm) + " · 소매길이 52.00" && near(m.hemTargetCm, 24.05, 0.01) && near(m.hemCm, m.hemTargetCm, 1e-9), "6: 소맷부리 목표·실제(호 길이): " + L[1]);
-  ok(L[2] === "소맷부리 구간 뒤 " + f2(m.sections.actual.backOuter) + " : 중앙 " + f2(m.sections.actual.center) + " : 앞 " + f2(m.sections.actual.frontOuter) + " cm (목표 ● " + f2(m.sections.unitCm) + " : 2● : ●)" && /뒤 6\.01 : 중앙 12\.02 : 앞 6\.01/.test(L[2]), "6: 구간 뒤:중앙:앞 = 6.01:12.02:6.01 — 앞뒤 구분: " + L[2]);
+  ok(L[1] === "소맷부리 목표 W×3/4 " + f2(m.hemTargetCm) + " · 실측(마무리 곡선) " + f2(m.hemCm) + " cm · 소매폭 " + f2(m.widthCm) + " · 소매길이 52.00" && near(m.hemTargetCm, 24.05, 0.01), "6: 소맷부리 목표·실측: " + L[1]);
+  ok(/^● = 소맷부리÷4 = 6\.01 · 완성 가정선 구간 뒤 6\.01 : 중앙 12\.02 : 앞 6\.01 \(앞 최종 \d+\.\d\d — 소매구 연장 반영\)$/.test(L[2]), "6: ● · 완성 가정선 구간: " + L[2]);
   ok(L[3] === "팔꿈치 EL 31.40 cm (SP 기준) · EL 아래 " + f2(m.lowerLengthCm) + " cm", "6: EL 줄: " + L[3]);
-  ok(/^뒤: 열린 봉제 다트 · EL 꼭짓점 → 소맷부리 · 폭 \d+\.\d\d · 다리 \d+\.\d\d cm$/.test(L[4]) && L[4].indexOf(f2(m.back.dartWidthAtHemCm)) > 0, "6: 뒤 다트 줄: " + L[4]);
-  ok(/^앞: 겹침 1\.4\d cm\(계산\) · 회전 3\.\d\d° · EL 쪽 벌어짐 없음$/.test(L[5]), "6: 앞 겹침(계산) 줄: " + L[5]);
-  ok(L[6] === "AH 앞 " + f2(AH.front) + " · 뒤 " + f2(AH.back) + " · 총 " + f2(AH.front + AH.back) + " cm", "6: AH 줄(= 몸판 armholeLengths)");
-  ok(L[7] === "소매산 앞 " + f2(prim.lengths.front) + " · 뒤 " + f2(prim.lengths.back) + " · 총 " + f2(prim.lengths.total) + " cm", "6: 소매산 길이(geometry 실측)");
+  ok(/^뒤: EL 까지 맞대고 아래는 열린 봉제 다트 · EL 쐐기 폭 \d+\.\d\d · 다리 \d+\.\d\d · 벌어짐 \d+\.\d\d · 다리끝 소맷부리선 아래 1$/.test(L[4]) && L[4].indexOf(f2(m.back.dartOpenCm)) > 0, "6: 뒤 다트 줄: " + L[4]);
+  ok(/^앞: EL 가로 절개 · 겹침 0\.9\d → 소매구 연장 0\.9\d · 옆선 앞 \d+\.\d\d \/ 뒤 \d+\.\d\d cm$/.test(L[5]), "6: 앞 EL 절개·연장·옆선 줄: " + L[5]);
+  ok(L[6] === "소매산: 맞댄 뒤 꺾임 양쪽 2.00cm 국소 재제도(임시 시작 설정)", "6: 소매산 재제도 줄: " + L[6]);
+  ok(L[7] === "AH 앞 " + f2(AH.front) + " · 뒤 " + f2(AH.back) + " · 총 " + f2(AH.front + AH.back) + " cm", "6: AH 줄(= 몸판 armholeLengths)");
+  ok(L[8] === "소매산 앞 " + f2(prim.lengths.front) + " · 뒤 " + f2(prim.lengths.back) + " · 총 " + f2(prim.lengths.total) + " cm", "6: 소매산 길이(geometry 실측)");
   const ef = prim.lengths.front - AH.front, eb = prim.lengths.back - AH.back;
-  ok(L[8] === "이세(실측) 앞 " + sg(ef) + " · 뒤 " + sg(eb) + " · 총 " + sg(ef + eb) + " cm", "6: 이세 줄 = geometry 실측(지배 ease): " + L[8]);
+  ok(L[9] === "이세(실측) 앞 " + sg(ef) + " · 뒤 " + sg(eb) + " · 총 " + sg(ef + eb) + " cm", "6: 이세 줄 = geometry 실측(지배 ease): " + L[8]);
   ok(!L.some(t => /rigid|raw|fairing|compensation|iterations|residual/i.test(t)) && !L.some(t => /easeAfter|easeTarget/.test(t)), "6: 내부 디버그 값(raw·정리 보정·잔차)을 UI 에 올리지 않는다");
   ok(near(m.easeAfter.total, ef + eb, 5e-3), "6: 엔진 meta.easeAfter(최종 곡선 GL 실측)와 표시 이세는 샘플링 차 안");
   ok(SCA.infoLines({ working: {} }).length === 0 && SCA.infoLines(null).length === 0, "6: Ⓒ 꺼짐 → 빈 목록");
@@ -192,7 +193,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/designSleeveB.js", "js/sleeveBApply.js", "js/designSleeveC.js", "js/sleeveCApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(Ⓐ → Ⓑ → 엔진 Ⓒ → 연결 Ⓒ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(ver("ui.js") === "2026100703" && ["designSleeveC.js", "sleeveCApply.js", "sleevePresets.js", "sleeveCheckpoint.js"].every(f => ver(f) === "2026100701"), "7: 캐시 버전 갱신(2026100701)");
+  ok(ver("ui.js") === "2026100902" && ["designSleeveC.js", "sleeveCApply.js"].every(f => ver(f) === "2026100901") && ver("sleevePresets.js") === "2026100801" && ver("sleeveCheckpoint.js") === "2026100701", "7: 캐시 버전 갱신(Ⓒ 엔진·연결 2026100901)");
   ok(/id="rowSleeveElbow"[^>]*hidden/.test(html) && /id="inpSleeveElbow"[^>]*type="number"[^>]*value="31\.4"/.test(html) && />팔꿈치 길이 EL \(cm\)</.test(html), "7: EL 입력(라벨 «팔꿈치 길이 EL (cm)»·기본 31.4·기본 숨김)");
   ok(html.indexOf('id="rowSleeveElbow"') > html.indexOf('id="rowSleevePalm"') && html.indexOf('id="rowSleeveElbow"') < html.indexOf('id="inpSleeveCuff"'), "7: EL 입력은 소매길이·손바닥 다음 줄");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo", "btnApplySleeve", "btnResetSleeve", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "inpSleevePalm", "rowSleevePalm", "designSleeveCheckNote", "designSleeveStatusNote"]

@@ -74,11 +74,11 @@
           availability: "available", presetId: "bunka-sleeve-A", note: null }
       ] },
     { id: "tight-sleeve", order: 2, label: "타이트 소매", symbol: "B", page: 41, availability: "available", note: null,
-      familyNote: "Ⓑ — 소매 Ⓐ 에서 소맷부리를 소매폭×3/4 로 정하고 앞·뒤 반폭 중점 2곳을 맞댄다(손바닥 둘레+3cm 미달은 경고만). Ⓒ — 소맷부리 ●:2●:●(=1:2:1)로 팔 모양에 맞추고 뒤 소맷부리 다트(EL 꼭짓점~소맷부리, 열린 봉제 다트)를 둔다(EL 입력).",
+      familyNote: "Ⓑ — 소매 Ⓐ 에서 소맷부리를 소매폭×3/4 로 정하고 앞·뒤 반폭 중점 2곳을 맞댄다(손바닥 둘레+3cm 미달은 경고만). Ⓒ — 완성 모양(● = 소맷부리÷4)을 가정해 그린 뒤 맞댄다: 뒤는 EL 까지 맞대고 아래 열린 봉제 다트, 앞은 EL 가로 절개·겹친 만큼 소매구 연장(EL 입력).",
       variants: [
         { id: "bunka-sleeve-B", symbol: "B", label: "B · 소맷부리를 소매폭의 3/4 로 맞댐(소매 Ⓐ 기반)", page: 41, methodPage: 41,
           availability: "available", presetId: "bunka-sleeve-B", note: null },
-        { id: "bunka-sleeve-C", symbol: "C", label: "C · 소맷부리 ●:2●:● + 뒤 소맷부리 다트(소매 Ⓐ 기반, EL 입력)", page: 41, methodPage: 41,
+        { id: "bunka-sleeve-C", symbol: "C", label: "C · 뒤 소맷부리 다트 + 앞 EL 절개(소매 Ⓐ 기반, EL 입력)", page: 41, methodPage: 41,
           availability: "available", presetId: "bunka-sleeve-C", note: null }
       ] },
     pendingFamily("flare-sleeve", 3, "플레어 소매", "D", 42),

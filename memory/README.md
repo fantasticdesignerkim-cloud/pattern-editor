@@ -15,7 +15,7 @@
 | [decisions.md](decisions.md) | **1차** | 결정의 **ID·상태·잠금·앵커 색인** | 결정 **내용**(원문 문서가 소유) |
 | [dart-engine.md](dart-engine.md) | **1차** | 다트이동 엔진의 **현재형 계약**·실재 함수·상수 | 연대기(history)·설계 의도(spec)·결정 원문 |
 | `architecture.md` | 예약 — 아직 없음 | 모듈 지도·데이터 흐름·state 구조 | 알고리즘 상세 |
-| `pattern-rules.md` | 예약 — 아직 없음 | 패턴 원리 **한 줄 규칙** + 링크 | 교재 수치·절차(book·`collarPresets.js` 레코드가 소유) |
+| [pattern-rules.md](pattern-rules.md) | **2차 (2026-10-08, 소매 Ⓒ 재해석)** | 패턴 원리 **한 줄 규칙·방법 교훈** + 링크 | 교재 수치·절차(book·`collarPresets.js` 레코드가 소유) · 진행 상태 |
 | `rendering.md` | 예약 — 아직 없음 | SVG 렌더 규칙(격자 한 벌·열린 다트 실선·캐시 버전·`dbg`) | 형상 계산 |
 | `bugs-learned.md` | 예약 — 아직 없음 | 증상 → 원인 → 예방 규칙 → 회귀 스위트 id | 수정 과정 서술 |
 | ~~`current-state.md`~~ | **만들지 않는다 (사용자 확정 2026-10-04)** | — | **진행 상태 = [../docs/STATUS.md](../docs/STATUS.md) 가 단일 소유자** |

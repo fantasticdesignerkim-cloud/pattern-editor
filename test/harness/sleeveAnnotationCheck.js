@@ -126,31 +126,39 @@ let MC, GC;
   const ct = capText(P, m);
   ok(m && m.line === "C" && m.title === "소매 Ⓒ · 타이트 + 뒤 소맷부리 다트(P.41)", "4: Ⓒ 패턴명");
   ok(T(m, "cap-back-1") === ct.b1 && T(m, "cap-back-2") === ct.b2 && T(m, "cap-front-1") === ct.f1 && T(m, "cap-front-2") === ct.f2, "4: 앞뒤 소매산·AH·이세 = geometry 실측");
-  // 소맷부리 세 구간 = 최종 곡선 호 길이(독립 Simpson)
-  const O = g.outline, arc = (i) => segArc(O[i]);
-  const arcBack = arc(8) + arc(9), arcToDart = arc(2) + arc(3) + arc(4) + arc(5), u = C.widthCm * 3 / 16;
-  ok(T(m, "hem-back") === "뒤 ● " + f2(arcBack) && T(m, "hem-center") === "중앙 2● " + f2(arcToDart - u) && T(m, "hem-front") === "앞 ● " + f2(u), "4: 소맷부리 ●:2●:● 각 구간 라벨 = 최종 곡선 호 길이(독립 실측): " + T(m, "hem-back") + " / " + T(m, "hem-center") + " / " + T(m, "hem-front"));
+  // 소맷부리 구간 = 실제 외곽 직선 구간 길이(독립 실측) — 최종 곡선 호 길이 1:2:1 강제가 아니다(2026-10-08 재해석)
+  const O = g.outline, u = C.widthCm * 3 / 16;
+  const pcub = (s) => { const o = []; let cur = s.commands[0].points[0]; s.commands.slice(1).forEach(c => { o.push([cur, c.points[0], c.points[1], c.points[2]]); cur = c.points[2]; }); return o; };
+  const cbz = (q, t) => { const v = 1 - t; return { x: v*v*v*q[0].x + 3*v*v*t*q[1].x + 3*v*t*t*q[2].x + t*t*t*q[3].x, y: v*v*v*q[0].y + 3*v*v*t*q[1].y + 3*v*t*t*q[2].y + t*t*t*q[3].y }; };
+  const len = (s) => { if (s.kind !== "path") return D(s.from, s.to); let t = 0; pcub(s).forEach(q => { let pr = q[0]; for (let i = 1; i <= 4000; i++) { const p = cbz(q, i / 4000); t += D(pr, p); pr = p; } }); return t; };
+  const sFrom = (s) => s.kind === "path" ? s.commands[0].points[0] : s.from, sTo = (s) => s.kind === "path" ? s.commands[s.commands.length - 1].points[2] : s.to;
+  ok(O.map(s => s.role).join() === "cap,side-seam-front,side-seam-front-lower,hem-front,hem-center,dart-leg-center,dart-leg-outer,hem-back,side-seam-back-lower,side-seam-back", "4: Ⓒ outline 역할 순서");
+  ok(T(m, "hem-back") === "뒤 ● " + f2(len(O[7])) && T(m, "hem-center") === "중앙 2● " + f2(len(O[4])) && T(m, "hem-front") === "앞 " + f2(len(O[3])), "4: 소맷부리 구간 라벨 = 실제 외곽 곡선 길이(독립 실측): " + T(m, "hem-back") + " / " + T(m, "hem-center") + " / " + T(m, "hem-front"));
+  ok(Math.abs(D(sFrom(O[7]), sTo(O[7])) - u) < 1e-9 && Math.abs(D(sFrom(O[4]), sTo(O[4])) - 2 * u) < 1e-9 && O[7].kind === "path", "4: 뒤 ● · 중앙 2● = 소맷부리÷4 (완성 가정선 두 점 거리 — 곡선은 그 두 점을 잇는다)");
   const dB = m.dims.find(d => d.id === "hem-back"), dC = m.dims.find(d => d.id === "hem-center"), dF = m.dims.find(d => d.id === "hem-front");
-  ok(Math.abs(dB.from.x - O[9].to.x) < 1e-9 && Math.abs(dB.to.x - O[7].to.x) < 1e-9 && Math.abs(dC.from.x - O[6].from.x) < 1e-9 && Math.abs(dF.to.x - O[2].from.x) < 1e-9 && Math.abs(dC.to.x - dF.from.x) < 1e-12 && dB.axis === "h", "4: 구간 치수선 끝점 = 실제 외곽 점(뒤 모서리·다트 바깥 끝·다트 모서리·앞 모서리)");
-  ok(Math.abs(dC.from.x - dB.to.x) > 4.9 && Math.abs(dC.from.x - dB.to.x) < 5.2, "4: 뒤 구간과 중앙 구간 사이는 열린 다트 폭(약 5cm) — 치수선이 다트 위로 이어지지 않는다");
-  ok(m.lines.find(l => l.id === "block-1").text === "소맷부리 목표 W×3/4 " + f2(C.hemTargetCm) + " = 실제(호 길이) " + f2(C.hemCm) && Math.abs(arcBack + arcToDart - C.hemTargetCm) < 1e-9, "4: 소맷부리 목표 = 실제(호 길이) 줄(독립 합 일치)");
-  ok(m.lines.find(l => l.id === "block-2").text === "● = 소매폭×3/16 = " + f2(u) + " → 뒤 ● : 중앙 2● : 앞 ● = " + f2(arcBack) + " : " + f2(arcToDart - u) + " : " + f2(u), "4: ● 정의 줄");
+  ok(D(dB.from, sTo(O[7])) < 1e-12 && D(dB.to, sFrom(O[7])) < 1e-12 && D(dC.from, sTo(O[4])) < 1e-12 && D(dC.to, sFrom(O[4])) < 1e-12 && D(dF.from, sTo(O[3])) < 1e-12 && D(dF.to, sFrom(O[3])) < 1e-12 && dB.axis === "h", "4: 구간 치수선 끝점 = 실제 외곽 점");
+  ok(Math.abs(dC.from.x - dB.to.x) > 4 && Math.abs(dC.from.x - dB.to.x) < 5.2, "4: 뒤 구간과 중앙 구간 사이는 열린 다트(약 4.5cm) — 치수선이 다트 위로 이어지지 않는다");
+  const hemSum = len(O[3]) + len(O[4]) + len(O[7]);
+  ok(m.lines.find(l => l.id === "block-1").text === "소맷부리 목표 W×3/4 " + f2(C.hemTargetCm) + " · 실측(마무리 곡선) " + f2(hemSum) + " · ● = 소맷부리÷4 = " + f2(u) && Math.abs(hemSum - C.hemCm) < 1e-5, "4: 소맷부리 목표·실측(독립 합)·● 줄");
+  ok(/^완성 가정선 구간 뒤 ● 6\.01 · 중앙 2● 12\.02 · 앞 ● 6\.01 \(앞 최종 \d+\.\d\d\)$/.test(m.lines.find(l => l.id === "block-2").text), "4: 완성 가정선 구간 줄: " + m.lines.find(l => l.id === "block-2").text);
   // EL
   ok(T(m, "el") === "EL 31.40" && T(m, "el-2") === "(기본 31.4)" && m.lines.find(l => l.id === "el").at.y === 31.4 && g.construction.find(s => s.role === "elbow-line").from.y === 31.4, "4: EL 현재값 31.40 · 기본 31.4 — EL 선(construction) 위치와 같다");
   // 뒤 열린 다트
   const lc = roleSeg(g, "dart-leg-center")[0], lo = roleSeg(g, "dart-leg-outer")[0], apex = lc.to;
   ok(D(m.marks.find(x => x.id === "apex").at, apex) === 0 && T(m, "apex") === "뒤 다트 꼭짓점(EL)" && apex.y === 31.4, "4: 뒤 다트 꼭짓점 표식 = 실제 두 다리 꼭짓점(EL 위)");
   ok(T(m, "leg-center") === "다리 " + f2(D(lc.from, lc.to)) && T(m, "leg-outer") === "다리 " + f2(D(lo.from, lo.to)) && T(m, "leg-center") === T(m, "leg-outer"), "4: 두 다리 길이 라벨 = 실제 다리 선분 길이(같다)");
-  ok(T(m, "dart-width") === "폭 " + f2(lc.from.x - lo.to.x) && Math.abs(lc.from.x - lo.to.x - C.back.dartWidthAtHemCm) < 1e-12, "4: 다트 폭 라벨 = 두 다리 소맷부리 끝 간격");
+  ok(T(m, "dart-width") === "벌어짐 " + f2(D(lc.from, lo.to)) && T(m, "dart-drop") === "다리끝 소맷부리선 아래 1" && Math.abs(D(lc.from, lo.to) - C.back.dartOpenCm) < 1e-12, "4: 다트 벌어짐 라벨 = 두 다리 끝 간격 · 다리끝 1cm 내림 표기");
   ok(m.lines.find(l => l.id === "leg-outer").at.x < apex.x && m.lines.find(l => l.id === "leg-center").at.x > apex.x - 1e-9 === true, "4: 다리 라벨은 각 다리 중점에 붙는다");
-  // 앞 겹침(계산값)
-  const aF = P.working.sleeveC.meta.axes.front.x, ovl = aF - u;
-  ok(T(m, "lap-2") === f2(ovl) + "cm(계산)" && T(m, "lap") === "앞 겹침" && Math.abs(ovl - C.front.overlapCm) < 1e-12, "4: 앞 겹침 = Of−● 계산값 " + T(m, "lap-2"));
+  // 앞 EL 절개 겹침 · 소매구 연장
+  ok(T(m, "lap") === "앞 EL 절개 겹침 " + f2(C.front.overlapCm) && T(m, "lap-2") === "→ 소매구 연장 " + f2(C.front.extensionCm) && Math.abs(C.front.overlapCm - C.front.extensionCm) < 2e-3, "4: 앞 EL 절개 겹침·소매구 연장 라벨: " + T(m, "lap") + " " + T(m, "lap-2"));
   const z = m.zones.find(x => x.id === "lap");
-  ok(z && z.cls === "zone" && z.pts.length === 4 && D(z.pts[0], C.front.pivot) === 0 && D(z.pts[1], C.elbowLine.front) === 0 && D(z.pts[3], C.front.cutEdgeEnd) === 0, "4: 겹침 영역은 음영(zone) — 꼭짓점 = 앞 소매산 교점·EL 앞 점·raw 경계점·회전한 절개변 끝");
-  ok(!O.some(s => /lap|zone|cut-edge/.test(s.role || "")) && !JSON.stringify(g).includes("front-cut-edge") && g.construction.map(s => s.role).sort().join() === "center-line,cut-axis-back,cut-axis-front,elbow-line", "4: 겹침 영역·과거 절개변은 geometry(재단 외곽·construction)에 없다 — 음영 설명으로만 표시");
-  ok(m.lines.find(l => l.id === "block-4").text.indexOf("앞: 겹침 " + f2(ovl) + "(계산) · 회전 " + f2(C.front.angleDeg) + "°") > 0 && m.lines.find(l => l.id === "block-5").text === "점선·음영 = 설명용(재단선 아님, 겹침 영역은 처리 과정) · 남색 실선 = 재단 외곽", "4: 앞 겹침·회전 줄 · 설명용/재단 외곽 구분 문구");
-  ok(T(m, "axis-back") === "뒤 절개축" && T(m, "axis-front-2") === "(반폭 중점)" && m.lines.find(l => l.id === "axis-back").at.x === C.axes.back.x, "4: 뒤/앞 절개축 라벨(반폭 중점) 위치 = meta 축");
+  ok(z && z.cls === "zone" && z.pts.length === 3 && D(z.pts[0], C.front.elCut.from) === 0 && D(z.pts[1], C.front.elCut.to) === 0 && D(z.pts[2], C.front.elCut.lowerOuter) === 0, "4: 겹침은 음영(zone) — EL 절개선 쐐기(처리 과정)");
+  ok(!O.some(s => /lap|zone|cut-edge/.test(s.role || "")) && g.construction.map(s => s.role).sort().join() === "center-line,cut-axis-back,cut-axis-front,elbow-line,front-axis-lower", "4: 겹침·EL 절개 내부선은 geometry 에 없다(음영 설명) · 앞 EL→소매구 맞댐선은 표시");
+  ok(T(m, "axis-lower") === "앞 맞댐선(EL→소매구)" && T(m, "ext") === "소매구 연장 " + f2(C.front.extensionCm) && T(m, "ext-2") === "(점선 = 연장 전)", "4: 앞 맞댐선 이름 · 소매구 연장 라벨");
+  const ez = m.zones.find(x => x.id === "ext"), er = m.refs.find(x => x.id === "ext-before");
+  ok(ez && ez.cls === "zone" && ez.pts.length === C.front.extension.zone.length && er && er.cls === "past" && D(er.from, C.front.outerCornerBeforeExtension) === 0 && m.leaders.some(x => x.id === "ext"), "4: 소매구 연장 영역 음영 · 연장 전 기준선(점선) · 리더선");
+  ok(m.lines.find(l => l.id === "block-4").text.indexOf("옆선 앞 " + f2(C.seams.frontCm) + " · 뒤 " + f2(C.seams.backCm)) === 0 && /2\.00cm 재제도\(임시 시작 설정\)$/.test(m.lines.find(l => l.id === "block-4").text) && m.lines.find(l => l.id === "block-5").text === "점선·음영 = 설명용(재단선 아님, 겹침은 처리 과정) · 남색 실선 = 재단 외곽", "4: 옆선·재제도 줄 · 설명용/재단 외곽 구분 문구");
+  ok(T(m, "axis-back") === "뒤 맞댐(EL 까지)" && T(m, "axis-back-2") === "쐐기 EL 폭 " + f2(C.derivation.backWedge.D) && T(m, "axis-front-2") === "(EL 간격 1)" && m.lines.find(l => l.id === "axis-back").at.x === C.axes.back.x, "4: 뒤/앞 맞댐 라벨 위치 = meta 축 · 쐐기 폭");
   ok(!JSON.stringify(m).includes("⊠") && !/드래프|rigid|raw|fairing|compensation/.test(JSON.stringify(m)), "4: 해석 미확정 ⊠ 수치·내부 디버그(raw·정리 보정)를 표시하지 않는다");
   ok(m.dims.every(d => /^(h|v)$/.test(d.axis)) && m.lines.every(l => typeof l.text === "string" && l.text.length > 0), "4: 모델 형식(치수선 축·글자)");
 }
@@ -165,7 +173,7 @@ let MC, GC;
   ok(J(g) !== snapJ, "5: geometry 자체도 바뀌었다(라벨만 바뀐 것이 아님)");
   SCA.apply(P, { sleeveLengthCm: 58, elbowLengthCm: 31.4 });
   const m2 = SAN.buildModel(P);
-  ok(T(m2, "len") === "소매길이 58.00" && m2.dims.find(d => d.id === "len").to.y === 58 && T(m2, "hem-front") === "앞 ● " + f2(P.working.sleeveC.meta.widthCm * 3 / 16), "5: 소매길이 58 → 소매길이 치수선·구간 라벨 갱신");
+  ok(T(m2, "len") === "소매길이 58.00" && m2.dims.find(d => d.id === "len").to.y === 58 && T(m2, "hem-front") === "앞 " + f2(P.working.sleeveC.meta.sections.final.frontOuter), "5: 소매길이 58 → 소매길이 치수선·구간 라벨 갱신");
   // 라인 전환
   SCA.clear(P); SBA.apply(P, { sleeveLengthCm: 52 }); ok(SAN.buildModel(P).line === "B" && /Ⓑ/.test(SAN.buildModel(P).title), "5: Ⓒ→Ⓑ 전환 → Ⓑ 모델");
   SBA.clear(P); SAA.apply(P, { sleeveLengthCm: 52 }); ok(SAN.buildModel(P).line === "A", "5: Ⓑ→Ⓐ 전환 → Ⓐ 모델");
@@ -231,7 +239,11 @@ let MC, GC;
   const pos = f => html.indexOf('src="js/' + f);
   ok(pos("peplumAnnotation.js") > 0 && pos("sleeveAnnotation.js") > pos("peplumAnnotation.js") && pos("sleeveAnnotation.js") < pos("ui.js"), "7: index.html 스크립트 등록(sleeveAnnotation — peplumAnnotation 다음, ui.js 앞)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(ver("sleeveAnnotation.js") === "2026100702" && ver("render.js") === "2026100702" && ver("designLayout.js") === "2026100701" && /css\/style\.css\?v=2026100702/.test(html) && ver("ui.js") === "2026100703", "7: 캐시 버전 갱신(render/css/sleeveAnnotation 2026100701 · ui 2026100702)");
+  ok(ver("sleeveAnnotation.js") === "2026100901" && ver("render.js") === "2026100902" && ver("designLayout.js") === "2026100701" && /css\/style\.css\?v=2026100702/.test(html) && ver("ui.js") === "2026100902", "7: 캐시 버전 갱신(sleeveAnnotation 2026100901 · render/css 2026100702 · ui 2026100703)");
+  ok(/<input type="checkbox" id="chkSleeveRef">\s*원형 소매 비교</.test(html) && !/id="chkSleeveRef"[^>]*checked/.test(html), "7: 원형 소매 비교 토글(chkSleeveRef) 기본 꺼짐");
+  { const rj = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8"), uj = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8");
+    ok(/getElementById\("chkSleeveRef"\)/.test(rj) && /pc === "sleeve" && !\(_slvRefChk && _slvRefChk\.checked\)\) \{ grp\.setAttribute\("display", "none"\)/.test(rj), "7: render — 원형 소매 참고 레이어만 꺼짐일 때 숨김(앞/뒤 참고선 무관)");
+    ok(/chkSleeveRef\.addEventListener\("change", \(\) => \{ if \(typeof render === "function"\) render\(\); \}\)/.test(uj), "7: 토글 변경 → 다시 그리기"); }
   ok(/id="rowSleeveInfo"[^>]*hidden/.test(html) && /type="checkbox" id="chkSleeveInfo" checked/.test(html) && />\s*제작 정보 표시</.test(html), "7: 설명 표시 토글(chkSleeveInfo) 기본 켜짐·소매 라인 있을 때만 보임");
   const dl = fs.readFileSync(path.join(ROOT, "js", "designLayout.js"), "utf8");
   ok(/function withSleeveOverhang\(u, geometry, L\)/.test(dl) && /u = withSleeveOverhang\(u, p\.working\.geometry, L\)/.test(dl) && /typeof hook !== "function" \|\| !u\) return u/.test(dl) && /if \(!oh\) return u/.test(dl), "7: designLayout.fitUnion 이 소매 설명 여백을 포함(훅 없음/토글 OFF/모델 없음이면 기존 fit 그대로)");

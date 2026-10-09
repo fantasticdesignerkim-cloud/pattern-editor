@@ -18,7 +18,7 @@
   "use strict";
   var PRESET_ID = "bunka-sleeve-C";
   var DEFAULT_EL = 31.4;
-  var DISPLAY_CONSTRUCTION = { "center-line": 1, "elbow-line": 1, "cut-axis-back": 1, "cut-axis-front": 1 };
+  var DISPLAY_CONSTRUCTION = { "center-line": 1, "elbow-line": 1, "cut-axis-back": 1, "cut-axis-front": 1, "front-axis-lower": 1 };   // front-axis-lower = 앞 EL→소매구 맞댐선(2026-10-09 복원)
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function fin(v) { return typeof v === "number" && isFinite(v); }
   function f2(v) { return (Math.round(v * 100) / 100).toFixed(2); }
@@ -30,13 +30,18 @@
     "invalid-elbow-length": "팔꿈치 길이 EL 값을 확인하세요(0 보다 큰 수)",
     "elbow-too-close-to-hem": "EL 이 소맷부리에 너무 가깝습니다(EL 아래 길이 1cm 이상 필요) — EL 을 줄이세요",
     "elbow-above-underarm": "EL 이 아랫점·절개축 소매산 교점보다 위에 있습니다 — EL 을 늘리세요",
-    "front-overlap-negative": "이 치수는 앞 겹침이 음수라(앞 반폭 중점이 소맷부리 구간 ● 보다 작음) 소매 Ⓒ 지원 범위 밖입니다",
-    "front-overlap-zero": "이 치수는 앞 겹침이 0 이라 소매 Ⓒ 지원 범위 밖입니다",
-    "front-rotation-too-large": "앞 회전각이 한계(30°)를 넘습니다 — 소매길이·EL 확인",
-    "dart-negative": "뒤 다트 폭이 음수라 소매 Ⓒ 지원 범위 밖입니다",
-    "dart-degenerate": "뒤 다트 폭이 너무 좁아(0.1cm 미만) 소매 Ⓒ 지원 범위 밖입니다",
-    "dart-angle-too-large": "뒤 다트 꼭짓점각이 한계(45°)를 넘습니다 — EL 아래 길이가 짧습니다. EL 을 줄이거나 소매길이를 늘리세요",
-    "dart-legs-unequal": "뒤 다트 두 다리 길이가 어긋남",
+    "cuff-chain-impossible": "소맷부리 구간(●·2●)과 다리끝 1cm 내림으로 완성 가정선을 그릴 수 없습니다 — 소매 Ⓒ 지원 범위 밖",
+    "back-leg-ends-crossed": "뒤 다트 다리끝이 뒤 절개축을 넘어갑니다 — 소매 Ⓒ 지원 범위 밖",
+    "back-wedge-degenerate": "뒤 EL 쐐기 폭이 0 이하입니다 — 소매 Ⓒ 지원 범위 밖",
+    "back-dart-not-open": "뒤 쐐기를 맞대면 뒤 다트가 벌어지지 않습니다 — 소매 Ⓒ 지원 범위 밖",
+    "front-seam-parallel": "앞 옆선 두 조각이 만나지 않습니다(평행) — 소매 Ⓒ 지원 범위 밖",
+    "front-no-overlap": "앞 EL 절개에서 겹침이 생기지 않습니다 — 소매 Ⓒ 지원 범위 밖",
+    "cuff-curve-degenerate": "소맷부리 마무리 곡선을 그릴 수 없습니다(구간이 퇴화)",
+    "cuff-curve-g1-break": "소맷부리 마무리 곡선 이음이 매끄럽지 않습니다",
+    "cuff-curve-inflection": "소맷부리 마무리 곡선에 변곡이 생깁니다 — 소매 Ⓒ 지원 범위 밖",
+    "redraw-window-invalid": "소매산 재제도 구간을 잡을 수 없습니다(꺾임이 너무 가깝거나 짧음)",
+    "redraw-g1-break": "소매산 재제도 이음이 매끄럽지 않습니다",
+    "redraw-extra-inflection": "소매산 재제도 구간에 원래 없던 변곡이 생깁니다 — 소매 Ⓒ 지원 범위 밖",
     "no-sleeve-a": "Ⓒ 의 출발 소매 Ⓐ 를 만들 수 없음",
     "invalid-sleeve-a": "Ⓐ 소매 형상을 읽을 수 없음",
     "invalid-width": "소매폭을 읽을 수 없음",
@@ -44,9 +49,6 @@
     "self-intersection": "소매 외곽이 자기 교차함",
     "discontinuous": "소매 외곽이 끊김",
     "spike": "소매 외곽에 뾰족한 꺾임이 생김",
-    "cuff-sections-not-1-2-1": "소맷부리 세 구간이 ●:2●:● 와 어긋남",
-    "cap-length-drift": "소매산 길이가 바뀜",
-    "ease-mismatch": "이세가 출발 소매 Ⓐ 와 어긋남",
     "invalid-input": "입력 값을 확인하세요",
     "no-module": "소매 Ⓒ 모듈을 불러오지 못함"
   };
@@ -57,7 +59,7 @@
     var base = REASONS[r.reason];
     if (!base) base = /^fairing-/.test(r.reason || "") ? "소매 곡선 정리 단계에서 조건을 만족하지 못함(" + r.reason + ")" : ("소매 Ⓒ 를 만들 수 없음(" + r.reason + ")");
     var pc = r.piece ? pieceKo(r.piece) : "";
-    var det = (r.reason === "front-overlap-negative" && fin(r.detail)) ? " (" + f2(r.detail) + "cm)" : "";
+    var det = (r.reason === "front-no-overlap" && fin(r.detail)) ? " (" + f2(r.detail) + "cm)" : "";
     return (pc ? pc + "판: " : "") + base + det;
   }
   function fail(r, stage) { var o = { ok: false, reason: r.reason }; if (r.piece) o.piece = r.piece; if (r.detail !== undefined) o.detail = r.detail; if (r.outOfSupportedRange) o.outOfSupportedRange = true; if (stage) o.stage = stage; o.text = failText(o); return o; }
@@ -135,12 +137,13 @@
     var w = work(project), s = w && w.sleeveC; if (!s) return [];
     var lines = ["타이트 소매 Ⓒ · 소매 Ⓐ 에서 소맷부리 W×3/4 + 뒤 소맷부리 다트 (P.41)"];
     if (s.blocked) { lines.push("⚠ 차단: " + s.blocked.text + " · 화면의 소매는 이전 입력·몸판의 형상이라 완료할 수 없습니다 — 입력·몸판을 확인한 뒤 다시 적용하세요"); return lines; }
-    var m = s.meta, sec = m.sections, a = sec.actual;
-    lines.push("소맷부리 목표 " + f2(m.hemTargetCm) + " · 실제(호 길이) " + f2(m.hemCm) + " cm · 소매폭 " + f2(m.widthCm) + " · 소매길이 " + f2(m.sleeveLengthCm));
-    lines.push("소맷부리 구간 뒤 " + f2(a.backOuter) + " : 중앙 " + f2(a.center) + " : 앞 " + f2(a.frontOuter) + " cm (목표 ● " + f2(sec.unitCm) + " : 2● : ●)");
+    var m = s.meta, sec = m.sections, wh = sec.white, fi = sec.final;
+    lines.push("소맷부리 목표 W×3/4 " + f2(m.hemTargetCm) + " · 실측(마무리 곡선) " + f2(m.hemCm) + " cm · 소매폭 " + f2(m.widthCm) + " · 소매길이 " + f2(m.sleeveLengthCm));
+    lines.push("● = 소맷부리÷4 = " + f2(sec.unitCm) + " · 완성 가정선 구간 뒤 " + f2(wh.backOuter) + " : 중앙 " + f2(wh.center) + " : 앞 " + f2(wh.frontOuter) + " (앞 최종 " + f2(fi.frontOuter) + " — 소매구 연장 반영)");
     lines.push("팔꿈치 EL " + f2(m.elbowLengthCm) + " cm (SP 기준) · EL 아래 " + f2(m.lowerLengthCm) + " cm");
-    lines.push("뒤: 열린 봉제 다트 · EL 꼭짓점 → 소맷부리 · 폭 " + f2(m.back.dartWidthAtHemCm) + " · 다리 " + f2(m.back.legCenter.lengthCm) + " cm");
-    lines.push("앞: 겹침 " + f2(m.front.overlapCm) + " cm(계산) · 회전 " + f2(m.front.angleDeg) + "° · EL 쪽 벌어짐 없음");
+    lines.push("뒤: EL 까지 맞대고 아래는 열린 봉제 다트 · EL 쐐기 폭 " + f2(m.derivation.backWedge.D) + " · 다리 " + f2(m.back.legCenter.lengthCm) + " · 벌어짐 " + f2(m.back.dartOpenCm) + " · 다리끝 소맷부리선 아래 1");
+    lines.push("앞: EL 가로 절개 · 겹침 " + f2(m.front.overlapCm) + " → 소매구 연장 " + f2(m.front.extensionCm) + " · 옆선 앞 " + f2(m.seams.frontCm) + " / 뒤 " + f2(m.seams.backCm) + " cm");
+    lines.push("소매산: 맞댄 뒤 꺾임 양쪽 " + f2(m.redraw.ellCm) + "cm 국소 재제도(임시 시작 설정)");
     var BC = window.bodiceCheckpoint, DS = window.designSleeve, bodice = BC && BC.latest(project);
     var prim = (DS && w.geometry && w.geometry.sleeve) ? DS.capPrimitives(w.geometry.sleeve) : null;
     if (bodice && bodice.armholeLengths) {

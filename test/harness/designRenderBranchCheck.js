@@ -48,7 +48,7 @@ function makeHarness(cfg) {
 
   const sbEl = makeEl("div");
   const capEl = makeEl("div");
-  const document = { getElementById(id) { if (id === "sb") return sbEl; if (id === "capAdjVal") return capEl; return null; } };
+  const document = { getElementById(id) { if (id === "sb") return sbEl; if (id === "capAdjVal") return capEl; if (id === "chkSleeveRef") return cfg.sleeveRef === undefined ? null : { checked: !!cfg.sleeveRef }; return null; } };
 
   const spy = () => { const f = (...a) => { f.calls++; return f.ret; }; f.calls = 0; f.ret = undefined; return f; };
   const createDraft = spy(), drawSleeve = spy(), drawDartMoveOverlay = spy(), applyLayerVisibility = spy(), updateStatusBar = spy();
@@ -114,6 +114,9 @@ const PROJECT = () => ({
   ok(workKids.length === 3 && workKids.every(c => c === "design-working"), "3: working root=front+back+sleeve(design-working)");
   const pcs = roots[1].childNodes.map(c => c._attrs["data-layout-piece"]);
   ok(pcs[0] === "front" && pcs[1] === "back" && pcs[2] === "sleeve", "3: piece 순서 front→back→sleeve");
+  ok(roots[1].childNodes[2]._attrs["display"] === "none" && roots[1].childNodes[2]._attrs["data-ref-hidden"] === "true" && roots[1].childNodes[0]._attrs["display"] === undefined && roots[1].childNodes[1]._attrs["display"] === undefined, "3: 원형 소매 비교 기본 꺼짐 — 소매 참고만 숨김(앞/뒤 참고선 그대로)");
+  const h2 = makeHarness({ designGetter: () => true, project: PROJECT(), nValue: 83, sleeveRef: true }); h2.render();
+  ok(h2.svg._appended[1].childNodes[2]._attrs["display"] === undefined && h2.svg._appended[1].childNodes.length === 3, "3: 원형 소매 비교 켬 → 소매 참고 다시 표시");
 }
 // 4. design 분기에서 createDraft·sleeve·overlay·applyLayerVisibility·updateStatusBar 호출 0
 {

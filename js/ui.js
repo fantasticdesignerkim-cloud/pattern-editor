@@ -2820,6 +2820,8 @@
     // 페플럼 제작 정보 표시 토글(세션 UI, 표시 전용): 오버레이만 다시 그린다.
     const chkSleeveInfo = document.getElementById("chkSleeveInfo");   // 소매 제작 정보 표시 토글(세션 UI, 표시 전용): 오버레이만 다시 그린다.
     if (chkSleeveInfo) chkSleeveInfo.addEventListener("change", () => { if (typeof render === "function") render(); });
+    const chkSleeveRef = document.getElementById("chkSleeveRef");   // 원형 소매 비교 레이어 토글(세션 UI, 표시 전용, 기본 꺼짐)
+    if (chkSleeveRef) chkSleeveRef.addEventListener("change", () => { if (typeof render === "function") render(); });
     const chkPep = document.getElementById("chkPeplumInfo");
     if (chkPep) chkPep.addEventListener("change", () => { if (typeof render === "function") render(); });
     // 소매 라인 카탈로그(P.36–): 종류·세부 선택 → 라인 적용(소매 Ⓐ 또는 원형 소매 기준으로 복귀).

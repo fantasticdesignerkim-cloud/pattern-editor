@@ -119,37 +119,46 @@
       });
       rows([title, "소맷부리 목표 W×3/4 " + f2(m.hemTargetCm) + " · 실측 " + f2(m.hemCm) + " · 맞댐 ● " + f2(m.closeTotalCm) + " = " + f2(m.closePerCutCm) + " × 2곳", lengthsLine, "점선 = 설명용(맞댐 전 절개축·절개선, 재단선 아님) · 남색 실선 = 재단 외곽"]);
     } else {
-      var sec = m.sections, a = sec.actual, u = sec.unitCm, elY = m.elbowLengthCm, K = m.back.outerCorner, D = m.back.outerEnd, Cb = sec.boundaries.back, Bf = sec.boundaries.front, FP = m.front.outerCorner;
+      var sec = m.sections, wh = sec.white, fi = sec.final, u = sec.unitCm, elY = m.elbowLengthCm, bk = m.back, fr = m.front, wd = m.derivation.backWedge;
+      var K = bk.outerCorner, Dn = bk.outerEnd, Hr = bk.legCenter.to, Cf = m.derivation.frontHemPoints[0], FP = fr.outerCorner;
       title = "소매 Ⓒ · 타이트 + 뒤 소맷부리 다트(P.41)";
-      var base = hemY + 2.2;
-      dim("hem-back", K, D, "h", base, "뒤 ● " + f2(a.backOuter), { dx: 0, dy: 11 }, "middle", "dim");
-      dim("hem-center", Cb, Bf, "h", base, "중앙 2● " + f2(a.center), { dx: 0, dy: 11 }, "middle", "dim");
-      dim("hem-front", Bf, FP, "h", base, "앞 ● " + f2(a.frontOuter), { dx: 0, dy: 11 }, "middle", "dim");
-      // 뒤 열린 다트: 꼭짓점·두 다리 길이·소맷부리 폭
-      var apex = m.back.apex, legC = m.back.legCenter, legO = m.back.legOuter;
+      var base = hemY + 3.2;
+      dim("hem-back", K, Dn, "h", base, "뒤 ● " + f2(fi.backOuter), { dx: 0, dy: 11 }, "middle", "dim");
+      dim("hem-center", Hr, Cf, "h", base, "중앙 2● " + f2(fi.center), { dx: 0, dy: 11 }, "middle", "dim");
+      dim("hem-front", Cf, FP, "h", base, "앞 " + f2(fi.frontOuter), { dx: 0, dy: 11 }, "middle", "dim");
+      // 뒤 열린 다트: 꼭짓점(EL, 맞댄 쐐기 끝)·두 다리 길이·벌어짐·다리끝 1cm 내림
+      var apex = bk.apex, legC = bk.legCenter, legO = bk.legOuter;
       marks.push({ id: "apex", at: P(apex), cls: "notch" });
       add("apex", apex, -8, 4, "end", "뒤 다트 꼭짓점(EL)", "label");
       add("leg-outer", { x: (apex.x + legO.to.x) / 2, y: (apex.y + legO.to.y) / 2 }, -6, 0, "end", "다리 " + f2(legO.lengthCm), "ref");
       add("leg-center", { x: (apex.x + legC.to.x) / 2, y: (apex.y + legC.to.y) / 2 }, 6, 0, "start", "다리 " + f2(legC.lengthCm), "ref");
-      add("dart-width", { x: (D.x + Cb.x) / 2, y: hemY - 1.5 }, 0, 0, "middle", "폭 " + f2(m.back.dartWidthAtHemCm), "label");
+      add("dart-width", { x: (Dn.x + Hr.x) / 2, y: hemY - 1.5 }, 0, 0, "middle", "벌어짐 " + f2(bk.dartOpenCm), "label");
+      add("dart-drop", { x: (Dn.x + Hr.x) / 2, y: hemY - 1.5 }, 0, 11, "middle", "다리끝 소맷부리선 아래 1", "ref", "dart-width");
       // EL 선 라벨(기본 31.4 와 현재값)
       add("el", { x: m.axes.front.x + 0.8, y: elY }, 0, -14, "start", "EL " + f2(elY), "label", "el");
       add("el-2", { x: m.axes.front.x + 0.8, y: elY }, 0, -4, "start", "(기본 " + DEFAULT_EL + ")", "ref", "el");
-      add("axis-back", { x: m.axes.back.x, y: elY - 9 }, -5, 0, "end", "뒤 절개축", "ref", "axis-back");
-      add("axis-back-2", { x: m.axes.back.x, y: elY - 9 }, -5, 10, "end", "(반폭 중점)", "ref", "axis-back");
-      add("axis-front", { x: m.axes.front.x, y: elY - 9 }, 5, 0, "start", "앞 절개축", "ref", "axis-front");
-      add("axis-front-2", { x: m.axes.front.x, y: elY - 9 }, 5, 10, "start", "(반폭 중점)", "ref", "axis-front");
-      // 앞 겹침(계산값): 처리 과정의 겹침 영역을 음영으로(재단선 아님) — 중앙 조각 앞 변과 회전한 절개변 사이
-      var Pf = m.front.pivot, Ef = m.elbowLine.front, Cf = sec.boundaries.frontRaw, Ap = m.front.cutEdgeEnd;
-      zones.push({ id: "lap", pts: [P(Pf), P(Ef), P(Cf), P(Ap)], cls: "zone" });
-      add("lap", { x: m.axes.front.x + 1.2, y: elY + 7 }, 0, 0, "start", "앞 겹침", "label", "lap");
-      add("lap-2", { x: m.axes.front.x + 1.2, y: elY + 7 }, 0, 11, "start", f2(m.front.overlapCm) + "cm(계산)", "label", "lap");
-      var yL = elY + 7, tC = (yL - Ef.y) / (Cf.y - Ef.y), tK = (yL - Pf.y) / (Ap.y - Pf.y);   // 같은 높이에서 중앙 조각 앞 변(E→C) 과 회전한 절개변(P→A') 의 x — 겹침 영역 가운데를 가리킨다
-      var xC = Ef.x + (Cf.x - Ef.x) * tC, xK = Pf.x + (Ap.x - Pf.x) * tK;
-      leaders.push({ id: "lap", from: { x: (xC + xK) / 2, y: yL }, toAt: { x: m.axes.front.x + 1.2, y: yL }, toPx: { dx: -2, dy: -3 } });
-      rows([title, "소맷부리 목표 W×3/4 " + f2(m.hemTargetCm) + " = 실제(호 길이) " + f2(m.hemCm), "● = 소매폭×3/16 = " + f2(u) + " → 뒤 ● : 중앙 2● : 앞 ● = " + f2(a.backOuter) + " : " + f2(a.center) + " : " + f2(a.frontOuter),
-        lengthsLine, "뒤: 열린 봉제 다트 폭 " + f2(m.back.dartWidthAtHemCm) + " · 다리 " + f2(legC.lengthCm) + " · 앞: 겹침 " + f2(m.front.overlapCm) + "(계산) · 회전 " + f2(m.front.angleDeg) + "°",
-        "점선·음영 = 설명용(재단선 아님, 겹침 영역은 처리 과정) · 남색 실선 = 재단 외곽"]);
+      add("axis-back", { x: m.axes.back.x, y: elY - 9 }, -5, 0, "end", "뒤 맞댐(EL 까지)", "ref", "axis-back");
+      add("axis-back-2", { x: m.axes.back.x, y: elY - 9 }, -5, 10, "end", "쐐기 EL 폭 " + f2(wd.D), "ref", "axis-back");
+      add("axis-front", { x: m.axes.front.x, y: elY - 9 }, 5, 0, "start", "앞 맞댐", "ref", "axis-front");
+      add("axis-front-2", { x: m.axes.front.x, y: elY - 9 }, 5, 10, "start", "(EL 간격 1)", "ref", "axis-front");
+      // 앞 EL 절개 겹침(처리 과정, 재단선 아님): 맞댄 뒤 EL 절개선(하부 조각 위 변)과 상부 조각 아래 변 사이 쐐기
+      zones.push({ id: "lap", pts: [P(fr.elCut.from), P(fr.elCut.to), P(fr.elCut.lowerOuter)], cls: "zone" });
+      // 앞 EL→소매구 맞댐선(construction front-axis-lower, 청록 점선) 이름
+      var ax = fr.axisLower, axM = { x: (ax.from.x + ax.to.x) / 2, y: (ax.from.y + ax.to.y) / 2 };
+      add("axis-lower", axM, -5, 0, "end", "앞 맞댐선(EL→소매구)", "ref", "axis-lower");
+      // 소매구 연장 영역(처리 과정 — 옅은 음영): 연장 전 모서리 → 연장 후 모서리 → 최종 앞 소맷부리 곡선
+      var ex = fr.extension;
+      zones.push({ id: "ext", pts: ex.zone.map(P), cls: "zone" });
+      refs.push({ id: "ext-before", from: P(ex.before.from), to: P(ex.before.to), cls: "past" });   // 연장 전 앞 소맷부리 기준선(점선)
+      add("ext", { x: ex.after.x + 0.6, y: ex.after.y + 1.2 }, 4, 0, "start", "소매구 연장 " + f2(ex.amountCm), "label", "ext");
+      add("ext-2", { x: ex.after.x + 0.6, y: ex.after.y + 1.2 }, 4, 11, "start", "(점선 = 연장 전)", "ref", "ext");
+      leaders.push({ id: "ext", from: P({ x: (ex.after.x + ex.before.from.x) / 2, y: (ex.after.y + ex.before.from.y) / 2 }), toAt: { x: ex.after.x + 0.6, y: ex.after.y + 1.2 }, toPx: { dx: 2, dy: -3 } });
+      add("lap", { x: fr.elCut.to.x + 0.6, y: elY - 0.4 }, 4, 0, "start", "앞 EL 절개 겹침 " + f2(fr.overlapCm), "label", "lap");
+      add("lap-2", { x: fr.elCut.to.x + 0.6, y: elY - 0.4 }, 4, 11, "start", "→ 소매구 연장 " + f2(fr.extensionCm), "label", "lap");
+      rows([title, "소맷부리 목표 W×3/4 " + f2(m.hemTargetCm) + " · 실측(마무리 곡선) " + f2(m.hemCm) + " · ● = 소맷부리÷4 = " + f2(u),
+        "완성 가정선 구간 뒤 ● " + f2(wh.backOuter) + " · 중앙 2● " + f2(wh.center) + " · 앞 ● " + f2(wh.frontOuter) + " (앞 최종 " + f2(fi.frontOuter) + ")",
+        lengthsLine, "옆선 앞 " + f2(m.seams.frontCm) + " · 뒤 " + f2(m.seams.backCm) + " · 소매산 꺾임 양쪽 " + f2(m.redraw.ellCm) + "cm 재제도(임시 시작 설정)",
+        "점선·음영 = 설명용(재단선 아님, 겹침은 처리 과정) · 남색 실선 = 재단 외곽"]);
     }
     body.forEach(function (t, i) { add("block-" + i, below, 0, 56 + i * 12, "middle", t, i === 0 ? "title" : (i === body.length - 1 ? "note" : "label"), "block"); lines[lines.length - 1].block = i; });
     var bb = { minX: minX, maxX: maxX, minY: Math.min.apply(null, ys.concat((g.construction || []).reduce(function (a, c) { return a.concat([c.from.y, c.to.y]); }, []))), maxY: Math.max(maxY, hemY) };
@@ -165,7 +174,7 @@
   function textW(t, f) { var w = 0; for (var i = 0; i < t.length; i++) w += (t.charCodeAt(i) > 255 ? 1.0 : 0.58) * f; return w; }
   function boxOf(x, y, anchor, text, f) { var w = textW(text, f), x0 = anchor === "end" ? x - w : anchor === "middle" ? x - w / 2 : x; return { x0: x0, x1: x0 + w, y0: y - f * 0.85, y1: y + f * 0.2 }; }
   function hit(a, b) { return a.x0 < b.x1 - 0.5 && b.x0 < a.x1 - 0.5 && a.y0 < b.y1 - 0.5 && b.y0 < a.y1 - 0.5; }
-  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "back-line": 6, "front-line": 6 };
+  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, ext: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "axis-lower": 5, "back-line": 6, "front-line": 6 };
   var NUM = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"];
 
   function layout(model, scale) {

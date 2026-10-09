@@ -261,6 +261,8 @@
           <div class="row note sleeve-a-info" id="designSleeveAInfo" aria-live="polite" hidden></div>
           <!-- 소매 제작 정보 표시 토글(세션 UI, 표시 전용, 기본 켜짐): Ⓐ/Ⓑ/Ⓒ 일 때만 보인다. 캔버스의 설명(치수선·라벨·음영)만 끄고 재단 외곽은 그대로. -->
           <div class="row" id="rowSleeveInfo" hidden><label><input type="checkbox" id="chkSleeveInfo" checked> 제작 정보 표시</label></div>
+          <!-- 원형 소매 비교(세션 UI, 표시 전용, 기본 꺼짐): 켜면 원형(block) 소매 참고선을 다시 그린다. 원형 데이터·계측은 그대로. -->
+          <div class="row" id="rowSleeveRef"><label><input type="checkbox" id="chkSleeveRef"> 원형 소매 비교</label></div>
           <div class="row"><label for="inpSleeveLength">소매길이 (cm)</label><input id="inpSleeveLength" type="number" min="10" max="90" step="0.1"></div>
           <!-- 소매 Ⓑ(P.41) 전용 선택 입력: 손바닥 둘레. 비우면 기본 소맷부리 W×3/4. 소맷부리 < 손바닥+3cm 는 경고만(자동 보정 없음). 라인에 따라 ui.js 가 표시/숨김. -->
           <div class="row" id="rowSleevePalm" hidden><label for="inpSleevePalm">손바닥 둘레 (cm, 선택)</label><input id="inpSleevePalm" type="number" min="10" max="40" step="0.1" placeholder="기본" title="비우면 기본 소맷부리 W×3/4"></div>
@@ -416,7 +418,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026100702"></script>
+<script src="js/render.js?v=2026100902"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -438,12 +440,12 @@
 <!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
 <script src="js/designPlacket.js?v=2026082001"></script>
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
-<script src="js/designSleeve.js?v=2026082041"></script>
+<script src="js/designSleeve.js?v=2026100801"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
 <!-- 페플럼 제작 정보 표시 모델(순수·표시 전용): window.peplumAnnotation. 형상·hash·hit 무관. -->
 <script src="js/peplumAnnotation.js?v=2026100404"></script>
 <!-- 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시 모델(순수·표시 전용): window.sleeveAnnotation. 형상·hash·완료본·hit 무관. -->
-<script src="js/sleeveAnnotation.js?v=2026100702"></script>
+<script src="js/sleeveAnnotation.js?v=2026100901"></script>
 <script src="js/designLayout.js?v=2026100701"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026091620"></script>
@@ -466,14 +468,14 @@
 <script src="js/sleeveCheckpoint.js?v=2026100701"></script>
 <!-- 소매 Ⓐ(P.137–139 타입 4): window.designSleeveA 엔진 코어 · window.sleevePresets 카탈로그 · window.sleeveAApply 상태 연결(전부 순수·DOM 미접근). -->
 <script src="js/designSleeveA.js?v=2026100501"></script>
-<script src="js/sleevePresets.js?v=2026100701"></script>
+<script src="js/sleevePresets.js?v=2026100801"></script>
 <script src="js/sleeveAApply.js?v=2026100502"></script>
 <!-- 소매 Ⓑ(P.41 타이트): window.designSleeveB 엔진 코어 · window.sleeveBApply 상태 연결(순수·DOM 미접근). Ⓐ 모듈 뒤에 로드. -->
 <script src="js/designSleeveB.js?v=2026100601"></script>
 <script src="js/sleeveBApply.js?v=2026100601"></script>
 <!-- 소매 Ⓒ(P.41 하단 뒤 소맷부리 다트): window.designSleeveC 엔진 코어 · window.sleeveCApply 상태 연결(순수·DOM 미접근). Ⓐ 모듈 뒤에 로드. -->
-<script src="js/designSleeveC.js?v=2026100701"></script>
-<script src="js/sleeveCApply.js?v=2026100701"></script>
+<script src="js/designSleeveC.js?v=2026100901"></script>
+<script src="js/sleeveCApply.js?v=2026100901"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
 <script src="js/designCollar.js?v=2026092520"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
@@ -488,7 +490,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026100703"></script>
+<script src="js/ui.js?v=2026100902"></script>
 
 </body>
 </html>

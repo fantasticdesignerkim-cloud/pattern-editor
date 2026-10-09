@@ -610,7 +610,12 @@ function render(){
     const mkWork = (sub) => window.designRenderer.createWorkingGroup(sub);
 
     const refRoot = E("g"); refRoot.setAttribute("data-design-root", "reference");
-    SUBS.forEach(([pc, sub]) => refRoot.appendChild(piece(mkRef, sub(dp.referenceGeometry), L[pc], pc)));
+    const _slvRefChk = document.getElementById("chkSleeveRef");   // 원형 소매 비교 레이어(표시 전용, 기본 꺼짐) — 원형 데이터·geometry·계측은 그대로, 그리기만 숨긴다
+    SUBS.forEach(([pc, sub]) => {
+      const grp = piece(mkRef, sub(dp.referenceGeometry), L[pc], pc);
+      if (pc === "sleeve" && !(_slvRefChk && _slvRefChk.checked)) { grp.setAttribute("display", "none"); grp.setAttribute("data-ref-hidden", "true"); }
+      refRoot.appendChild(grp);
+    });
     svg.appendChild(refRoot);
 
     const workRoot = E("g"); workRoot.setAttribute("data-design-root", "working");
