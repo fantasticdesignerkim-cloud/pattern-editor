@@ -6,7 +6,7 @@
 // ★ 소매 10종류의 이름·시작 쪽·표지 기호는 P036 판독 표만 근거다. 아직 판독하지 않은 라인의 변형(Ⓑ 다음 기호 등)은
 //   **슬롯을 만들지 않는다** — 표지 대표 기호 하나만 «보류»로 두고, 왜 못 만드는지(blockedBy)를 들고 있게 한다.
 //
-// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ 다섯 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
+// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ · 턱 Ⓕ 여섯 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
 // 그중 Ⓐ 는: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
 //   (`designSleeveA.draftSleeveA`, [패턴학교] P.137–139 «타입 4»). 이 레코드는 수치를 갖지 않는다 — 소매 길이만
 //   사용자가 정하고 나머지는 전부 몸판에서 읽는다. 순수(DOM·storage 미접근).
@@ -63,7 +63,13 @@
     // Ⓔ: 절개 3개(반폭 중점 2 + 소매 중심선) · 4조각 · 플레어 = 소매폭×1. 가운데 두 조각 SP 대칭 → 바깥은 움직인 가운데 조각의 기준점 중심.
     { id: "bunka-sleeve-E", familyId: "flare-sleeve", symbol: "E",
       method: "flare-3cut-symmetric-from-sleeve-A", methodPage: 42,
-      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" }] }
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" }] },
+    // Ⓕ: 소매 중심선 ±1·±3cm 평행 절개 4개 · 가운데 띠 고정 · 소맷부리 기준점으로 소매산을 벌려 턱(각 기본 1.5 · 최대 3cm, 김님 확정 — 사용자 수정).
+    //   턱은 바깥쪽으로 접고 중심 쪽 천이 위(김님 원문). 재단선 = 턱 접은 상태에서 정리한 소매산을 펼친 선. 이세 = 턱 접은 소매산 길이 기준.
+    { id: "bunka-sleeve-F", familyId: "tuck-sleeve", symbol: "F",
+      method: "tuck-parallel-slash-from-sleeve-A", methodPage: 43,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "tuckCm", label: "턱 분량(각)", unit: "cm", defaultValue: 1.5 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -97,7 +103,12 @@
         { id: "bunka-sleeve-E", symbol: "E", label: "E · 절개 3개 · 플레어 소매폭×1(소매 Ⓐ 기반)", page: 42, methodPage: 42,
           availability: "available", presetId: "bunka-sleeve-E", note: null }
       ] },
-    pendingFamily("tuck-sleeve", 4, "턱 소매", "F", 43),
+    { id: "tuck-sleeve", order: 4, label: "턱 소매", symbol: "F", page: 43, availability: "available", note: null,
+      familyNote: "Ⓕ — 소매 Ⓐ 에 소매 중심선과 평행한 절개 4개(중심 ±1·±3cm)를 넣고, 가운데 띠를 고정한 채 소맷부리를 기준점으로 소매산을 벌려 턱 4개(각 기본 1.5cm · 최대 3cm). 소맷부리·소매산 높이는 그대로, 소매폭이 조금 넓어진다. 턱은 바깥쪽으로 접고 중심 쪽 천이 위.",
+      variants: [
+        { id: "bunka-sleeve-F", symbol: "F", label: "F · 평행 절개 4개 · 소맷부리 기준점 · 턱 분량 입력(소매 Ⓐ 기반)", page: 43, methodPage: 43,
+          availability: "available", presetId: "bunka-sleeve-F", note: null }
+      ] },
     pendingFamily("puff-sleeve", 5, "퍼프 소매", "H", 44),
     pendingFamily("short-sleeve", 6, "반소매", "L", 46),
     pendingFamily("dolman-sleeve", 7, "돌먼 소매", "R", 49),

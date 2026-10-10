@@ -239,7 +239,7 @@ let MC, GC;
   const pos = f => html.indexOf('src="js/' + f);
   ok(pos("peplumAnnotation.js") > 0 && pos("sleeveAnnotation.js") > pos("peplumAnnotation.js") && pos("sleeveAnnotation.js") < pos("ui.js"), "7: index.html 스크립트 등록(sleeveAnnotation — peplumAnnotation 다음, ui.js 앞)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(ver("sleeveAnnotation.js") === "2026101001" && ver("render.js") === "2026100902" && ver("designLayout.js") === "2026100701" && /css\/style\.css\?v=2026100702/.test(html) && ver("ui.js") === "2026101001", "7: 캐시 버전 갱신(sleeveAnnotation 2026100901 · render/css 2026100702 · ui 2026100703)");
+  ok(ver("sleeveAnnotation.js") === "2026101003" && ver("render.js") === "2026100902" && ver("designLayout.js") === "2026100701" && /css\/style\.css\?v=2026100702/.test(html) && ver("ui.js") === "2026101002", "7: 캐시 버전 갱신(sleeveAnnotation 2026100901 · render/css 2026100702 · ui 2026100703)");
   ok(/<input type="checkbox" id="chkSleeveRef">\s*원형 소매 비교</.test(html) && !/id="chkSleeveRef"[^>]*checked/.test(html), "7: 원형 소매 비교 토글(chkSleeveRef) 기본 꺼짐");
   { const rj = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8"), uj = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8");
     ok(/getElementById\("chkSleeveRef"\)/.test(rj) && /pc === "sleeve" && !\(_slvRefChk && _slvRefChk\.checked\)\) \{ grp\.setAttribute\("display", "none"\)/.test(rj), "7: render — 원형 소매 참고 레이어만 꺼짐일 때 숨김(앞/뒤 참고선 무관)");

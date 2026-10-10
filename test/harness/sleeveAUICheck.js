@@ -52,7 +52,7 @@ function throwsReason(fn, reason, n) { try { fn(); ok(false, n + " (throw 안 �
   ok(fams.map(f => f.symbol).join("") === "ABDFHLRTVX", "1: 표지 대표 기호 = P036 판독표");
   ok(Object.isFrozen(SP) && Object.isFrozen(fams) && Object.isFrozen(fams[0]) && Object.isFrozen(SP.get("bunka-sleeve-A")), "1: 레지스트리·레코드 동결");
   const avail = fams.filter(f => f.availability === "available");
-  ok(avail.length === 3 && avail[0].id === "straight-sleeve" && avail[0].variants.length === 1 && avail[0].variants[0].presetId === "bunka-sleeve-A", "1: 실행 가능 = 스트레이트 Ⓐ + 타이트 Ⓑ·Ⓒ + 플레어 Ⓓ(각 전담 회귀)");
+  ok(avail.length === 4 && avail[0].id === "straight-sleeve" && avail[0].variants.length === 1 && avail[0].variants[0].presetId === "bunka-sleeve-A", "1: 실행 가능 = 스트레이트 Ⓐ + 타이트 Ⓑ·Ⓒ + 플레어 Ⓓ·Ⓔ + 턱 Ⓕ(각 전담 회귀)");
   ok(SP.get("bunka-sleeve-A").method === "bodice-armhole" && SP.get("bunka-sleeve-A").methodPage === 137 && SP.get("bunka-sleeve-A").inputs.length === 1 && SP.get("bunka-sleeve-A").inputs[0].key === "sleeveLengthCm", "1: 레코드 = 제도 방식·P.137·입력은 소매길이 하나(교재 수치 없음)");
   ok(SP.get("bunka-bodice-A") === null && BP.get("bunka-sleeve-A") === null, "1: 소매/몸판 id 네임스페이스 분리");
   fams.filter(f => f.availability !== "available").forEach(f => {
@@ -63,7 +63,7 @@ function throwsReason(fn, reason, n) { try { fn(); ok(false, n + " (throw 안 �
   ok(SP.resolve("nope", "x").reason === "unknown-sleeve-family" && SP.resolve("straight-sleeve", "x").reason === "unknown-sleeve-variant", "1: 모르는 라인/세부 거부");
   const t = SP.displayTitle("straight-sleeve", "bunka-sleeve-A");
   ok(t.symbol === "A" && t.page === 40 && t.familyLabel === "스트레이트 소매", "1: displayTitle");
-  ok(SP.familyOptions()[0].available === true && SP.familyOptions()[1].available === true && SP.familyOptions()[2].available === true && SP.familyOptions().slice(3).every(o => !o.available), "1: familyOptions available 플래그");
+  ok(SP.familyOptions()[0].available === true && SP.familyOptions()[1].available === true && SP.familyOptions()[2].available === true && SP.familyOptions()[3].available === true && SP.familyOptions().slice(4).every(o => !o.available), "1: familyOptions available 플래그");
   throwsReason(() => SP.validateRecord({ id: "x", familyId: "f", symbol: "A", method: "m", methodPage: 0, inputs: [] }), "invalid-page", "1: 레코드 검증 — 쪽");
   throwsReason(() => SP.validateRecord({ id: "x", familyId: "f", symbol: "A", method: "m", methodPage: 1, inputs: [{ key: 1 }] }), "invalid-inputs", "1: 레코드 검증 — 입력");
 }
@@ -193,7 +193,7 @@ ok(Object.isFrozen(bodice), "2: bodiceResult 는 동결 객체");
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f + "?v="));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(엔진 → 카탈로그 → 연결 → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(ver("designSleeveA.js") === "2026100501" && ver("sleeveAApply.js") === "2026100502" && ver("ui.js") === "2026101001" && ver("sleevePresets.js") === "2026101001" && ver("sleeveCheckpoint.js") === "2026101001", "7: 캐시 버전 갱신(Ⓒ 연결로 변경된 파일 2026100701)");
+  ok(ver("designSleeveA.js") === "2026100501" && ver("sleeveAApply.js") === "2026100502" && ver("ui.js") === "2026101002" && ver("sleevePresets.js") === "2026101002" && ver("sleeveCheckpoint.js") === "2026101002", "7: 캐시 버전 갱신(Ⓕ 연결로 변경된 공용 파일 2026101002)");
   ok(/css\/style\.css\?v=2026100702/.test(html), "7: css 캐시 버전 갱신");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo"].forEach(id => ok(new RegExp('id="' + id + '"').test(html) && ui.indexOf('"' + id + '"') > 0, "7: DOM id " + id + " 존재·ui.js 사용"));
   ["btnApplySleeve", "btnResetSleeve", "btnApplyCap", "btnSleeveCapManual", "btnSleeveCapRevert", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "selSleeveSide", "inpSleeveBicep", "inpSleeveCapHeight", "designSleeveNote", "designSleeveEaseNote", "designSleeveCheckNote", "designSleeveStatusNote"]

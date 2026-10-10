@@ -26,6 +26,7 @@
 
   function lineOf(project) {
     var w = project && project.working; if (!w) return null;
+    if (w.sleeveF) return { key: "F", st: w.sleeveF };
     if (w.sleeveE) return { key: "E", st: w.sleeveE };
     if (w.sleeveD) return { key: "D", st: w.sleeveD };
     if (w.sleeveC) return { key: "C", st: w.sleeveC };
@@ -54,12 +55,22 @@
     return pts[pts.length - 1];
   }
 
+  function key0(L) { return L.key; }
+  // Ⓕ: 소매산 길이 = 턱을 접은(봉제 후) 길이(designSleeveF.capLengthsOf, 김님 ③). 분할 = SP(가운데 띠 고정). 호 중점용 primitive 는 재단선 cubic.
+  function primF(g) {
+    var SF = window.designSleeveF; if (!SF) return null;
+    var lens = SF.capLengthsOf(g); if (!lens) return null;
+    var capS = g.outline.filter(function (s) { return s.role === "cap" && s.kind === "path"; })[0], cs = [], cur = capS.commands[0].points[0];
+    capS.commands.slice(1).forEach(function (c) { cs.push({ kind: "cubic", from: cur, c1: c.points[0], c2: c.points[1], to: c.points[2] }); cur = c.points[2]; });
+    return { backPrimitives: cs.slice(0, lens.splitIndex), frontPrimitives: cs.slice(lens.splitIndex), splitPoint: lens.split, lengths: lens.sewn, cutLengths: lens.cut };
+  }
+
   function buildModel(project) {
     var L = lineOf(project); if (!L) return null;
     var w = project.working, g = w.geometry && w.geometry.sleeve, st = L.st, m = st && st.meta;
     var DS = window.designSleeve, BC = window.bodiceCheckpoint;
     if (!g || !Array.isArray(g.outline) || !m || st.blocked || !DS || !BC) return null;   // 차단 중에는 낡은 형상에 설명을 붙이지 않는다
-    var bodice = BC.latest(project), prim = DS.capPrimitives(g);
+    var bodice = BC.latest(project), prim = key0(L) === "F" ? primF(g) : DS.capPrimitives(g);
     if (!prim || !bodice || !bodice.armholeLengths) return null;
     var AH = bodice.armholeLengths, key = L.key, hemY = m.sleeveLengthCm;
     if (!num(hemY)) return null;
@@ -87,9 +98,10 @@
     // 소매산 길이·이세(geometry 실측) — SP 위쪽 두 블록 + 호 중점에서 리더선
     var backMid = arcMid(prim.backPrimitives), frontMid = arcMid(prim.frontPrimitives);
     var eb = prim.lengths.back - AH.back, ef = prim.lengths.front - AH.front;
-    add("cap-back-1", sp, -12, -34, "end", "뒤 소매산 " + f2(prim.lengths.back), "label", "cap-back");
+    var capWord = key === "F" ? "소매산(턱 접음) " : "소매산 ";
+    add("cap-back-1", sp, -12, -34, "end", "뒤 " + capWord + f2(prim.lengths.back), "label", "cap-back");
     add("cap-back-2", sp, -12, -22, "end", "AH " + f2(AH.back) + " · 이세 " + sg(eb), "ref", "cap-back");
-    add("cap-front-1", sp, 12, -34, "start", "앞 소매산 " + f2(prim.lengths.front), "label", "cap-front");
+    add("cap-front-1", sp, 12, -34, "start", "앞 " + capWord + f2(prim.lengths.front), "label", "cap-front");
     add("cap-front-2", sp, 12, -22, "start", "AH " + f2(AH.front) + " · 이세 " + sg(ef), "ref", "cap-front");
     leaders.push({ id: "cap-back", from: P(backMid), toAt: sp, toPx: { dx: -14, dy: -18 } });
     leaders.push({ id: "cap-front", from: P(frontMid), toAt: sp, toPx: { dx: 14, dy: -18 } });
@@ -120,6 +132,27 @@
         add("close-" + s, { x: c.axisX, y: ay }, isB ? -5 : 5, 20, isB ? "end" : "start", "맞댐 " + f2(c.closeAtHemCm), "ref", "axis-" + s);
       });
       rows([title, "소맷부리 목표 W×3/4 " + f2(m.hemTargetCm) + " · 실측 " + f2(m.hemCm) + " · 맞댐 ● " + f2(m.closeTotalCm) + " = " + f2(m.closePerCutCm) + " × 2곳", lengthsLine, "점선 = 설명용(맞댐 전 절개축·절개선, 재단선 아님) · 남색 실선 = 재단 외곽"]);
+    } else if (key === "F") {
+      var tf = m.tuck, TK = tf.tucks, hpF = m.hem.points;
+      title = "소매 Ⓕ · 턱 소매(평행 절개 4개 · 소맷부리 기준점, P.43)";
+      dim("hem", hpF[5], hpF[0], "h", hemY + 2.2, "소맷부리(곡선) " + f2(m.hemCm) + " · Ⓐ 대비 " + (m.hem.diffFromSleeveACm >= 0 ? "+" : "") + m.hem.diffFromSleeveACm.toFixed(4), { dx: 0, dy: 11 }, "middle", "dim");
+      ["back-outer", "back-inner", "front-inner", "front-outer"].forEach(function (id) {
+        var t = TK[id], isB = id.indexOf("back") === 0;
+        zones.push({ id: "tuck-" + id, pts: [P(t.pivot), P(t.place), P(t.fold)], cls: "zone" });
+        marks.push({ id: "pivot-" + id, at: P(t.pivot), cls: "notch" });
+        // 턱 표시(책 기호): 쐐기 입구 아래 사선 두 줄 — 높은 쪽 = 접는 선(중심 쪽, 위층), 낮은 쪽 = 맞출 선(바깥). 박기 끝 아님(미확정).
+        var along = function (from, d) { var L0 = dist(from, t.pivot); return { x: from.x + (t.pivot.x - from.x) * d / L0, y: from.y + (t.pivot.y - from.y) * d / L0 }; };
+        [0.9, 1.5].forEach(function (d, i) { refs.push({ id: "tuck-mark-" + id + "-" + i, from: along(t.fold, d), to: along(t.place, d + 0.6), cls: "tick" }); });
+        add("tuck-" + id, t.mid, isB ? -3 : 3, -10, isB ? "end" : "start", "턱 " + f2(t.openedCm), "label", "tuck-" + id);
+      });
+      add("pivot-note", { x: 0, y: hemY }, 0, -6, "middle", "기준점 = 절개선 소맷부리 끝(소맷부리는 벌어지지 않음)", "ref", "pivot-note");
+      add("tuck-note", { x: 0, y: (m.sp.y + hemY) / 2 }, 0, 0, "middle", "음영 = 턱 분량(재단 패턴에 포함) · 사선 = 턱 표시", "ref", "open-note");
+      var lc = prim.cutLengths;
+      rows([title, "턱 각 " + f2(tf.perTuckCm) + " × 4 = " + f2(tf.totalCm) + " · 절개선 중심 ±1·±3cm · 가운데 띠 고정",
+        "턱 방향: 바깥쪽으로 접음 · 소매 중심 쪽 천이 위(김님) · 박기 끝 미확정",
+        "소매폭 " + f2(m.widthCm) + " → " + f2(m.widthAfterCm) + " · 소맷부리(자연 곡선) " + f2(m.hemCm) + " · 소매산 높이 그대로 · 옆선 앞 " + f2(m.seams.frontCm) + " / 뒤 " + f2(m.seams.backCm),
+        lengthsLine + " (턱 접은 길이)", "재단선 소매산(펼침) 총 " + f2(lc.total) + " · 쐐기 위 산 모양 = 턱 접은 상태 소매산을 펼친 선",
+        "점선·음영·사선 = 설명용(재단선 아님) · 남색 실선 = 재단 외곽"]);
     } else if (key === "E") {
       var fe = m.flare, he = m.hemPoints;
       title = "소매 Ⓔ · 플레어(절개 3개 잘라서 벌림, P.42)";
@@ -212,7 +245,7 @@
   function textW(t, f) { var w = 0; for (var i = 0; i < t.length; i++) w += (t.charCodeAt(i) > 255 ? 1.0 : 0.58) * f; return w; }
   function boxOf(x, y, anchor, text, f) { var w = textW(text, f), x0 = anchor === "end" ? x - w : anchor === "middle" ? x - w / 2 : x; return { x0: x0, x1: x0 + w, y0: y - f * 0.85, y1: y + f * 0.2 }; }
   function hit(a, b) { return a.x0 < b.x1 - 0.5 && b.x0 < a.x1 - 0.5 && a.y0 < b.y1 - 0.5 && b.y0 < a.y1 - 0.5; }
-  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, ext: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "axis-lower": 5, "open-note": 6, "open-back": 0, "open-front": 0, "open-center": 0, "pivot-sp": 4, "back-line": 6, "front-line": 6 };
+  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, ext: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "axis-lower": 5, "open-note": 6, "open-back": 0, "open-front": 0, "open-center": 0, "pivot-sp": 4, "tuck-back-outer": 1, "tuck-back-inner": 1, "tuck-front-inner": 1, "tuck-front-outer": 1, "pivot-note": 6, "back-line": 6, "front-line": 6 };
   var NUM = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"];
 
   function layout(model, scale) {

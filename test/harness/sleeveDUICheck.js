@@ -131,7 +131,7 @@ let RES = null;
   const pos = f => html.indexOf('src="js/' + f);
   ok(pos("sleeveCApply.js") > 0 && pos("designSleeveD.js") > pos("sleeveCApply.js") && pos("sleeveDApply.js") > pos("designSleeveD.js") && pos("ui.js") > pos("sleeveDApply.js"), "7: 스크립트 등록·순서(Ⓒ → 엔진 Ⓓ → 연결 Ⓓ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(["designSleeveD.js", "sleeveDApply.js"].every(f => ver(f) === "2026100903") && ["sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js"].every(f => ver(f) === "2026101001"), "7: 캐시 버전(Ⓓ 2026100903 · 공용 2026101001)");
+  ok(["designSleeveD.js", "sleeveDApply.js"].every(f => ver(f) === "2026100903") && ["sleevePresets.js", "sleeveCheckpoint.js", "ui.js"].every(f => ver(f) === "2026101002") && ver("sleeveAnnotation.js") === "2026101003", "7: 캐시 버전(Ⓓ 2026100903 · 공용 2026101002/3)");
   ok(/function sleeveDOn\(project\)/.test(ui) && /keep !== "D" && window\.sleeveDApply/.test(ui) && /if \(sleeveDOn\(project\)\) \{ window\.sleeveDApply\.rederive\(project\)/.test(ui) && /if \(isD\) \{/.test(ui), "7: ui — 라인 슬롯·배타·재제도 훅·라인 적용 분기");
 }
 

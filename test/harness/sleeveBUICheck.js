@@ -51,7 +51,7 @@ const segRoles = (g) => g.outline.map(s => s.role || s.edge || s.kind);
 {
   const fams = SP.families();
   const avail = fams.filter(f => f.availability === "available");
-  ok(avail.map(f => f.id).join() === "straight-sleeve,tight-sleeve,flare-sleeve", "1: 실행 가능 = 스트레이트 Ⓐ + 타이트 Ⓑ·Ⓒ + 플레어 Ⓓ");
+  ok(avail.map(f => f.id).join() === "straight-sleeve,tight-sleeve,flare-sleeve,tuck-sleeve", "1: 실행 가능 = 스트레이트 Ⓐ + 타이트 Ⓑ·Ⓒ + 플레어 Ⓓ·Ⓔ + 턱 Ⓕ");
   const t = SP.family("tight-sleeve");
   ok(t.variants.length === 2 && t.variants[0].presetId === "bunka-sleeve-B" && t.variants[0].symbol === "B" && t.variants[0].page === 41 && t.variants[1].presetId === "bunka-sleeve-C" && t.variants[1].symbol === "C", "1: 타이트 소매 = Ⓑ(P.41) + Ⓒ(뒤 소맷부리 다트, sleeveCUICheck 가 전담)");
   const rec = SP.get("bunka-sleeve-B");
@@ -62,7 +62,7 @@ const segRoles = (g) => g.outline.map(s => s.role || s.edge || s.kind);
   fams.filter(f => f.availability !== "available").forEach(f => {
     ok(SP.resolve(f.id, f.variants[0].id).reason === "sleeve-preset-unavailable" && f.variants.every(v => typeof v.blockedBy === "string" && v.blockedBy.length > 10), "1: 보류 슬롯 유지·blockedBy · " + f.id);
   });
-  ok(fams.filter(f => f.availability !== "available").length === 7, "1: 나머지 7종 보류");
+  ok(fams.filter(f => f.availability !== "available").length === 6, "1: 나머지 6종 보류");
   ok(SP.get("bunka-bodice-B") === null && BP.get("bunka-sleeve-B") === null, "1: 소매/몸판 id 네임스페이스 분리");
   const t2 = SP.displayTitle("tight-sleeve", "bunka-sleeve-B");
   ok(t2.symbol === "B" && t2.page === 41 && t2.familyLabel === "타이트 소매", "1: displayTitle");
@@ -208,7 +208,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/designSleeveB.js", "js/sleeveBApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f + "?v="));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(Ⓐ 모듈 → 엔진 Ⓑ → 연결 Ⓑ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(["designSleeveB.js", "sleeveBApply.js"].every(f => ver(f) === "2026100601") && ver("ui.js") === "2026101001" && ver("sleevePresets.js") === "2026101001" && ver("sleeveCheckpoint.js") === "2026101001", "7: 캐시 버전 갱신(Ⓑ 파일 2026100601 · Ⓒ 연결로 변경된 공용 파일 2026100701)");
+  ok(["designSleeveB.js", "sleeveBApply.js"].every(f => ver(f) === "2026100601") && ver("ui.js") === "2026101002" && ver("sleevePresets.js") === "2026101002" && ver("sleeveCheckpoint.js") === "2026101002", "7: 캐시 버전 갱신(Ⓑ 파일 2026100601 · Ⓕ 연결로 변경된 공용 파일 2026101002)");
   ok(/id="rowSleevePalm"[^>]*hidden/.test(html) && /id="inpSleevePalm"[^>]*type="number"/.test(html) && ui.indexOf('"inpSleevePalm"') > 0 && ui.indexOf('"rowSleevePalm"') > 0, "7: 손바닥 둘레 입력(DOM id·기본 숨김·ui.js 사용)");
   ok(html.indexOf('id="rowSleevePalm"') > html.indexOf('id="inpSleeveLength"') && html.indexOf('id="rowSleevePalm"') < html.indexOf('id="inpSleeveCuff"'), "7: 손바닥 입력은 소매길이 다음 줄");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo", "btnApplySleeve", "btnResetSleeve", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "designSleeveStatusNote"]
