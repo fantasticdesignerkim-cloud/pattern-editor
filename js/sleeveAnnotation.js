@@ -26,6 +26,7 @@
 
   function lineOf(project) {
     var w = project && project.working; if (!w) return null;
+    if (w.sleeveE) return { key: "E", st: w.sleeveE };
     if (w.sleeveD) return { key: "D", st: w.sleeveD };
     if (w.sleeveC) return { key: "C", st: w.sleeveC };
     if (w.sleeveB) return { key: "B", st: w.sleeveB };
@@ -119,6 +120,26 @@
         add("close-" + s, { x: c.axisX, y: ay }, isB ? -5 : 5, 20, isB ? "end" : "start", "맞댐 " + f2(c.closeAtHemCm), "ref", "axis-" + s);
       });
       rows([title, "소맷부리 목표 W×3/4 " + f2(m.hemTargetCm) + " · 실측 " + f2(m.hemCm) + " · 맞댐 ● " + f2(m.closeTotalCm) + " = " + f2(m.closePerCutCm) + " × 2곳", lengthsLine, "점선 = 설명용(맞댐 전 절개축·절개선, 재단선 아님) · 남색 실선 = 재단 외곽"]);
+    } else if (key === "E") {
+      var fe = m.flare, he = m.hemPoints;
+      title = "소매 Ⓔ · 플레어(절개 3개 잘라서 벌림, P.42)";
+      dim("open-back", he.backInner, he.backCenterOuter, "h", hemY + 2.2, "∅/3 " + f2(fe.openedCm.back), { dx: 0, dy: 11 }, "middle", "dim");
+      dim("open-center", he.backCenterMid, he.frontCenterMid, "h", hemY + 2.2, "∅/3 " + f2(fe.openedCm.center), { dx: 0, dy: 11 }, "middle", "dim");
+      dim("open-front", he.frontCenterOuter, he.frontInner, "h", hemY + 2.2, "∅/3 " + f2(fe.openedCm.front), { dx: 0, dy: 11 }, "middle", "dim");
+      zones.push({ id: "open-back", pts: [P(m.pivots.back), P(he.backCenterOuter), P(he.backInner)], cls: "zone" });
+      zones.push({ id: "open-center", pts: [P(m.pivots.sp), P(he.frontCenterMid), P(he.backCenterMid)], cls: "zone" });
+      zones.push({ id: "open-front", pts: [P(m.pivots.front), P(he.frontInner), P(he.frontCenterOuter)], cls: "zone" });
+      marks.push({ id: "pivot-sp", at: P(m.pivots.sp), cls: "notch" });
+      add("pivot-sp", m.pivots.sp, 0, -8, "middle", "SP 기준(가운데 대칭 ±" + f2(m.rotationDeg.center) + "°)", "ref", "pivot-sp");
+      [["back", m.pivots.back, -5, "end"], ["front", m.pivots.front, 5, "start"]].forEach(function (a) {
+        marks.push({ id: "pivot-" + a[0], at: P(a[1]), cls: "notch" });
+        add("pivot-" + a[0], a[1], a[2], 14, a[3], "기준점(" + (a[0] === "back" ? "뒤" : "앞") + ") +" + f2(m.rotationDeg[a[0] + "OuterRelative"]) + "°", "ref", "axis-" + a[0]);
+      });
+      add("open-note", { x: 0, y: (m.pivots.back.y + hemY) / 2 }, 0, 0, "middle", "벌린 틈(음영) = 잘라서 벌린 플레어", "ref", "open-note");
+      rows([title, "플레어 ∅ = 소매폭 " + f2(m.widthCm) + " × 1 = " + f2(fe.totalCm) + " · 틈마다 ∅/3 " + f2(fe.perCutCm) + " (가운데 SP 대칭 → 바깥)",
+        "소맷부리(곡선, 8 끝점 통과) " + f2(m.hemCm) + " · 벌리기 전 " + f2(m.hemBeforeCm) + " · 옆선 앞 " + f2(m.seams.frontCm) + " / 뒤 " + f2(m.seams.backCm),
+        lengthsLine, "소매산 꺾임 3곳 재제도(잠정 구간 뒤 " + f2(m.redraw.ellChosenCm.Pb) + " · SP " + f2(m.redraw.ellChosenCm.SP) + " · 앞 " + f2(m.redraw.ellChosenCm.Pf) + "cm)",
+        "점선·음영 = 설명용(재단선 아님, 벌린 틈은 처리 과정) · 남색 실선 = 재단 외곽"]);
     } else if (key === "D") {
       var fl = m.flare, hp = m.hemPoints;
       title = "소매 Ⓓ · 플레어(절개 2개 잘라서 벌림, P.42)";
@@ -191,7 +212,7 @@
   function textW(t, f) { var w = 0; for (var i = 0; i < t.length; i++) w += (t.charCodeAt(i) > 255 ? 1.0 : 0.58) * f; return w; }
   function boxOf(x, y, anchor, text, f) { var w = textW(text, f), x0 = anchor === "end" ? x - w : anchor === "middle" ? x - w / 2 : x; return { x0: x0, x1: x0 + w, y0: y - f * 0.85, y1: y + f * 0.2 }; }
   function hit(a, b) { return a.x0 < b.x1 - 0.5 && b.x0 < a.x1 - 0.5 && a.y0 < b.y1 - 0.5 && b.y0 < a.y1 - 0.5; }
-  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, ext: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "axis-lower": 5, "open-note": 6, "open-back": 0, "open-front": 0, "back-line": 6, "front-line": 6 };
+  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, ext: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "axis-lower": 5, "open-note": 6, "open-back": 0, "open-front": 0, "open-center": 0, "pivot-sp": 4, "back-line": 6, "front-line": 6 };
   var NUM = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"];
 
   function layout(model, scale) {

@@ -44,10 +44,10 @@ const T = (m, id) => { const l = m.lines.find(x => x.id === id) || m.dims.find(x
   const f = SP.family("flare-sleeve");
   ok(f.availability === "available" && f.variants.map(v => v.id).join() === "bunka-sleeve-D,bunka-sleeve-E", "1: 플레어 소매 = Ⓓ(실행) + Ⓔ");
   ok(f.variants[0].availability === "available" && f.variants[0].presetId === "bunka-sleeve-D" && f.variants[0].page === 42, "1: Ⓓ 실행 가능 · P.42");
-  ok(f.variants[1].availability === "pending-page" && f.variants[1].presetId === null && typeof f.variants[1].blockedBy === "string" && f.variants[1].blockedBy.length > 10, "1: Ⓔ 보류 · blockedBy 보유");
+  ok(f.variants[1].availability === "available" && f.variants[1].presetId === "bunka-sleeve-E", "1: Ⓔ 실행 가능(sleeveEUICheck 전담)");
   const rec = SP.get("bunka-sleeve-D");
   ok(rec && rec.method === "flare-slash-spread-from-sleeve-A" && rec.methodPage === 42 && rec.inputs.length === 1 && rec.inputs[0].key === "sleeveLengthCm" && Object.isFrozen(rec), "1: 레코드 = 제도 방식·입력 소매길이만");
-  ok(SP.resolve("flare-sleeve", "bunka-sleeve-D").ok && !SP.resolve("flare-sleeve", "bunka-sleeve-E").ok, "1: resolve Ⓓ 성공 · Ⓔ 불가");
+  ok(SP.resolve("flare-sleeve", "bunka-sleeve-D").ok, "1: resolve Ⓓ 성공");
 }
 
 // ── 2. 적용(읽기 전용·불변) ──
@@ -131,7 +131,7 @@ let RES = null;
   const pos = f => html.indexOf('src="js/' + f);
   ok(pos("sleeveCApply.js") > 0 && pos("designSleeveD.js") > pos("sleeveCApply.js") && pos("sleeveDApply.js") > pos("designSleeveD.js") && pos("ui.js") > pos("sleeveDApply.js"), "7: 스크립트 등록·순서(Ⓒ → 엔진 Ⓓ → 연결 Ⓓ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(["designSleeveD.js", "sleeveDApply.js", "sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js"].every(f => ver(f) === "2026100903"), "7: 캐시 버전(2026100903)");
+  ok(["designSleeveD.js", "sleeveDApply.js"].every(f => ver(f) === "2026100903") && ["sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js"].every(f => ver(f) === "2026101001"), "7: 캐시 버전(Ⓓ 2026100903 · 공용 2026101001)");
   ok(/function sleeveDOn\(project\)/.test(ui) && /keep !== "D" && window\.sleeveDApply/.test(ui) && /if \(sleeveDOn\(project\)\) \{ window\.sleeveDApply\.rederive\(project\)/.test(ui) && /if \(isD\) \{/.test(ui), "7: ui — 라인 슬롯·배타·재제도 훅·라인 적용 분기");
 }
 

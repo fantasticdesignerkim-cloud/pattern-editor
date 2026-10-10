@@ -208,7 +208,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/designSleeveB.js", "js/sleeveBApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f + "?v="));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(Ⓐ 모듈 → 엔진 Ⓑ → 연결 Ⓑ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(["designSleeveB.js", "sleeveBApply.js"].every(f => ver(f) === "2026100601") && ver("ui.js") === "2026100903" && ver("sleevePresets.js") === "2026100903" && ver("sleeveCheckpoint.js") === "2026100903", "7: 캐시 버전 갱신(Ⓑ 파일 2026100601 · Ⓒ 연결로 변경된 공용 파일 2026100701)");
+  ok(["designSleeveB.js", "sleeveBApply.js"].every(f => ver(f) === "2026100601") && ver("ui.js") === "2026101001" && ver("sleevePresets.js") === "2026101001" && ver("sleeveCheckpoint.js") === "2026101001", "7: 캐시 버전 갱신(Ⓑ 파일 2026100601 · Ⓒ 연결로 변경된 공용 파일 2026100701)");
   ok(/id="rowSleevePalm"[^>]*hidden/.test(html) && /id="inpSleevePalm"[^>]*type="number"/.test(html) && ui.indexOf('"inpSleevePalm"') > 0 && ui.indexOf('"rowSleevePalm"') > 0, "7: 손바닥 둘레 입력(DOM id·기본 숨김·ui.js 사용)");
   ok(html.indexOf('id="rowSleevePalm"') > html.indexOf('id="inpSleeveLength"') && html.indexOf('id="rowSleevePalm"') < html.indexOf('id="inpSleeveCuff"'), "7: 손바닥 입력은 소매길이 다음 줄");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo", "btnApplySleeve", "btnResetSleeve", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "designSleeveStatusNote"]
