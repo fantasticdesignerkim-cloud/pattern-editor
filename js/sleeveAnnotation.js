@@ -26,6 +26,7 @@
 
   function lineOf(project) {
     var w = project && project.working; if (!w) return null;
+    if (w.sleeveG) return { key: "G", st: w.sleeveG };
     if (w.sleeveF) return { key: "F", st: w.sleeveF };
     if (w.sleeveE) return { key: "E", st: w.sleeveE };
     if (w.sleeveD) return { key: "D", st: w.sleeveD };
@@ -57,8 +58,8 @@
 
   function key0(L) { return L.key; }
   // Ⓕ: 소매산 길이 = 턱을 접은(봉제 후) 길이(designSleeveF.capLengthsOf, 김님 ③). 분할 = SP(가운데 띠 고정). 호 중점용 primitive 는 재단선 cubic.
-  function primF(g) {
-    var SF = window.designSleeveF; if (!SF) return null;
+  function primF(g, SF) {   // Ⓕ·Ⓖ 공통(모듈의 capLengthsOf)
+    if (!SF) return null;
     var lens = SF.capLengthsOf(g); if (!lens) return null;
     var capS = g.outline.filter(function (s) { return s.role === "cap" && s.kind === "path"; })[0], cs = [], cur = capS.commands[0].points[0];
     capS.commands.slice(1).forEach(function (c) { cs.push({ kind: "cubic", from: cur, c1: c.points[0], c2: c.points[1], to: c.points[2] }); cur = c.points[2]; });
@@ -70,7 +71,7 @@
     var w = project.working, g = w.geometry && w.geometry.sleeve, st = L.st, m = st && st.meta;
     var DS = window.designSleeve, BC = window.bodiceCheckpoint;
     if (!g || !Array.isArray(g.outline) || !m || st.blocked || !DS || !BC) return null;   // 차단 중에는 낡은 형상에 설명을 붙이지 않는다
-    var bodice = BC.latest(project), prim = key0(L) === "F" ? primF(g) : DS.capPrimitives(g);
+    var bodice = BC.latest(project), prim = key0(L) === "F" ? primF(g, window.designSleeveF) : key0(L) === "G" ? primF(g, window.designSleeveG) : DS.capPrimitives(g);
     if (!prim || !bodice || !bodice.armholeLengths) return null;
     var AH = bodice.armholeLengths, key = L.key, hemY = m.sleeveLengthCm;
     if (!num(hemY)) return null;
@@ -94,11 +95,12 @@
     add("bicep", { x: 0, y: bicepY }, 0, -5, "middle", (key === "A" ? "위팔 기준선(소매폭) " : "출발 Ⓐ 위팔선(참고) ") + f2(bicepW) + " · 소매산 높이 " + f2(capH), "ref");
     // 소매길이: 오른쪽 치수선
     var dimX = 0;   // 소매 중심선 위(오른쪽 여백을 쓰지 않는다 — 소매는 맨 오른쪽 조각이라 fit 에서 잘린다)
-    dim("len", { x: 0, y: m.sp.y }, { x: 0, y: hemY }, "v", dimX, "소매길이 " + f2(hemY), { dx: -5, dy: 3 }, "end", "dim");
+    // Ⓖ: O(중심선 × 위팔선) 고정·★ 위로 → 펼친 중심 길이 SP′→소맷부리 = 입력 소매길이 + ★(김님 2026-10-11: 길이 보정 안 함). 입력값과 구분해 표시.
+    dim("len", { x: 0, y: m.sp.y }, { x: 0, y: hemY }, "v", dimX, key === "G" ? "SP′→소맷부리 " + f2(hemY - m.sp.y) + " (입력 소매길이 " + f2(hemY) + " + ★)" : "소매길이 " + f2(hemY), { dx: -5, dy: 3 }, "end", "dim");
     // 소매산 길이·이세(geometry 실측) — SP 위쪽 두 블록 + 호 중점에서 리더선
     var backMid = arcMid(prim.backPrimitives), frontMid = arcMid(prim.frontPrimitives);
     var eb = prim.lengths.back - AH.back, ef = prim.lengths.front - AH.front;
-    var capWord = key === "F" ? "소매산(턱 접음) " : "소매산 ";
+    var capWord = (key === "F" || key === "G") ? "소매산(턱 접음) " : "소매산 ";
     add("cap-back-1", sp, -12, -34, "end", "뒤 " + capWord + f2(prim.lengths.back), "label", "cap-back");
     add("cap-back-2", sp, -12, -22, "end", "AH " + f2(AH.back) + " · 이세 " + sg(eb), "ref", "cap-back");
     add("cap-front-1", sp, 12, -34, "start", "앞 " + capWord + f2(prim.lengths.front), "label", "cap-front");
@@ -132,6 +134,35 @@
         add("close-" + s, { x: c.axisX, y: ay }, isB ? -5 : 5, 20, isB ? "end" : "start", "맞댐 " + f2(c.closeAtHemCm), "ref", "axis-" + s);
       });
       rows([title, "소맷부리 목표 W×3/4 " + f2(m.hemTargetCm) + " · 실측 " + f2(m.hemCm) + " · 맞댐 ● " + f2(m.closeTotalCm) + " = " + f2(m.closePerCutCm) + " × 2곳", lengthsLine, "점선 = 설명용(맞댐 전 절개축·절개선, 재단선 아님) · 남색 실선 = 재단 외곽"]);
+    } else if (key === "G") {
+      var tg = m.tuck, TG = tg.tucks, SB = m.sides.back, SF2 = m.sides.front;
+      title = "소매 Ⓖ · 턱 소매(소매산 높이 2등분 위 a·b 절개, P.43)";
+      dim("star", m.star.from, m.star.to, "v", m.star.from.x, "★ " + f2(m.star.cm), { dx: 5, dy: 3 }, "start", "dim");
+      ["back", "front"].forEach(function (sid) {
+        var sd = m.sides[sid], isB = sid === "back";
+        zones.push({ id: "fill-" + sid, pts: m.fill[sid].pts.map(P), cls: "zone" });
+        marks.push({ id: "star-" + sid, at: P(sd.star), cls: "notch" });
+        add("star-" + sid, sd.star, isB ? -6 : 6, 12, isB ? "end" : "start", "☆ 기준점(바깥 회전 " + f2(Math.abs(sd.betaDeg)) + "°)", "ref", "star-" + sid);
+        ["a", "b"].forEach(function (ln) {
+          var t = TG[sid + "-" + ln];
+          var along = function (from, d) { var L0 = dist(from, t.apex); return { x: from.x + (t.apex.x - from.x) * d / L0, y: from.y + (t.apex.y - from.y) * d / L0 }; };
+          [0.9, 1.5].forEach(function (d, i) { refs.push({ id: "tuck-mark-" + sid + ln + "-" + i, from: along(t.fold, d), to: along(t.place, d + 0.6), cls: "tick" }); });
+          add("tuck-" + sid + "-" + ln, t.mid, isB ? -3 : 3, -10, isB ? "end" : "start", ln + " 턱 " + f2(t.openedCm), "label", "tuck-" + sid + "-" + ln);
+        });
+        var ue = sd.underarmExtension;
+        refs.push({ id: "ext-" + sid, from: P(ue.from), to: P(ue.to), cls: "tick" });
+        marks.push({ id: "ext-" + sid, at: P(ue.to), cls: "notch" });
+        add("ext-" + sid, ue.to, isB ? -6 : 6, -8, isB ? "end" : "start", "진동밑 연장 " + f2(ue.cm) + "(시안)", "label", "ext-" + sid);
+        add("step-" + sid, TG[sid + "-b"].fold, isB ? -6 : 6, 14, isB ? "end" : "start", "b 접을 때 단차 " + f2(Math.abs(sd.bLegs.stepCm)) + " → 재제도로 정리", "ref", "step-" + sid);
+      });
+      add("fill-note", { x: 0, y: m.halfLineY }, 0, 14, "middle", "음영 = 벌어진 틈(종이 덧댐) · 사선 = 턱 표시", "ref", "open-note");
+      var lcg = prim.cutLengths;
+      rows([title, "턱 각 " + f2(tg.perTuckCm) + " × 4 · ★ 가운데 상승 " + f2(m.star.cm) + " (독립 설정값) · 2등분 선 위만 절개",
+        "소매산 높이 " + f2(m.capHeightBeforeCm) + " → " + f2(m.capHeightAfterCm) + " · 진동밑~b 위끝 턱 접은 상태 재제도 · 소맷부리 " + f2(m.hemCm) + "(그대로)",
+        "진동밑 연장(시안) 뒤 " + f2(SB.underarmExtension.cm) + " · 앞 " + f2(SF2.underarmExtension.cm) + " → 소매폭 " + f2(m.widthCm) + " → " + f2(m.widthAfterCm) + " · 옆선 뒤 " + f2(m.seams.backCm) + " / 앞 " + f2(m.seams.frontCm),
+        "턱 방향: 바깥쪽으로 접음 · 소매 중심 쪽 천이 위 · 박기 끝 미확정",
+        lengthsLine + " (턱 접은 길이)", "재단선 소매산(펼침) 총 " + f2(lcg.total) + " · Ⓐ 소매산 " + f2(m.capLengthsA.total),
+        "점선·음영·사선 = 설명용(재단선 아님) · 남색 실선 = 재단 외곽"]);
     } else if (key === "F") {
       var tf = m.tuck, TK = tf.tucks, hpF = m.hem.points;
       title = "소매 Ⓕ · 턱 소매(평행 절개 4개 · 소맷부리 기준점, P.43)";
@@ -245,7 +276,7 @@
   function textW(t, f) { var w = 0; for (var i = 0; i < t.length; i++) w += (t.charCodeAt(i) > 255 ? 1.0 : 0.58) * f; return w; }
   function boxOf(x, y, anchor, text, f) { var w = textW(text, f), x0 = anchor === "end" ? x - w : anchor === "middle" ? x - w / 2 : x; return { x0: x0, x1: x0 + w, y0: y - f * 0.85, y1: y + f * 0.2 }; }
   function hit(a, b) { return a.x0 < b.x1 - 0.5 && b.x0 < a.x1 - 0.5 && a.y0 < b.y1 - 0.5 && b.y0 < a.y1 - 0.5; }
-  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, ext: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "axis-lower": 5, "open-note": 6, "open-back": 0, "open-front": 0, "open-center": 0, "pivot-sp": 4, "tuck-back-outer": 1, "tuck-back-inner": 1, "tuck-front-inner": 1, "tuck-front-outer": 1, "pivot-note": 6, "back-line": 6, "front-line": 6 };
+  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, ext: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "axis-lower": 5, "open-note": 6, "open-back": 0, "open-front": 0, "open-center": 0, "pivot-sp": 4, "tuck-back-outer": 1, "tuck-back-inner": 1, "tuck-front-inner": 1, "tuck-front-outer": 1, "pivot-note": 6, star: 0, "tuck-back-a": 1, "tuck-back-b": 1, "tuck-front-a": 1, "tuck-front-b": 1, "star-back": 3, "star-front": 3, "step-back": 4, "step-front": 4, "ext-back": 1, "ext-front": 1, "back-line": 6, "front-line": 6 };
   var NUM = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"];
 
   function layout(model, scale) {
