@@ -26,6 +26,7 @@
 
   function lineOf(project) {
     var w = project && project.working; if (!w) return null;
+    if (w.sleeveI) return { key: "I", st: w.sleeveI };
     if (w.sleeveH) return { key: "H", st: w.sleeveH };
     if (w.sleeveG) return { key: "G", st: w.sleeveG };
     if (w.sleeveF) return { key: "F", st: w.sleeveF };
@@ -171,6 +172,31 @@
         lengthsLine + " (소매산 = Ⓐ — 소맷부리 개더와 별개)",
         (paperZones.length ? "녹색 = 원래 종이(아래변 = 원래 밑단 — 남색선 밖 녹색 = 파낸 곳) · 음영 = 벌어진 틈(덧댄 종이) · " : "점선·음영 = 설명용(재단선 아님) · ") + "남색 실선 = 최종 재단선"]);
       zones = paperZones.concat(zones);   // 종이 조각을 먼저(아래) 그리고 틈 음영을 그 위에
+    } else if (key === "I") {
+      var fi = m.flare, hi2 = m.hem, he2 = m.hemPoints, consI = g.construction || [], cR = function (r) { return consI.filter(function (c) { return c.role === r; })[0]; };
+      title = "소매 Ⓘ · 퍼프(소매산 기준점 절개 3개 · 소맷부리 개더, P.44) — 화면 검토용 시안";
+      // 원래 종이 4조각(엔진 meta.rigid.pieces 그대로 — 표시 전용) · 틈 3개(덧댄 종이) · 남색 = 최종 재단선
+      var showPcI = !opts || opts.pieces !== false, paperI = [];
+      if (showPcI && m.rigid && m.rigid.pieces) ["backOuter", "backCenter", "frontCenter", "frontOuter"].forEach(function (k) { paperI.push({ id: "paper-" + k, pts: m.rigid.pieces[k].map(P), cls: "paper" }); });
+      var cb = cR("cut-center-back"), cf = cR("cut-center-front"), ab = cR("cut-axis-back"), eb2 = cR("cut-edge-back"), af = cR("cut-axis-front"), ef2 = cR("cut-edge-front");
+      if (cb && cf) zones.push({ id: "wedge-center", pts: [P(cb.from), P(cb.to), P(cf.to)], cls: "zone" });
+      if (ab && eb2) zones.push({ id: "wedge-back", pts: [P(ab.from), P(ab.to), P(eb2.to)], cls: "zone" });
+      if (af && ef2) zones.push({ id: "wedge-front", pts: [P(af.from), P(af.to), P(ef2.to)], cls: "zone" });
+      dim("open-back", he2.backInner, he2.backCenterOuter, "h", hemY + 2.2, "∅/3 " + f2(fi.openedCm.back), { dx: 0, dy: 11 }, "middle", "dim");
+      dim("open-center", he2.backCenterMid, he2.frontCenterMid, "h", hemY + 2.2, "∅/3 " + f2(fi.openedCm.center), { dx: 0, dy: 11 }, "middle", "dim");
+      dim("open-front", he2.frontCenterOuter, he2.frontInner, "h", hemY + 2.2, "∅/3 " + f2(fi.openedCm.front), { dx: 0, dy: 11 }, "middle", "dim");
+      marks.push({ id: "pivot-sp", at: P(m.pivots.sp), cls: "notch" });
+      add("pivot-sp", m.pivots.sp, 0, -8, "middle", "SP 기준(가운데 대칭 ±" + f2(m.rotationDeg.center) + "°)", "ref", "pivot-sp");
+      [["back", m.pivots.back, -5, "end"], ["front", m.pivots.front, 5, "start"]].forEach(function (a2) {
+        marks.push({ id: "pivot-" + a2[0], at: P(a2[1]), cls: "notch" });
+        add("pivot-" + a2[0], a2[1], a2[2], 14, a2[3], "기준점(" + (a2[0] === "back" ? "뒤" : "앞") + ") +" + f2(m.rotationDeg[a2[0] + "OuterRelative"]) + "°", "ref", "axis-" + a2[0]);
+      });
+      rows([title, "커프스 달림 ● = 손바닥 " + f2(m.cuff.palmCm) + " + 3 = " + f2(m.cuff.lengthCm) + " · 폭 " + f2(m.cuff.widthCm) + " (치수 정보 — 커프스 조각 없음)",
+        "■ = Ⓐ 소맷부리 " + f2(m.widthCm) + " − ● = " + f2(m.formula.square) + " · ∅ = ● − ■ = " + f2(m.formula.spread) + " · 틈마다 " + f2(m.formula.perCut) + " · O 는 중심선 절개로 갈라짐(기준 = SP)",
+        "소맷부리(최종 곡선 실측) " + f2(hi2.lengthCm) + " · 여유 산식 2● " + f2(hi2.formulaHemCm) + " · 개더 " + f2(hi2.gatherCm) + " · truing 파임 최대 " + hi2.fair.maxCutCm.toFixed(2) + " · 덧댐 최대 " + hi2.fair.maxOutwardCm.toFixed(2),
+        lengthsLine + " · 소매산 꺾임 3곳 재제도(잠정 ℓ)",
+        (paperI.length ? "녹색 = 원래 종이 4조각(아래변 = 원래 밑단) · 음영 = 벌어진 틈(덧댄 종이) · " : "점선·음영 = 설명용(재단선 아님) · ") + "남색 실선 = 최종 재단선"]);
+      zones = paperI.concat(zones);
     } else if (key === "G") {
       var tg = m.tuck, TG = tg.tucks, SB = m.sides.back, SF2 = m.sides.front;
       title = "소매 Ⓖ · 턱 소매(소매산 높이 2등분 위 a·b 절개, P.43)";
@@ -377,7 +403,12 @@
   //   EL · 중심 a · 앞뒤 반폭 중점 b · ☆(EL × 옆선) · 벌림 순서를 표시. geometry·계측·hash·완료본·hit 와 무관(소매 피스 그룹의 설명 오버레이로만).
   //   가로 위치는 화면 배율에 따라 완성 Ⓗ 의 설명 글자 오른쪽 끝(px) 밖으로 띄운다(글자·도안 겹침 방지). Ⓗ 가 아니거나 차단 중이면 null.
   var REF_GAP_PX = 28;
-  function REF_ROWS(pr, m) {
+  function REF_ROWS(pr, m, kind) {
+    if (kind === "I") return ["벌리기 전 절개 도안(참고) — 출발 Ⓐ · 현재 입력",
+      "소매길이 " + f2(pr.sleeveLengthCm) + " · 손바닥 " + f2(pr.palmCircumferenceCm),
+      "① 가운데 두 조각을 SP 기준 좌우로 → ② 바깥 두 조각을 함께 움직인 기준점(절개선 × 소매산)에서",
+      "→ 소맷부리에서 틈마다 ∅/3 " + f2(m.formula.perCut) + " · 중심선이 잘려 O 는 갈라짐",
+      "회색 점선 = 참고 도안(재단선 아님) · 완성 Ⓘ 는 왼쪽 남색 실선"];
     return ["벌리기 전 절개 도안(참고) — 출발 Ⓐ · 현재 입력",
       "소매길이 " + f2(pr.sleeveLengthCm) + " · EL " + f2(pr.elbowLengthCm) + " · 손바닥 " + f2(pr.palmCircumferenceCm) + " · ★ " + f2(pr.dropCm),
       "① 가운데 두 조각 ★ " + f2(m.drop.cm) + " 아래로 → ② a 를 중심선 위 기준점에서 벌림(∅/3 " + f2(m.formula.perCut) + ")",
@@ -385,18 +416,18 @@
       "회색 점선 = 참고 도안(재단선 아님) · 완성 Ⓗ 는 왼쪽 남색 실선"];
   }
   function refModel(project, scale, opts) {
-    var w = project && project.working, st = w && w.sleeveH, g = w && w.geometry && w.geometry.sleeve, SAA = window.sleeveAApply;
+    var w = project && project.working, kind = w && w.sleeveI ? "I" : "H", st = w && (w.sleeveI || w.sleeveH), g = w && w.geometry && w.geometry.sleeve, SAA = window.sleeveAApply;
     if (!st || st.blocked || !g || !SAA || !(scale > 0)) return null;
     var pr = st.parameters, m = st.meta, a = SAA.draft(project, pr.sleeveLengthCm);
     if (!a || !a.ok) return null;
     var ag = a.geometry, sp = a.meta.sp, capS = ag.outline[0], cs = [], cur = capS.commands[0].points[0];
     capS.commands.slice(1).forEach(function (c) { cs.push([cur, c.points[0], c.points[1], c.points[2]]); cur = c.points[2]; });
-    var Ub = cs[0][0], Uf = cs[cs.length - 1][3], hemY = a.meta.sleeveLengthCm, yEl = sp.y + pr.elbowLengthCm;
+    var Ub = cs[0][0], Uf = cs[cs.length - 1][3], hemY = a.meta.sleeveLengthCm, yEl = kind === "H" ? sp.y + pr.elbowLengthCm : null;
     // 완성 Ⓗ 의 오른쪽 끝(형상 + 설명 글자 px)
     var hx = []; g.outline.forEach(function (sg) { ctrl(sg).forEach(function (q) { hx.push(q.x); }); });
     var rightAbsPx = Math.max.apply(null, hx) * scale;   // 완성 Ⓗ 오른쪽 끝(화면 px, 소매 좌표 기준)
     // 참고 도안의 세로 띠(설명 블록은 도안 위 — blockAbove): 그 띠와 겹치는 완성 Ⓗ 글자만 비켜 간다(Ⓗ 설명 블록은 Ⓗ 소맷부리 아래라 겹치지 않음)
-    var nRows = REF_ROWS(pr, m).length, bandTop = sp.y * scale - (18 + nRows * 12), bandBot = hemY * scale + 14;
+    var nRows = REF_ROWS(pr, m, kind).length, bandTop = sp.y * scale - (18 + nRows * 12), bandBot = hemY * scale + 14;
     if (!opts || opts.mainVisible !== false) {
       var mm = buildModel(project);
       if (mm) layout(mm, scale).items.forEach(function (it) {
@@ -404,7 +435,7 @@
         if (y + f * 0.2 >= bandTop && y - f * 0.85 <= bandBot) rightAbsPx = Math.max(rightAbsPx, x0 + w);
       });
     }
-    var rowsW = REF_ROWS(pr, m).map(function (t, i) { return textW(t, fsOf(i === 0 ? "title" : "label")); }), halfW = Math.max.apply(null, rowsW) / 2;
+    var rowsW = REF_ROWS(pr, m, kind).map(function (t, i) { return textW(t, fsOf(i === 0 ? "title" : "label")); }), halfW = Math.max.apply(null, rowsW) / 2;
     var cA = (Ub.x + Uf.x) / 2;
     var dx = Math.max((rightAbsPx + REF_GAP_PX) / scale - Ub.x, (rightAbsPx + REF_GAP_PX + halfW) / scale - cA);
     var T = function (p) { return { x: p.x + dx, y: p.y }; };
@@ -414,8 +445,18 @@
     var pts = []; cs.forEach(function (q, i) { for (var k = (i ? 1 : 0); k <= 24; k++) pts.push(cubicAt(q, k / 24)); });
     pts.push({ x: Uf.x, y: hemY }, { x: Ub.x, y: hemY }, cp0(Ub));
     for (var i = 1; i < pts.length; i++) refs.push({ id: "ref-outline-" + i, from: T(pts[i - 1]), to: T(pts[i]), cls: "past" });
-    // EL · a · b (절개선 = 청록 가는 실선) · ☆
     var X0 = sp.x, xb = (Ub.x + X0) / 2, xf = (Uf.x + X0) / 2;
+    if (kind === "I") {   // Ⓘ: 절개 3개(반폭 중점·중심선) — 소맷부리 → 소매산 기준점(위 화살표 = 기준점)
+      var capY = function (x) { var best = pts[0]; pts.forEach(function (q) { if (Math.abs(q.x - x) < Math.abs(best.x - x)) best = q; }); return best.y; };
+      [["back", xb], ["center", X0], ["front", xf]].forEach(function (e) {
+        var top = { x: e[1], y: e[0] === "center" ? sp.y : capY(e[1]) };
+        refs.push({ id: "ref-cut-" + e[0], from: T(top), to: T({ x: e[1], y: hemY }), cls: "tick" });
+        marks.push({ id: "ref-pivot-" + e[0], at: T(top), cls: "notch" });
+        add("ref-cut-" + e[0], { x: e[1], y: (top.y + hemY) / 2 }, e[0] === "back" ? -4 : 4, 0, e[0] === "back" ? "end" : "start", e[0] === "center" ? "중심선" : "절개", "label");
+        add("ref-pivot-" + e[0], top, e[0] === "back" ? -6 : 6, -4, e[0] === "back" ? "end" : "start", e[0] === "center" ? "SP" : "기준점", "label");
+      });
+    } else {
+    // EL · a · b (절개선 = 청록 가는 실선) · ☆
     refs.push({ id: "ref-el", from: T({ x: Ub.x, y: yEl }), to: T({ x: Uf.x, y: yEl }), cls: "tick" });
     refs.push({ id: "ref-a", from: T({ x: X0, y: yEl }), to: T({ x: X0, y: hemY }), cls: "tick" });
     refs.push({ id: "ref-b-back", from: T({ x: xb, y: yEl }), to: T({ x: xb, y: hemY }), cls: "tick" });
@@ -428,10 +469,11 @@
     add("ref-a", { x: X0, y: (yEl + hemY) / 2 }, 4, 0, "start", "a(중심선)", "label");
     add("ref-b-back", { x: xb, y: (yEl + hemY) / 2 }, -4, 0, "end", "b", "label");
     add("ref-b-front", { x: xf, y: (yEl + hemY) / 2 }, 4, 0, "start", "b", "label");
-    var rowsT = REF_ROWS(pr, m), title = rowsT[0];
+    }
+    var rowsT = REF_ROWS(pr, m, kind), title = rowsT[0];
     rowsT.forEach(function (t, i) { add("ref-block-" + i, { x: (Ub.x + Uf.x) / 2, y: hemY }, 0, 56 + i * 12, "middle", t, i === 0 ? "title" : (i === rowsT.length - 1 ? "note" : "label"), "ref-block"); lines[lines.length - 1].block = i; });
     var bb = { minX: Ub.x + dx, maxX: Uf.x + dx, minY: sp.y, maxY: hemY };
-    return { key: "sleeveRef", line: "H-ref", title: title, lines: lines, dims: [], leaders: [], zones: [], refs: refs, marks: marks, bbox: bb, offsetCm: dx, blockX: (Ub.x + Uf.x) / 2 + dx, blockAbove: true };
+    return { key: "sleeveRef", line: kind + "-ref", title: title, lines: lines, dims: [], leaders: [], zones: [], refs: refs, marks: marks, bbox: bb, offsetCm: dx, blockX: (Ub.x + Uf.x) / 2 + dx, blockAbove: true };
   }
   function cp0(p) { return { x: p.x, y: p.y }; }
 

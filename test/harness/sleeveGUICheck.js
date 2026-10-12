@@ -119,7 +119,7 @@ const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.refe
   const pos = f => html.indexOf('src="js/' + f);
   ok(pos("designSleeveG.js") > pos("sleeveFApply.js") && pos("sleeveGApply.js") > pos("designSleeveG.js") && pos("ui.js") > pos("sleeveGApply.js"), "7: 스크립트 순서");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(["designSleeveG.js", "sleeveGApply.js", "sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js"].every(f => ver(f) === (f === "sleeveGApply.js" ? "2026101103" : f === "designSleeveG.js" ? "2026101102" : f === "ui.js" ? "2026101203" : f === "sleeveAnnotation.js" ? "2026101302" : "2026101201")), "7: 캐시 버전(Ⓖ 2026101102/3 · 공용 2026101201/2)");
+  ok(["designSleeveG.js", "sleeveGApply.js", "sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js"].every(f => ver(f) === (f === "sleeveGApply.js" ? "2026101103" : f === "designSleeveG.js" ? "2026101102" : f === "ui.js" ? "2026101303" : f === "sleeveAnnotation.js" ? "2026101303" : "2026101303")), "7: 캐시 버전(Ⓖ 2026101102/3 · 공용 2026101201/2)");
   ok(/id="rowSleeveStar" hidden/.test(html) && /id="inpSleeveStar" type="number" min="0.1" step="0.1" value="3"/.test(html) && !/id="inpSleeveStar"[^>]*max=/.test(html), "7: ★ 입력 행(기본 숨김, 기본 3, 책 규칙 같은 상한 없음)");
   ok(/function sleeveGOn\(project\)/.test(ui) && /keep !== "G" && window\.sleeveGApply/.test(ui) && /if \(isG\) \{/.test(ui) && /window\.sleeveGApply\.rederive\(project\)/.test(ui) && /"inpSleeveStar"/.test(ui), "7: ui 배선");
 }
