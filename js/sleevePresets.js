@@ -6,7 +6,7 @@
 // ★ 소매 10종류의 이름·시작 쪽·표지 기호는 P036 판독 표만 근거다. 아직 판독하지 않은 라인의 변형(Ⓑ 다음 기호 등)은
 //   **슬롯을 만들지 않는다** — 표지 대표 기호 하나만 «보류»로 두고, 왜 못 만드는지(blockedBy)를 들고 있게 한다.
 //
-// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ · 턱 Ⓕ · Ⓖ 일곱 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
+// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ · 턱 Ⓕ · Ⓖ · 퍼프 Ⓗ 여덟 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
 // 그중 Ⓐ 는: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
 //   (`designSleeveA.draftSleeveA`, [패턴학교] P.137–139 «타입 4»). 이 레코드는 수치를 갖지 않는다 — 소매 길이만
 //   사용자가 정하고 나머지는 전부 몸판에서 읽는다. 순수(DOM·storage 미접근).
@@ -76,7 +76,15 @@
       method: "tuck-cap-half-slash-from-sleeve-A", methodPage: 43,
       inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
         { key: "tuckCm", label: "턱 분량(각)", unit: "cm", defaultValue: 1.5 },
-        { key: "starCm", label: "★ 가운데 상승", unit: "cm", defaultValue: 3 }] }
+        { key: "starCm", label: "★ 가운데 상승", unit: "cm", defaultValue: 3 }] },
+    // Ⓗ: EL 아래만 a(중심선)·b(반폭 중점) 절개 — 가운데 ★ 내림 → a → 바깥 ☆ 기준 b. 커프스 달림 ● = 손바닥 + 3, ∅ = ● − ■(■ = Ⓐ 소맷부리 − ●), 각 ∅/3.
+    //   김님 확정 기본값(모두 수정 가능): EL 31.4 · 손바닥 21 · ★ 3.5 · 커프스 폭 1(치수 정보만). 소맷부리는 8 끝점 통과 곡선(S 굽이 허용 — 화면 검토용 시안).
+    { id: "bunka-sleeve-H", familyId: "puff-sleeve", symbol: "H",
+      method: "puff-below-el-slash-from-sleeve-A", methodPage: 44,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "elbowLengthCm", label: "팔꿈치 길이 EL", unit: "cm", defaultValue: 31.4 },
+        { key: "palmCircumferenceCm", label: "손바닥 둘레", unit: "cm", defaultValue: 21 },
+        { key: "dropCm", label: "★ 가운데 내림", unit: "cm", defaultValue: 3.5 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -118,7 +126,12 @@
         { id: "bunka-sleeve-G", symbol: "G", label: "G · 소매산 높이 2등분 위 a·b 절개 · 턱 분량·★ 입력(소매 Ⓐ 기반)", page: 43, methodPage: 43,
           availability: "available", presetId: "bunka-sleeve-G", note: null }
       ] },
-    pendingFamily("puff-sleeve", 5, "퍼프 소매", "H", 44),
+    { id: "puff-sleeve", order: 5, label: "퍼프 소매", symbol: "H", page: 44, availability: "available", note: null,
+      familyNote: "Ⓗ — 소매 Ⓐ 의 EL(팔꿈치) 아래만 절개: 가운데 두 조각을 ★ 만큼 내려 중심선 위 기준점에서 벌리고(a), 바깥 두 조각을 ☆(EL × 옆선)에서 벌린다(b). 벌린 소맷부리를 커프스(손바닥 + 3)에 개더로 단다(개더 = 커프스의 1배). 화면 검토용 시안.",
+      variants: [
+        { id: "bunka-sleeve-H", symbol: "H", label: "H · EL 아래 a·b 절개 · 소맷부리만 벌림 · 커프스 개더(소매 Ⓐ 기반, 시안)", page: 44, methodPage: 44,
+          availability: "available", presetId: "bunka-sleeve-H", note: null }
+      ] },
     pendingFamily("short-sleeve", 6, "반소매", "L", 46),
     pendingFamily("dolman-sleeve", 7, "돌먼 소매", "R", 49),
     pendingFamily("shirt-sleeve", 8, "셔츠 소매", "T", 50),

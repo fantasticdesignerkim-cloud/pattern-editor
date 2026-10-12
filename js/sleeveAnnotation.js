@@ -26,6 +26,7 @@
 
   function lineOf(project) {
     var w = project && project.working; if (!w) return null;
+    if (w.sleeveH) return { key: "H", st: w.sleeveH };
     if (w.sleeveG) return { key: "G", st: w.sleeveG };
     if (w.sleeveF) return { key: "F", st: w.sleeveF };
     if (w.sleeveE) return { key: "E", st: w.sleeveE };
@@ -66,7 +67,7 @@
     return { backPrimitives: cs.slice(0, lens.splitIndex), frontPrimitives: cs.slice(lens.splitIndex), splitPoint: lens.split, lengths: lens.sewn, cutLengths: lens.cut };
   }
 
-  function buildModel(project) {
+  function buildModel(project, opts) {
     var L = lineOf(project); if (!L) return null;
     var w = project.working, g = w.geometry && w.geometry.sleeve, st = L.st, m = st && st.meta;
     var DS = window.designSleeve, BC = window.bodiceCheckpoint;
@@ -96,7 +97,8 @@
     // 소매길이: 오른쪽 치수선
     var dimX = 0;   // 소매 중심선 위(오른쪽 여백을 쓰지 않는다 — 소매는 맨 오른쪽 조각이라 fit 에서 잘린다)
     // Ⓖ: O(중심선 × 위팔선) 고정·★ 위로 → 펼친 중심 길이 SP′→소맷부리 = 입력 소매길이 + ★(김님 2026-10-11: 길이 보정 안 함). 입력값과 구분해 표시.
-    dim("len", { x: 0, y: m.sp.y }, { x: 0, y: hemY }, "v", dimX, key === "G" ? "SP′→소맷부리 " + f2(hemY - m.sp.y) + " (입력 소매길이 " + f2(hemY) + " + ★)" : "소매길이 " + f2(hemY), { dx: -5, dy: 3 }, "end", "dim");
+    if (key === "H" && num(m.centerLength && m.centerLength.spreadCm)) dim("len", { x: 0, y: m.sp.y }, { x: 0, y: m.sp.y + m.centerLength.spreadCm }, "v", dimX, "SP→소맷부리(중심) " + f2(m.centerLength.spreadCm) + " (입력 소매길이 " + f2(hemY) + ")", { dx: -5, dy: 3 }, "end", "dim");
+    else dim("len", { x: 0, y: m.sp.y }, { x: 0, y: hemY }, "v", dimX, key === "G" ? "SP′→소맷부리 " + f2(hemY - m.sp.y) + " (입력 소매길이 " + f2(hemY) + " + ★)" : "소매길이 " + f2(hemY), { dx: -5, dy: 3 }, "end", "dim");
     // 소매산 길이·이세(geometry 실측) — SP 위쪽 두 블록 + 호 중점에서 리더선
     var backMid = arcMid(prim.backPrimitives), frontMid = arcMid(prim.frontPrimitives);
     var eb = prim.lengths.back - AH.back, ef = prim.lengths.front - AH.front;
@@ -134,6 +136,41 @@
         add("close-" + s, { x: c.axisX, y: ay }, isB ? -5 : 5, 20, isB ? "end" : "start", "맞댐 " + f2(c.closeAtHemCm), "ref", "axis-" + s);
       });
       rows([title, "소맷부리 목표 W×3/4 " + f2(m.hemTargetCm) + " · 실측 " + f2(m.hemCm) + " · 맞댐 ● " + f2(m.closeTotalCm) + " = " + f2(m.closePerCutCm) + " × 2곳", lengthsLine, "점선 = 설명용(맞댐 전 절개축·절개선, 재단선 아님) · 남색 실선 = 재단 외곽"]);
+    } else if (key === "H") {
+      var hh = m.hem, fo = m.formula, cons = g.construction || [], cByRole = function (r) { return cons.filter(function (c) { return c.role === r; })[0]; };
+      // 원래 종이 조각(김님 2026-10-11 의도 정정 — 책 P.44 «절개 그림»의 녹색 조각): EL 위 고정 부분 + EL 아래 강체 조각 4개(meta.rigid 그대로).
+      //   표시 전용(재단선·hit·편집 대상 아님). 조각 아래변 = 원래 밑단(직선) — 최종 소맷부리 곡선(남색)과 다른 것을 그대로 보인다.
+      var showPieces = !opts || opts.pieces !== false, paperZones = [];
+      if (showPieces && m.rigid) {
+        var capS = g.outline.filter(function (s2) { return s2.role === "cap" && s2.kind === "path"; })[0], up = [];
+        if (capS) { var cur2 = capS.commands[0].points[0]; up.push(P(cur2)); capS.commands.slice(1).forEach(function (c) { var q = [cur2, c.points[0], c.points[1], c.points[2]]; for (var k2 = 1; k2 <= 24; k2++) up.push(cubicAt(q, k2 / 24)); cur2 = c.points[2]; }); }
+        up.push(P(m.sides.front.star), P(m.sides.back.star));
+        paperZones.push({ id: "paper-upper", pts: up, cls: "paper" });
+        ["backOuter", "backInner", "frontInner", "frontOuter"].forEach(function (k) { if (m.rigid[k]) paperZones.push({ id: "paper-" + k, pts: m.rigid[k].map(P), cls: "paper" }); });
+      }
+      title = "소매 Ⓗ · 퍼프(EL 아래 절개 · 소맷부리 개더, P.44) — 화면 검토용 시안";
+      dim("drop", m.drop.from, m.drop.to, "v", m.drop.from.x, "★ " + f2(m.drop.cm), { dx: 5, dy: 3 }, "start", "dim");
+      add("el", { x: m.sides.front.star.x, y: m.elY }, 6, -4, "start", "EL " + f2(m.elbowLengthCm) + " (위는 Ⓐ 그대로)", "label", "el");
+      zones.push({ id: "fill-center", pts: m.fill.centerGap.map(P), cls: "zone" });
+      ["back", "front"].forEach(function (sid) {
+        var isB = sid === "back", inn = cByRole("cut-b-inner-" + sid), out = cByRole("cut-b-outer-" + sid);
+        if (inn && out) {
+          zones.push({ id: "wedge-b-" + sid, pts: [P(inn.from), P(inn.to), P(out.to), P(out.from)], cls: "zone" });
+          add("open-b-" + sid, { x: (inn.to.x + out.to.x) / 2, y: (inn.to.y + out.to.y) / 2 }, 0, 14, "middle", "∅/3 " + f2(isB ? m.openedCm.bBack : m.openedCm.bFront), "dim", "open-b-" + sid);
+        }
+        marks.push({ id: "star-" + sid, at: P(m.sides[sid].star), cls: "notch" });
+        add("star-" + sid, m.sides[sid].star, isB ? -6 : 6, 12, isB ? "end" : "start", "☆ 기준점(바깥 " + f2(isB ? m.rotationDeg.outerBack : m.rotationDeg.outerFront) + "°)", "ref", "star-" + sid);
+      });
+      var aB = cByRole("cut-a-back"), aF = cByRole("cut-a-front");
+      if (aB && aF) { zones.push({ id: "wedge-a", pts: [P(aB.from), P(aB.to), P(aF.to)], cls: "zone" }); add("open-a", { x: (aB.to.x + aF.to.x) / 2, y: (aB.to.y + aF.to.y) / 2 }, 0, 14, "middle", "∅/3 " + f2(m.openedCm.a), "dim", "open-a"); }
+      add("fill-note", { x: 0, y: m.elY }, 0, 26, "middle", "음영 = 벌어진 틈(종이 덧댐)", "ref", "open-note");
+      rows([title, "커프스 달림 ● = 손바닥 " + f2(m.cuff.palmCm) + " + 3 = " + f2(m.cuff.lengthCm) + " · 폭 " + f2(m.cuff.widthCm) + " (치수 정보 — 커프스 조각 없음)",
+        "■ = Ⓐ 소맷부리 " + f2(m.widthCm) + " − ● = " + f2(fo.square) + " · ∅ = ● − ■ = " + f2(fo.spread) + " · 절개마다 " + f2(fo.perCut),
+        "소맷부리(최종 곡선 실측) " + f2(hh.lengthCm) + " · 여유 산식 2● " + f2(hh.formulaHemCm) + " · 개더 " + f2(hh.gatherCm) + " · truing 파임 최대 " + hh.fair.maxCutCm.toFixed(2) + " · 덧댐 최대 " + hh.fair.maxOutwardCm.toFixed(2) + (hh.fair.largeDeviationNote ? " · 1cm 초과(Ⓗ 승인 범위)" : ""),
+        "★ 가운데 내림 " + f2(m.drop.cm) + " · EL " + f2(m.elbowLengthCm) + " · 옆선 ☆ 에서 꺾임 뒤 " + f2(m.sideSeamKinkDeg.back) + "° · 앞 " + f2(m.sideSeamKinkDeg.front) + "°",
+        lengthsLine + " (소매산 = Ⓐ — 소맷부리 개더와 별개)",
+        (paperZones.length ? "녹색 = 원래 종이(아래변 = 원래 밑단 — 남색선 밖 녹색 = 파낸 곳) · 음영 = 벌어진 틈(덧댄 종이) · " : "점선·음영 = 설명용(재단선 아님) · ") + "남색 실선 = 최종 재단선"]);
+      zones = paperZones.concat(zones);   // 종이 조각을 먼저(아래) 그리고 틈 음영을 그 위에
     } else if (key === "G") {
       var tg = m.tuck, TG = tg.tucks, SB = m.sides.back, SF2 = m.sides.front;
       title = "소매 Ⓖ · 턱 소매(소매산 높이 2등분 위 a·b 절개, P.43)";
@@ -276,7 +313,7 @@
   function textW(t, f) { var w = 0; for (var i = 0; i < t.length; i++) w += (t.charCodeAt(i) > 255 ? 1.0 : 0.58) * f; return w; }
   function boxOf(x, y, anchor, text, f) { var w = textW(text, f), x0 = anchor === "end" ? x - w : anchor === "middle" ? x - w / 2 : x; return { x0: x0, x1: x0 + w, y0: y - f * 0.85, y1: y + f * 0.2 }; }
   function hit(a, b) { return a.x0 < b.x1 - 0.5 && b.x0 < a.x1 - 0.5 && a.y0 < b.y1 - 0.5 && b.y0 < a.y1 - 0.5; }
-  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, ext: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "axis-lower": 5, "open-note": 6, "open-back": 0, "open-front": 0, "open-center": 0, "pivot-sp": 4, "tuck-back-outer": 1, "tuck-back-inner": 1, "tuck-front-inner": 1, "tuck-front-outer": 1, "pivot-note": 6, star: 0, "tuck-back-a": 1, "tuck-back-b": 1, "tuck-front-a": 1, "tuck-front-b": 1, "star-back": 3, "star-front": 3, "step-back": 4, "step-front": 4, "ext-back": 1, "ext-front": 1, "back-line": 6, "front-line": 6 };
+  var PRIO = { len: 0, "hem": 0, "hem-back": 0, "hem-center": 0, "hem-front": 0, el: 1, apex: 1, "dart-width": 1, back: 2, front: 2, "leg-outer": 2, "leg-center": 2, lap: 2, ext: 2, "cap-back": 3, "cap-front": 3, sp: 4, bicep: 4, "axis-back": 5, "axis-front": 5, "axis-lower": 5, "open-note": 6, "open-back": 0, "open-front": 0, "open-center": 0, "pivot-sp": 4, "tuck-back-outer": 1, "tuck-back-inner": 1, "tuck-front-inner": 1, "tuck-front-outer": 1, "pivot-note": 6, star: 0, "tuck-back-a": 1, "tuck-back-b": 1, "tuck-front-a": 1, "tuck-front-b": 1, "star-back": 3, "star-front": 3, "step-back": 4, "step-front": 4, "ext-back": 1, "ext-front": 1, drop: 0, "open-a": 0, "open-b-back": 0, "open-b-front": 0, "back-line": 6, "front-line": 6 };
   var NUM = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"];
 
   function layout(model, scale) {
@@ -313,10 +350,16 @@
       }
     });
     // 설명 블록(제목·요약·구분 문구) — 치수선 글자 아래에서 시작, 번호 설명이 있으면 그 아래에 이어 붙인다
-    var baseY = bb.maxY * s, bottom = placed.reduce(function (m, b) { return Math.max(m, b.y1); }, baseY);
+    var above = !!model.blockAbove, baseY = above ? bb.minY * s : bb.maxY * s, bottom = placed.reduce(function (m, b) { return Math.max(m, b.y1); }, baseY);
     var top = Math.max(36, bottom - baseY + 16), bl = model.lines.filter(function (l) { return l.block !== undefined; }).sort(function (a, b) { return a.block - b.block; });
     var blocks = [], row = 0;
-    var addRow = function (id, text, cls) { blocks.push({ id: id, at: { x: 0, y: bb.maxY }, dx: 0, dy: top + row * 12, anchor: "middle", text: text, cls: cls }); row++; };
+    var bx = num(model.blockX) ? model.blockX : 0;   // 설명 블록 가로 기준(기본 = 소매 중심선 x 0, 참고 도안 = 그 도안 중심)
+    var nBl = model.lines.filter(function (l) { return l.block !== undefined; }).length;
+    var addRow = function (id, text, cls) {   // blockAbove: 도안 위에 제목부터 아래로 쌓아 마지막 줄이 도안 위끝 16px 위
+      if (above) blocks.push({ id: id, at: { x: bx, y: bb.minY }, dx: 0, dy: -16 - (nBl - 1 - row) * 12, anchor: "middle", text: text, cls: cls });
+      else blocks.push({ id: id, at: { x: bx, y: bb.maxY }, dx: 0, dy: top + row * 12, anchor: "middle", text: text, cls: cls });
+      row++;
+    };
     bl.forEach(function (l, i) { if (l.cls === "note" && legend.length) return; addRow(l.id, l.text, l.cls); });
     if (legend.length) {
       addRow("legend-head", "배율이 작아 일부 설명을 번호(" + legend.map(function (e) { return e.label; }).join("") + ")로 모았습니다 — 확대하면 제자리에 표시됩니다", "label");
@@ -329,11 +372,85 @@
     return { items: items.filter(function (i) { return i.legend === undefined; }).map(function (i) { return { id: i.id, dim: !!i.dim, at: i.at, dx: i.fdx, dy: i.fdy, anchor: i.anchor, text: i.text, cls: i.cls }; }).concat(blocks.map(function (b) { return { id: b.id, dim: false, at: b.at, dx: b.dx, dy: b.dy, anchor: b.anchor, text: b.text, cls: b.cls }; })),
       leaders: leaders, tags: tags.map(function (t) { return { n: t.n, label: NUM[t.n] || String(t.n + 1), at: t.at, dx: t.dx, dy: t.dy }; }), legend: legend, compact: legend.length > 0, extent: ext, scale: s };
   }
+  // ── Ⓗ «벌리기 전 절개 도안(참고)» (김님 2026-10-11, 표시 전용) ──
+  //   현재 몸판·입력(소매길이·EL)으로 출발 Ⓐ 를 읽기 전용으로 다시 제도해(sleeveAApply.draft — 상태 변경 없음) 완성 Ⓗ 오른쪽에 따로 그린다.
+  //   EL · 중심 a · 앞뒤 반폭 중점 b · ☆(EL × 옆선) · 벌림 순서를 표시. geometry·계측·hash·완료본·hit 와 무관(소매 피스 그룹의 설명 오버레이로만).
+  //   가로 위치는 화면 배율에 따라 완성 Ⓗ 의 설명 글자 오른쪽 끝(px) 밖으로 띄운다(글자·도안 겹침 방지). Ⓗ 가 아니거나 차단 중이면 null.
+  var REF_GAP_PX = 28;
+  function REF_ROWS(pr, m) {
+    return ["벌리기 전 절개 도안(참고) — 출발 Ⓐ · 현재 입력",
+      "소매길이 " + f2(pr.sleeveLengthCm) + " · EL " + f2(pr.elbowLengthCm) + " · 손바닥 " + f2(pr.palmCircumferenceCm) + " · ★ " + f2(pr.dropCm),
+      "① 가운데 두 조각 ★ " + f2(m.drop.cm) + " 아래로 → ② a 를 중심선 위 기준점에서 벌림(∅/3 " + f2(m.formula.perCut) + ")",
+      "→ ③ 바깥 두 조각을 ☆ 에서 돌려 b 벌림(∅/3) · EL 위는 고정",
+      "회색 점선 = 참고 도안(재단선 아님) · 완성 Ⓗ 는 왼쪽 남색 실선"];
+  }
+  function refModel(project, scale, opts) {
+    var w = project && project.working, st = w && w.sleeveH, g = w && w.geometry && w.geometry.sleeve, SAA = window.sleeveAApply;
+    if (!st || st.blocked || !g || !SAA || !(scale > 0)) return null;
+    var pr = st.parameters, m = st.meta, a = SAA.draft(project, pr.sleeveLengthCm);
+    if (!a || !a.ok) return null;
+    var ag = a.geometry, sp = a.meta.sp, capS = ag.outline[0], cs = [], cur = capS.commands[0].points[0];
+    capS.commands.slice(1).forEach(function (c) { cs.push([cur, c.points[0], c.points[1], c.points[2]]); cur = c.points[2]; });
+    var Ub = cs[0][0], Uf = cs[cs.length - 1][3], hemY = a.meta.sleeveLengthCm, yEl = sp.y + pr.elbowLengthCm;
+    // 완성 Ⓗ 의 오른쪽 끝(형상 + 설명 글자 px)
+    var hx = []; g.outline.forEach(function (sg) { ctrl(sg).forEach(function (q) { hx.push(q.x); }); });
+    var rightAbsPx = Math.max.apply(null, hx) * scale;   // 완성 Ⓗ 오른쪽 끝(화면 px, 소매 좌표 기준)
+    // 참고 도안의 세로 띠(설명 블록은 도안 위 — blockAbove): 그 띠와 겹치는 완성 Ⓗ 글자만 비켜 간다(Ⓗ 설명 블록은 Ⓗ 소맷부리 아래라 겹치지 않음)
+    var nRows = REF_ROWS(pr, m).length, bandTop = sp.y * scale - (18 + nRows * 12), bandBot = hemY * scale + 14;
+    if (!opts || opts.mainVisible !== false) {
+      var mm = buildModel(project);
+      if (mm) layout(mm, scale).items.forEach(function (it) {
+        var f = fsOf(it.cls), w = textW(it.text, f), x = it.at.x * scale + it.dx, y = it.at.y * scale + it.dy, x0 = it.anchor === "end" ? x - w : it.anchor === "middle" ? x - w / 2 : x;
+        if (y + f * 0.2 >= bandTop && y - f * 0.85 <= bandBot) rightAbsPx = Math.max(rightAbsPx, x0 + w);
+      });
+    }
+    var rowsW = REF_ROWS(pr, m).map(function (t, i) { return textW(t, fsOf(i === 0 ? "title" : "label")); }), halfW = Math.max.apply(null, rowsW) / 2;
+    var cA = (Ub.x + Uf.x) / 2;
+    var dx = Math.max((rightAbsPx + REF_GAP_PX) / scale - Ub.x, (rightAbsPx + REF_GAP_PX + halfW) / scale - cA);
+    var T = function (p) { return { x: p.x + dx, y: p.y }; };
+    var refs = [], lines = [], marks = [];
+    var add = function (id, at, ddx, ddy, anchor, text, cls, group) { lines.push({ id: id, at: T(at), px: { dx: ddx, dy: ddy }, anchor: anchor, text: text, cls: cls || "label", group: group || id }); };
+    // 출발 Ⓐ 외곽(참고 = 회색 점선)
+    var pts = []; cs.forEach(function (q, i) { for (var k = (i ? 1 : 0); k <= 24; k++) pts.push(cubicAt(q, k / 24)); });
+    pts.push({ x: Uf.x, y: hemY }, { x: Ub.x, y: hemY }, cp0(Ub));
+    for (var i = 1; i < pts.length; i++) refs.push({ id: "ref-outline-" + i, from: T(pts[i - 1]), to: T(pts[i]), cls: "past" });
+    // EL · a · b (절개선 = 청록 가는 실선) · ☆
+    var X0 = sp.x, xb = (Ub.x + X0) / 2, xf = (Uf.x + X0) / 2;
+    refs.push({ id: "ref-el", from: T({ x: Ub.x, y: yEl }), to: T({ x: Uf.x, y: yEl }), cls: "tick" });
+    refs.push({ id: "ref-a", from: T({ x: X0, y: yEl }), to: T({ x: X0, y: hemY }), cls: "tick" });
+    refs.push({ id: "ref-b-back", from: T({ x: xb, y: yEl }), to: T({ x: xb, y: hemY }), cls: "tick" });
+    refs.push({ id: "ref-b-front", from: T({ x: xf, y: yEl }), to: T({ x: xf, y: hemY }), cls: "tick" });
+    refs.push({ id: "ref-center", from: T(sp), to: T({ x: X0, y: yEl }), cls: "past" });
+    marks.push({ id: "ref-star-back", at: T({ x: Ub.x, y: yEl }), cls: "notch" }, { id: "ref-star-front", at: T({ x: Uf.x, y: yEl }), cls: "notch" }, { id: "ref-c", at: T({ x: X0, y: yEl }), cls: "notch" });
+    add("ref-el", { x: Uf.x, y: yEl }, 6, -4, "start", "EL " + f2(pr.elbowLengthCm), "label");
+    add("ref-star-back", { x: Ub.x, y: yEl }, -6, 4, "end", "☆", "label");
+    add("ref-star-front", { x: Uf.x, y: yEl }, 6, 12, "start", "☆", "label");
+    add("ref-a", { x: X0, y: (yEl + hemY) / 2 }, 4, 0, "start", "a(중심선)", "label");
+    add("ref-b-back", { x: xb, y: (yEl + hemY) / 2 }, -4, 0, "end", "b", "label");
+    add("ref-b-front", { x: xf, y: (yEl + hemY) / 2 }, 4, 0, "start", "b", "label");
+    var rowsT = REF_ROWS(pr, m), title = rowsT[0];
+    rowsT.forEach(function (t, i) { add("ref-block-" + i, { x: (Ub.x + Uf.x) / 2, y: hemY }, 0, 56 + i * 12, "middle", t, i === 0 ? "title" : (i === rowsT.length - 1 ? "note" : "label"), "ref-block"); lines[lines.length - 1].block = i; });
+    var bb = { minX: Ub.x + dx, maxX: Uf.x + dx, minY: sp.y, maxY: hemY };
+    return { key: "sleeveRef", line: "H-ref", title: title, lines: lines, dims: [], leaders: [], zones: [], refs: refs, marks: marks, bbox: bb, offsetCm: dx, blockX: (Ub.x + Uf.x) / 2 + dx, blockAbove: true };
+  }
+  function cp0(p) { return { x: p.x, y: p.y }; }
+
   // 화면 초기화(fit)가 설명 영역을 포함하도록 — 소매 geometry bbox 바깥으로 나오는 px 여백(위·아래·좌·우). 모델이 없으면 0.
-  function overhang(project, scale) {
-    var m = buildModel(project); if (!m) return { top: 0, bottom: 0, left: 0, right: 0 };
-    var e = layout(m, scale).extent; return { top: Math.max(0, e.top), bottom: Math.max(0, e.bottom), left: Math.max(0, e.left), right: Math.max(0, e.right) };
+  function overhang(project, scale, opts) {
+    var info = !opts || opts.info !== false, ref = !!(opts && opts.ref);
+    var m = info ? buildModel(project) : null, o = { top: 0, bottom: 0, left: 0, right: 0 };
+    if (m) { var e = layout(m, scale).extent; o = { top: Math.max(0, e.top), bottom: Math.max(0, e.bottom), left: Math.max(0, e.left), right: Math.max(0, e.right) }; }
+    var rm = ref ? refModel(project, scale, { mainVisible: info }) : null;
+    if (rm) {   // 참고 도안: 소매 bbox 오른쪽 밖(형상 + 글자) · 아래(설명 블록)
+      var g = project.working.geometry.sleeve, xs = [], ys = []; g.outline.forEach(function (sg) { ctrl(sg).forEach(function (q) { xs.push(q.x); ys.push(q.y); }); });
+      var sMaxX = Math.max.apply(null, xs), sMaxY = Math.max.apply(null, ys), sMinY = Math.min.apply(null, ys), re = layout(rm, scale).extent;
+      o.right = Math.max(o.right, (rm.bbox.maxX - sMaxX) * scale + Math.max(0, re.right) + REF_GAP_PX);   // 배율에 따라 위치가 바뀌는 도안이라 fit 반복 수렴 여유
+      o.bottom = Math.max(o.bottom, (rm.bbox.maxY - sMaxY) * scale + Math.max(0, re.bottom));
+      o.top = Math.max(o.top, (sMinY - rm.bbox.minY) * scale + Math.max(0, re.top));
+    }
+    if (!m && !rm) return { top: 0, bottom: 0, left: 0, right: 0 };
+    return o;
   }
 
-  window.sleeveAnnotation = Object.freeze({ buildModel: buildModel, layout: layout, overhang: overhang });
+  window.sleeveAnnotation = Object.freeze({ buildModel: buildModel, layout: layout, overhang: overhang, refModel: refModel });
 })();

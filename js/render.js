@@ -444,7 +444,7 @@ function _appendPeplumAnnotation(grp, model, dy){
 //   재단 외곽(남색 실선)과 구분: 설명용 = 청록 점선/가는 치수선/옅은 음영. 선 굵기·글자 크기는 px 고정(줌 무관), 글자는 흰 후광으로 읽히게 한다.
 function _appendSleeveAnnotation(grp, model){
   if(!model) return;
-  const g=E("g",{ "data-design-sleeve":"annotation", "data-sleeve-line":model.line, class:"sleeve-anno" });
+  const g=E("g",{ "data-design-sleeve":model.key==="sleeveRef"?"reference":"annotation", "data-sleeve-line":model.line, class:"sleeve-anno" });
   const TICK=3.5, sc=Math.abs(c2p(1,0)[0]-c2p(0,0)[0]);
   const LY=window.sleeveAnnotation.layout(model, sc);   // 화면 배율 기준 배치(겹치면 이동+리더선, 그래도 안 되면 번호 표식+번호 설명)
   if(LY.compact) g.setAttribute("data-anno-compact","1");
@@ -637,8 +637,15 @@ function render(){
       if (_princessModeOf(dp.working.geometry)) _appendPrincessAnnotation(grp, window.designLayout && window.designLayout.princessLabels(dp.working.geometry), pc);
       if (_yokeModeOf(dp.working.geometry)) _appendYokeAnnotation(grp, window.designLayout && window.designLayout.yokeLabels(dp.working.geometry), pc);
       if (pc === "sleeve" && window.sleeveAnnotation) {   // 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보(표시 전용). 기본 소매는 모델 없음 → 기존 표시 그대로. 토글은 설명 오버레이만 끈다.
-        const _sm = window.sleeveAnnotation.buildModel(dp);
+        const _hPcChk = document.getElementById("chkSleeveHPieces");   // Ⓗ 원래 종이 조각(녹색) 표시 — 기본 켜짐(표시 전용)
+        const _sm = window.sleeveAnnotation.buildModel(dp, { pieces: !_hPcChk || _hPcChk.checked });
         if (_sm) { grp.setAttribute("data-sleeve-line", _sm.line); if (!_slvInfoChk || _slvInfoChk.checked) _appendSleeveAnnotation(grp, _sm); }
+        // 소매 Ⓗ «벌리기 전 절개 도안(참고)»(표시 전용, 기본 켜짐 — chkSleeveHRef). Ⓗ 가 아니면 모델 없음.
+        const _hRefChk = document.getElementById("chkSleeveHRef");
+        if (_sm && _sm.line === "H" && (!_hRefChk || _hRefChk.checked) && window.sleeveAnnotation.refModel) {
+          const _rm = window.sleeveAnnotation.refModel(dp, Math.abs(c2p(1,0)[0]-c2p(0,0)[0]), { mainVisible: !_slvInfoChk || _slvInfoChk.checked });
+          if (_rm) _appendSleeveAnnotation(grp, _rm);
+        }
       }
       if (_pepOn && _pepAll[pc]) _appendPeplumAnnotation(grp, _pepAll[pc], dp.working.geometry.waistSeam ? window.designLayout.peplumDrop(dp.working.geometry, pc + "Peplum") : 0);
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)

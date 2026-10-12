@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026100702">
+<link rel="stylesheet" href="css/style.css?v=2026101203">
 </head>
 <body>
 
@@ -261,6 +261,10 @@
           <div class="row note sleeve-a-info" id="designSleeveAInfo" aria-live="polite" hidden></div>
           <!-- 소매 제작 정보 표시 토글(세션 UI, 표시 전용, 기본 켜짐): Ⓐ/Ⓑ/Ⓒ 일 때만 보인다. 캔버스의 설명(치수선·라벨·음영)만 끄고 재단 외곽은 그대로. -->
           <div class="row" id="rowSleeveInfo" hidden><label><input type="checkbox" id="chkSleeveInfo" checked> 제작 정보 표시</label></div>
+          <!-- 소매 Ⓗ 원래 종이 조각(책 P.44 «절개 그림» 녹색 조각) 표시 토글(표시 전용, 기본 켜짐). Ⓗ 가 켜져 있을 때만 ui.js 가 보인다. -->
+          <div class="row" id="rowSleeveHPieces" hidden><label><input type="checkbox" id="chkSleeveHPieces" checked> 원래 종이 조각(녹색)</label></div>
+          <!-- 소매 Ⓗ 비교용 «벌리기 전 절개 도안(참고)» 토글(표시 전용, 기본 꺼짐 — 2026-10-11 의도 정정으로 선택 표시만). -->
+          <div class="row" id="rowSleeveHRef" hidden><label><input type="checkbox" id="chkSleeveHRef"> 비교: 벌리기 전 도안(참고)</label></div>
           <!-- 원형 소매 비교(세션 UI, 표시 전용, 기본 꺼짐): 켜면 원형(block) 소매 참고선을 다시 그린다. 원형 데이터·계측은 그대로. -->
           <div class="row" id="rowSleeveRef"><label><input type="checkbox" id="chkSleeveRef"> 원형 소매 비교</label></div>
           <div class="row"><label for="inpSleeveLength">소매길이 (cm)</label><input id="inpSleeveLength" type="number" min="10" max="90" step="0.1"></div>
@@ -269,6 +273,9 @@
           <!-- 소매 Ⓒ(P.41 하단) 전용 입력: 팔꿈치 길이 EL(SP→팔꿈치선, 기본 31.4). 라인에 따라 ui.js 가 표시/숨김. 빈 값·범위 밖은 기본값으로 바꾸지 않고 거부한다. -->
           <div class="row" id="rowSleeveElbow" hidden><label for="inpSleeveElbow">팔꿈치 길이 EL (cm)</label><input id="inpSleeveElbow" type="number" min="10" max="60" step="0.1" value="31.4" title="SP 에서 팔꿈치선까지(기본 31.4)"></div>
           <!-- 소매 Ⓕ(P.43 턱 소매) 전용 입력: 턱 분량(각 턱, 기본 1.5 · 최대 3cm). 라인에 따라 ui.js 가 표시/숨김. 빈 값·범위 밖은 기본값으로 바꾸지 않고 거부한다. -->
+          <!-- 소매 Ⓗ(P.44 퍼프) 전용 입력: 손바닥 둘레(기본 21 — 커프스 달림 = 손바닥 + 3) · ★ 가운데 내림(기본 3.5). 김님 확정 기본값, 모두 수정 가능. 상한은 엔진 기하 가드. -->
+          <div class="row" id="rowSleeveHPalm" hidden><label for="inpSleeveHPalm">손바닥 둘레 (cm)</label><input id="inpSleeveHPalm" type="number" min="0.1" step="0.1" value="21" title="Ⓗ 커프스 달림 = 손바닥 둘레 + 3(기본 21)"></div>
+          <div class="row" id="rowSleeveDrop" hidden><label for="inpSleeveDrop">★ 가운데 내림 (cm)</label><input id="inpSleeveDrop" type="number" min="0.1" step="0.1" value="3.5" title="Ⓗ EL 아래 가운데 두 조각을 내리는 양(기본 3.5 — 설정값)"></div>
           <!-- 소매 Ⓖ(P.43 하단) 전용 입력: ★ 가운데 상승(기본 3, 턱과 독립 설정값). 상한은 책 규칙이 아니라 엔진 기하 가드가 판정한다. -->
           <div class="row" id="rowSleeveStar" hidden><label for="inpSleeveStar">★ 가운데 상승 (cm)</label><input id="inpSleeveStar" type="number" min="0.1" step="0.1" value="3" title="Ⓖ 가운데 조각을 올리는 양(책 도해 3 — 설정값)"></div>
           <div class="row" id="rowSleeveTuck" hidden><label for="inpSleeveTuck">턱 분량 (각, cm)</label><input id="inpSleeveTuck" type="number" min="0.1" max="3" step="0.1" value="1.5" title="턱 1곳 분량(책 도해 1.5 · 최대 3cm)"></div>
@@ -422,7 +429,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026100902"></script>
+<script src="js/render.js?v=2026101203"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -449,7 +456,7 @@
 <!-- 페플럼 제작 정보 표시 모델(순수·표시 전용): window.peplumAnnotation. 형상·hash·hit 무관. -->
 <script src="js/peplumAnnotation.js?v=2026100404"></script>
 <!-- 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시 모델(순수·표시 전용): window.sleeveAnnotation. 형상·hash·완료본·hit 무관. -->
-<script src="js/sleeveAnnotation.js?v=2026101103"></script>
+<script src="js/sleeveAnnotation.js?v=2026101302"></script>
 <script src="js/designLayout.js?v=2026100701"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026091620"></script>
@@ -469,10 +476,10 @@
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
 <script src="js/sleeveMeasure.js?v=2026082011"></script>
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
-<script src="js/sleeveCheckpoint.js?v=2026101101"></script>
+<script src="js/sleeveCheckpoint.js?v=2026101201"></script>
 <!-- 소매 Ⓐ(P.137–139 타입 4): window.designSleeveA 엔진 코어 · window.sleevePresets 카탈로그 · window.sleeveAApply 상태 연결(전부 순수·DOM 미접근). -->
 <script src="js/designSleeveA.js?v=2026100501"></script>
-<script src="js/sleevePresets.js?v=2026101101"></script>
+<script src="js/sleevePresets.js?v=2026101201"></script>
 <script src="js/sleeveAApply.js?v=2026100502"></script>
 <!-- 소매 Ⓑ(P.41 타이트): window.designSleeveB 엔진 코어 · window.sleeveBApply 상태 연결(순수·DOM 미접근). Ⓐ 모듈 뒤에 로드. -->
 <script src="js/designSleeveB.js?v=2026100601"></script>
@@ -488,6 +495,8 @@
 <script src="js/sleeveFApply.js?v=2026101003"></script>
 <script src="js/designSleeveG.js?v=2026101102"></script>
 <script src="js/sleeveGApply.js?v=2026101103"></script>
+<script src="js/designSleeveH.js?v=2026101302"></script>
+<script src="js/sleeveHApply.js?v=2026101302"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
 <script src="js/designCollar.js?v=2026092520"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
@@ -502,7 +511,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026101102"></script>
+<script src="js/ui.js?v=2026101203"></script>
 
 </body>
 </html>
