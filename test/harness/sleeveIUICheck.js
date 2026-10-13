@@ -43,7 +43,7 @@ const IN = { sleeveLengthCm: 52, palmCircumferenceCm: 21 };
 // ── 1. 카탈로그 ──
 {
   const f = SP.family("puff-sleeve"), rec = SP.get("bunka-sleeve-I");
-  ok(f.variants.map(v => v.id).join() === "bunka-sleeve-H,bunka-sleeve-I" && f.variants[1].availability === "available", "1: 퍼프 = Ⓗ + Ⓘ(실행)");
+  ok(f.variants.map(v => v.id).slice(0, 2).join() === "bunka-sleeve-H,bunka-sleeve-I" && f.variants[1].availability === "available", "1: 퍼프 = Ⓗ + Ⓘ(실행) · 뒤에 Ⓙ");
   ok(rec && rec.methodPage === 44 && rec.inputs.map(i => i.key + "=" + (i.defaultValue === undefined ? "" : i.defaultValue)).join() === "sleeveLengthCm=,palmCircumferenceCm=21" && Object.isFrozen(rec), "1: Ⓘ 레코드 · 입력 소매길이 + 손바닥(21) — EL·★ 없음");
 }
 const P = projectWithBodice("A");
@@ -106,7 +106,7 @@ const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.refe
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveI.js") > pos("sleeveHApply.js") && pos("sleeveIApply.js") > pos("designSleeveI.js") && pos("ui.js") > pos("sleeveIApply.js"), "7: 스크립트 순서");
-  ok(["designSleeveI.js", "sleeveIApply.js", "sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js", "render.js"].every(f => ver(f) === "2026101303"), "7: 캐시 버전 2026101303");
+  ok(["designSleeveI.js", "sleeveIApply.js"].every(f => ver(f) === "2026101303") && ["sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js", "render.js"].every(f => ver(f) === "2026101601"), "7: 캐시 버전 Ⓘ 2026101303 · 공용 2026101601");
   ok(/function sleeveIOn\(project\)/.test(ui) && /keep !== "I" && window\.sleeveIApply/.test(ui) && /if \(isI\) \{/.test(ui) && /window\.sleeveIApply\.rederive\(project\)/.test(ui) && /_sm\.line === "H" \|\| _sm\.line === "I"/.test(rn), "7: ui·render 배선");
   ok(/id="chkSleeveHPieces" checked/.test(html) && /id="chkSleeveHRef">/.test(html), "7: 녹색 토글 기본 켜짐 · 비교 도안 기본 꺼짐");
 }

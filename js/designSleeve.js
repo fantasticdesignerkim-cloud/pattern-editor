@@ -276,7 +276,45 @@
       cuffCircumferenceCm: cuff, sleeveLengthCm: len, warnings: warnings
     };
   }
-  // 원형/변환 cap geometry(path/cubic) → 관리형 patternLine 세그먼트 + SP anchor 인덱스(apex 최근접).
+  // ── 명시 분할 기준(소매 Ⓙ·Ⓚ): geometry.capSplit = { x } ──
+  //   최종 소매산이 세로선 x(소매 중심선 = 벌린 틈의 이등분선, 김님 확정 기준)와 만나는 점에서 앞/뒤를 나눈다.
+  //   기준이 주어지면 «가장 높은 앵커» 규칙을 쓰지 않는다 — 상승 0 이면 같은 높이 앵커가 셋이라 한쪽 SP 로 쏠린다(2026-10-13 수정).
+  //   교점이 정확히 하나가 아니면 null(조용히 옛 규칙으로 돌아가지 않는다). 교점이 앵커가 아니면 **측정용 세그먼트만** 그 점에서 나눈다(geometry 불변).
+  //   capSplit 이 없는 geometry(원형 소매 · Ⓐ~Ⓘ)는 아래 옛 규칙 그대로다.
+  function segAt(s, t) {
+    if (s.kind === "line") return { x: s.from.x + (s.to.x - s.from.x) * t, y: s.from.y + (s.to.y - s.from.y) * t };
+    var u = 1 - t;
+    return { x: u * u * u * s.from.x + 3 * u * u * t * s.c1.x + 3 * u * t * t * s.c2.x + t * t * t * s.to.x,
+      y: u * u * u * s.from.y + 3 * u * u * t * s.c1.y + 3 * u * t * t * s.c2.y + t * t * t * s.to.y };
+  }
+  function splitSegAt(s, t) {
+    var lerp = function (a, b) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; };
+    if (s.kind === "line") { var m = lerp(s.from, s.to); return [{ kind: "line", from: cp(s.from), to: cp(m) }, { kind: "line", from: cp(m), to: cp(s.to) }]; }
+    var p01 = lerp(s.from, s.c1), p12 = lerp(s.c1, s.c2), p23 = lerp(s.c2, s.to), p012 = lerp(p01, p12), p123 = lerp(p12, p23), mid = lerp(p012, p123);
+    return [{ kind: "cubic", from: cp(s.from), c1: p01, c2: p012, to: cp(mid) }, { kind: "cubic", from: cp(mid), c1: p123, c2: p23, to: cp(s.to) }];
+  }
+  function capSplitAtX(lineSegs, x) {
+    var N = 32, TOL = 1e-9, pts = [];
+    lineSegs.forEach(function (s, si) { for (var k = (si === 0 ? 0 : 1); k <= N; k++) pts.push({ si: si, t: k / N, d: segAt(s, k / N).x - x }); });
+    var sg = function (d) { return d > TOL ? 1 : (d < -TOL ? -1 : 0); };
+    var prev = -1, cross = [];
+    for (var i = 0; i < pts.length; i++) { var v = sg(pts[i].d); if (!v) continue; if (prev >= 0 && sg(pts[prev].d) !== v) cross.push([prev, i]); prev = i; }
+    if (cross.length !== 1) return null;                       // 만나지 않거나 여러 번 만남
+    var a = cross[0][0], b = cross[0][1], onAnchor = [], nAnch = lineSegs.length + 1, idx;
+    for (var j = a + 1; j < b; j++) if (pts[j].t === 1) onAnchor.push(pts[j].si + 1);
+    if (onAnchor.length > 1) return null;                      // 세로선 위에 앵커가 여럿(세로 구간) — 기준이 모호
+    if (onAnchor.length === 1) idx = onAnchor[0];              // 교점 = 기존 앵커(Ⓙ·Ⓚ 의 새 꼭대기)
+    else {
+      var si2 = pts[b].si, s2 = lineSegs[si2], lo = pts[a].si === si2 ? pts[a].t : 0, hi = pts[b].t, sideA = pts[a].d > 0;
+      for (var it = 0; it < 80; it++) { var tm = (lo + hi) / 2; if ((segAt(s2, tm).x - x > 0) === sideA) lo = tm; else hi = tm; }
+      var tc = (lo + hi) / 2;
+      if (tc < 1e-9) idx = si2; else if (tc > 1 - 1e-9) idx = si2 + 1;
+      else { lineSegs = lineSegs.slice(0, si2).concat(splitSegAt(s2, tc), lineSegs.slice(si2 + 1)); idx = si2 + 1; nAnch++; }
+    }
+    if (idx < 1 || idx > nAnch - 2) return null;
+    return { segments: lineSegs, splitAnchorIndex: idx };
+  }
+  // 원형/변환 cap geometry(path/cubic) → 관리형 patternLine 세그먼트 + SP anchor 인덱스(명시 기준 capSplit 이 있으면 그 교점, 없으면 apex 최근접).
   function capLineFromGeometry(sleeveGeometry) {
     if (!sleeveGeometry || !Array.isArray(sleeveGeometry.outline)) return null;
     var capSegs = capSegsOf(sleeveGeometry);
@@ -292,6 +330,11 @@
     // 방향: 시작 anchor 가 뒤(낮은 x)여야. 아니면 전체 역순.
     var first = lineSegs[0].from, last = lineSegs[lineSegs.length - 1].to;
     if (first.x > last.x) lineSegs = lineSegs.reverse().map(function (s) { return s.kind === "line" ? { kind: "line", from: cp(s.to), to: cp(s.from) } : { kind: "cubic", from: cp(s.to), c1: cp(s.c2), c2: cp(s.c1), to: cp(s.from) }; });
+    var split = sleeveGeometry.capSplit;
+    if (split !== undefined && split !== null) {   // 명시 분할 기준(Ⓙ·Ⓚ) — 잘못된 값이면 측정 불가(null)
+      if (!(typeof split.x === "number" && isFinite(split.x))) return null;
+      return capSplitAtX(lineSegs, split.x);
+    }
     // SP = apex(min y) 최근접 anchor.
     var anchors = anchorsOfLine(lineSegs), sp = 0;
     for (var i = 1; i < anchors.length; i++) if (anchors[i].y < anchors[sp].y) sp = i;

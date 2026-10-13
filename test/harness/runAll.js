@@ -112,6 +112,8 @@ const suites = [
   { file: "designSleeveGCheck.js",      golden: false },
   { file: "designSleeveHCheck.js",      golden: false },
   { file: "designSleeveICheck.js",      golden: false },
+  { file: "designSleeveJCheck.js",      golden: false },
+  { file: "designSleeveKCheck.js",      golden: false },
   // 소매 Ⓐ UI/프리셋 연결: 카탈로그(sleevePresets)·적용 상태(sleeveAApply)·차단 사유·재제도 훅·표시 줄·완료 연결 차단·index/ui 배선.
   { file: "sleeveAUICheck.js",          golden: false },
   { file: "sleeveAResultCheck.js",      golden: false },
@@ -126,6 +128,9 @@ const suites = [
   { file: "sleeveGUICheck.js",          golden: false },
   { file: "sleeveHUICheck.js",          golden: false },
   { file: "sleeveIUICheck.js",          golden: false },
+  { file: "sleeveJUICheck.js",          golden: false },
+  { file: "sleeveKUICheck.js",          golden: false },
+  { file: "sleeveCapSplitCheck.js",     golden: false },
   { file: "sleeveCResultCheck.js",      golden: false },
   // 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시(sleeveAnnotation): 라벨·치수가 실제 geometry/meta 와 일치(독립 실측)·EL 변경/라인 전환/몸판 변경 동기화·기본 소매 모델 없음·표시 전용(상태·hash 불변)·글자 겹침·렌더/CSS/토글 배선.
   { file: "sleeveAnnotationCheck.js",   golden: false },

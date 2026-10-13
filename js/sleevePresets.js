@@ -6,7 +6,7 @@
 // ★ 소매 10종류의 이름·시작 쪽·표지 기호는 P036 판독 표만 근거다. 아직 판독하지 않은 라인의 변형(Ⓑ 다음 기호 등)은
 //   **슬롯을 만들지 않는다** — 표지 대표 기호 하나만 «보류»로 두고, 왜 못 만드는지(blockedBy)를 들고 있게 한다.
 //
-// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ · 턱 Ⓕ · Ⓖ · 퍼프 Ⓗ · Ⓘ 아홉 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
+// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ · 턱 Ⓕ · Ⓖ · 퍼프 Ⓗ · Ⓘ · Ⓙ · Ⓚ 열한 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
 // 그중 Ⓐ 는: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
 //   (`designSleeveA.draftSleeveA`, [패턴학교] P.137–139 «타입 4»). 이 레코드는 수치를 갖지 않는다 — 소매 길이만
 //   사용자가 정하고 나머지는 전부 몸판에서 읽는다. 순수(DOM·storage 미접근).
@@ -89,7 +89,21 @@
     { id: "bunka-sleeve-I", familyId: "puff-sleeve", symbol: "I",
       method: "puff-cap-pivot-slash-from-sleeve-A", methodPage: 44,
       inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
-        { key: "palmCircumferenceCm", label: "손바닥 둘레", unit: "cm", defaultValue: 21 }] }
+        { key: "palmCircumferenceCm", label: "손바닥 둘레", unit: "cm", defaultValue: 21 }] },
+    // Ⓙ(P.45): Ⓐ 중심선을 잘라 두 반쪽을 좌우 ∅/2 평행 이동(회전 없음). ∅ = 0.7● − ■(개더 계수 0.7 = 책 설정). 소매산 꼭대기 +상승(기본 0.7 — 별개 설정값),
+    //   틈 위만 국소 재제도 · 소맷부리 직선. 김님 승인 2026-10-12(docs/book/P045.md). 화면 검토용 시안.
+    { id: "bunka-sleeve-J", familyId: "puff-sleeve", symbol: "J",
+      method: "puff-center-parallel-spread-from-sleeve-A", methodPage: 45,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "palmCircumferenceCm", label: "손바닥 둘레", unit: "cm", defaultValue: 21 },
+        { key: "riseCm", label: "소매산 상승", unit: "cm", defaultValue: 0.7 }] },
+    // Ⓚ(P.45 하단): Ⓐ 에 절개 3개 — 가운데 좌우 ∅/6 평행(Ⓙ 방법) + 바깥 조각만 이동한 소매산 기준점에서 회전. ∅ = 1.5● − ■(개더 계수 1.5 = 책 설정), 틈마다 ∅/3.
+    //   소매산 꼭대기 +상승(기본 0.7 — 별개 설정값) · 가운데 틈·기준점 꺾임 국소 재제도 · 소맷부리 전체 자연 곡선. 김님 승인 2026-10-13(docs/book/P045.md § Ⓚ). 화면 검토용 시안.
+    { id: "bunka-sleeve-K", familyId: "puff-sleeve", symbol: "K",
+      method: "puff-center-parallel-plus-cap-pivot-slash-from-sleeve-A", methodPage: 45,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "palmCircumferenceCm", label: "손바닥 둘레", unit: "cm", defaultValue: 21 },
+        { key: "riseCm", label: "소매산 상승", unit: "cm", defaultValue: 0.7 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -137,7 +151,11 @@
         { id: "bunka-sleeve-H", symbol: "H", label: "H · EL 아래 a·b 절개 · 소맷부리만 벌림 · 커프스 개더(소매 Ⓐ 기반, 시안)", page: 44, methodPage: 44,
           availability: "available", presetId: "bunka-sleeve-H", note: null },
         { id: "bunka-sleeve-I", symbol: "I", label: "I · 소매산 기준점 절개 3개 · 소맷부리만 벌림 · 커프스 개더(소매 Ⓐ 기반, 시안)", page: 44, methodPage: 44,
-          availability: "available", presetId: "bunka-sleeve-I", note: null }
+          availability: "available", presetId: "bunka-sleeve-I", note: null },
+        { id: "bunka-sleeve-J", symbol: "J", label: "J · 중심선 평행 벌림 · 소매산 상승 · 커프스 개더(소매 Ⓐ 기반, 시안)", page: 45, methodPage: 45,
+          availability: "available", presetId: "bunka-sleeve-J", note: null },
+        { id: "bunka-sleeve-K", symbol: "K", label: "K · 중심선 평행 벌림 + 소매산 기준점 절개 2개 · 커프스 개더 1.5배(소매 Ⓐ 기반, 시안)", page: 45, methodPage: 45,
+          availability: "available", presetId: "bunka-sleeve-K", note: null }
       ] },
     pendingFamily("short-sleeve", 6, "반소매", "L", 46),
     pendingFamily("dolman-sleeve", 7, "돌먼 소매", "R", 49),
