@@ -6,7 +6,7 @@
 // ★ 소매 10종류의 이름·시작 쪽·표지 기호는 P036 판독 표만 근거다. 아직 판독하지 않은 라인의 변형(Ⓑ 다음 기호 등)은
 //   **슬롯을 만들지 않는다** — 표지 대표 기호 하나만 «보류»로 두고, 왜 못 만드는지(blockedBy)를 들고 있게 한다.
 //
-// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ · 턱 Ⓕ · Ⓖ · 퍼프 Ⓗ · Ⓘ · Ⓙ · Ⓚ 열한 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
+// 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ · 턱 Ⓕ · Ⓖ · 퍼프 Ⓗ · Ⓘ · Ⓙ · Ⓚ · 반소매 Ⓛ 열두 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
 // 그중 Ⓐ 는: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
 //   (`designSleeveA.draftSleeveA`, [패턴학교] P.137–139 «타입 4»). 이 레코드는 수치를 갖지 않는다 — 소매 길이만
 //   사용자가 정하고 나머지는 전부 몸판에서 읽는다. 순수(DOM·storage 미접근).
@@ -103,7 +103,14 @@
       method: "puff-center-parallel-plus-cap-pivot-slash-from-sleeve-A", methodPage: 45,
       inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
         { key: "palmCircumferenceCm", label: "손바닥 둘레", unit: "cm", defaultValue: 21 },
-        { key: "riseCm", label: "소매산 상승", unit: "cm", defaultValue: 0.7 }] }
+        { key: "riseCm", label: "소매산 상승", unit: "cm", defaultValue: 0.7 }] },
+    // Ⓛ(P.46 반소매 퍼프 «소맷부리를 잘라서 벌린다»): 소매길이 기본 20(SP → 출발 밑단)의 Ⓐ 에 절개 3개 — 가운데 SP 대칭 → 바깥 이동 기준점(Ⓘ 와 같은 이동).
+    //   ● = 위팔 둘레(이 책 26) + 4 · ∅ = 0.5● − ■ · ⊠ = ∅/4 · 틈(현) 가운데 2⊠ · 양옆 ⊠. 김님 확정 2026-10-13(docs/book/P046.md). 화면 검토용 시안.
+    //   sleeveLengthCm 의 defaultValue = 이 라인을 고를 때 소매길이 입력칸에 넣는 기본값(수정 가능 — 다른 라인은 기본값 없음).
+    { id: "bunka-sleeve-L", familyId: "short-sleeve", symbol: "L",
+      method: "short-puff-cap-pivot-slash-from-sleeve-A", methodPage: 46,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm", defaultValue: 20 },
+        { key: "upperArmCm", label: "위팔 둘레", unit: "cm", defaultValue: 26 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -111,6 +118,13 @@
       familyNote: "표지 대표 기호만 확인됨 — 나머지 변형은 쪽 판독 후.",
       variants: [{ id: "bunka-sleeve-" + symbol, symbol: symbol, label: symbol + " · " + label, page: page, availability: "pending-page",
         presetId: null, blockedBy: BLOCKED, note: PENDING_NOTE }] };
+  }
+
+  // 반소매(P.46–48)의 아직 구현하지 않은 변형: 제목만 판독(2026-10-13) — 본문·도해 해석과 김님 확정 전이라 보류(blockedBy 를 들고 있다).
+  var SHORT_BLOCKED = "제목만 판독했다(P.46–48) — 본문·도해 해석과 김님의 도메인 확정(치수·분량·마무리)이 아직 없다. 변형마다 읽기 전용 해석 → 승인 후 별도 착수";
+  function shortPending(symbol, title, page) {
+    return { id: "bunka-sleeve-" + symbol, symbol: symbol, label: symbol + " · " + title, page: page, availability: "pending-page",
+      presetId: null, blockedBy: SHORT_BLOCKED, note: PENDING_NOTE };
   }
 
   // ── 카탈로그(교시 순서 = P.36–37) ──
@@ -157,7 +171,17 @@
         { id: "bunka-sleeve-K", symbol: "K", label: "K · 중심선 평행 벌림 + 소매산 기준점 절개 2개 · 커프스 개더 1.5배(소매 Ⓐ 기반, 시안)", page: 45, methodPage: 45,
           availability: "available", presetId: "bunka-sleeve-K", note: null }
       ] },
-    pendingFamily("short-sleeve", 6, "반소매", "L", 46),
+    { id: "short-sleeve", order: 6, label: "반소매", symbol: "L", page: 46, availability: "available", note: null,
+      familyNote: "6교시 «반소매의 변형»(P.46–48): Ⓛ·Ⓜ·Ⓝ·Ⓞ·Ⓟ·Ⓠ. 지금 실행 가능한 것은 Ⓛ — 짧은 소매 Ⓐ(소매길이 기본 20)에 절개 3개를 넣어 소맷부리만 벌리고, 커프스(위팔 둘레 + 4)에 개더로 단다(개더 = 커프스의 0.5배). 화면 검토용 시안.",
+      variants: [
+        { id: "bunka-sleeve-L", symbol: "L", label: "L · 소맷부리를 잘라서 벌린다(퍼프) · 절개 3개 2:1:1 · 커프스 개더 0.5배(소매 Ⓐ 기반, 시안)", page: 46, methodPage: 46,
+          availability: "available", presetId: "bunka-sleeve-L", note: null },
+        shortPending("M", "소매산과 소맷부리를 잘라서 벌린다(퍼프)", 46),
+        shortPending("N", "소맷부리를 잘라서 벌린다(퍼프 · 소맷부리 턱)", 47),
+        shortPending("O", "소매산과 소맷부리를 잘라서 벌린다(턱트)", 47),
+        shortPending("P", "소맷부리를 잘라서 벌린다(플레어)", 48),
+        shortPending("Q", "소맷부리선을 그린다(캡)", 48)
+      ] },
     pendingFamily("dolman-sleeve", 7, "돌먼 소매", "R", 49),
     pendingFamily("shirt-sleeve", 8, "셔츠 소매", "T", 50),
     pendingFamily("raglan-sleeve", 9, "래글런 소매", "V", 52),

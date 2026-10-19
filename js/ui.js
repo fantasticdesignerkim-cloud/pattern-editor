@@ -1037,14 +1037,15 @@
   function sleeveDOn(project) { return !!(window.sleeveDApply && window.sleeveDApply.isActive(project)); }
   function sleeveEOn(project) { return !!(window.sleeveEApply && window.sleeveEApply.isActive(project)); }   // 소매 Ⓔ(P.42 플레어 절개 3개)
   function sleeveFOn(project) { return !!(window.sleeveFApply && window.sleeveFApply.isActive(project)); }   // 소매 Ⓕ(P.43 턱 소매) — 입력 = 소매길이 + 턱 분량
+  function sleeveLOn(project) { return !!(window.sleeveLApply && window.sleeveLApply.isActive(project)); }   // 소매 Ⓛ(P.46 반소매 퍼프) — 입력 = 소매길이(기본 20) + 위팔 둘레(기본 26)
   function sleeveKOn(project) { return !!(window.sleeveKApply && window.sleeveKApply.isActive(project)); }   // 소매 Ⓚ(P.45 하단 퍼프: Ⓙ 방법 + 소매산 기준점 절개) — 입력 = 소매길이 + 손바닥 + 소매산 상승
   function sleeveJOn(project) { return !!(window.sleeveJApply && window.sleeveJApply.isActive(project)); }   // 소매 Ⓙ(P.45 퍼프 중심선 평행 벌림) — 입력 = 소매길이 + 손바닥 + 소매산 상승
   function sleeveIOn(project) { return !!(window.sleeveIApply && window.sleeveIApply.isActive(project)); }   // 소매 Ⓘ(P.44 하단 퍼프) — 입력 = 소매길이 + 손바닥
   function sleeveHOn(project) { return !!(window.sleeveHApply && window.sleeveHApply.isActive(project)); }   // 소매 Ⓗ(P.44 퍼프) — 입력 = 소매길이 + EL + 손바닥 + ★
   function sleeveGOn(project) { return !!(window.sleeveGApply && window.sleeveGApply.isActive(project)); }   // 소매 Ⓖ(P.43 하단) — 입력 = 소매길이 + 턱 분량 + ★
-  function sleeveLineOn(project) { return sleeveAOn(project) || sleeveBOn(project) || sleeveCOn(project) || sleeveDOn(project) || sleeveEOn(project) || sleeveFOn(project) || sleeveGOn(project) || sleeveHOn(project) || sleeveIOn(project) || sleeveJOn(project) || sleeveKOn(project); }
-  function sleeveLineSymbol(project) { return sleeveKOn(project) ? "Ⓚ" : sleeveJOn(project) ? "Ⓙ" : sleeveIOn(project) ? "Ⓘ" : sleeveHOn(project) ? "Ⓗ" : sleeveGOn(project) ? "Ⓖ" : sleeveFOn(project) ? "Ⓕ" : sleeveEOn(project) ? "Ⓔ" : sleeveDOn(project) ? "Ⓓ" : sleeveCOn(project) ? "Ⓒ" : sleeveBOn(project) ? "Ⓑ" : "Ⓐ"; }
-  function presetSymbolOfResult(res) { const id = res && res.origin && res.origin.presetId; return id === "bunka-sleeve-K" ? "Ⓚ" : id === "bunka-sleeve-J" ? "Ⓙ" : id === "bunka-sleeve-I" ? "Ⓘ" : id === "bunka-sleeve-H" ? "Ⓗ" : id === "bunka-sleeve-G" ? "Ⓖ" : id === "bunka-sleeve-F" ? "Ⓕ" : id === "bunka-sleeve-E" ? "Ⓔ" : id === "bunka-sleeve-D" ? "Ⓓ" : id === "bunka-sleeve-C" ? "Ⓒ" : id === "bunka-sleeve-B" ? "Ⓑ" : "Ⓐ"; }
+  function sleeveLineOn(project) { return sleeveAOn(project) || sleeveBOn(project) || sleeveCOn(project) || sleeveDOn(project) || sleeveEOn(project) || sleeveFOn(project) || sleeveGOn(project) || sleeveHOn(project) || sleeveIOn(project) || sleeveJOn(project) || sleeveKOn(project) || sleeveLOn(project); }
+  function sleeveLineSymbol(project) { return sleeveLOn(project) ? "Ⓛ" : sleeveKOn(project) ? "Ⓚ" : sleeveJOn(project) ? "Ⓙ" : sleeveIOn(project) ? "Ⓘ" : sleeveHOn(project) ? "Ⓗ" : sleeveGOn(project) ? "Ⓖ" : sleeveFOn(project) ? "Ⓕ" : sleeveEOn(project) ? "Ⓔ" : sleeveDOn(project) ? "Ⓓ" : sleeveCOn(project) ? "Ⓒ" : sleeveBOn(project) ? "Ⓑ" : "Ⓐ"; }
+  function presetSymbolOfResult(res) { const id = res && res.origin && res.origin.presetId; return id === "bunka-sleeve-L" ? "Ⓛ" : id === "bunka-sleeve-K" ? "Ⓚ" : id === "bunka-sleeve-J" ? "Ⓙ" : id === "bunka-sleeve-I" ? "Ⓘ" : id === "bunka-sleeve-H" ? "Ⓗ" : id === "bunka-sleeve-G" ? "Ⓖ" : id === "bunka-sleeve-F" ? "Ⓕ" : id === "bunka-sleeve-E" ? "Ⓔ" : id === "bunka-sleeve-D" ? "Ⓓ" : id === "bunka-sleeve-C" ? "Ⓒ" : id === "bunka-sleeve-B" ? "Ⓑ" : "Ⓐ"; }
   // 소매 라인 배타 해제: 지정한 라인만 남기고 나머지를 끈다(geometry.sleeve 는 적용한 쪽이 이미 덮어씀).
   function clearOtherSleeveLines(project, keep) {
     if (keep !== "A" && window.sleeveAApply) window.sleeveAApply.clear(project);
@@ -1058,6 +1059,7 @@
     if (keep !== "I" && window.sleeveIApply) window.sleeveIApply.clear(project);
     if (keep !== "J" && window.sleeveJApply) window.sleeveJApply.clear(project);
     if (keep !== "K" && window.sleeveKApply) window.sleeveKApply.clear(project);
+    if (keep !== "L" && window.sleeveLApply) window.sleeveLApply.clear(project);
   }
   function applySleeveI(project) {   // Ⓘ 적용 — 입력 = 소매길이 · 손바닥(Ⓗ 와 같은 입력칸 inpSleeveHPalm)
     const rejectI = (text, reason) => {
@@ -1096,6 +1098,42 @@
     if (typeof render === "function") render();
     setSleeveNote("소매 Ⓙ 적용됨(시안) · 소매길이 " + fmtL(len.v) + " · 손바닥 " + fmtL(palm.v) + " · 소매산 상승 " + fmtL(rise) + "cm · 세션 전용");
     return true;
+  }
+  function applySleeveL(project) {   // Ⓛ 적용 — 입력 = 소매길이(기본 20 · SP → 출발 밑단) · 위팔 둘레(inpSleeveUpperArm, 기본 26). 값을 고쳐 쓰지 않는다(범위 밖이면 사유를 내고 멈춤).
+    const rejectL = (text, reason) => {
+      const raw = { sleeveLength: (document.getElementById("inpSleeveLength") || {}).value, upperArm: (document.getElementById("inpSleeveUpperArm") || {}).value };   // 거부된 입력 원문(패널 갱신이 덮어쓰기 전)
+      if (sleeveLOn(project)) { window.sleeveLApply.reject(project, { reason: reason || "invalid-input", text: text, attemptedInputs: raw }); syncSleeveLineUI(project); }
+      setSleeveNote(sleeveLOn(project) ? "소매 Ⓛ 차단: " + text + " · 완료 불가" : text + " · 이전 소매 유지");
+      return false;
+    };
+    const len = readNum("inpSleeveLength", 10, 90);
+    if (!len.valid || !(len.v > 0)) return rejectL("소매길이 10–90 범위를 확인하세요", "invalid-sleeve-length");
+    const arm = readPos("inpSleeveUpperArm");
+    if (!arm.valid) return rejectL("위팔 둘레 값을 확인하세요(" + arm.why + ")", "invalid-upper-arm");
+    const r = window.sleeveLApply.apply(project, { sleeveLengthCm: len.v, upperArmCm: arm.v });
+    if (!r.ok) return rejectL((sleeveLOn(project) ? "" : "소매 Ⓛ 적용 불가: ") + r.text, r.reason);
+    clearOtherSleeveLines(project, "L");
+    relayoutSleeve();
+    if (typeof render === "function") render();
+    setSleeveNote("소매 Ⓛ 적용됨(시안) · 소매길이 " + fmtL(len.v) + " · 위팔 둘레 " + fmtL(arm.v) + "cm · 세션 전용");
+    return true;
+  }
+  // 선택한 세부 제도가 소매길이 기본값을 가지면(반소매 Ⓛ = 20) 그 선택을 한 순간 입력칸에 넣는다(화면에 보이는 값 — 수정 가능). 사용자가 고친 값은 건드리지 않고,
+  //   기본값이 없는 제도로 옮기면 넣기 전 값으로 되돌린다(입력칸이 아직 그 기본값 그대로일 때만).
+  let sleeveLenAuto = null;   // { value: 넣은 기본값, prev: 그 전 입력칸 값 }
+  function applySleeveLengthDefault() {
+    const el = document.getElementById("inpSleeveLength"); if (!el || !window.sleevePresets) return;
+    const fid = selectedSleeveFamilyId();
+    const rr = fid !== SLEEVE_BASE ? window.sleevePresets.resolve(fid, selectedSleeveVariantId()) : null;
+    const rec = rr && rr.ok ? window.sleevePresets.get(rr.presetId) : null;
+    const inp = rec ? rec.inputs.filter(i => i.key === "sleeveLengthCm")[0] : null;
+    const def = inp && typeof inp.defaultValue === "number" ? inp.defaultValue : null;
+    if (def !== null) {
+      if (!sleeveLenAuto || sleeveLenAuto.value !== def) { sleeveLenAuto = { value: def, prev: sleeveLenAuto ? sleeveLenAuto.prev : el.value }; el.value = String(def); }
+    } else if (sleeveLenAuto) {
+      if (Number(el.value) === sleeveLenAuto.value) el.value = sleeveLenAuto.prev;
+      sleeveLenAuto = null;
+    }
   }
   function applySleeveK(project) {   // Ⓚ 적용 — 입력 = 소매길이 · 손바닥(inpSleeveHPalm 공용) · 소매산 상승(inpSleeveRise, 기본 0.7 · 0 허용)
     const rejectK = (text, reason) => {
@@ -1322,7 +1360,7 @@
   // Ⓐ 확인 정보(패턴명·소매산·소매폭·AH·목표/실제 이세). Ⓐ 가 꺼져 있으면 숨긴다.
   function renderSleeveAInfo(project) {
     const el = document.getElementById("designSleeveAInfo"); if (!el) return;
-    const api = sleeveKOn(project) ? window.sleeveKApply : sleeveJOn(project) ? window.sleeveJApply : sleeveIOn(project) ? window.sleeveIApply : sleeveHOn(project) ? window.sleeveHApply : sleeveGOn(project) ? window.sleeveGApply : sleeveFOn(project) ? window.sleeveFApply : sleeveEOn(project) ? window.sleeveEApply : sleeveDOn(project) ? window.sleeveDApply : sleeveCOn(project) ? window.sleeveCApply : sleeveBOn(project) ? window.sleeveBApply : window.sleeveAApply;
+    const api = sleeveLOn(project) ? window.sleeveLApply : sleeveKOn(project) ? window.sleeveKApply : sleeveJOn(project) ? window.sleeveJApply : sleeveIOn(project) ? window.sleeveIApply : sleeveHOn(project) ? window.sleeveHApply : sleeveGOn(project) ? window.sleeveGApply : sleeveFOn(project) ? window.sleeveFApply : sleeveEOn(project) ? window.sleeveEApply : sleeveDOn(project) ? window.sleeveDApply : sleeveCOn(project) ? window.sleeveCApply : sleeveBOn(project) ? window.sleeveBApply : window.sleeveAApply;
     const lines = (project && api) ? api.infoLines(project) : [];
     el.hidden = lines.length === 0;
     el.setAttribute("data-blocked", project && api && api.isBlocked(project) ? "1" : "0");
@@ -1345,9 +1383,9 @@
       palmRow.hidden = !(sleeveBOn(project) || (rec && rec.id !== "bunka-sleeve-H" && rec.id !== "bunka-sleeve-I" && rec.id !== "bunka-sleeve-J" && rec.id !== "bunka-sleeve-K" && rec.inputs.some(i => i.key === "palmCircumferenceCm")));   // Ⓗ 는 자기 손바닥 입력(rowSleeveHPalm, 기본 21)을 쓴다
     }
     const hRefRow = document.getElementById("rowSleeveHRef");   // Ⓗ 비교용 «벌리기 전 도안» 토글(기본 꺼짐) — Ⓗ 가 켜져 있을 때만
-    if (hRefRow) hRefRow.hidden = !(project && (sleeveHOn(project) || sleeveIOn(project) || sleeveJOn(project) || sleeveKOn(project)));
+    if (hRefRow) hRefRow.hidden = !(project && (sleeveHOn(project) || sleeveIOn(project) || sleeveJOn(project) || sleeveKOn(project) || sleeveLOn(project)));
     const hPcRow = document.getElementById("rowSleeveHPieces");   // Ⓗ 원래 종이 조각(녹색) 토글(기본 켜짐) — Ⓗ 가 켜져 있을 때만
-    if (hPcRow) hPcRow.hidden = !(project && (sleeveHOn(project) || sleeveIOn(project) || sleeveJOn(project) || sleeveKOn(project)));
+    if (hPcRow) hPcRow.hidden = !(project && (sleeveHOn(project) || sleeveIOn(project) || sleeveJOn(project) || sleeveKOn(project) || sleeveLOn(project)));
     const infoRow = document.getElementById("rowSleeveInfo");   // 제작 정보 표시 토글 — 소매 라인(Ⓐ/Ⓑ/Ⓒ)이 켜져 있을 때만
     if (infoRow) infoRow.hidden = !(project && sleeveLineOn(project));
     const elbowRow = document.getElementById("rowSleeveElbow");   // 팔꿈치 길이 EL(Ⓒ 입력) — 선택된(또는 켜진) 라인의 입력 목록에 있을 때만 보인다
@@ -1367,6 +1405,12 @@
       const rr4 = fid !== SLEEVE_BASE && window.sleevePresets ? window.sleevePresets.resolve(fid, selectedSleeveVariantId()) : null;
       const rec4 = rr4 && rr4.ok ? window.sleevePresets.get(rr4.presetId) : null;
       starRow.hidden = !(sleeveGOn(project) || (rec4 && rec4.inputs.some(i => i.key === "starCm")));
+    }
+    const armRow = document.getElementById("rowSleeveUpperArm");   // Ⓛ 위팔 둘레 — Ⓛ 이 켜져 있거나 선택됐을 때만
+    if (armRow) {
+      const rr7 = fid !== SLEEVE_BASE && window.sleevePresets ? window.sleevePresets.resolve(fid, selectedSleeveVariantId()) : null;
+      const rec7 = rr7 && rr7.ok ? window.sleevePresets.get(rr7.presetId) : null;
+      armRow.hidden = !(sleeveLOn(project) || (rec7 && rec7.inputs.some(i => i.key === "upperArmCm")));
     }
     const riseRow = document.getElementById("rowSleeveRise");   // Ⓙ 소매산 상승 — Ⓙ 가 켜져 있거나 선택됐을 때만
     if (riseRow) {
@@ -1409,7 +1453,12 @@
     const isI = !!(window.sleeveIApply && r.presetId === window.sleeveIApply.PRESET_ID);
     const isJ = !!(window.sleeveJApply && r.presetId === window.sleeveJApply.PRESET_ID);
     const isK = !!(window.sleeveKApply && r.presetId === window.sleeveKApply.PRESET_ID);
-    if (sleeveManual(project)) { setSleeveNote("소매산 직접 수정 중에는 소매 " + (isK ? "Ⓚ" : isJ ? "Ⓙ" : isI ? "Ⓘ" : isH ? "Ⓗ" : isG ? "Ⓖ" : isF ? "Ⓕ" : isE ? "Ⓔ" : isD ? "Ⓓ" : isC ? "Ⓒ" : isB ? "Ⓑ" : "Ⓐ") + " 를 적용할 수 없습니다 · 기본 소매산으로 돌아가기 후 적용"); return; }
+    const isL = !!(window.sleeveLApply && r.presetId === window.sleeveLApply.PRESET_ID);
+    if (sleeveManual(project)) { setSleeveNote("소매산 직접 수정 중에는 소매 " + (isL ? "Ⓛ" : isK ? "Ⓚ" : isJ ? "Ⓙ" : isI ? "Ⓘ" : isH ? "Ⓗ" : isG ? "Ⓖ" : isF ? "Ⓕ" : isE ? "Ⓔ" : isD ? "Ⓓ" : isC ? "Ⓒ" : isB ? "Ⓑ" : "Ⓐ") + " 를 적용할 수 없습니다 · 기본 소매산으로 돌아가기 후 적용"); return; }
+    if (isL) {
+      if (applySleeveL(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      return;
+    }
     if (isK) {
       if (applySleeveK(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
       return;
@@ -1494,6 +1543,7 @@
     project = project || designProjectNow(); if (!project) return;
     if (sleeveAOn(project)) { window.sleeveAApply.rederive(project); relayoutSleeve(); return; }   // 소매 Ⓐ: 새 몸판 기준 재제도(기존 파생 경로 미사용)
     if (sleeveBOn(project)) { window.sleeveBApply.rederive(project); relayoutSleeve(); return; }   // 소매 Ⓑ: 새 몸판 기준 Ⓐ→Ⓑ 재제도
+    if (sleeveLOn(project)) { window.sleeveLApply.rederive(project); relayoutSleeve(); return; }   // 소매 Ⓛ: 새 몸판 기준 Ⓐ→Ⓛ 재제도(같은 입력)
     if (sleeveKOn(project)) { window.sleeveKApply.rederive(project); relayoutSleeve(); return; }   // 소매 Ⓚ: 새 몸판 기준 Ⓐ→Ⓚ 재제도(같은 입력)
     if (sleeveJOn(project)) { window.sleeveJApply.rederive(project); relayoutSleeve(); return; }   // 소매 Ⓙ: 새 몸판 기준 Ⓐ→Ⓙ 재제도(같은 입력)
     if (sleeveIOn(project)) { window.sleeveIApply.rederive(project); relayoutSleeve(); return; }   // 소매 Ⓘ: 새 몸판 기준 Ⓐ→Ⓘ 재제도(같은 입력)
@@ -1597,6 +1647,11 @@
     if (!project || !window.designSleeve) return;
     if (!sleeveGateOk(project)) { setSleeveNote("몸판 완료 후 소매를 편집할 수 있습니다"); return; }
     if (sleeveCapInvalid(project)) { setSleeveNote("소매산 편집이 무효입니다 · 복구 또는 기본 소매산으로 돌아간 뒤 적용"); return; }
+    if (sleeveLOn(project)) {   // 소매 Ⓛ: 소매길이·위팔 둘레 입력 — 같은 몸판에서 Ⓐ→Ⓛ 다시 제도
+      applySleeveL(project);
+      updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project);
+      return;
+    }
     if (sleeveKOn(project)) {   // 소매 Ⓚ: 소매길이·손바닥·상승 입력 — 같은 몸판에서 Ⓐ→Ⓚ 다시 제도
       applySleeveK(project);
       updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project);
@@ -1730,6 +1785,17 @@
       if (!sa.blocked) { setIf("inpSleeveCuff", sa.meta.bicepCm); setIf("inpSleeveBicep", sa.meta.bicepCm); setIf("inpSleeveCapHeight", sa.meta.capHeightCm); }
       setSleeveNote(sa.blocked ? "소매 Ⓐ 차단: " + sa.blocked.text : "소매 Ⓐ · 몸판 진동둘레 기준 · 소매길이만 입력");
     }
+    else if (sleeveLOn(project)) {   // 소매 Ⓛ: 입력칸은 소매길이·위팔 둘레(입력 원문), 소맷부리 = 곡선 실측(읽기 전용)
+      const sl = project.working.sleeveL;
+      const ae = document.getElementById("inpSleeveUpperArm");
+      if (!sl.blocked) { setIf("inpSleeveLength", sl.parameters.sleeveLengthCm); if (ae && document.activeElement !== ae) ae.value = String(sl.parameters.upperArmCm); setIf("inpSleeveCuff", sl.meta.hem.lengthCm); setIf("inpSleeveBicep", sl.meta.widthCm); const ch = document.getElementById("inpSleeveCapHeight"); if (ch) ch.value = ""; }
+      if (sl.blocked) {   // 차단 중: 위의 공용 갱신이 소매길이 칸을 원형 값으로 바꿔 놓는다 — 거부된 입력 원문(없으면 Ⓛ 의 마지막 적용값)으로 되돌려, 다음 적용이 몰래 다른 길이로 가지 않게 한다.
+        const le = document.getElementById("inpSleeveLength"), at = sl.blocked.attemptedInputs;
+        if (le && document.activeElement !== le) le.value = String(at && at.sleeveLength != null ? at.sleeveLength : sl.parameters.sleeveLengthCm);
+        if (ae && document.activeElement !== ae && at && at.upperArm != null) ae.value = String(at.upperArm);
+      }
+      setSleeveNote(sl.blocked ? "소매 Ⓛ 차단: " + sl.blocked.text : "소매 Ⓛ · 짧은 소매 Ⓐ 기반 반소매 퍼프(소매산 기준점 절개 3개, 화면 검토용 시안) · 소매길이·위팔 둘레만 입력");
+    }
     else if (sleeveKOn(project)) {   // 소매 Ⓚ: 입력칸은 소매길이·손바닥·상승(입력 원문), 소맷부리 = 곡선 실측(읽기 전용)
       const sk = project.working.sleeveK;
       const putK = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e && !sk.blocked) e.value = String(v); };
@@ -1817,7 +1883,7 @@
       "sleeve-b-geometry-mismatch": "소매 형상이 Ⓑ 제도 결과와 다름 · 소매 라인 다시 적용", "invalid-palm-circumference": "손바닥 둘레 값 확인",
       "sleeve-line-conflict": "소매 Ⓐ·Ⓑ·Ⓒ 중 둘 이상이 함께 켜져 있음 · 소매 라인 다시 적용",
       "sleeve-c-blocked": "소매 Ⓒ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-c-redraft-failed": "소매 Ⓒ 를 다시 제도할 수 없음",
-      "sleeve-c-geometry-mismatch": "소매 형상이 Ⓒ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-d-blocked": "소매 Ⓓ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-d-redraft-failed": "소매 Ⓓ 를 다시 제도할 수 없음", "sleeve-d-geometry-mismatch": "소매 형상이 Ⓓ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-e-blocked": "소매 Ⓔ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-e-redraft-failed": "소매 Ⓔ 를 다시 제도할 수 없음", "sleeve-e-geometry-mismatch": "소매 형상이 Ⓔ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-f-blocked": "소매 Ⓕ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-f-redraft-failed": "소매 Ⓕ 를 다시 제도할 수 없음", "sleeve-f-geometry-mismatch": "소매 형상이 Ⓕ 제도 결과와 다름 · 소매 라인 다시 적용", "invalid-tuck": "턱 분량 값 확인(Ⓕ 3 이하 · Ⓖ 2 이하)", "sleeve-g-blocked": "소매 Ⓖ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-g-redraft-failed": "소매 Ⓖ 를 다시 제도할 수 없음", "sleeve-g-geometry-mismatch": "소매 형상이 Ⓖ 제도 결과와 다름 · 소매 라인 다시 적용", "invalid-star": "★ 값 확인(0 초과)", "sleeve-h-blocked": "소매 Ⓗ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-h-redraft-failed": "소매 Ⓗ 를 다시 제도할 수 없음", "sleeve-h-geometry-mismatch": "소매 형상이 Ⓗ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-i-blocked": "소매 Ⓘ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-j-blocked": "소매 Ⓙ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-j-redraft-failed": "소매 Ⓙ 를 다시 제도할 수 없음", "sleeve-j-geometry-mismatch": "소매 형상이 Ⓙ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-k-blocked": "소매 Ⓚ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-k-redraft-failed": "소매 Ⓚ 를 다시 제도할 수 없음", "sleeve-k-geometry-mismatch": "소매 형상이 Ⓚ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-i-redraft-failed": "소매 Ⓘ 를 다시 제도할 수 없음", "sleeve-i-geometry-mismatch": "소매 형상이 Ⓘ 제도 결과와 다름 · 소매 라인 다시 적용", "invalid-elbow-length": "팔꿈치 길이 EL 값 확인" };
+      "sleeve-c-geometry-mismatch": "소매 형상이 Ⓒ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-d-blocked": "소매 Ⓓ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-d-redraft-failed": "소매 Ⓓ 를 다시 제도할 수 없음", "sleeve-d-geometry-mismatch": "소매 형상이 Ⓓ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-e-blocked": "소매 Ⓔ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-e-redraft-failed": "소매 Ⓔ 를 다시 제도할 수 없음", "sleeve-e-geometry-mismatch": "소매 형상이 Ⓔ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-f-blocked": "소매 Ⓕ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-f-redraft-failed": "소매 Ⓕ 를 다시 제도할 수 없음", "sleeve-f-geometry-mismatch": "소매 형상이 Ⓕ 제도 결과와 다름 · 소매 라인 다시 적용", "invalid-tuck": "턱 분량 값 확인(Ⓕ 3 이하 · Ⓖ 2 이하)", "sleeve-g-blocked": "소매 Ⓖ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-g-redraft-failed": "소매 Ⓖ 를 다시 제도할 수 없음", "sleeve-g-geometry-mismatch": "소매 형상이 Ⓖ 제도 결과와 다름 · 소매 라인 다시 적용", "invalid-star": "★ 값 확인(0 초과)", "sleeve-h-blocked": "소매 Ⓗ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-h-redraft-failed": "소매 Ⓗ 를 다시 제도할 수 없음", "sleeve-h-geometry-mismatch": "소매 형상이 Ⓗ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-i-blocked": "소매 Ⓘ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-j-blocked": "소매 Ⓙ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-j-redraft-failed": "소매 Ⓙ 를 다시 제도할 수 없음", "sleeve-j-geometry-mismatch": "소매 형상이 Ⓙ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-k-blocked": "소매 Ⓚ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-k-redraft-failed": "소매 Ⓚ 를 다시 제도할 수 없음", "sleeve-k-geometry-mismatch": "소매 형상이 Ⓚ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-l-blocked": "소매 Ⓛ 차단 중(위 사유 확인) · 입력을 고쳐 다시 적용하거나 원형 소매로 돌아가기", "sleeve-l-redraft-failed": "소매 Ⓛ 를 다시 제도할 수 없음", "sleeve-l-geometry-mismatch": "소매 형상이 Ⓛ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-i-redraft-failed": "소매 Ⓘ 를 다시 제도할 수 없음", "sleeve-i-geometry-mismatch": "소매 형상이 Ⓘ 제도 결과와 다름 · 소매 라인 다시 적용", "invalid-elbow-length": "팔꿈치 길이 EL 값 확인" };
     return m[reason] || reason;
   }
   function updateSleeveCheckpointUI(project) {
@@ -3190,13 +3256,13 @@
     if (chkPep) chkPep.addEventListener("change", () => { if (typeof render === "function") render(); });
     // 소매 라인 카탈로그(P.36–): 종류·세부 선택 → 라인 적용(소매 Ⓐ 또는 원형 소매 기준으로 복귀).
     const sleeveFamSel = document.getElementById("selSleeveFamily");
-    if (sleeveFamSel) sleeveFamSel.addEventListener("change", () => { rebuildSleeveVariantOptions(); syncSleeveLineUI(); });
+    if (sleeveFamSel) sleeveFamSel.addEventListener("change", () => { rebuildSleeveVariantOptions(); applySleeveLengthDefault(); syncSleeveLineUI(); });
     const sleeveVarSel = document.getElementById("selSleevePreset");
-    if (sleeveVarSel) sleeveVarSel.addEventListener("change", () => syncSleeveLineUI());
+    if (sleeveVarSel) sleeveVarSel.addEventListener("change", () => { applySleeveLengthDefault(); syncSleeveLineUI(); });
     const applySleeveLine = document.getElementById("btnApplySleevePreset");
     if (applySleeveLine) applySleeveLine.addEventListener("click", () => { if (!applySleeveLine.disabled) onApplySleevePreset(); });
     // 소매 모양(S1): 입력 중엔 버튼 활성만 갱신·Enter 로 적용, 적용/원형복원 버튼.
-    ["inpSleeveLength", "inpSleeveCuff", "inpSleevePalm", "inpSleeveElbow", "inpSleeveTuck", "inpSleeveStar", "inpSleeveHPalm", "inpSleeveDrop", "inpSleeveRise"].forEach(id => {
+    ["inpSleeveLength", "inpSleeveCuff", "inpSleevePalm", "inpSleeveElbow", "inpSleeveTuck", "inpSleeveStar", "inpSleeveHPalm", "inpSleeveDrop", "inpSleeveRise", "inpSleeveUpperArm"].forEach(id => {
       const el = document.getElementById(id); if (!el) return;
       el.addEventListener("input", syncSleeveButtons);
       el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplySleeve(); } });
@@ -3330,7 +3396,7 @@
   // 소매 제작 정보가 소매 bbox 밖으로 나오는 px 여백(fit 용, designLayout.fitUnion). 토글 OFF·소매 라인 없음·차단이면 null → 기존 fit 그대로.
   window.sleeveAnnotationOverhang = function (scale) {
     const project = designProjectNow(), chk = document.getElementById("chkSleeveInfo"), refChk = document.getElementById("chkSleeveHRef");
-    const info = !chk || chk.checked, ref = (sleeveHOn(project || null) || sleeveIOn(project || null) || sleeveJOn(project || null) || sleeveKOn(project || null)) && (!refChk || refChk.checked);   // Ⓗ 참고 도안(표시 전용)도 fit 에 포함
+    const info = !chk || chk.checked, ref = (sleeveHOn(project || null) || sleeveIOn(project || null) || sleeveJOn(project || null) || sleeveKOn(project || null) || sleeveLOn(project || null)) && (!refChk || refChk.checked);   // Ⓗ 참고 도안(표시 전용)도 fit 에 포함
     if (!project || !window.sleeveAnnotation || !sleeveLineOn(project) || (!info && !ref)) return null;
     return window.sleeveAnnotation.overhang(project, scale, { info: info, ref: ref });
   };

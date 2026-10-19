@@ -49,8 +49,9 @@
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
     // 소매 Ⓐ 는 working.sleeveA + geometry.sleeve 만 쓰고 sleeveDraft 는 모른다 — 기본 소매 파라미터로 서명하지 않도록 별도 분기.
-    var lineCount = (proj.working.sleeveA ? 1 : 0) + (proj.working.sleeveB ? 1 : 0) + (proj.working.sleeveC ? 1 : 0) + (proj.working.sleeveD ? 1 : 0) + (proj.working.sleeveE ? 1 : 0) + (proj.working.sleeveF ? 1 : 0) + (proj.working.sleeveG ? 1 : 0) + (proj.working.sleeveH ? 1 : 0) + (proj.working.sleeveI ? 1 : 0) + (proj.working.sleeveJ ? 1 : 0) + (proj.working.sleeveK ? 1 : 0);
+    var lineCount = (proj.working.sleeveA ? 1 : 0) + (proj.working.sleeveB ? 1 : 0) + (proj.working.sleeveC ? 1 : 0) + (proj.working.sleeveD ? 1 : 0) + (proj.working.sleeveE ? 1 : 0) + (proj.working.sleeveF ? 1 : 0) + (proj.working.sleeveG ? 1 : 0) + (proj.working.sleeveH ? 1 : 0) + (proj.working.sleeveI ? 1 : 0) + (proj.working.sleeveJ ? 1 : 0) + (proj.working.sleeveK ? 1 : 0) + (proj.working.sleeveL ? 1 : 0);
     if (lineCount > 1) return { ok: false, fails: ["sleeve-line-conflict"], capLengths: null, ease: null };
+    if (proj.working.sleeveL) return checkL(proj);
     if (proj.working.sleeveK) return checkK(proj);
     if (proj.working.sleeveJ) return checkJ(proj);
     if (proj.working.sleeveI) return checkI(proj);
@@ -342,6 +343,46 @@
   }
   function inputsH(d) { var p = d.parameters; return { sleeveLengthCm: p.sleeveLengthCm, elbowLengthCm: p.elbowLengthCm, palmCircumferenceCm: p.palmCircumferenceCm, dropCm: p.dropCm }; }
   // ── 소매 Ⓘ 분기(P.44 하단 퍼프, bunka-sleeve-I) — Ⓔ 와 같은 결 + 입력 손바닥(소매산 재제도 → capPrimitives 실측) ──
+  // ── 소매 Ⓛ 분기(P.46 반소매 퍼프, bunka-sleeve-L) — Ⓘ 와 같은 결. 입력 = 소매길이(기본 20) · 위팔 둘레(기본 26). 앞/뒤 분할 = geometry.capSplit(중심선). ──
+  var PRESET_L = "bunka-sleeve-L";
+  var L_ORIGIN = { kind: "preset", presetId: PRESET_L, method: "short-puff-cap-pivot-slash-from-sleeve-A", methodPage: 46 };
+  function checkL(proj) {
+    var fails = [];
+    var BC = window.bodiceCheckpoint, DS = window.designSleeve, SLA = window.sleeveLApply;
+    var d = proj.working.sleeveL;
+    var bodice = BC && BC.latest(proj);
+    if (!bodice) fails.push("no-bodice");
+    else if (BC.isCurrentBodiceChanged(proj)) fails.push("bodice-stale");
+    if (d.blocked) fails.push("sleeve-l-blocked");
+    if (d.presetId !== PRESET_L) fails.push("sleeve-preset-unsupported");
+    if (bodice && d.sourceBodiceHash !== bodice.hash) fails.push("source-mismatch");
+    var pp = d.parameters || {}, len = pp.sleeveLengthCm;
+    if (!fin(len) || !(len > 0)) fails.push("invalid-sleeve-length");
+    if (!fin(pp.upperArmCm)) fails.push("invalid-input");
+    var geom = proj.working.geometry && proj.working.geometry.sleeve;
+    var prim = (geom && DS) ? DS.capPrimitives(geom) : null;
+    if (!prim) fails.push("cap-unmeasured");
+    if (prim && d.meta && d.meta.checks && (d.meta.checks.selfIntersection !== false || d.meta.checks.singlePiece !== true)) fails.push("self-intersection");
+    if (!fails.length) {
+      if (!SLA || !window.designSleeveL) fails.push("no-module");
+      else {
+        var r = SLA.draft(proj, pp);
+        if (!r.ok) fails.push("sleeve-l-redraft-failed");
+        else if (JSON.stringify(canonGeom(r.geometry)) !== JSON.stringify(canonGeom(geom)) || JSON.stringify(r.meta) !== JSON.stringify(d.meta)
+          || JSON.stringify(r.geometry.construction) !== JSON.stringify(geom.construction) || JSON.stringify(r.geometry.capSplit) !== JSON.stringify(geom.capSplit)   // capSplit = 앞/뒤 계측 분할 기준
+          || r.sourceSleeveAHash !== d.sourceSleeveAHash) fails.push("sleeve-l-geometry-mismatch");
+      }
+    }
+    var ease = null;
+    if (prim && bodice) {
+      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
+      else ease = { front: fe, back: be, total: fe + be };
+    }
+    return { ok: fails.length === 0, fails: fails, capLengths: prim ? prim.lengths : null, ease: ease,
+      lower: null, cap: null, mode: "preset", preset: PRESET_L, _prim: prim, _bodice: bodice, _a: d };
+  }
+  function inputsL(d) { var p = d.parameters; return { sleeveLengthCm: p.sleeveLengthCm, upperArmCm: p.upperArmCm }; }
   var PRESET_K = "bunka-sleeve-K";
   var K_ORIGIN = { kind: "preset", presetId: PRESET_K, method: "puff-center-parallel-plus-cap-pivot-slash-from-sleeve-A", methodPage: 45 };
   function checkK(proj) {
@@ -588,6 +629,7 @@
     if (!proj) return { ok: false, reason: "no-project" };
     var c = check(proj);
     if (!c.ok) return { ok: false, reason: c.fails[0], check: c };
+    if (proj.working.sleeveL) return completeL(proj, c);
     if (proj.working.sleeveK) return completeK(proj, c);
     if (proj.working.sleeveJ) return completeJ(proj, c);
     if (proj.working.sleeveI) return completeI(proj, c);
@@ -756,6 +798,26 @@
     proj.working.sleeveResult = result;
     return { ok: true, result: result, check: c };
   }
+  function completeL(proj, c) {
+    var dd = c._a, sb = proj.sourceBlock || {};
+    var result = {
+      schemaVersion: 1,
+      origin: clone(L_ORIGIN),
+      sourceBodiceHash: dd.sourceBodiceHash,
+      sourceSleeveAHash: dd.sourceSleeveAHash,
+      sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+      inputs: inputsL(dd),
+      geometry: clone(proj.working.geometry.sleeve),
+      meta: clone(dd.meta), warnings: dd.warnings.slice(),
+      cap: capBlock(c),
+      completedAt: Date.now()
+    };
+    result.hash = hashStr(signature(result));
+    deepFreeze(result);
+    proj.working.sleeveResult = result;
+    return { ok: true, result: result, check: c };
+  }
+
   function completeK(proj, c) {
     var dd = c._a, sb = proj.sourceBlock || {};
     var result = {
@@ -885,6 +947,10 @@
     var res = proj.working.sleeveResult; if (!res) return true;
     var c = check(proj);
     if (!c.ok || !c._prim) return true;   // 현재 유효하지 않으면 변경으로 간주(재완료 필요)
+    if (proj.working.sleeveL) {   // 소매 Ⓛ: 같은 signature 형식(입력 = 소매길이·위팔 둘레)
+      return signature({ origin: L_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsL(c._a),
+        geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);
+    }
     if (proj.working.sleeveK) {   // 소매 Ⓚ: 같은 signature 형식(입력 = 소매길이·손바닥·상승)
       return signature({ origin: K_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsK(c._a),
         geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);
