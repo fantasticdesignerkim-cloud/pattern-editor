@@ -39,13 +39,13 @@ const f2 = v => (Math.round(v * 100) / 100).toFixed(2), sg = v => (v >= 0 ? "+" 
 const T = (m, id) => { const l = m.lines.find(x => x.id === id) || m.dims.find(x => x.id === id); return l ? l.text : null; };
 
 const IN = { sleeveLengthCm: 20, upperArmCm: 26 };
-const VER = "2026101901";
+const VER = "2026102001";
 // ── 1. 카탈로그 ──
 {
   const f = SP.family("short-sleeve"), rec = SP.get("bunka-sleeve-L");
   ok(f && f.availability === "available" && f.order === 6 && f.symbol === "L" && f.page === 46 && f.variants.map(v => v.symbol).join("") === "LMNOPQ", "1: 반소매 계열 = Ⓛ·Ⓜ·Ⓝ·Ⓞ·Ⓟ·Ⓠ(P.46–48) · 대표 Ⓛ");
-  ok(f.variants[0].availability === "available" && f.variants[0].presetId === "bunka-sleeve-L" && f.variants.slice(1).every(v => v.availability === "pending-page" && v.presetId === null && typeof v.blockedBy === "string" && v.blockedBy.length > 20), "1: Ⓛ 만 실행 · Ⓜ~Ⓠ 는 보류(blockedBy 보유)");
-  ok(f.variants.map(v => v.page).join() === "46,46,47,47,48,48" && SP.resolve("short-sleeve", "bunka-sleeve-L").ok && SP.resolve("short-sleeve", "bunka-sleeve-M").reason === "sleeve-preset-unavailable", "1: 쪽 · resolve");
+  ok(f.variants[0].availability === "available" && f.variants[0].presetId === "bunka-sleeve-L" && f.variants.slice(2).every(v => v.availability === "pending-page" && v.presetId === null && typeof v.blockedBy === "string" && v.blockedBy.length > 20), "1: Ⓛ·Ⓜ 실행 · Ⓝ~Ⓠ 는 보류(blockedBy 보유)");
+  ok(f.variants.map(v => v.page).join() === "46,46,47,47,48,48" && SP.resolve("short-sleeve", "bunka-sleeve-L").ok && SP.resolve("short-sleeve", "bunka-sleeve-N").reason === "sleeve-preset-unavailable", "1: 쪽 · resolve");
   ok(rec && rec.methodPage === 46 && rec.inputs.map(i => i.key + "=" + (i.defaultValue === undefined ? "" : i.defaultValue)).join() === "sleeveLengthCm=20,upperArmCm=26" && Object.isFrozen(rec), "1: Ⓛ 레코드 · 입력 소매길이(기본 20) + 위팔 둘레(기본 26) — 손바닥·상승 없음");
   ok(SP.get("bunka-sleeve-K").inputs[0].defaultValue === undefined && SP.family("dolman-sleeve").availability !== "available", "1: 다른 라인의 소매길이 기본값 없음 · 다음 계열(돌먼)은 보류");
 }

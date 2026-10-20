@@ -40,7 +40,7 @@ const SKA = W.sleeveKApply, SK = W.designSleeveK, SJA = W.sleeveJApply, SJ = W.d
 const T = (m, id) => { const l = m.lines.find(x => x.id === id) || m.dims.find(x => x.id === id); return l ? l.text : null; };
 
 const IN = { sleeveLengthCm: 52, palmCircumferenceCm: 21, riseCm: 0.7 };
-const VER = "2026101901";
+const VER = "2026102001";
 // ── 1. 카탈로그 ──
 {
   const f = SP.family("puff-sleeve"), rec = SP.get("bunka-sleeve-K");
@@ -118,7 +118,7 @@ const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.refe
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveK.js") > pos("sleeveJApply.js") && pos("sleeveKApply.js") > pos("designSleeveK.js") && pos("ui.js") > pos("sleeveKApply.js"), "7: 스크립트 순서");
-  ok(["designSleeveK.js", "sleeveKApply.js", "sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js", "render.js"].every(f => ver(f) === VER) && ver("designSleeveJ.js") === "2026101901", "7: 캐시 버전 " + VER + " · Ⓙ 파일은 그대로");
+  ok(["designSleeveK.js", "sleeveKApply.js", "sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js", "render.js"].every(f => ver(f) === VER) && ver("designSleeveJ.js") === "2026102001", "7: 캐시 버전 " + VER + " · Ⓙ 파일은 그대로");
   ok(/function sleeveKOn\(project\)/.test(ui) && /function applySleeveK\(project\)/.test(ui) && /keep !== "K" && window\.sleeveKApply/.test(ui) && /if \(isK\) \{/.test(ui) && /window\.sleeveKApply\.rederive\(project\)/.test(ui) && /_sm\.line === "K"/.test(rn), "7: ui·render 배선");
   ok(/riseRow\.hidden = !\(sleeveJOn\(project\) \|\| sleeveKOn\(project\)/.test(ui) && /id="inpSleeveRise" type="number" min="0" step="0.1" value="0\.7"/.test(html), "7: 상승 입력칸 Ⓙ·Ⓚ 공용(기본 0.7)");
   ok(/id="chkSleeveHPieces" checked/.test(html) && /id="chkSleeveHRef">/.test(html), "7: 녹색 토글 기본 켜짐 · 비교 도안 기본 꺼짐");
