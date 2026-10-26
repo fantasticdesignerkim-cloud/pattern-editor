@@ -642,7 +642,7 @@ function render(){
         if (_sm) { grp.setAttribute("data-sleeve-line", _sm.line); if (!_slvInfoChk || _slvInfoChk.checked) _appendSleeveAnnotation(grp, _sm); }
         // 소매 Ⓗ «벌리기 전 절개 도안(참고)»(표시 전용, 기본 켜짐 — chkSleeveHRef). Ⓗ 가 아니면 모델 없음.
         const _hRefChk = document.getElementById("chkSleeveHRef");
-        if (_sm && (_sm.line === "H" || _sm.line === "I" || _sm.line === "J" || _sm.line === "K" || _sm.line === "L" || _sm.line === "M") && (!_hRefChk || _hRefChk.checked) && window.sleeveAnnotation.refModel) {
+        if (_sm && (_sm.line === "H" || _sm.line === "I" || _sm.line === "J" || _sm.line === "K" || _sm.line === "L" || _sm.line === "M" || _sm.line === "N" || _sm.line === "O" || _sm.line === "P") && (!_hRefChk || _hRefChk.checked) && window.sleeveAnnotation.refModel) {
           const _rm = window.sleeveAnnotation.refModel(dp, Math.abs(c2p(1,0)[0]-c2p(0,0)[0]), { mainVisible: !_slvInfoChk || _slvInfoChk.checked });
           if (_rm) _appendSleeveAnnotation(grp, _rm);
         }

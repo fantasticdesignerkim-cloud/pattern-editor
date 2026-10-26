@@ -138,7 +138,9 @@
       if (hit) comp[find(j)] = find(i);
     }
     var roots = uniqPts(prims.map(function (_, i) { return { x: find(i), y: 0 }; }), 0.5);
-    var base = { ok: true, shoulderStored: SP, underarmStored: U, underarm: U, shoulder: SP, closedDart: null, closedShoulderDart: null };
+    // underarmBlock = 다트를 연 원형 등가 위치의 아랫점(가드 비교 전용 · 측정 복사본). 배치 정규화가 없으면 보관 위치 그대로.
+    var base = { ok: true, shoulderStored: SP, underarmStored: U, underarm: U, shoulder: SP, closedDart: null, closedShoulderDart: null, underarmBlock: U, placement: null };
+    var placeRot = null;   // 측정 복사본 전체 회전(배치 정규화) { apex, angleRad }
     var upperIdx = null;   // 앞 AH 다트로 회전하는 위쪽 진동 조각 인덱스(없으면 null)
     if (roots.length !== 1 && roots.length !== 2) return { ok: false, reason: "armhole-chain-unsupported", detail: roots.length };
     if (roots.length === 2) {
@@ -171,6 +173,36 @@
     base.closedDart = { apex: apex, angleRad: ang, mouthResidualCm: dist(closedMouth, loMouth) };
     upperIdx = []; prims.forEach(function (e, idx) { if (find(idx) === upperRoot) upperIdx.push(idx); });
     }
+    // 배치 정규화(2026-10-21 · 측정 복사본만): 진동 체인은 이미 닫혀 있는데 AH 다트 다리 두 줄의 입구가 서로 떨어져 있고(다리가 옮겨진 조각과 함께
+    //   운반됨) 닫힌 이음점이 «아래» 다리 입구에 있으면, 몸판이 **위쪽을 고정하고 옆(아래) 조각을 BP 축으로 돌려** 다트를 닫은 것이다(플레어 Ⓖ 등).
+    //   봉제선(닫힌 진동)은 Ⓐ 규약(아랫점 고정·위쪽 회전)과 같고 놓인 방향만 다르다 → 같은 BP 축으로 «위 입구 → 아래 입구» 각만큼 돌려 Ⓐ 규약에 맞춘다.
+    //   몸판 geometry 는 바꾸지 않는다. 다리 attach.root(armhole-upper/lower)가 없거나 조건이 다르면 아무것도 하지 않는다(기존 동작).
+    if (roots.length === 1) {
+      var aLegs = (pc.construction || []).filter(function (s) { return s.kind === "line" && s.dart && s.dart.boundary === "armhole"; });
+      var legRole = function (l) { var r = l.dart.attach && l.dart.attach.root; return typeof r === "string" ? (/armhole-upper$/.test(r) ? "upper" : (/armhole-lower$/.test(r) ? "lower" : null)) : null; };
+      var upL = aLegs.filter(function (l) { return legRole(l) === "upper"; }), loL = aLegs.filter(function (l) { return legRole(l) === "lower"; });
+      if (aLegs.length === 2 && upL.length === 1 && loL.length === 1) {
+        var ap1 = null;
+        [upL[0].from, upL[0].to].forEach(function (c) { if (samePt(c, loL[0].from, 1e-2) || samePt(c, loL[0].to, 1e-2)) ap1 = cp(c); });
+        var mouthOf = function (l) { return samePt(l.from, ap1, 1e-2) ? cp(l.to) : cp(l.from); };
+        if (ap1) {
+          var upM = mouthOf(upL[0]), loM = mouthOf(loL[0]), joints = [];
+          for (var a1 = 0; a1 < prims.length; a1++) for (var b1 = a1 + 1; b1 < prims.length; b1++) prims[a1].forEach(function (p) { prims[b1].forEach(function (q) { if (samePt(p, q)) joints.push(p); }); });
+          var atLo = joints.some(function (p) { return dist(p, loM) <= MOUTH_TOL; }), atUp = joints.some(function (p) { return dist(p, upM) <= MOUTH_TOL; });
+          if (dist(upM, loM) > MOUTH_TOL && atLo && !atUp) {
+            var pAng = wrapPi(Math.atan2(loM.y - ap1.y, loM.x - ap1.x) - Math.atan2(upM.y - ap1.y, upM.x - ap1.x));
+            // 검증: 다트 닫힘 회전만 되돌리면 옆 조각이 원형 자리로 돌아와 아랫점이 가슴둘레선(BP 높이 — 원형에서 BP 는 B 선 위)에 놓여야 한다.
+            //   아니면 진동이 다트 닫힘 말고 다른 변형(진동 위 기준점 절개 등)으로도 움직인 것 — 배치로 설명되지 않으므로 판단을 넘긴다(값을 맞추지 않는다).
+            var Un = rot(U, ap1, pAng);
+            if (Math.abs(Un.y - ap1.y) > UNDERARM_Y_TOL) return { ok: false, reason: "armhole-placement-unverified", detail: { underarmBlockY: Un.y, bustPointY: ap1.y, angleDeg: pAng * 180 / Math.PI } };
+            placeRot = { apex: ap1, angleRad: pAng };
+            base.shoulder = rot(SP, ap1, pAng); base.underarm = rot(U, ap1, pAng); base.underarmBlock = base.underarm;
+            base.placement = { kind: "front-dart-closed-by-moving-lower-side", apex: ap1, angleRad: pAng, legsApartCm: dist(upM, loM),
+              note: "측정 복사본만 BP 축 회전(배치 정규화) — 몸판 geometry·진동 길이 불변" };
+          }
+        }
+      }
+    }
     // 어깨 다트(뒤판): 어깨선이 다트로 끊겨 열려 있으면 **중심(CB)을 고정하고 진동 쪽을 BP 축으로 회전**해 닫는다
     //   (플레어 Ⓖ 가 뒤 어깨 다트를 닫는 방식과 같다). 어깨점·아랫점이 함께 돈다. 이미 닫혔거나 다리가 없으면 그대로.
     var sLegs = (pc.construction || []).filter(function (s) { return s.kind === "line" && s.dart && s.dart.boundary === "shoulder"; });
@@ -189,6 +221,26 @@
         if (samePt(e[0], SP)) M = cp(e[1]); else if (samePt(e[1], SP)) M = cp(e[0]);
       });
       var mi = M ? (samePt(M, mouths[0], 0.02) ? 0 : (samePt(M, mouths[1], 0.02) ? 1 : -1)) : -1;
+      // 이미 닫힌 어깨 다트(2026-10-21): 어깨 두 구간이 M 에서 이어져 있고(잔차 ≤ SHOULDER_MOUTH_TOL) 다리 두 입구는 서로 떨어져 있으면
+      //   (다리가 진동 쪽 조각과 함께 운반됨 — 플레어 Ⓖ 등) 몸판이 이미 **중심 고정·진동 쪽 회전**(Ⓐ 와 같은 규약)으로 닫은 것이다 → 다시 돌리지 않는다.
+      //   가드 비교용 원형 등가 아랫점만, 운반된 목 쪽 다리 입구가 원래 자리(목 쪽 구간 안쪽 끝)에서 돈 각만큼 되돌려 구한다(측정 복사본).
+      var neckEnd = null;
+      if (M) pc.outline.forEach(function (s) {
+        if (s.edge !== "shoulder" || neckEnd) return; var e = endsOf(s); if (!e || samePt(e[0], SP) || samePt(e[1], SP)) return;
+        neckEnd = dist(e[0], M) < dist(e[1], M) ? cp(e[0]) : cp(e[1]);
+      });
+      var alreadyClosed = mi >= 0 && neckEnd && dist(neckEnd, M) <= SHOULDER_MOUTH_TOL && dist(mouths[0], mouths[1]) > SHOULDER_MOUTH_TOL;
+      if (alreadyClosed) {
+        var nkLeg = [sLegs[0], sLegs[1]].filter(function (l) { var r = l.dart.attach && l.dart.attach.root; return typeof r === "string" && /shoulder-neck$/.test(r); })[0];
+        if (nkLeg) {
+          var nkMouth = samePt(nkLeg.from, sApex, 1e-2) ? nkLeg.to : nkLeg.from;
+          var carried = wrapPi(Math.atan2(nkMouth.y - sApex.y, nkMouth.x - sApex.x) - Math.atan2(neckEnd.y - sApex.y, neckEnd.x - sApex.x));
+          base.underarmBlock = rot(U, sApex, -carried);
+          base.placement = { kind: "back-shoulder-dart-already-closed", apex: sApex, closedAngleRad: carried, spanGapCm: dist(neckEnd, M),
+            note: "이미 닫힌 어깨 다트 — 다시 닫지 않음 · 원형 등가 아랫점은 가드 비교용(측정 복사본)" };
+        }
+        mi = -1;
+      }
       if (mi >= 0) {
         var N = mouths[1 - mi];
         shAng = wrapPi(Math.atan2(N.y - sApex.y, N.x - sApex.x) - Math.atan2(mouths[mi].y - sApex.y, mouths[mi].x - sApex.x));
@@ -204,6 +256,7 @@
       var pts = flattenArm(sg);
       if (upperIdx && upperIdx.indexOf(idx) >= 0) pts = pts.map(function (q) { return rot(q, base.closedDart.apex, base.closedDart.angleRad); });
       if (shAng !== null && base.closedShoulderDart) pts = pts.map(function (q) { return rot(q, base.closedShoulderDart.apex, shAng); });
+      if (placeRot) pts = pts.map(function (q) { return rot(q, placeRot.apex, placeRot.angleRad); });
       return pts;
     });
     return base;
@@ -224,11 +277,13 @@
       var cl = 0; r.armholeClosed.forEach(function (pl) { cl += polyLen(pl); });
       out[piece] = { shoulder: r.shoulder, shoulderStored: r.shoulderStored, underarm: r.underarm, underarmStored: r.underarmStored,
         heightCm: h, heightStoredCm: hs, armholeLengthCm: lens[piece], closedDart: r.closedDart, closedShoulderDart: r.closedShoulderDart,
-        armholeClosed: r.armholeClosed, armholeClosedLengthCm: cl };
+        armholeClosed: r.armholeClosed, armholeClosedLengthCm: cl, underarmBlock: r.underarmBlock, placement: r.placement };
     }
-    // 가슴둘레선(**보관 형상**의 진동 아랫점 높이)이 앞뒤 같아야 한다 — 진동이 회전·이동된 몸판(플레어·프린세스 등)은 지원하지 않는다.
-    if (Math.abs(out.front.underarmStored.y - out.back.underarmStored.y) > UNDERARM_Y_TOL) {
-      return { ok: false, reason: "armhole-underarm-mismatch", detail: { front: out.front.underarmStored.y, back: out.back.underarmStored.y } };
+    // 가슴둘레선(진동 아랫점 높이)이 앞뒤 같아야 한다 — 다트 닫기로 생긴 **순수 배치 회전**(위 정규화)만 되돌린 원형 등가 위치에서 비교한다.
+    //   정규화가 없으면 보관 위치 그대로(기존 판정과 같다). 진동 자체가 디자인으로 바뀐 몸판(절개 추가·옆선 변경 등)은 여전히 여기서 멈춘다.
+    if (Math.abs(out.front.underarmBlock.y - out.back.underarmBlock.y) > UNDERARM_Y_TOL) {
+      return { ok: false, reason: "armhole-underarm-mismatch", detail: { front: out.front.underarmStored.y, back: out.back.underarmStored.y,
+        frontBlock: out.front.underarmBlock.y, backBlock: out.back.underarmBlock.y, placement: { front: out.front.placement ? out.front.placement.kind : null, back: out.back.placement ? out.back.placement.kind : null } } };
     }
     return out;
   }
@@ -375,6 +430,12 @@
         heightStoredCm: r.front.heightStoredCm, dartClosed: !!r.front.closedDart,
         dartAngleDeg: r.front.closedDart ? r.front.closedDart.angleRad * 180 / Math.PI : null }
     };
+    // 배치 정규화가 쓰인 몸판에만 기록(없으면 필드 없음 — 기존 결과 바이트 동일)
+    ["front", "back"].forEach(function (pc) {
+      var pl = r[pc].placement; if (!pl) return;
+      d.meta.source[pc].placement = { kind: pl.kind, apex: cp(pl.apex), angleDeg: (pl.angleRad !== undefined ? pl.angleRad : pl.closedAngleRad) * 180 / Math.PI,
+        underarmBlock: cp(r[pc].underarmBlock), note: pl.note };
+    });
     return d;
   }
 

@@ -219,7 +219,7 @@ let HASH_B;
   setCollar(P);
   ok(CC.complete(P).ok && DR.complete(P).ok && DR.latest(P) !== oldDesign && DR.latest(P).sleeveHash === rn.hash, "6: 카라·Design 재완료");
   const keep = P.working.sleeveResult;
-  ok(setBodice(P, "G").ok, "6: Ⓖ 몸판 재완료");
+  ok(setBodice(P, "M").ok, "6: Ⓜ 몸판 재완료(지원 밖 예시 — 2026-10-21 Ⓖ 는 지원으로 바뀜)");
   const rb = SBA.rederive(P);
   ok(!rb.ok && P.working.sleeveB.blocked && SC.check(P).ok === false && SC.check(P).fails.includes("sleeve-b-blocked"), "6: 지원 밖 몸판 → sleeve-b-blocked");
   const cr = SC.complete(P);

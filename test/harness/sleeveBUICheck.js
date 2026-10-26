@@ -134,7 +134,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const r = SBA.apply(Q, { sleeveLengthCm: 52 });
   ok(!r.ok && r.reason === "no-bodice" && /몸판을 먼저 완료해야 합니다/.test(r.text) && Q.working.sleeveB === undefined && J(Q.working.geometry.sleeve) === g0, "4: 몸판 미완료 → no-bodice·불변");
   ok(!SBA.apply(null, { sleeveLengthCm: 52 }).ok && SBA.apply(null, { sleeveLengthCm: 52 }).reason === "no-project", "4: 프로젝트 없음");
-  ["G", "H"].forEach(sym => {
+  ["M", "N"].forEach(sym => {   // 2026-10-21: Ⓖ 는 지원으로 바뀜 — 지원 밖 예시는 Ⓜ·Ⓝ
     const U = projectWithBodice(sym), g1 = J(U.working.geometry.sleeve);
     const x = SBA.apply(U, { sleeveLengthCm: 52 });
     ok(!x.ok && x.reason === "armhole-underarm-mismatch" && x.stage === "A" && /^출발 소매 Ⓐ: 앞·뒤 진동 아랫점 높이가 달라 지원하지 않는 몸판/.test(x.text), "4: 몸판 " + sym + " → Ⓐ 단계 사유를 그대로: " + x.text);
@@ -172,8 +172,8 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   ok(BC.complete(Q).ok && Q.working.bodiceResult.hash !== oldHash, "5: 다른 몸판 재완료");
   const r2 = SBA.rederive(Q);
   ok(r2.ok && Q.working.sleeveB.sourceBodiceHash === Q.working.bodiceResult.hash && Q.working.sleeveB.blocked === null, "5: 새 몸판 hash 로 재제도");
-  Q.working.parameters = { neckline: Q.working.parameters.neckline, body: BP.bodyParams(presetOf("G")) };
-  Q.working.geometry = DB.computeGeometry(Q.referenceGeometry, { body: BP.bodyParams(presetOf("G")) });
+  Q.working.parameters = { neckline: Q.working.parameters.neckline, body: BP.bodyParams(presetOf("M")) };
+  Q.working.geometry = DB.computeGeometry(Q.referenceGeometry, { body: BP.bodyParams(presetOf("M")) });
   ok(BC.complete(Q).ok, "5: Ⓖ 몸판 재완료");
   const gBefore = J(Q.working.geometry.sleeve);
   const r3 = SBA.rederive(Q);
@@ -208,7 +208,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/designSleeveB.js", "js/sleeveBApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f + "?v="));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(Ⓐ 모듈 → 엔진 Ⓑ → 연결 Ⓑ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(["designSleeveB.js", "sleeveBApply.js"].every(f => ver(f) === "2026100601") && ver("ui.js") === "2026102001" && ver("sleevePresets.js") === "2026102001" && ver("sleeveCheckpoint.js") === "2026102001", "7: 캐시 버전 갱신(Ⓑ 파일 2026100601 · Ⓖ 연결로 변경된 공용 파일 2026101101)");
+  ok(["designSleeveB.js", "sleeveBApply.js"].every(f => ver(f) === "2026100601") && ver("ui.js") === "2026102602" && ver("sleevePresets.js") === "2026102602" && ver("sleeveCheckpoint.js") === "2026102602", "7: 캐시 버전 갱신(Ⓑ 파일 2026100601 · Ⓖ 연결로 변경된 공용 파일 2026101101)");
   ok(/id="rowSleevePalm"[^>]*hidden/.test(html) && /id="inpSleevePalm"[^>]*type="number"/.test(html) && ui.indexOf('"inpSleevePalm"') > 0 && ui.indexOf('"rowSleevePalm"') > 0, "7: 손바닥 둘레 입력(DOM id·기본 숨김·ui.js 사용)");
   ok(html.indexOf('id="rowSleevePalm"') > html.indexOf('id="inpSleeveLength"') && html.indexOf('id="rowSleevePalm"') < html.indexOf('id="inpSleeveCuff"'), "7: 손바닥 입력은 소매길이 다음 줄");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo", "btnApplySleeve", "btnResetSleeve", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "designSleeveStatusNote"]

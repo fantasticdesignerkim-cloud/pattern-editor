@@ -1,0 +1,40 @@
+{
+ "note": "소매 Ⓐ 판독 배치 정규화(2026-10-21) 전의 draftSleeveA 결과 sha256 — 몸판 프리셋 × 소매길이 20·52·58. 기존 지원 몸판은 이후에도 같아야 한다.",
+ "lengths": [
+  20,
+  52,
+  58
+ ],
+ "presets": {
+  "bunka-bodice-A": "b6108cc9afb626161435abbe6aeacf40d858b6750e016d08ec2141386f9bdd19",
+  "bunka-bodice-B": "fd3141a8978ff002f6a46776fb87ec8d366a56665309cc6763a45055bc2c9a07",
+  "bunka-bodice-C": "cc31869439d16c9bbc759afe508ef4c4b06ab786fad7ef69e7ab9996b6c2c435",
+  "bunka-bodice-D": "03476c347b2ecf96f491903da70ac05f5281bf2e50ea9c013a5eab1fdae91b5d",
+  "bunka-bodice-E": "c1b73eb436e30ca982ddfb2a91344dd14cb2b487ab458af237b82ad86ce7ce0d",
+  "bunka-bodice-F": "5504a4b1c09b544618eeee7644fcf5c01931ab6d133fcc422595378aab0fa9ea",
+  "bunka-bodice-G": {
+   "unsupported": "armhole-underarm-mismatch"
+  },
+  "bunka-bodice-H": {
+   "unsupported": "armhole-underarm-mismatch"
+  },
+  "bunka-bodice-I": "865cdc6629fd9c16a5c8b599e8ad1b6c516536f4c8731fd144088ce8f5c9ac7d",
+  "bunka-bodice-J": "164b223815b6f1f8fe115a184ea696e75387a72f6f56332e924e72461dc73651",
+  "bunka-bodice-K": "25f3b7875ced6b7a461decc8a594581ec5fe518013b10801cdac33a23b40b7ed",
+  "bunka-bodice-L": "ed4ebab0a807239dd718efe63d3462b5b73c94a3bcf569fda09cf206289eb028",
+  "bunka-bodice-M": {
+   "unsupported": "armhole-underarm-mismatch"
+  },
+  "bunka-bodice-N": {
+   "unsupported": "armhole-underarm-mismatch"
+  },
+  "bunka-bodice-O": "bb8feb7c2f88c0970b370aecf37215939ec771495b2631ec37af5e768f9f8f7c",
+  "bunka-bodice-P": "00d00556faff0e5a28c19d9ded0fe925b80fcd54eb530669b242e08a6c8b2c99",
+  "bunka-bodice-Q": "d88446e05746edea91d285b2369a41b87fb40fb913902523f74bb96ecf006242",
+  "bunka-bodice-R": "dbe966323da9db00c75aefabfa96e434de1b62b9020fbe8fba9f6cb3205fe8b4",
+  "bunka-bodice-S": "c107ca49a33b3c0d0b0d1ec6d5ca743fd444757ce3d20ba5778d0f9a7f60d978",
+  "bunka-bodice-T": "bf0115fd552cd2ad0242681d4f4ba3cd6bb61a8a7efa27d09a6e994976ff69bb",
+  "bunka-bodice-U": "dfff32d8aed539a25cecbabca16d3904ee62bbc39d8441291bff0e107b6b7b10",
+  "bunka-bodice-V": "b3a4fccc1047f661ea7bac017692bf00c8ba91573b7672f18ff34fd36825c20c"
+ }
+}

@@ -103,7 +103,10 @@ ok(Object.isFrozen(bodice), "2: bodiceResult 는 동결 객체");
   ok(Q.working.sleeveA === undefined && J(Q.working.geometry.sleeve) === g0, "3: 몸판 미완료 → 상태·형상 불변");
   ok(!SAA.apply(null, { sleeveLengthCm: 52 }).ok && SAA.apply(null, { sleeveLengthCm: 52 }).reason === "no-project", "3: 프로젝트 없음");
 
-  ["G", "H", "M", "N"].forEach(sym => {
+  // 2026-10-21: Ⓖ 는 지원(배치 정규화 — sleeveBodiceVariantCheck) · Ⓗ 는 원리 판단 필요 사유로 멈춤 · Ⓜ·Ⓝ 은 기존 미지원
+  { const U = projectWithBodice("H"), g1 = J(U.working.geometry.sleeve), x = SAA.apply(U, { sleeveLengthCm: 52 });
+    ok(!x.ok && x.reason === "armhole-placement-unverified" && /^앞판: 다트 닫힘의 배치 회전만으로 설명되지 않는 진동 변형/.test(x.text) && U.working.sleeveA === undefined && J(U.working.geometry.sleeve) === g1, "3: 몸판 H → 원리 판단 필요 사유 · 폴백 없음: " + x.text); }
+  ["M", "N"].forEach(sym => {
     const U = projectWithBodice(sym), g1 = J(U.working.geometry.sleeve);
     const x = SAA.apply(U, { sleeveLengthCm: 52 });
     ok(!x.ok && x.reason === "armhole-underarm-mismatch", "3: 몸판 " + sym + " → armhole-underarm-mismatch");
@@ -143,8 +146,8 @@ ok(Object.isFrozen(bodice), "2: bodiceResult 는 동결 객체");
   const r2 = SAA.rederive(Q);
   ok(r2.ok && Q.working.sleeveA.sourceBodiceHash === Q.working.bodiceResult.hash && Q.working.sleeveA.blocked === null, "4: 새 몸판 hash 로 재제도(출처 갱신)");
   // 지원 밖 몸판으로 재완료 → blocked 표시, geometry 불변
-  Q.working.parameters = { neckline: Q.working.parameters.neckline, body: BP.bodyParams(presetOf("G")) };
-  Q.working.geometry = DB.computeGeometry(Q.referenceGeometry, { body: BP.bodyParams(presetOf("G")) });
+  Q.working.parameters = { neckline: Q.working.parameters.neckline, body: BP.bodyParams(presetOf("M")) };
+  Q.working.geometry = DB.computeGeometry(Q.referenceGeometry, { body: BP.bodyParams(presetOf("M")) });
   ok(BC.complete(Q).ok, "4: Ⓖ 몸판 재완료");
   const gBefore = J(Q.working.geometry.sleeve), prevSA = Q.working.sleeveA;
   const r3 = SAA.rederive(Q);
@@ -193,7 +196,7 @@ ok(Object.isFrozen(bodice), "2: bodiceResult 는 동결 객체");
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f + "?v="));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(엔진 → 카탈로그 → 연결 → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(ver("designSleeveA.js") === "2026100501" && ver("sleeveAApply.js") === "2026100502" && ver("ui.js") === "2026102001" && ver("sleevePresets.js") === "2026102001" && ver("sleeveCheckpoint.js") === "2026102001", "7: 캐시 버전 갱신(Ⓖ 연결로 변경된 공용 파일 2026101101)");
+  ok(ver("designSleeveA.js") === "2026102103" && ver("sleeveAApply.js") === "2026102103" && ver("ui.js") === "2026102602" && ver("sleevePresets.js") === "2026102602" && ver("sleeveCheckpoint.js") === "2026102602", "7: 캐시 버전 갱신(Ⓖ 연결로 변경된 공용 파일 2026101101)");
   ok(/css\/style\.css\?v=2026101203/.test(html), "7: css 캐시 버전 갱신");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo"].forEach(id => ok(new RegExp('id="' + id + '"').test(html) && ui.indexOf('"' + id + '"') > 0, "7: DOM id " + id + " 존재·ui.js 사용"));
   ["btnApplySleeve", "btnResetSleeve", "btnApplyCap", "btnSleeveCapManual", "btnSleeveCapRevert", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "selSleeveSide", "inpSleeveBicep", "inpSleeveCapHeight", "designSleeveNote", "designSleeveEaseNote", "designSleeveCheckNote", "designSleeveStatusNote"]

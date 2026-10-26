@@ -84,8 +84,12 @@ ok(D(RA.front.shoulder, RI.front.shoulder) < 0.01 && near(RA.front.heightCm, RI.
 ok(RI.front.closedDart === null && near(RI.front.heightStoredCm, RI.front.heightCm), "2: 이미 닫힌 앞(Ⓘ)은 보관 형상 그대로");
 ok(RI.back.closedShoulderDart && Math.abs(RI.back.closedShoulderDart.angleRad) < 1e-3 && near(RI.back.heightCm, 18.62, 0.01), "2: Ⓘ 뒤는 목둘레 턱이 이미 어깨 다트를 닫아 둠(회전 ≈0) — 보관 형상 그대로(진동 쪽 고정이라 18.62)");
 ok(near(RA.front.armholeLengthCm, BA.armholeLengths.front) && near(RA.back.armholeLengthCm, BA.armholeLengths.back), "2: AH 는 bodiceResult.armholeLengths");
-// 지원 밖 몸판: 진동이 회전·이동돼 가슴둘레선이 앞뒤 다른 몸판은 사유와 함께 거절(조용히 틀린 높이를 쓰지 않는다)
-["G", "H", "M", "N"].forEach(s => { const r = SA.readBodiceArmhole(bodiceResultOf(s)); ok(!r.ok && r.reason === "armhole-underarm-mismatch", `2: ${s} 지원 밖 → armhole-underarm-mismatch`); });
+// 지원 밖 몸판: 진동 자체가 디자인으로 바뀌어 가슴둘레선이 앞뒤 다른 몸판은 사유와 함께 거절(조용히 틀린 높이를 쓰지 않는다).
+//   2026-10-21: Ⓖ 는 다트 닫힘의 순수 배치 회전이라 측정 복사본 정규화로 지원(sleeveBodiceVariantCheck) · Ⓗ 는 진동 위 기준점 절개 → 원리 판단 필요로 멈춤.
+["M", "N"].forEach(s => { const r = SA.readBodiceArmhole(bodiceResultOf(s)); ok(!r.ok && r.reason === "armhole-underarm-mismatch", `2: ${s} 지원 밖 → armhole-underarm-mismatch`); });
+{ const rh = SA.readBodiceArmhole(bodiceResultOf("H")), rg = SA.readBodiceArmhole(bodiceResultOf("G"));
+  ok(!rh.ok && rh.reason === "armhole-placement-unverified" && rh.piece === "front", "2: H 지원 밖 → armhole-placement-unverified(배치로 설명되지 않는 진동 변형)");
+  ok(rg.ok && near(rg.front.heightCm, 16.38, 0.01) && near(rg.back.heightCm, 17.74, 0.01) && rg.front.placement && rg.back.placement, "2: G 지원(배치 정규화) — 어깨 높이 = 기본 몸판 16.38 · 17.74"); }
 ok(["B", "C", "D", "E", "F", "J", "K", "L", "O", "P", "Q", "R", "S", "T", "U", "V"].every(s => { const r = SA.readBodiceArmhole(bodiceResultOf(s)); return r.ok && near(r.front.heightCm, 16.38, 0.01) && near(r.back.heightCm, ["J", "K", "L"].indexOf(s) >= 0 ? 18.62 : 17.74, 0.01); }), "2: 나머지 16변형 모두 읽기 성공(앞 16.38 · 뒤 17.74, 이미 닫힌 목둘레 턱 J·K·L 은 18.62)");
 // 읽기 실패 계약
 ok(SA.readBodiceArmhole(null).reason === "no-bodice" && SA.readBodiceArmhole({}).reason === "no-bodice", "2: no-bodice");
@@ -246,7 +250,7 @@ ok(near(M.easeTarget.total, tot, 1e-12) && near(M.easeTarget.back, tot * 3 / 5, 
   ok(re(m, { sleeveLengthCm: 52, elbowLengthCm: 60 }) === "invalid-elbow-length" && re(m, { sleeveLengthCm: 52, elbowLengthCm: 5 }) === "invalid-elbow-length", "8: 팔꿈치 길이 범위 밖");
   ok(re({ backAHCm: 10, frontAHCm: 9, backShoulderHeightCm: 18.6, frontShoulderHeightCm: 16.4 }, { sleeveLengthCm: 52 }) === "cap-height-exceeds-line", "8: 직선이 소매산 높이보다 짧음 → cap-height-exceeds-line");
   ok(SA.draftSleeveA(null, { sleeveLengthCm: 52 }).reason === "no-bodice", "8: bodiceResult 없음");
-  ok(SA.draftSleeveA(bodiceResultOf("G"), { sleeveLengthCm: 52 }).reason === "armhole-underarm-mismatch", "8: 지원 밖 몸판은 소매 생성 거절");
+  ok(SA.draftSleeveA(bodiceResultOf("M"), { sleeveLengthCm: 52 }).reason === "armhole-underarm-mismatch", "8: 지원 밖 몸판은 소매 생성 거절");
 }
 
 // ── 9. 기존 소매 모듈과 호환(읽기만 — 기존 코드는 무변경) ──

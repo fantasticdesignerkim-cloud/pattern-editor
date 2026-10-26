@@ -114,7 +114,7 @@ const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.refe
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveJ.js") > pos("sleeveIApply.js") && pos("sleeveJApply.js") > pos("designSleeveJ.js") && pos("ui.js") > pos("sleeveJApply.js"), "7: 스크립트 순서");
-  ok(["designSleeveJ.js", "sleeveJApply.js"].every(f => ver(f) === VER) && ["sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js", "render.js"].every(f => ver(f) === "2026102001"), "7: 캐시 버전 Ⓙ " + VER + " · 공용 2026102001");
+  ok(["designSleeveJ.js", "sleeveJApply.js"].every(f => ver(f) === VER) && ["sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js", "render.js"].every(f => ver(f) === "2026102602"), "7: 캐시 버전 Ⓙ " + VER + " · 공용 2026102602");
   ok(/function sleeveJOn\(project\)/.test(ui) && /keep !== "J" && window\.sleeveJApply/.test(ui) && /if \(isJ\) \{/.test(ui) && /window\.sleeveJApply\.rederive\(project\)/.test(ui) && /_sm\.line === "J"/.test(rn), "7: ui·render 배선");
   ok(/id="rowSleeveRise" hidden/.test(html) && /id="inpSleeveRise" type="number" min="0" step="0.1" value="0\.7"/.test(html) && /"inpSleeveRise"(, "inpSleeveUpperArm")?\]\.forEach/.test(ui), "7: 상승 입력칸(기본 0.7 · 0 허용)");
   ok(/id="chkSleeveHPieces" checked/.test(html) && /id="chkSleeveHRef">/.test(html), "7: 녹색 토글 기본 켜짐 · 비교 도안 기본 꺼짐");

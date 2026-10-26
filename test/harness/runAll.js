@@ -135,6 +135,13 @@ const suites = [
   { file: "sleeveLUICheck.js",          golden: false },
   { file: "designSleeveMCheck.js",      golden: false },
   { file: "sleeveMUICheck.js",          golden: false },
+  { file: "designSleeveNCheck.js",      golden: false },
+  { file: "sleeveNUICheck.js",          golden: false },
+  { file: "designSleeveOCheck.js",      golden: false },
+  { file: "sleeveOUICheck.js",          golden: false },
+  { file: "sleeveBodiceVariantCheck.js", golden: false },
+  { file: "designSleevePCheck.js",      golden: false },
+  { file: "sleevePUICheck.js",          golden: false },
   { file: "sleeveCResultCheck.js",      golden: false },
   // 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시(sleeveAnnotation): 라벨·치수가 실제 geometry/meta 와 일치(독립 실측)·EL 변경/라인 전환/몸판 변경 동기화·기본 소매 모델 없음·표시 전용(상태·hash 불변)·글자 겹침·렌더/CSS/토글 배선.
   { file: "sleeveAnnotationCheck.js",   golden: false },

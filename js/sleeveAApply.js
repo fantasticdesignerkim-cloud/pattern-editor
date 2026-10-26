@@ -33,6 +33,7 @@
     "shoulder-dart-missing": "어깨선이 끊겼는데 어깨 다트 다리가 없음",
     "shoulder-dart-unclosable": "어깨 다트를 닫아도 입구가 맞지 않음",
     "armhole-underarm-mismatch": "앞·뒤 진동 아랫점 높이가 달라 지원하지 않는 몸판(진동이 회전·이동된 몸판)",
+    "armhole-placement-unverified": "다트 닫힘의 배치 회전만으로 설명되지 않는 진동 변형(진동 위 기준점 절개 등) — 측정 기준(원리) 판단이 필요해 아직 지원하지 않는 몸판",
     "invalid-shoulder-height": "어깨 높이(어깨점→진동 아랫점)가 0 이하",
     "invalid-sleeve-length": "소매길이 값 확인(소매산 높이+1cm 이상이어야 함)",
     "invalid-elbow-length": "팔꿈치 길이 값 확인",
@@ -49,6 +50,7 @@
     var det = "";
     if (fin(r.detail)) det = " · " + f2(r.detail);
     else if (r.reason === "armhole-underarm-mismatch" && r.detail && fin(r.detail.front) && fin(r.detail.back)) det = " · 앞 " + f2(r.detail.front) + " / 뒤 " + f2(r.detail.back);
+    else if (r.reason === "armhole-placement-unverified" && r.detail && fin(r.detail.underarmBlockY) && fin(r.detail.bustPointY)) det = " · 다트 회전을 되돌린 아랫점 높이 " + f2(r.detail.underarmBlockY) + " / BP(가슴둘레선) " + f2(r.detail.bustPointY);
     return (pc ? pc + "판: " : "") + base + det;
   }
 
