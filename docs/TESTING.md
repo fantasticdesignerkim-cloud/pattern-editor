@@ -140,3 +140,14 @@ post-normalize 결과를 좌표·각도까지 고정하므로, 리팩터가 불�
 **검증**: A~G 시나리오(적용/사용자 우선/치수 전환/미등록/404·malformed/flag off/
 사용자 데이터화 경계) 전부 격리 origin 통과, storage 최종 0키, runAll 전체 통과,
 골든 diff 0, 원본 JSON·`AGENTS.md` 미추적 보존.
+
+## 문서 lint (2026-10-27 도입, 보고 전용) — `tools/docLint.js`
+
+추적 Markdown 의 상대 링크·앵커·§ 접두어·색인 미연결 후보·HEAD 대비 급팽창·현재형 계약
+(`memory/dart-engine.md` ↔ `js/dartMove.js`) 식별자를 **읽기만** 해서 요약한다. 파일·git 을 바꾸지 않고,
+자동 수정·네트워크·저장소 밖 접근·심볼릭 링크 추적이 없다. `AGENTS.md`·`books/`·`260923/`·`.claude/`·원본 JSON 은 제외.
+
+- 실행: `node tools/docLint.js [--max N] [--strict]` · 자체 시험: `node test/tools/docLintCheck.js`(임시 저장소에서만)
+- 등급: error(대상 없음·대소문자·인코딩) / warn / review(한글 앵커·§·절대경로 등 판별 불확실 — 수동 확인) / info(색인 미연결·기준 없음)
+- exit: 기본 0(발견이 있어도 커밋을 막지 않는다) · `--strict` 이고 error 가 있으면 1 · 치명 실행 오류 2. runAll·hook 에는 아직 넣지 않았다.
+- 미지원(명시): 단축 참조 `[label]` · 들여쓰기 코드 블록 · HTML `<a href>` · 줄 넘김 링크 텍스트 · 각주. 발견은 목록일 뿐 문서를 고치는 근거가 아니다 — [../memory/README.md](../memory/README.md) § 2. 경계(불일치 처리 규칙).
