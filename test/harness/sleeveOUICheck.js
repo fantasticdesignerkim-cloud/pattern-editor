@@ -44,7 +44,7 @@ const VER = "2026102102";
 {
   const f = SP.family("short-sleeve"), rec = SP.get("bunka-sleeve-O");
   ok(f.variants.map(v => v.symbol).join("") === "LMNOPQ" && f.variants[3].availability === "available" && f.variants[3].presetId === "bunka-sleeve-O" && f.variants[3].page === 47
-    && f.variants.slice(5).every(v => v.availability === "pending-page" && typeof v.blockedBy === "string"), "1: 반소매 = Ⓛ·Ⓜ·Ⓝ·Ⓞ·Ⓟ 실행 · Ⓠ 보류(blockedBy)");
+    && f.variants.every(v => v.availability === "available"), "1: 반소매 = Ⓛ~Ⓠ 모두 실행");
   ok(rec && rec.methodPage === 47 && rec.inputs.map(i => i.key + "=" + i.defaultValue).join() === "sleeveLengthCm=20,innerOffsetCm=1.25,cutSpacingCm=2.5,spreadCm=2,stitchEndCm=1.5" && Object.isFrozen(rec), "1: Ⓞ 레코드 · 책 기본 설정값 5개(소매산 박음 입력 없음)");
   ok(SP.resolve("short-sleeve", "bunka-sleeve-O").ok && SP.get("bunka-sleeve-N").inputs.length === 5, "1: resolve Ⓞ · Ⓝ 레코드 보존");
 }
@@ -119,7 +119,7 @@ const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodi
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveO.js") > pos("sleeveNApply.js") && pos("sleeveOApply.js") > pos("designSleeveO.js") && pos("ui.js") > pos("sleeveOApply.js"), "7: 스크립트 순서");
-  ok(["designSleeveO.js", "sleeveOApply.js"].every(f => ver(f) === VER) && ["sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js", "render.js"].every(f => ver(f) === "2026102602") && ["designSleeveN.js", "sleeveNApply.js"].every(f => ver(f) === "2026102101"), "7: 캐시 버전 " + VER + " · Ⓝ 파일은 그대로");
+  ok(((ver("designSleeveO.js") === "2026102802") && ver("sleeveOApply.js") === "2026102802") && (["sleevePresets.js", "render.js"].every(f => ver(f) === "2026102703") && ver("sleeveCheckpoint.js") === "2026102802" && ver("ui.js") === "2026102802") && ver("sleeveAnnotation.js") === "2026102802" && (["designSleeveN.js"].every(f => ver(f) === "2026102101") && ver("sleeveNApply.js") === "2026102802"), "7: 캐시 버전 " + VER + " · Ⓝ 파일은 그대로");
   ok(["inpSleeveOInner\" type=\"number\" min=\"0.1\" step=\"0.05\" value=\"1.25\"", "inpSleeveOSpacing\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"2.5\"", "inpSleeveOSpread\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"2\"", "inpSleeveOStitch\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"1.5\""].every(s => html.indexOf('id="' + s) > 0)
     && ["rowSleeveOInner", "rowSleeveOSpacing", "rowSleeveOSpread", "rowSleeveOStitch"].every(id => new RegExp('id="' + id + '" hidden').test(html)), "7: 입력칸 4 · 기본값 · 숨김 시작");
   ok(/function sleeveOOn\(project\)/.test(ui) && /function applySleeveO\(project\)/.test(ui) && /keep !== "O" && window\.sleeveOApply/.test(ui) && /if \(isO\) \{/.test(ui) && /window\.sleeveOApply\.rederive\(project\)/.test(ui) && /_sm\.line === "O"/.test(rn), "7: ui·render 배선");

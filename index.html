@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026101203">
+<link rel="stylesheet" href="css/style.css?v=2026102702">
 </head>
 <body>
 
@@ -283,6 +283,8 @@
           <div class="row" id="rowSleeveNCenter" hidden><label for="inpSleeveNCenter">가운데 벌림 (cm)</label><input id="inpSleeveNCenter" type="number" min="0.1" step="0.1" value="4" title="Ⓝ 소맷부리 가운데 틈(현) — 두 반쪽이 중심선으로 접히는 턱(책 기본 4 — 수정 가능)"></div>
           <div class="row" id="rowSleeveNSide" hidden><label for="inpSleeveNSide">양옆 벌림 (각, cm)</label><input id="inpSleeveNSide" type="number" min="0.1" step="0.1" value="2" title="Ⓝ 소맷부리 양옆 틈(현) — 중심 쪽으로 접는 턱(책 기본 2 — 수정 가능)"></div>
           <div class="row" id="rowSleeveNStitch" hidden><label for="inpSleeveNStitch">박기 끝 (소맷부리에서, cm)</label><input id="inpSleeveNStitch" type="number" min="0.1" step="0.1" value="1.5" title="Ⓝ 턱을 소맷부리에서 박기 끝까지 박는다(책 기본 1.5 — 수정 가능)"></div>
+          <!-- 소매 Ⓠ(P.48 하단) 전용 입력: 소매산 높이 비율(위팔선에서 위로 소매산 높이 × 비율) — 기본 1/4(0.25), 허용 1/4 ~ 3/4(0.25 ~ 0.75, 양 끝 포함). 범위 밖은 사유와 함께 거부(clamp 없음). -->
+          <div class="row" id="rowSleeveQRatio" hidden><label for="inpSleeveQRatio">소매산 높이 비율 (기본 1/4 · 1/4 ~ 3/4)</label><input id="inpSleeveQRatio" type="number" min="0.25" max="0.75" step="0.05" value="0.25" title="Ⓠ 위팔선에서 위로 소매산 높이 × 비율 높이에 수평 소맷부리(기본 0.25 = 1/4 · 허용 0.25 ~ 0.75, 중간값 가능)"></div>
           <!-- 소매 Ⓟ(P.48) 전용 입력: 플레어 계수(× Ⓐ 소매 폭) — 책 기본 0.7(수정 가능 설정값). 틈 비율 1:2:4:2:1 은 자동. 상한은 엔진 수치 가드가 판정한다. -->
           <div class="row" id="rowSleevePFlare" hidden><label for="inpSleevePFlare">플레어 계수 (× 소매 폭)</label><input id="inpSleevePFlare" type="number" min="0.05" step="0.05" value="0.7" title="Ⓟ 플레어 분량 ∅ = Ⓐ 소매 폭 × 계수(책 기본 0.7 — 수정 가능)"></div>
           <!-- 소매 Ⓞ(P.47 하단) 전용 입력: 안쪽 절개(중심에서 좌우 각 — 도해 «2.5» 는 가운데 띠 폭) · 절개 간격 · 벌림(틈마다) · 소맷부리 박기 끝 — 책 기본 설정값(수정 가능). -->
@@ -443,7 +445,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026102602"></script>
+<script src="js/render.js?v=2026102703"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -470,7 +472,7 @@
 <!-- 페플럼 제작 정보 표시 모델(순수·표시 전용): window.peplumAnnotation. 형상·hash·hit 무관. -->
 <script src="js/peplumAnnotation.js?v=2026100404"></script>
 <!-- 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시 모델(순수·표시 전용): window.sleeveAnnotation. 형상·hash·완료본·hit 무관. -->
-<script src="js/sleeveAnnotation.js?v=2026102602"></script>
+<script src="js/sleeveAnnotation.js?v=2026102802"></script>
 <script src="js/designLayout.js?v=2026100701"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026091620"></script>
@@ -486,47 +488,49 @@
 <script src="js/bodicePresets.js?v=2026100404"></script>
 <script src="js/designFlare.js?v=2026100404"></script>
 <!-- 몸판 모양 완료 체크포인트: window.bodiceCheckpoint. 검사 + working.bodiceResult 세션 스냅샷. -->
-<script src="js/bodiceCheckpoint.js?v=2026100404"></script>
+<script src="js/bodiceCheckpoint.js?v=2026102802"></script>
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
 <script src="js/sleeveMeasure.js?v=2026082011"></script>
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
-<script src="js/sleeveCheckpoint.js?v=2026102602"></script>
+<script src="js/sleeveCheckpoint.js?v=2026102802"></script>
 <!-- 소매 Ⓐ(P.137–139 타입 4): window.designSleeveA 엔진 코어 · window.sleevePresets 카탈로그 · window.sleeveAApply 상태 연결(전부 순수·DOM 미접근). -->
-<script src="js/designSleeveA.js?v=2026102103"></script>
-<script src="js/sleevePresets.js?v=2026102602"></script>
-<script src="js/sleeveAApply.js?v=2026102103"></script>
+<script src="js/designSleeveA.js?v=2026102802"></script>
+<script src="js/sleevePresets.js?v=2026102703"></script>
+<script src="js/sleeveAApply.js?v=2026102802"></script>
 <!-- 소매 Ⓑ(P.41 타이트): window.designSleeveB 엔진 코어 · window.sleeveBApply 상태 연결(순수·DOM 미접근). Ⓐ 모듈 뒤에 로드. -->
 <script src="js/designSleeveB.js?v=2026100601"></script>
-<script src="js/sleeveBApply.js?v=2026100601"></script>
+<script src="js/sleeveBApply.js?v=2026102802"></script>
 <!-- 소매 Ⓒ(P.41 하단 뒤 소맷부리 다트): window.designSleeveC 엔진 코어 · window.sleeveCApply 상태 연결(순수·DOM 미접근). Ⓐ 모듈 뒤에 로드. -->
 <script src="js/designSleeveC.js?v=2026100901"></script>
-<script src="js/sleeveCApply.js?v=2026100901"></script>
+<script src="js/sleeveCApply.js?v=2026102802"></script>
 <script src="js/designSleeveD.js?v=2026100903"></script>
-<script src="js/sleeveDApply.js?v=2026100903"></script>
+<script src="js/sleeveDApply.js?v=2026102802"></script>
 <script src="js/designSleeveE.js?v=2026101001"></script>
-<script src="js/sleeveEApply.js?v=2026101001"></script>
+<script src="js/sleeveEApply.js?v=2026102802"></script>
 <script src="js/designSleeveF.js?v=2026101003"></script>
-<script src="js/sleeveFApply.js?v=2026101003"></script>
+<script src="js/sleeveFApply.js?v=2026102802"></script>
 <script src="js/designSleeveG.js?v=2026101102"></script>
-<script src="js/sleeveGApply.js?v=2026101103"></script>
+<script src="js/sleeveGApply.js?v=2026102802"></script>
 <script src="js/designSleeveH.js?v=2026101302"></script>
-<script src="js/sleeveHApply.js?v=2026101302"></script>
+<script src="js/sleeveHApply.js?v=2026102802"></script>
 <script src="js/designSleeveI.js?v=2026101303"></script>
-<script src="js/sleeveIApply.js?v=2026101303"></script>
+<script src="js/sleeveIApply.js?v=2026102802"></script>
 <script src="js/designSleeveJ.js?v=2026102001"></script>
-<script src="js/sleeveJApply.js?v=2026102001"></script>
+<script src="js/sleeveJApply.js?v=2026102802"></script>
 <script src="js/designSleeveK.js?v=2026102001"></script>
-<script src="js/sleeveKApply.js?v=2026102001"></script>
+<script src="js/sleeveKApply.js?v=2026102802"></script>
 <script src="js/designSleeveL.js?v=2026102001"></script>
-<script src="js/sleeveLApply.js?v=2026102001"></script>
+<script src="js/sleeveLApply.js?v=2026102802"></script>
 <script src="js/designSleeveM.js?v=2026102001"></script>
-<script src="js/sleeveMApply.js?v=2026102001"></script>
+<script src="js/sleeveMApply.js?v=2026102802"></script>
 <script src="js/designSleeveN.js?v=2026102101"></script>
-<script src="js/sleeveNApply.js?v=2026102101"></script>
-<script src="js/designSleeveO.js?v=2026102102"></script>
-<script src="js/sleeveOApply.js?v=2026102102"></script>
+<script src="js/sleeveNApply.js?v=2026102802"></script>
+<script src="js/designSleeveO.js?v=2026102802"></script>
+<script src="js/sleeveOApply.js?v=2026102802"></script>
 <script src="js/designSleeveP.js?v=2026102602"></script>
-<script src="js/sleevePApply.js?v=2026102602"></script>
+<script src="js/sleevePApply.js?v=2026102802"></script>
+<script src="js/designSleeveQ.js?v=2026102802"></script>
+<script src="js/sleeveQApply.js?v=2026102802"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
 <script src="js/designCollar.js?v=2026092520"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
@@ -541,7 +545,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026102602"></script>
+<script src="js/ui.js?v=2026102802"></script>
 
 </body>
 </html>

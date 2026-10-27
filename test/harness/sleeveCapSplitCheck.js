@@ -77,7 +77,7 @@ for (const e of ["J", "K"]) {
 {
   let n = 0, worst = { split: 0, sum: 0, meta: 0, ident: 0, at: 0 }; const bad = [];
   for (const [sym, id] of presets()) {
-    const pj = projectWithBodice(id); if (!pj) continue; const br = pj.working.bodiceResult, ah = br.armholeLengths;
+    const pj = projectWithBodice(id); if (!pj) continue; const br = pj.working.bodiceResult, ah = sandbox.window.designSleeveA.sewnArmholeLengths(br);   // 봉제용 AH(Ⓜ·Ⓝ 틈 메움 직선 제외 — 2026-10-27)
     for (const SL of [40, 52, 64]) {
       const a = SA.draftSleeveA(br, { sleeveLengthCm: SL }); if (!a.ok) continue; const x0 = a.meta.sp.x, capA = indep(a.geometry.outline[0], x0);
       for (const palm of [18, 21, 24]) for (const rise of [0, 0.7, 1.5]) for (const e of ["J", "K"]) {

@@ -144,7 +144,12 @@
     { id: "bunka-sleeve-P", familyId: "short-sleeve", symbol: "P",
       method: "short-flare-cap-pivot-five-slashes-from-sleeve-A", methodPage: 48,
       inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm", defaultValue: 20 },
-        { key: "flareRatio", label: "플레어 계수(× 소매 폭)", unit: "", defaultValue: 0.7 }] }
+        { key: "flareRatio", label: "플레어 계수(× 소매 폭)", unit: "", defaultValue: 0.7 }] },
+    // Ⓠ(P.48 하단 «소맷부리선을 그린다(캡 슬리브)»): 같은 몸판 Ⓐ 의 소매산만 — 위팔선에서 위로 소매산 높이 × 비율(기본 1/4, 1/4 ~ 3/4) 수평선과 소매산의 두 교점을
+    //   직선 소맷부리로 잇는다. 기장·앞뒤 호 길이는 입력하지 않는다. 김님 확정 2026-10-26(docs/book/P048.md § Ⓠ). 화면 검토용 시안.
+    { id: "bunka-sleeve-Q", familyId: "short-sleeve", symbol: "Q",
+      method: "cap-sleeve-horizontal-hem-on-sleeve-A-cap", methodPage: 48,
+      inputs: [{ key: "heightRatio", label: "소매산 높이 비율(위팔선에서 위로)", unit: "", defaultValue: 0.25 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -206,7 +211,7 @@
           availability: "available", presetId: "bunka-sleeve-K", note: null }
       ] },
     { id: "short-sleeve", order: 6, label: "반소매", symbol: "L", page: 46, availability: "available", note: null,
-      familyNote: "6교시 «반소매의 변형»(P.46–48): Ⓛ·Ⓜ·Ⓝ·Ⓞ·Ⓟ·Ⓠ. 지금 실행 가능한 것은 Ⓛ·Ⓜ·Ⓝ·Ⓞ·Ⓟ — 짧은 소매 Ⓐ(소매길이 기본 20)에 절개를 넣어 벌린다. Ⓛ = 절개 3개 · 소맷부리만 · 커프스 개더 0.5배 · Ⓜ = 절개 5개 · 가운데 평행 + 소매산 상승 0.5 · 커프스 개더 0.7배 · Ⓝ = 절개 3개 · 소맷부리 턱(중심 쪽 · 박기 끝 1.5, 커프스 없음) · Ⓞ = 평행 절개 4개 · 소매산·소맷부리 턱(바깥쪽) · Ⓟ = 절개 5개 · 소맷부리 플레어(소매 폭 × 0.7). 화면 검토용 시안.",
+      familyNote: "6교시 «반소매의 변형»(P.46–48): Ⓛ·Ⓜ·Ⓝ·Ⓞ·Ⓟ·Ⓠ. 지금 실행 가능한 것은 Ⓛ·Ⓜ·Ⓝ·Ⓞ·Ⓟ·Ⓠ — 짧은 소매 Ⓐ(소매길이 기본 20)에 절개를 넣어 벌린다. Ⓛ = 절개 3개 · 소맷부리만 · 커프스 개더 0.5배 · Ⓜ = 절개 5개 · 가운데 평행 + 소매산 상승 0.5 · 커프스 개더 0.7배 · Ⓝ = 절개 3개 · 소맷부리 턱(중심 쪽 · 박기 끝 1.5, 커프스 없음) · Ⓞ = 평행 절개 4개 · 소매산·소맷부리 턱(바깥쪽) · Ⓟ = 절개 5개 · 소맷부리 플레어(소매 폭 × 0.7) · Ⓠ = 캡 슬리브(소매산 높이 1/4 수평 · 직선 소맷부리). 화면 검토용 시안.",
       variants: [
         { id: "bunka-sleeve-L", symbol: "L", label: "L · 소맷부리를 잘라서 벌린다(퍼프) · 절개 3개 2:1:1 · 커프스 개더 0.5배(소매 Ⓐ 기반, 시안)", page: 46, methodPage: 46,
           availability: "available", presetId: "bunka-sleeve-L", note: null },
@@ -218,7 +223,8 @@
           availability: "available", presetId: "bunka-sleeve-O", note: null },
         { id: "bunka-sleeve-P", symbol: "P", label: "P · 소맷부리를 잘라서 벌린다(플레어) · 절개 5개 1:2:4:2:1 · 계수 0.7(소매 Ⓐ 기반, 시안)", page: 48, methodPage: 48,
           availability: "available", presetId: "bunka-sleeve-P", note: null },
-        shortPending("Q", "소맷부리선을 그린다(캡)", 48)
+        { id: "bunka-sleeve-Q", symbol: "Q", label: "Q · 소맷부리선을 그린다(캡) · 소매산 높이 1/4 수평 · 직선 소맷부리(소매 Ⓐ 소매산, 시안)", page: 48, methodPage: 48,
+          availability: "available", presetId: "bunka-sleeve-Q", note: null }
       ] },
     pendingFamily("dolman-sleeve", 7, "돌먼 소매", "R", 49),
     pendingFamily("shirt-sleeve", 8, "셔츠 소매", "T", 50),

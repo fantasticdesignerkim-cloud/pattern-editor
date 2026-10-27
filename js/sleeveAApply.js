@@ -34,6 +34,8 @@
     "shoulder-dart-unclosable": "어깨 다트를 닫아도 입구가 맞지 않음",
     "armhole-underarm-mismatch": "앞·뒤 진동 아랫점 높이가 달라 지원하지 않는 몸판(진동이 회전·이동된 몸판)",
     "armhole-placement-unverified": "다트 닫힘의 배치 회전만으로 설명되지 않는 진동 변형(진동 위 기준점 절개 등) — 측정 기준(원리) 판단이 필요해 아직 지원하지 않는 몸판",
+    "armhole-restore-unverified": "원형 등가 복원 기록(절개·허리 이음)이 몸판 형상과 맞지 않음 — 추측하지 않고 멈춤",
+    "armhole-restore-ambiguous": "원형 등가 복원 기록이 둘 이상 겹침 — 판단 필요",
     "invalid-shoulder-height": "어깨 높이(어깨점→진동 아랫점)가 0 이하",
     "invalid-sleeve-length": "소매길이 값 확인(소매산 높이+1cm 이상이어야 함)",
     "invalid-elbow-length": "팔꿈치 길이 값 확인",
@@ -50,6 +52,7 @@
     var det = "";
     if (fin(r.detail)) det = " · " + f2(r.detail);
     else if (r.reason === "armhole-underarm-mismatch" && r.detail && fin(r.detail.front) && fin(r.detail.back)) det = " · 앞 " + f2(r.detail.front) + " / 뒤 " + f2(r.detail.back);
+    else if (r.reason === "armhole-restore-unverified" && r.detail && r.detail.why) det = " · " + r.detail.why;
     else if (r.reason === "armhole-placement-unverified" && r.detail && fin(r.detail.underarmBlockY) && fin(r.detail.bustPointY)) det = " · 다트 회전을 되돌린 아랫점 높이 " + f2(r.detail.underarmBlockY) + " / BP(가슴둘레선) " + f2(r.detail.bustPointY);
     return (pc ? pc + "판: " : "") + base + det;
   }
@@ -120,6 +123,12 @@
     if (m.source.front.dartClosed) closed.push("앞 AH 다트");
     if (m.source.back.shoulderDartClosed) closed.push("뒤 어깨 다트");
     if (closed.length) lines.push("진동선 계산: " + closed.join("·") + " 닫은 봉제 상태");
+    // 원형 등가 복원(2026-10-27 김님 확정)이 쓰인 몸판만 — 저장 AH(표시 형상)와 봉제 AH 를 나란히 보인다
+    var rsF = m.source.front.restore, rsB = m.source.back.restore;
+    if (rsF || rsB) {
+      var kind = (rsF || rsB).kind === "flare-slash-undo" ? "플레어 절개 회전 되돌림" : "허리 이음 다트 닫힘 회전 되돌림 · 진동 틈 메움 직선 제외";
+      lines.push("원형 기준 측정: " + kind + " · 저장 AH 앞 " + f2(m.source.front.armholeStoredCm) + " / 뒤 " + f2(m.source.back.armholeStoredCm) + " → 봉제 AH 앞 " + f2(a.front) + " / 뒤 " + f2(a.back));
+    }
     if (s.warnings.indexOf("ease-adjust-ge-1cm") >= 0) lines.push("⚠ 이세 조정이 1cm 이상 — 책: 치수 오측정 가능, 확인 필요");
     return lines;
   }

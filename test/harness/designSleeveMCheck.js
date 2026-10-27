@@ -194,7 +194,7 @@ const capM = cubsOf(seg(g, "cap")), hemM = cubsOf(seg(g, "hem")), UbA = capA[0][
 {
   let n = 0, okN = 0, negOk = 0; const out = {}, bad = []; const worst = { open: 0, cut: 0, outw: 0, infl: 0, g1: 0, rigid: 0, overlap: 0, rotMax: 0, split: 0, ident: 0, hemVsFormula: 0, bridge: 0 };
   for (const [sym, id] of presets()) {
-    const br = bodiceResultOf(id); if (!br) continue; const ah = br.armholeLengths;
+    const br = bodiceResultOf(id); if (!br) continue; const ah = SA.sewnArmholeLengths(br);   // 봉제용 AH(Ⓜ·Ⓝ 틈 메움 직선 제외 — 2026-10-27)
     for (const SLc of [15, 20, 25]) {
       const a = SA.draftSleeveA(br, { sleeveLengthCm: SLc }); if (!a.ok) continue; const x0 = a.meta.sp.x, Wd = a.meta.bicepCm, indA = indep(a.geometry.outline[0], x0);
       for (const arm of [22, 26, 30, 32]) for (const rise of [0, 0.5]) {

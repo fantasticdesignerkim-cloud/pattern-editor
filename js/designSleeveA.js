@@ -262,22 +262,157 @@
     return base;
   }
 
+  // ── 원형 등가 측정 복사본(2026-10-27 김님 확정 · 측정 복사본만 — 몸판 geometry·armholeLengths·다트량 무변경) ──────────────
+  //   진동이 다트 닫힘 말고 다른 디자인 변환으로도 움직인 몸판은, 그 변환을 **완료본에 실린 기록**대로 조각별로 되돌려 원형 기준에서 잰다.
+  //   · 플레어 Ⓗ(flareSlash[pc].slash — 진동 기준점 pivot · angleDeg): 진동 체인을 pivot 에서 나눠 아랫점 쪽 조각(+ 옆선)을 pivot 축 −angle 회전.
+  //     → Ⓖ 와 같은 상태(다트 닫힘만 남음)가 되고, 그 뒤는 기존 판독(배치 정규화·가드)이 그대로 검증한다.
+  //   · 허리 이음선 Ⓜ·Ⓝ(waistSeam[pc].closedDart — apex · dartAngleRad · slashEnd T · slashEndRotated T′ · armholeEaseCm):
+  //     옆 조각(진동·옆선 «-splice» identity)을 apex 축 −dartAngle 회전 · T′→T 틈 메움 직선(진동선 위 line, 끝점 = 기록 T′·T, 길이 = 기록)은
+  //     다트 입구로 보아 **봉제(소매 제도)용 진동 길이에서 뺀다**(저장 AH 는 표시 형상 길이로 그대로).
+  //   기록이 없으면 원본 그대로(기존 몸판 결과 바이트 동일). 기록과 형상이 맞지 않으면 추측하지 않고 이유와 함께 멈춘다.
+  var RESTORE_TOL = 1e-6;
+  function round4A(v) { return Math.round(v * 10000) / 10000; }
+  function rotSegA(sg, c, a) {
+    var q = JSON.parse(JSON.stringify(sg));
+    ["from", "to", "c1", "c2"].forEach(function (k) { if (q[k]) q[k] = rot(q[k], c, a); });
+    if (Array.isArray(q.commands)) q.commands.forEach(function (cm) { cm.points = cm.points.map(function (p) { return rot(p, c, a); }); });
+    return q;
+  }
+  function sameEnds(sg, a, b, tol) { var e = endsOf(sg); return !!e && ((samePt(e[0], a, tol) && samePt(e[1], b, tol)) || (samePt(e[0], b, tol) && samePt(e[1], a, tol))); }
+  function sideTip(pc, arm) {   // 옆선 끝에 닿는 진동 끝점(readPiece 와 같은 규칙)
+    var tips = [];
+    pc.outline.forEach(function (s) {
+      if (s.edge !== "side-seam") return; var e = endsOf(s); if (!e) return;
+      e.forEach(function (q) { arm.forEach(function (a) { var ea = endsOf(a); if (ea) ea.forEach(function (p) { if (samePt(p, q)) tips.push(p); }); }); });
+    });
+    tips = uniqPts(tips); return tips.length === 1 ? cp(tips[0]) : null;
+  }
+  function restorePiece(bodice, piece) {
+    var pc = bodice[piece], arm = bodice.armhole && bodice.armhole[piece];
+    var fsRec = bodice.flareSlash && bodice.flareSlash[piece] && bodice.flareSlash[piece].slash;
+    var wsRec = bodice.waistSeam && bodice.waistSeam[piece] && bodice.waistSeam[piece].closedDart;
+    if (!fsRec && !wsRec) return { ok: true, restore: null };
+    if (fsRec && wsRec) return { ok: false, reason: "armhole-restore-ambiguous", detail: { piece: piece } };
+    if (!pc || !Array.isArray(pc.outline) || !Array.isArray(arm)) return { ok: false, reason: "no-armhole" };
+    var bad = function (why, d) { return { ok: false, reason: "armhole-restore-unverified", detail: { piece: piece, why: why, value: d } }; };
+    var outPc = { outline: pc.outline.slice(), construction: pc.construction || [] }, outArm = arm.slice(), fwd = arm.map(function () { return null; });
+    if (fsRec) {
+      var P = fsRec.pivot, ang = (fin(fsRec.angleDeg) ? fsRec.angleDeg : NaN) * Math.PI / 180;
+      if (!P || !fin(P.x) || !fin(P.y) || !fin(ang)) return bad("flare-slash-record-invalid");
+      var U = sideTip(pc, arm); if (!U) return bad("underarm-not-found");
+      // 아랫점에서 체인을 따라가 pivot(이음점)에 닿을 때까지의 조각 = 절개로 함께 돈 조각
+      var used = arm.map(function () { return false; }), cur = U, moved = [], hitPivot = false;
+      for (var guard = 0; guard < arm.length && !hitPivot; guard++) {
+        var k = -1, far = null;
+        arm.forEach(function (sg, i) { if (used[i] || k >= 0) return; var e = endsOf(sg); if (samePt(e[0], cur)) { k = i; far = e[1]; } else if (samePt(e[1], cur)) { k = i; far = e[0]; } });
+        if (k < 0) break;
+        used[k] = true; moved.push(k); cur = far;
+        if (samePt(cur, P, RESTORE_TOL)) hitPivot = true;
+      }
+      var pivotJoint = hitPivot && arm.some(function (sg, i) { if (used[i]) return false; var e = endsOf(sg); return samePt(e[0], P, RESTORE_TOL) || samePt(e[1], P, RESTORE_TOL); });
+      if (!hitPivot || !pivotJoint) return bad("flare-slash-pivot-not-armhole-joint");
+      // 옆선 조각이 진동 아래 조각과 같은 쪽(절개선 pivot→foot 기준)에 있어야 한다
+      var F = fsRec.foot; if (!F || !fin(F.x) || !fin(F.y)) return bad("flare-slash-record-invalid");
+      var sideOf = function (p) { return Math.sign((F.x - P.x) * (p.y - P.y) - (F.y - P.y) * (p.x - P.x)); };
+      var midOf = function (sg) { var pl = flattenArm(sg); return pl[Math.floor(pl.length / 2)]; };
+      var sgn = sideOf(midOf(arm[moved[0]]));
+      if (!sgn || moved.some(function (i) { return sideOf(midOf(arm[i])) !== sgn; })) return bad("flare-slash-side-ambiguous");
+      var sideSegs = pc.outline.filter(function (s) { return s.edge === "side-seam"; });
+      if (!sideSegs.length || sideSegs.some(function (s) { var e = endsOf(s); return sideOf({ x: (e[0].x + e[1].x) / 2, y: (e[0].y + e[1].y) / 2 }) !== sgn; })) return bad("flare-slash-side-seam-not-on-moving-side");
+      moved.forEach(function (i) { outArm[i] = rotSegA(arm[i], P, -ang); fwd[i] = { center: cp(P), angleRad: ang }; });
+      outPc.outline = pc.outline.map(function (s) {
+        if (s.edge === "side-seam") return rotSegA(s, P, -ang);
+        if (s.edge === "armhole" && moved.some(function (i) { var e = endsOf(arm[i]); return sameEnds(s, e[0], e[1]); })) return rotSegA(s, P, -ang);
+        return s;
+      });
+      return { ok: true, piece: outPc, armhole: outArm, forward: fwd, excludedCm: 0,
+        restore: { kind: "flare-slash-undo", center: cp(P), angleDeg: fsRec.angleDeg, movedArmholeSegments: moved.length, excludedCm: 0, rule: fsRec.rule || null,
+          note: "플레어 절개(진동 기준점 pivot)의 회전을 아랫점 쪽 조각에만 되돌림 — 다트 닫힘은 이후 기존 판독이 처리" } };
+    }
+    // 허리 이음선 Ⓜ·Ⓝ
+    var A = wsRec.apex, th = wsRec.dartAngleRad, T = wsRec.slashEnd, Tp = wsRec.slashEndRotated, e0 = wsRec.armholeEaseCm;
+    if (!A || !T || !Tp || !fin(th) || !fin(e0) || !fin(A.x) || !fin(T.x) || !fin(Tp.x)) return bad("waist-seam-record-invalid");
+    if (!samePt(rot(Tp, A, -th), T, RESTORE_TOL)) return bad("waist-seam-rotation-mismatch", dist(rot(Tp, A, -th), T));
+    var gaps = []; arm.forEach(function (sg, i) { if (sg.kind === "line" && sameEnds(sg, Tp, T, RESTORE_TOL)) gaps.push(i); });
+    if (gaps.length !== 1) return bad("waist-seam-gap-line-not-unique", gaps.length);
+    var gapLen = dist(arm[gaps[0]].from, arm[gaps[0]].to);
+    if (Math.abs(gapLen - e0) > RESTORE_TOL) return bad("waist-seam-gap-length-mismatch", { measured: gapLen, recorded: e0 });
+    var spliceRoot = piece + "/armhole-splice", isSplice = function (s) { return !!(s.boundary && s.boundary.root === spliceRoot); };
+    var mv = []; arm.forEach(function (sg, i) { if (isSplice(sg)) mv.push(i); });
+    if (!mv.length) return bad("waist-seam-moved-armhole-missing");
+    outArm = []; fwd = [];
+    arm.forEach(function (sg, i) {
+      if (i === gaps[0]) return;
+      if (isSplice(sg)) { outArm.push(rotSegA(sg, A, -th)); fwd.push({ center: cp(A), angleRad: th }); }
+      else { outArm.push(sg); fwd.push(null); }
+    });
+    // 되돌린 옆 조각 진동이 T(원래 이음점)에 정확히 닿아야 한다
+    if (!outArm.some(function (sg, j) { if (!fwd[j]) return false; var e = endsOf(sg); return samePt(e[0], T, RESTORE_TOL) || samePt(e[1], T, RESTORE_TOL); })) return bad("waist-seam-restored-armhole-not-at-T");
+    outPc.outline = [];
+    pc.outline.forEach(function (s) {
+      if (s.kind === "line" && s.edge === "armhole" && sameEnds(s, Tp, T, RESTORE_TOL)) return;   // 틈 메움 직선 — 측정 복사본에서 뺀다
+      var r = s.boundary && s.boundary.root;
+      outPc.outline.push((r === spliceRoot || r === piece + "/side-seam-splice") ? rotSegA(s, A, -th) : s);
+    });
+    return { ok: true, piece: outPc, armhole: outArm, forward: fwd, excludedCm: gapLen,
+      restore: { kind: "waist-seam-undo", center: cp(A), angleDeg: th * 180 / Math.PI, dartId: wsRec.dartId || null, movedArmholeSegments: mv.length,
+        excludedCm: gapLen, gapLine: { from: cp(arm[gaps[0]].from), to: cp(arm[gaps[0]].to) },
+        note: "허리 다트 닫힘 회전을 옆 조각에만 되돌림 · T′→T 틈 메움 직선은 다트 입구로 보아 봉제 진동에서 제외" } };
+  }
+  // 반환 { ok, bodice(측정 복사본 — 기록 없으면 원본 그대로), restore:{front,back}|null, forward:{front,back} } | { ok:false, reason, detail }
+  function blockEquivalentBodice(bodiceResult) {
+    if (!bodiceResult || !bodiceResult.front || !bodiceResult.back || !bodiceResult.armhole) return { ok: true, bodice: bodiceResult, restore: null, forward: null };
+    var rf = restorePiece(bodiceResult, "front"); if (!rf.ok) return rf;
+    var rbk = restorePiece(bodiceResult, "back"); if (!rbk.ok) return rbk;
+    if (!rf.restore && !rbk.restore) return { ok: true, bodice: bodiceResult, restore: null, forward: null };
+    var lens = bodiceResult.armholeLengths || {};
+    var copy = { hash: bodiceResult.hash, front: rf.piece || bodiceResult.front, back: rbk.piece || bodiceResult.back,
+      armhole: { front: rf.armhole || bodiceResult.armhole.front, back: rbk.armhole || bodiceResult.armhole.back },
+      // 저장 AH 와 같은 정밀도(소수 4자리 — bodiceCheckpoint round4)로 남긴다: 봉제 AH 도 같은 측정 권위의 값이다.
+      armholeLengths: { front: round4A(lens.front - (rf.excludedCm || 0)), back: round4A(lens.back - (rbk.excludedCm || 0)) } };
+    return { ok: true, bodice: copy, restore: { front: rf.restore, back: rbk.restore },
+      forward: { front: rf.forward || bodiceResult.armhole.front.map(function () { return null; }), back: rbk.forward || bodiceResult.armhole.back.map(function () { return null; }) } };
+  }
+  // 소매 제도·봉제 비교용 진동 길이(저장 AH − 확인된 틈 메움 직선). 복원 기록이 없으면 저장 AH 객체 그대로. 기록이 형상과 맞지 않으면 null.
+  function sewnArmholeLengths(bodiceResult) {
+    if (!bodiceResult || !bodiceResult.armholeLengths) return null;
+    var be = blockEquivalentBodice(bodiceResult);
+    return be.ok ? be.bodice.armholeLengths : null;
+  }
+
   // 반환 { ok, back:{shoulder,shoulderStored,underarm,heightCm,heightStoredCm,armholeLengthCm,closedDart}, front:{…}, sourceBodiceHash }
   //   | { ok:false, reason, piece? }.  실패 reason 은 readPiece + no-bodice / invalid-armhole-length / armhole-underarm-mismatch / invalid-shoulder-height.
   function readBodiceArmhole(bodiceResult) {
     if (!bodiceResult || typeof bodiceResult !== "object" || !bodiceResult.front || !bodiceResult.back) return { ok: false, reason: "no-bodice" };
-    var lens = bodiceResult.armholeLengths;
-    if (!lens || !fin(lens.front) || !fin(lens.back) || lens.front <= 0 || lens.back <= 0) return { ok: false, reason: "invalid-armhole-length" };
+    var lens0 = bodiceResult.armholeLengths;
+    if (!lens0 || !fin(lens0.front) || !fin(lens0.back) || lens0.front <= 0 || lens0.back <= 0) return { ok: false, reason: "invalid-armhole-length" };
+    var be = blockEquivalentBodice(bodiceResult);
+    if (!be.ok) return be;
+    var src = be.bodice, lens = src.armholeLengths;
     var out = { ok: true, sourceBodiceHash: bodiceResult.hash !== undefined ? bodiceResult.hash : null };
     for (var k = 0; k < 2; k++) {
-      var piece = k ? "front" : "back", r = readPiece(bodiceResult, piece);
+      var piece = k ? "front" : "back", r = readPiece(src, piece);
       if (!r.ok) { r.piece = piece; return r; }
-      var h = r.underarm.y - r.shoulder.y, hs = r.underarmStored.y - r.shoulderStored.y;
+      var rs = be.restore && be.restore[piece], fw = be.forward ? be.forward[piece] : null;
+      // 보관(몸판) 좌표: 복원한 조각 위 점은 그 조각의 정변환으로 되돌린다(아랫점·어깨점)
+      var toStored = function (p) {
+        if (!fw) return p;
+        for (var i2 = 0; i2 < src.armhole[piece].length; i2++) {
+          var e2 = endsOf(src.armhole[piece][i2]);
+          if (fw[i2] && (samePt(e2[0], p) || samePt(e2[1], p))) return rot(p, fw[i2].center, fw[i2].angleRad);
+        }
+        return p;
+      };
+      var uS = toStored(r.underarmStored), sS = toStored(r.shoulderStored);
+      var h = r.underarm.y - r.shoulder.y, hs = uS.y - sS.y;
       if (!(h > 0)) return { ok: false, reason: "invalid-shoulder-height", piece: piece };
       var cl = 0; r.armholeClosed.forEach(function (pl) { cl += polyLen(pl); });
-      out[piece] = { shoulder: r.shoulder, shoulderStored: r.shoulderStored, underarm: r.underarm, underarmStored: r.underarmStored,
+      out[piece] = { shoulder: r.shoulder, shoulderStored: sS, underarm: r.underarm, underarmStored: uS,
         heightCm: h, heightStoredCm: hs, armholeLengthCm: lens[piece], closedDart: r.closedDart, closedShoulderDart: r.closedShoulderDart,
-        armholeClosed: r.armholeClosed, armholeClosedLengthCm: cl, underarmBlock: r.underarmBlock, placement: r.placement };
+        armholeClosed: r.armholeClosed, armholeClosedLengthCm: cl, underarmBlock: r.underarmBlock, placement: r.placement,
+        // 측정 복사본(원형 등가) 진동 + 조각별 정변환(복사본 → 보관). 달림 끝 등 «호 길이 → 몸판 위치» 대응에 쓴다.
+        armholeMeasure: src.armhole[piece], underarmMeasure: r.underarmStored, armholeForward: fw };
+      if (rs) { out[piece].restore = rs; out[piece].armholeStoredCm = lens0[piece]; }
     }
     // 가슴둘레선(진동 아랫점 높이)이 앞뒤 같아야 한다 — 다트 닫기로 생긴 **순수 배치 회전**(위 정규화)만 되돌린 원형 등가 위치에서 비교한다.
     //   정규화가 없으면 보관 위치 그대로(기존 판정과 같다). 진동 자체가 디자인으로 바뀐 몸판(절개 추가·옆선 변경 등)은 여전히 여기서 멈춘다.
@@ -436,10 +571,17 @@
       d.meta.source[pc].placement = { kind: pl.kind, apex: cp(pl.apex), angleDeg: (pl.angleRad !== undefined ? pl.angleRad : pl.closedAngleRad) * 180 / Math.PI,
         underarmBlock: cp(r[pc].underarmBlock), note: pl.note };
     });
+    // 원형 등가 복원이 쓰인 몸판에만 기록(없으면 필드 없음 — 기존 결과 바이트 동일). 저장 AH(표시 형상)와 봉제용 AH 를 따로 남긴다.
+    ["front", "back"].forEach(function (pc) {
+      var rs = r[pc].restore; if (!rs) return;
+      d.meta.source[pc].restore = JSON.parse(JSON.stringify(rs));
+      d.meta.source[pc].armholeStoredCm = r[pc].armholeStoredCm;
+      d.meta.source[pc].armholeSewnCm = r[pc].armholeLengthCm;
+    });
     return d;
   }
 
   window.designSleeveA = Object.freeze({ draftSleeveA: draftSleeveA, draftFromMeasures: draftFromMeasures,
-    readBodiceArmhole: readBodiceArmhole, easeAdjustment: easeAdjustment,
+    readBodiceArmhole: readBodiceArmhole, easeAdjustment: easeAdjustment, blockEquivalentBodice: blockEquivalentBodice, sewnArmholeLengths: sewnArmholeLengths,
     RULES: Object.freeze({ backPlusCm: BACK_PLUS, frontMinusCm: FRONT_MINUS, bulgeCm: BULGE, flatCm: FLAT, easeRate: EASE_RATE, backShare: BACK_SHARE, frontShare: FRONT_SHARE }) });
 })();

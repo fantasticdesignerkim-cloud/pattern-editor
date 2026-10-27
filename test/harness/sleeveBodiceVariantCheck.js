@@ -26,7 +26,7 @@ sb.window.designWorkflow = { current: () => PROJECT };
 const files = ["designLineTool.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designYokeSeam.js", "designPrincess.js", "designBodice.js", "bodicePresets.js",
   "designLayout.js", "designRenderer.js", "bodiceCheckpoint.js", "peplumAnnotation.js", "designSleeve.js", "sleeveMeasure.js", "sleeveCheckpoint.js",
   "designSleeveA.js", "designSleeveB.js", "sleevePresets.js", "sleeveAApply.js", "sleeveBApply.js"];
-"CDEFGHIJKLMNO".split("").forEach(k => files.push("designSleeve" + k + ".js", "sleeve" + k + "Apply.js"));
+"CDEFGHIJKLMNOPQ".split("").forEach(k => files.push("designSleeve" + k + ".js", "sleeve" + k + "Apply.js"));
 files.push("sleeveAnnotation.js", "designCollar.js", "collarCheckpoint.js", "designResult.js");
 files.forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, "js", f), "utf8"), sb, { filename: f }));
 const W = sb.window, DB = W.designBodice, BP = W.bodicePresets, BC = W.bodiceCheckpoint, SC = W.sleeveCheckpoint, SA = W.designSleeveA, SAN = W.sleeveAnnotation;
@@ -53,12 +53,9 @@ const endsI = s => s.kind === "line" ? [s.from, s.to] : [s.commands[0].points[0]
 const CLASS = {};
 for (const f of BP.families()) for (const v of f.variants) { if (!v.presetId) continue; const rb = SA.readBodiceArmhole(bodiceOf(v.presetId)); CLASS[v.symbol] = rb.ok ? "ok" : rb.reason; }
 {
+  // 2026-10-27(김님 확정): Ⓗ·Ⓜ·Ⓝ 은 완료본의 변환 기록으로 원형 등가 복원해 지원 — 22종 전부. 상세는 §7.
   const supported = Object.keys(CLASS).filter(k => CLASS[k] === "ok").join("");
-  ok(supported === "ABCDEFGIJKLOPQRSTUV", "2: 지원 = 기존 18 + 새로 Ⓖ — " + supported);
-  ok(CLASS.H === "armhole-placement-unverified", "2: Ⓗ(진동 위 기준점 절개) = 배치로 설명되지 않음 → 원리 판단 필요로 멈춤");
-  ok(CLASS.M === "armhole-underarm-mismatch" && CLASS.N === "armhole-underarm-mismatch", "2: Ⓜ·Ⓝ(허리 이음선 — 진동 자체 변경) = 기존 미지원 유지");
-  const P = proj("H"), r = W.sleeveAApply.apply(P, { sleeveLengthCm: 52 });
-  ok(!r.ok && /원리\) 판단이 필요/.test(r.text) && /BP\(가슴둘레선\) 20\.62/.test(r.text), "2: Ⓗ 사유 문구(값을 맞추지 않음): " + r.text);
+  ok(supported === "ABCDEFGHIJKLMNOPQRSTUV", "2: 지원 = 기존 18 + Ⓖ + 원형 등가 복원 Ⓗ·Ⓜ·Ⓝ — " + supported);
 }
 // ── 3. 사용자 실패 사례(Ⓖ) 재현 · 해결 · 독립 검산 ──
 const RG = bodiceOf(pick("G")), RA = bodiceOf(pick("A"));
@@ -92,7 +89,8 @@ const INPUTS = { A: { sleeveLengthCm: 52 }, B: { sleeveLengthCm: 52 }, C: { slee
   F: { sleeveLengthCm: 52, tuckCm: 1.5 }, G: { sleeveLengthCm: 52, tuckCm: 1.5, starCm: 3 }, H: { sleeveLengthCm: 52, elbowLengthCm: 31.4, palmCircumferenceCm: 21, dropCm: 3.5 },
   I: { sleeveLengthCm: 52, palmCircumferenceCm: 21 }, J: { sleeveLengthCm: 52, palmCircumferenceCm: 21, riseCm: 0.7 }, K: { sleeveLengthCm: 52, palmCircumferenceCm: 21, riseCm: 0.7 },
   L: { sleeveLengthCm: 20, upperArmCm: 26 }, M: { sleeveLengthCm: 20, upperArmCm: 26, riseCm: 0.5 },
-  N: { sleeveLengthCm: 20, cutOffsetCm: 2.5, centerTuckCm: 4, sideTuckCm: 2, stitchEndCm: 1.5 }, O: { sleeveLengthCm: 20, innerOffsetCm: 1.25, cutSpacingCm: 2.5, spreadCm: 2, stitchEndCm: 1.5 } };
+  N: { sleeveLengthCm: 20, cutOffsetCm: 2.5, centerTuckCm: 4, sideTuckCm: 2, stitchEndCm: 1.5 }, O: { sleeveLengthCm: 20, innerOffsetCm: 1.25, cutSpacingCm: 2.5, spreadCm: 2, stitchEndCm: 1.5 },
+  P: { sleeveLengthCm: 20, flareRatio: 0.7 }, Q: { heightRatio: 0.25 } };
 {
   const bad = [];
   "ABCDEFGHIJKLMNO".split("").forEach(k => {
@@ -115,6 +113,128 @@ const INPUTS = { A: { sleeveLengthCm: 52 }, B: { sleeveLengthCm: 52 }, C: { slee
   BC.complete(P);
   const c = SC.check(P);
   ok(!c.ok && c.fails.indexOf("source-mismatch") >= 0 && P.working.sleeveResult.hash === h0, "6: 몸판을 바꾸면 소매 게이트가 무효(출처 불일치) · 기존 완료본은 동결 그대로 " + J(c.fails));
+}
+
+// ── 7. 몸판 Ⓗ·Ⓜ·Ⓝ — 원형 등가 복원(2026-10-27 김님 확정: Ⓗ 는 되돌린 원형 기준 · Ⓜ·Ⓝ 틈 메움 직선은 봉제 진동에서 제외) ──
+{
+  const RH = bodiceOf(pick("H")), RM = bodiceOf(pick("M")), RN = bodiceOf(pick("N")), RAx = bodiceOf(pick("A"));
+  const cubI = (q, t) => { const u = 1 - t; return { x: u*u*u*q[0].x + 3*u*u*t*q[1].x + 3*u*t*t*q[2].x + t*t*t*q[3].x, y: u*u*u*q[0].y + 3*u*u*t*q[1].y + 3*u*t*t*q[2].y + t*t*t*q[3].y }; };
+  const polyI = sg => { if (sg.kind === "line") { const o = []; for (let k = 0; k <= 64; k++) o.push({ x: sg.from.x + (sg.to.x - sg.from.x) * k / 64, y: sg.from.y + (sg.to.y - sg.from.y) * k / 64 }); return o; }
+    const o = []; let cur = null; sg.commands.forEach(c => { if (c.type === "M") { cur = c.points[0]; o.push(cur); } else { const q = [cur, ...c.points]; for (let k = 1; k <= 400; k++) o.push(cubI(q, k / 400)); cur = c.points[2]; } }); return o; };
+  const lenP = P => { let s = 0; for (let i = 1; i < P.length; i++) s += Math.hypot(P[i].x - P[i - 1].x, P[i].y - P[i - 1].y); return s; };
+  const segD = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy; let t = l2 ? ((p.x - a.x) * vx + (p.y - a.y) * vy) / l2 : 0; t = Math.max(0, Math.min(1, t)); return Math.hypot(p.x - a.x - vx * t, p.y - a.y - vy * t); };
+  const toPolys = segs => segs.map(polyI), dTo = (p, polys) => { let m = Infinity; polys.forEach(P => { for (let i = 1; i < P.length; i++) m = Math.min(m, segD(p, P[i - 1], P[i])); }); return m; };
+  const haus = (sa, sbb) => { const A = toPolys(sa), B = toPolys(sbb); let m = 0; A.forEach(P => P.forEach((p, i) => { if (i % 8 === 0) m = Math.max(m, dTo(p, B)); })); return m; };
+  const D2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  // 7a. 완료본 기록: 절개 기록은 Ⓗ 에만(다른 몸판은 키 없음 — 기존 완료본 바이트 동일) · 형상 hash 미포함
+  ok(RH.flareSlash && RH.flareSlash.front.slash && RH.flareSlash.back.slash && !("flareSlash" in RG) && !("flareSlash" in RAx) && !("flareSlash" in RM), "7: 완료본 절개 기록은 Ⓗ 에만(Ⓐ·Ⓖ·Ⓜ 키 없음)");
+  { PROJECT = proj("H"); const h1 = PROJECT.working.bodiceResult.hash; const cpy = JSON.parse(J(PROJECT.working.bodiceResult)); delete cpy.flareSlash; ok(h1 === RH.hash && BC.isCurrentBodiceChanged(PROJECT) === false, "7: Ⓗ 완료본 hash 재현 · 기록은 hash 와 무관"); }
+  // 7b. Ⓗ — 독립 복원: 기록 pivot·각으로 아랫점 쪽 진동 조각만 되돌리면 Ⓖ 의 진동과 겹친다(조각별 강체 합동)
+  ["front", "back"].forEach(pc => {
+    const rec = RH.flareSlash[pc].slash, Pv = rec.pivot, F = rec.foot, a = rec.angleDeg * Math.PI / 180;
+    // 독립 분할: 저장 아랫점에서 진동 체인을 따라 pivot(이음점)에 닿을 때까지가 절개로 돈 조각
+    const segs = RH.armhole[pc], arm = segs.map(endsI).flat(), ua = RH[pc].outline.filter(s => s.edge === "side-seam").map(endsI).flat();
+    let cur = arm.find(p => ua.some(q => D2(p, q) < 1e-3)); const moved = new Set();
+    for (let g = 0; g < segs.length && D2(cur, Pv) > 1e-6; g++) { const k = segs.findIndex((sg, i) => !moved.has(i) && endsI(sg).some(e => D2(e, cur) < 1e-6)); if (k < 0) break; moved.add(k); const e = endsI(segs[k]); cur = D2(e[0], cur) < 1e-6 ? e[1] : e[0]; }
+    const restored = segs.map((sg, i) => ({ _pts: moved.has(i) ? polyI(sg).map(q => rotI(q, Pv, -a)) : polyI(sg) }));
+    const asSeg = r => r._pts; const A = restored.map(asSeg), B = toPolys(RG.armhole[pc]);
+    let m = 0; A.forEach(P => P.forEach((p, i) => { if (i % 8 === 0) m = Math.max(m, dTo(p, B)); }));
+    const eng = SA.blockEquivalentBodice(RH).bodice.armhole[pc];
+    ok(m < 1e-4 && haus(eng, RG.armhole[pc]) < 1e-4 && haus(RG.armhole[pc], eng) < 1e-4 && haus(RH.armhole[pc], RG.armhole[pc]) > 1, "7: Ⓗ " + pc + " — 기록 pivot·" + rec.angleDeg.toFixed(3) + "° 로 되돌린 진동 = Ⓖ 진동(독립 " + m.toExponential(1) + ") · 저장 형상은 다름");
+  });
+  // 7c. Ⓜ·Ⓝ — 틈 메움 직선(기록 T′→T)·옆 조각(-splice) 식별, 되돌리면 기본 몸판 진동과 겹친다(허리 이음 조립 snap ≤ 1e-3)
+  [["M", RM], ["N", RN]].forEach(([sym, R]) => ["front", "back"].forEach(pc => {
+    const rec = R.waistSeam[pc].closedDart, gaps = R.armhole[pc].filter(sg => sg.kind === "line" && ((D2(sg.from, rec.slashEndRotated) < 1e-9 && D2(sg.to, rec.slashEnd) < 1e-9) || (D2(sg.to, rec.slashEndRotated) < 1e-9 && D2(sg.from, rec.slashEnd) < 1e-9)));
+    const gl = gaps.length === 1 ? D2(gaps[0].from, gaps[0].to) : NaN;
+    const eng = SA.blockEquivalentBodice(R).bodice.armhole[pc];
+    ok(gaps.length === 1 && Math.abs(gl - rec.armholeEaseCm) < 1e-12 && eng.length === R.armhole[pc].length - 1 && haus(eng, RAx.armhole[pc]) < 1e-3 && haus(RAx.armhole[pc], eng) < 1e-3,
+      "7: " + sym + " " + pc + " — 틈 직선 1개(" + gl.toFixed(4) + " = 기록) · 되돌린 진동 = 기본 몸판 진동");
+  }));
+  // 7d. 봉제용 AH = 저장 AH − 틈 직선(독립 적분) · 저장 AH 는 그대로 · 다른 몸판은 같은 객체
+  [["M", RM], ["N", RN]].forEach(([sym, R]) => {
+    const sw = SA.sewnArmholeLengths(R), ex = { front: R.waistSeam.front.closedDart.armholeEaseCm, back: R.waistSeam.back.closedDart.armholeEaseCm };
+    const integ = pc => R.armhole[pc].reduce((s, sg) => s + lenP(polyI(sg)), 0);
+    ok(Math.abs(integ("front") - R.armholeLengths.front) < 2e-3 && Math.abs(integ("back") - R.armholeLengths.back) < 2e-3 && sw.front === Math.round((R.armholeLengths.front - ex.front) * 1e4) / 1e4 && sw.back === Math.round((R.armholeLengths.back - ex.back) * 1e4) / 1e4
+      && Math.abs(ex.front - 0.1212) < 1e-4 && Math.abs(ex.back - 0.2192) < 1e-4 && Math.abs(sw.front - RAx.armholeLengths.front) < 2e-3 && Math.abs(sw.back - RAx.armholeLengths.back) < 2e-3,
+      "7: " + sym + " 봉제 AH 앞 " + sw.front.toFixed(4) + " / 뒤 " + sw.back.toFixed(4) + " = 저장 " + R.armholeLengths.front + " / " + R.armholeLengths.back + " − 틈 " + ex.front.toFixed(4) + " / " + ex.back.toFixed(4));
+  });
+  ok([RAx, RG].every(R => SA.sewnArmholeLengths(R) === R.armholeLengths) && SA.sewnArmholeLengths(RH).front === RH.armholeLengths.front && SA.sewnArmholeLengths(RH).back === RH.armholeLengths.back, "7: 틈 기록 없는 몸판의 봉제 AH = 저장 AH(복원 없는 몸판은 같은 객체 · Ⓗ 는 같은 값)");
+  // 7e. 어깨 높이(원형 기준) · Ⓐ meta · 몸판 불변 · 출처 hash
+  const rA = SA.readBodiceArmhole(RAx);
+  [["H", RH], ["M", RM], ["N", RN]].forEach(([sym, R]) => {
+    const before = J(R), fr = deepFreeze(JSON.parse(before)), rb = SA.readBodiceArmhole(fr), d = SA.draftSleeveA(fr, { sleeveLengthCm: 52 }), dA = SA.draftSleeveA(RAx, { sleeveLengthCm: 52 });
+    const sw = SA.sewnArmholeLengths(R);
+    ok(rb.ok && Math.abs(rb.front.heightCm - rA.front.heightCm) < 1e-3 && Math.abs(rb.back.heightCm - rA.back.heightCm) < 1e-3 && rb.front.restore && rb.back.restore,
+      "7: " + sym + " 어깨 높이(원형 기준) 앞 " + (rb.ok ? rb.front.heightCm.toFixed(3) : "-") + " / 뒤 " + (rb.ok ? rb.back.heightCm.toFixed(3) : "-") + " = 박시");
+    ok(d.ok && d.meta.armholeCm.front === sw.front && d.meta.armholeCm.back === sw.back && d.meta.source.front.armholeStoredCm === R.armholeLengths.front && d.meta.source.front.armholeSewnCm === sw.front
+      && d.meta.source.front.restore.kind === (sym === "H" ? "flare-slash-undo" : "waist-seam-undo") && Math.abs(d.meta.capHeightCm - dA.meta.capHeightCm) < 2e-3 && d.meta.checks.closed && d.meta.checks.connected && d.meta.checks.selfIntersection === false,
+      "7: " + sym + " Ⓐ — 봉제 AH 로 제도 · 저장/봉제 AH 따로 기록 · 소매산 높이 ≈ 박시 · 단일 외곽");
+    ok(J(fr) === before && d.sourceBodiceHash === R.hash, "7: " + sym + " 몸판 불변(동결) · 출처 hash");
+    // 보관 좌표 아랫점 = 실제 몸판 아랫점
+    const tip = pc => { const arm = R.armhole[pc].map(endsI).flat(), ua = R[pc].outline.filter(s => s.edge === "side-seam").map(endsI).flat(); return arm.find(p => ua.some(q => D2(p, q) < 1e-3)); };
+    ok(D2(rb.front.underarmStored, tip("front")) < 1e-9 && D2(rb.back.underarmStored, tip("back")) < 1e-9, "7: " + sym + " 보관 아랫점 = 몸판 위 실제 아랫점(조각 정변환)");
+  });
+  // 7f. Ⓠ 달림 끝 — 몸판 실제 진동 위 · 틈 직선 위가 아님 · 보관 진동을 틈 직선 없이 독립 보행한 호 = 빠진 호
+  const SQ = W.designSleeveQ;
+  const walk = (R, pc, arc, skipGap) => {   // 보관 진동 독립 보행(아랫점 → ), 틈 직선(T′→T)은 길이 0 으로 건너뛴다
+    const rec = R.waistSeam && R.waistSeam[pc] && R.waistSeam[pc].closedDart, polys = R.armhole[pc].map(polyI), used = polys.map(() => false);
+    const arm = R.armhole[pc].map(endsI).flat(), ua = R[pc].outline.filter(s => s.edge === "side-seam").map(endsI).flat();
+    let cur = arm.find(p => ua.some(q => D2(p, q) < 1e-3)), w = 0;
+    for (let g = 0; g < polys.length; g++) {
+      let k = -1, rev = false; polys.forEach((P, i) => { if (used[i] || k >= 0) return; if (D2(P[0], cur) < 1e-6) { k = i; } else if (D2(P[P.length - 1], cur) < 1e-6) { k = i; rev = true; } });
+      if (k < 0) return null; used[k] = true; const P = rev ? polys[k].slice().reverse() : polys[k];
+      const isGap = rec && R.armhole[pc][k].kind === "line" && (D2(P[0], rec.slashEndRotated) < 1e-9 || D2(P[0], rec.slashEnd) < 1e-9) && (D2(P[P.length - 1], rec.slashEnd) < 1e-9 || D2(P[P.length - 1], rec.slashEndRotated) < 1e-9);
+      if (isGap && skipGap) { cur = P[P.length - 1]; continue; }
+      for (let j = 1; j < P.length; j++) { const dd = D2(P[j - 1], P[j]); if (w + dd >= arc) { const u = (arc - w) / dd; return { x: P[j - 1].x + (P[j].x - P[j - 1].x) * u, y: P[j - 1].y + (P[j].y - P[j - 1].y) * u }; } w += dd; }
+      cur = P[P.length - 1];
+    }
+    return null;
+  };
+  const bad = [];
+  [["H", RH], ["M", RM], ["N", RN]].forEach(([sym, R]) => {
+    const A = SA.draftSleeveA(R, { sleeveLengthCm: 30 });
+    [0.25, 0.4, 0.75].forEach(r => {
+      const q = SQ.draftSleeveQ(A, { heightRatio: r }); if (!q.ok) { bad.push(sym + r + ":" + q.reason); return; }
+      const at = SQ.bodiceAttachEnds(R, q.meta.excludedArcCm);
+      ["back", "front"].forEach(pc => {
+        const e = at[pc]; if (e.status !== "ok") { bad.push(sym + r + pc + ":" + e.status); return; }
+        const onArm = dTo(e.point, toPolys(R.armhole[pc]));
+        const rec = R.waistSeam && R.waistSeam[pc] && R.waistSeam[pc].closedDart;
+        const onGap = rec ? segD(e.point, rec.slashEndRotated, rec.slashEnd) < 1e-6 && D2(e.point, rec.slashEnd) > 1e-6 && D2(e.point, rec.slashEndRotated) > 1e-6 : false;
+        if (!(onArm < 1e-3) || onGap) bad.push(sym + r + pc + ":off-armhole " + onArm.toExponential(1));
+        if (!e.acrossClosedDart) {   // 다트를 건너지 않은 점은 보관 진동 독립 보행(틈 제외)과 같아야 한다
+          const ind = walk(R, pc, q.meta.excludedArcCm[pc], true);
+          if (!ind || D2(ind, e.point) > 0.02) bad.push(sym + r + pc + ":walk " + (ind ? D2(ind, e.point).toFixed(4) : "none"));
+        }
+      });
+    });
+  });
+  ok(bad.length === 0, "7: Ⓗ·Ⓜ·Ⓝ × Ⓠ 0.25/0.4/0.75 — 달림 끝 앞·뒤 표시 · 실제 몸판 진동 위 · 틈 직선 위 아님 · 독립 보행 일치 " + J(bad));
+  { const A = SA.draftSleeveA(RM, { sleeveLengthCm: 30 }), q = SQ.draftSleeveQ(A, { heightRatio: 0.4 }), e = SQ.bodiceAttachEnds(RM, q.meta.excludedArcCm).back, withGap = walk(RM, "back", q.meta.excludedArcCm.back, false);
+    ok(withGap && D2(withGap, e.point) > 0.1, "7: Ⓜ 뒤 0.4 — 틈 직선을 진동 호에 넣으면 다른 점(" + (withGap ? D2(withGap, e.point).toFixed(3) : "-") + "cm) → 넣지 않음 확인"); }
+  // 7g. 소매 A–Q 전체 적용·게이트·완료 · 이세 = 박시(봉제 AH 일관) · Ⓞ 물리
+  const bad2 = [];
+  ["H", "M", "N"].forEach(sym => "ABCDEFGHIJKLMNOPQ".split("").forEach(k => {
+    const PA = proj("A"), ra = W["sleeve" + k + "Apply"].apply(PA, INPUTS[k]), ca = SC.check(PA);
+    const PX = proj(sym), rx = W["sleeve" + k + "Apply"].apply(PX, INPUTS[k]), cx = SC.check(PX), done = cx.ok ? SC.complete(PX) : null;
+    if (!(ra.ok && rx.ok && ca.ok && cx.ok && done && done.ok && Object.isFrozen(PX.working.sleeveResult) && cx.ease && ca.ease && Math.abs(cx.ease.total - ca.ease.total) < 0.01)) bad2.push(sym + k + ":" + (rx.reason || (cx.fails || []).join("/")));
+  }));
+  ok(bad2.length === 0, "7: Ⓗ·Ⓜ·Ⓝ 몸판에서 소매 A–Q 17개 적용·게이트·완료 · 이세 = 박시 " + J(bad2));
+  ["H", "M"].forEach(sym => { const PX = proj(sym), ro = W.sleeveOApply.apply(PX, INPUTS.O); if (!ro.ok || !PX.working.sleeveO) { ok(false, "7: " + sym + " → Ⓞ 적용 실패 " + (ro.reason || "")); return; } const m = PX.working.sleeveO.meta;
+    ok(m.folded.roundTripMaxCm < 1e-9 && m.folded.maxDevCm < 1e-9 && m.checks.selfIntersection === false && Math.abs(m.hem.sewnCm - m.widthCm) < 1e-9, "7: " + sym + " → Ⓞ 물리(접기 왕복 · 단일 외곽 · 봉제 소맷부리 = W)"); });
+  { const PM = proj("M"); W.sleeveAApply.apply(PM, INPUTS.A); const L = W.sleeveAApply.infoLines(PM).join("\n"); const PA = proj("A"); W.sleeveAApply.apply(PA, INPUTS.A);
+    ok(/원형 기준 측정: 허리 이음 다트 닫힘 회전 되돌림 · 진동 틈 메움 직선 제외 · 저장 AH 앞 20\.75 \/ 뒤 21\.81 → 봉제 AH 앞 20\.63 \/ 뒤 21\.59/.test(L) && /AH 앞 20\.63 · 뒤 21\.59/.test(L) && !/원형 기준 측정/.test(W.sleeveAApply.infoLines(PA).join()), "7: Ⓜ 표시 줄 — 저장 AH / 봉제 AH 나란히(박시는 줄 없음)"); }
+  // 7h. 몸판 변경 무효화(Ⓜ → Ⓗ) · 완료본 동결
+  { const P = proj("M"); W.sleeveQApply.apply(P, INPUTS.Q); SC.complete(P); const h0 = P.working.sleeveResult.hash;
+    const body = BP.bodyParams(pick("H")); P.working.parameters.body = body; P.working.geometry = Object.assign({}, DB.computeGeometry(REF, { body }), { sleeve: P.working.geometry.sleeve }); BC.complete(P);
+    const c = SC.check(P); ok(!c.ok && c.fails.indexOf("source-mismatch") >= 0 && P.working.sleeveResult.hash === h0, "7: Ⓜ→Ⓗ 몸판 변경 → 소매 무효 · 완료본 동결 " + J(c.fails)); }
+  // 7i. 기록이 없거나 형상과 맞지 않으면 추측하지 않고 멈춤
+  const noRec = R => { const c = JSON.parse(J(R)); delete c.flareSlash; c.waistSeam = null; return c; };
+  ok(SA.readBodiceArmhole(noRec(RM)).reason === "armhole-underarm-mismatch" && SA.readBodiceArmhole(noRec(RH)).reason === "armhole-placement-unverified", "7: 기록 없는 완료본(합성) → 예전 사유로 멈춤");
+  { const t = JSON.parse(J(RM)); t.waistSeam.front.closedDart.armholeEaseCm += 0.01; const r = SA.readBodiceArmhole(t);
+    ok(!r.ok && r.reason === "armhole-restore-unverified" && r.detail.why === "waist-seam-gap-length-mismatch" && SA.sewnArmholeLengths(t) === null, "7: Ⓜ 틈 길이 기록 불일치 → 멈춤 · 봉제 AH 없음"); }
+  { const t = JSON.parse(J(RH)); t.flareSlash.back.slash.pivot.x += 0.01; const r = SA.readBodiceArmhole(t);
+    ok(!r.ok && r.reason === "armhole-restore-unverified" && r.detail.why === "flare-slash-pivot-not-armhole-joint", "7: Ⓗ pivot 기록이 진동 이음점이 아님 → 멈춤"); }
 }
 
 console.log("\n══════════════════════════════════════════════");

@@ -316,7 +316,16 @@
 
     // 접기 검증(최종 geometry 에서 표본 → 접기 변환): 조각 = 평행 역이동 · 첫 겹 = 거울 ∘ 접는 조각 역이동 · 둘째 겹 = 맞출 조각 역이동.
     //   접은 소매산 = Ⓐ 소매산 위 · 접은 소맷부리 = y = H · 겹은 접는 조각 아래 [c, c + side·w] · 왕복 · 접은 조각이 Ⓐ 를 빈틈 없이 한 줄로.
-    var capA = function (x) { return yAtX(cubs, x); };
+    // 접은 점 → Ⓐ 소매산까지의 편차(2026-10-28). 바깥 조각 끝 표본은 평행 이동(+DX)·역이동(−DX)의 부동소수 왕복으로 Ⓐ 끝(Ub.x·Uf.x)을
+    //   1ulp(~1e-15cm) 넘어갈 수 있다 — 그때 yAtX 가 NaN 을 돌려 접기 검사가 «fold-mismatch(null)» 로 떨어졌다(강체 불변식 위반이 아닌 비교 정의역 문제).
+    //   정의역 밖 거리(넘친 x)는 편차에 그대로 더해 판정한다: 끝점 y 와의 차와 넘친 x 중 큰 값 — 넘침이 FOLD_TOL 을 넘으면 여전히 실패(종이 밖).
+    //   정의역 안에서 값을 못 구하면(NaN) 무한대로 실패시킨다(조용한 통과 없음).
+    var capDev = function (fp) {
+      var x = fp.x, over = 0;
+      if (x < XL) { over = XL - x; x = XL; } else if (x > XR) { over = x - XR; x = XR; }
+      var y = yAtX(cubs, x);
+      return fin(y) ? Math.max(over, Math.abs(fp.y - y)) : Infinity;
+    };
     var foldDev = 0, layerDev = 0, rangeDev = 0, roundTrip = 0;
     var capOwners = [], hemOwners = [];
     var pushN = function (arr, n, o) { for (var q = 0; q < n; q++) arr.push(o); };
@@ -342,14 +351,14 @@
       var t2 = T(d.def.crease); return function (p) { return t2(d.refl(p)); };
     };
     var foldedPieces = { cap: [], hem: [] };
-    var check = function (segs, owners, onA, which) {
+    var check = function (segs, owners, devOf, which) {
       if (segs.length !== owners.length) return "owner-count";
       for (var k = 0; k < segs.length; k++) {
         var o = owners[k], q = segs[k], f = foldOf(o), u = unfoldOf(o), lo2 = Infinity, hi2 = -Infinity;
         for (var t = 0; t <= 16; t++) {
           var p = cubicAt(q, t / 16), fp = f(p);
           roundTrip = Math.max(roundTrip, dist(u(fp), p));
-          var dev = Math.abs(fp.y - onA(fp.x));
+          var dev = devOf(fp);
           if (o.kind === "piece") foldDev = Math.max(foldDev, dev); else layerDev = Math.max(layerDev, dev);
           lo2 = Math.min(lo2, fp.x); hi2 = Math.max(hi2, fp.x);
           if (o.kind !== "piece") { var d = TK[o.tuck], r0 = Math.min(d.c, d.c + d.def.side * w), r1 = Math.max(d.c, d.c + d.def.side * w); rangeDev = Math.max(rangeDev, Math.max(0, r0 - fp.x, fp.x - r1)); }
@@ -358,7 +367,7 @@
       }
       return null;
     };
-    var e1 = check(cap, capOwners, capA, "cap"), e2 = check(hemCs, hemOwners, function () { return H; }, "hem");
+    var e1 = check(cap, capOwners, capDev, "cap"), e2 = check(hemCs, hemOwners, function (fp) { return Math.abs(fp.y - H); }, "hem");
     if (e1 || e2) return fail("fold-owner-mismatch", e1 || e2);
     if (!(foldDev < FOLD_TOL)) return fail("fold-mismatch", foldDev);
     if (!(layerDev < FOLD_TOL && rangeDev < FOLD_TOL)) return fail("fold-layer-mismatch", { onACm: layerDev, rangeCm: rangeDev });

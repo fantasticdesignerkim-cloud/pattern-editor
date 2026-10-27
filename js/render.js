@@ -448,6 +448,12 @@ function _appendSleeveAnnotation(grp, model){
   const TICK=3.5, sc=Math.abs(c2p(1,0)[0]-c2p(0,0)[0]);
   const LY=window.sleeveAnnotation.layout(model, sc);   // 화면 배율 기준 배치(겹치면 이동+리더선, 그래도 안 되면 번호 표식+번호 설명)
   if(LY.compact) g.setAttribute("data-anno-compact","1");
+  if((model.zones||[]).some(z=>z.cls==="cut")){   // 소매 Ⓠ 잘라내는 영역: 회색 사선 무늬(표시 전용)
+    const defs=E("defs",{}), pat=E("pattern",{ id:"capSleeveCutHatch", patternUnits:"userSpaceOnUse", width:6, height:6, patternTransform:"rotate(45)" });
+    pat.appendChild(E("rect",{ x:0, y:0, width:6, height:6, fill:"rgba(148,163,184,.12)" }));
+    pat.appendChild(E("line",{ x1:0, y1:0, x2:0, y2:6, stroke:"#94A3B8", "stroke-width":1.1 }));
+    defs.appendChild(pat); g.appendChild(defs);
+  }
   (model.zones||[]).forEach(z=>g.appendChild(E("polygon",{ points:z.pts.map(p=>c2p(p.x,p.y).join(",")).join(" "), class:"sleeve-anno-"+z.cls, "data-anno":"zone-"+z.id })));
   (model.refs||[]).forEach(r=>{ const [x1,y1]=c2p(r.from.x,r.from.y), [x2,y2]=c2p(r.to.x,r.to.y); g.appendChild(E("line",{ x1,y1,x2,y2, class:"sleeve-anno-"+r.cls, "data-anno":"ref-"+r.id })); });
   (model.dims||[]).forEach(d=>{
@@ -642,10 +648,17 @@ function render(){
         if (_sm) { grp.setAttribute("data-sleeve-line", _sm.line); if (!_slvInfoChk || _slvInfoChk.checked) _appendSleeveAnnotation(grp, _sm); }
         // 소매 Ⓗ «벌리기 전 절개 도안(참고)»(표시 전용, 기본 켜짐 — chkSleeveHRef). Ⓗ 가 아니면 모델 없음.
         const _hRefChk = document.getElementById("chkSleeveHRef");
-        if (_sm && (_sm.line === "H" || _sm.line === "I" || _sm.line === "J" || _sm.line === "K" || _sm.line === "L" || _sm.line === "M" || _sm.line === "N" || _sm.line === "O" || _sm.line === "P") && (!_hRefChk || _hRefChk.checked) && window.sleeveAnnotation.refModel) {
+        if (_sm && (_sm.line === "H" || _sm.line === "I" || _sm.line === "J" || _sm.line === "K" || _sm.line === "L" || _sm.line === "M" || _sm.line === "N" || _sm.line === "O" || _sm.line === "P" || _sm.line === "Q") && (!_hRefChk || _hRefChk.checked) && window.sleeveAnnotation.refModel) {
           const _rm = window.sleeveAnnotation.refModel(dp, Math.abs(c2p(1,0)[0]-c2p(0,0)[0]), { mainVisible: !_slvInfoChk || _slvInfoChk.checked });
           if (_rm) _appendSleeveAnnotation(grp, _rm);
         }
+      }
+      if ((pc === "front" || pc === "back") && window.sleeveAnnotation && window.sleeveAnnotation.bodiceMarks && (!_slvInfoChk || _slvInfoChk.checked)) {   // 소매 Ⓠ 몸판 달림 끝(표시 전용)
+        const _bm = window.sleeveAnnotation.bodiceMarks(dp), _m = _bm && _bm[pc];
+        if (_m) { const _g = E("g", { "data-design-sleeve": "bodice-attach", "data-anno-piece": pc, class: "sleeve-anno" }), [_x, _y] = c2p(_m.at.x, _m.at.y);
+          _g.appendChild(E("circle", { cx: _x, cy: _y, r: 2.6, class: "sleeve-anno-mark sleeve-anno-notch", "data-anno": "mark-attach-" + pc }));
+          _g.appendChild(E("text", { x: _x + (pc === "back" ? -6 : 6), y: _y - 5, class: "sleeve-anno-text sleeve-anno-ref", "text-anchor": pc === "back" ? "end" : "start", "data-anno-text": "attach-" + pc }, _m.text));
+          grp.appendChild(_g); }
       }
       if (_pepOn && _pepAll[pc]) _appendPeplumAnnotation(grp, _pepAll[pc], dp.working.geometry.waistSeam ? window.designLayout.peplumDrop(dp.working.geometry, pc + "Peplum") : 0);
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)

@@ -5,6 +5,13 @@
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
+
+  // 봉제(소매 제도)용 진동 길이 — 저장 AH 에서 확인된 틈 메움 직선만 뺀 값(허리 이음선 Ⓜ·Ⓝ). 그 밖의 몸판은 저장 AH 그대로(2026-10-27).
+  //   designSleeveA 가 없는 맥락(소매 Ⓐ 미사용 단독 계산)에서는 빼야 할 틈 기록(waistSeam.closedDart)이 없을 때만 저장 AH 와 같다고 확정할 수 있다 — 있으면 null.
+  function sewnAH(b) {
+    if (!b) return null; var S = window.designSleeveA; if (S && S.sewnArmholeLengths) return S.sewnArmholeLengths(b);
+    var ws = b.waistSeam; return (ws && ((ws.front && ws.front.closedDart) || (ws.back && ws.back.closedDart))) ? null : (b.armholeLengths || null);
+  }
   var PRESET_ID = "bunka-sleeve-K";
   var DISPLAY_CONSTRUCTION = { "center-line": 1, "cut-center-back": 1, "cut-center-front": 1, "cut-axis-back": 1, "cut-axis-front": 1, "cut-edge-back": 1, "cut-edge-front": 1 };
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -104,8 +111,8 @@
     lines.push("소매산 상승 " + f2(m.rise.cm) + " cm(설정값 — 개더 계수와 별개) · 국소 재제도(잠정): 가운데 틈 양쪽 " + f2(rdw.center.ellCm) + " · 기준점 꺾임 뒤 " + f2(rdw.kinks.ellChosenCm.Pb) + " · 앞 " + f2(rdw.kinks.ellChosenCm.Pf) + " cm(그 밖은 원래 소매산 그대로) · 소매길이 입력 " + f2(m.centerLength.inputCm) + " · 꼭대기→소맷부리 " + f2(m.centerLength.spreadCm));
     var BC = window.bodiceCheckpoint, DS = window.designSleeve, bodice = BC && BC.latest(project);
     var prim = (DS && w.geometry && w.geometry.sleeve) ? DS.capPrimitives(w.geometry.sleeve) : null;
-    if (bodice && bodice.armholeLengths && prim) {
-      var ah = bodice.armholeLengths, ca = m.capLengthsA, tf = prim.lengths.front - ah.front, tb = prim.lengths.back - ah.back;
+    if (bodice && sewnAH(bodice) && prim) {
+      var ah = sewnAH(bodice), ca = m.capLengthsA, tf = prim.lengths.front - ah.front, tb = prim.lengths.back - ah.back;
       lines.push("소매산(최종 실측) 앞 " + f2(prim.lengths.front) + " · 뒤 " + f2(prim.lengths.back) + " · 총 " + f2(prim.lengths.total) + " cm · AH 앞 " + f2(ah.front) + " · 뒤 " + f2(ah.back));
       if (ca) {
         lines.push("Ⓐ 실측 이세 앞 " + sgn(ca.front - ah.front) + " · 뒤 " + sgn(ca.back - ah.back) + " · 총 " + sgn(ca.total - ah.front - ah.back) + " + 추가 개더(최종 − Ⓐ 소매산) 앞 " + sgn(prim.lengths.front - ca.front) + " · 뒤 " + sgn(prim.lengths.back - ca.back) + " · 총 " + sgn(prim.lengths.total - ca.total));

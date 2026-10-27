@@ -38,6 +38,13 @@
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
+
+  // 봉제(소매 제도)용 진동 길이 — 저장 AH 에서 확인된 틈 메움 직선만 뺀 값(허리 이음선 Ⓜ·Ⓝ). 그 밖의 몸판은 저장 AH 그대로(2026-10-27).
+  //   designSleeveA 가 없는 맥락(소매 Ⓐ 미사용 단독 계산)에서는 빼야 할 틈 기록(waistSeam.closedDart)이 없을 때만 저장 AH 와 같다고 확정할 수 있다 — 있으면 null.
+  function sewnAH(b) {
+    if (!b) return null; var S = window.designSleeveA; if (S && S.sewnArmholeLengths) return S.sewnArmholeLengths(b);
+    var ws = b.waistSeam; return (ws && ((ws.front && ws.front.closedDart) || (ws.back && ws.back.closedDart))) ? null : (b.armholeLengths || null);
+  }
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
   function round4(v) { return Math.round(v * 1e4) / 1e4; }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -49,8 +56,9 @@
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
     // 소매 Ⓐ 는 working.sleeveA + geometry.sleeve 만 쓰고 sleeveDraft 는 모른다 — 기본 소매 파라미터로 서명하지 않도록 별도 분기.
-    var lineCount = (proj.working.sleeveA ? 1 : 0) + (proj.working.sleeveB ? 1 : 0) + (proj.working.sleeveC ? 1 : 0) + (proj.working.sleeveD ? 1 : 0) + (proj.working.sleeveE ? 1 : 0) + (proj.working.sleeveF ? 1 : 0) + (proj.working.sleeveG ? 1 : 0) + (proj.working.sleeveH ? 1 : 0) + (proj.working.sleeveI ? 1 : 0) + (proj.working.sleeveJ ? 1 : 0) + (proj.working.sleeveK ? 1 : 0) + (proj.working.sleeveL ? 1 : 0) + (proj.working.sleeveM ? 1 : 0) + (proj.working.sleeveN ? 1 : 0) + (proj.working.sleeveO ? 1 : 0) + (proj.working.sleeveP ? 1 : 0);
+    var lineCount = (proj.working.sleeveA ? 1 : 0) + (proj.working.sleeveB ? 1 : 0) + (proj.working.sleeveC ? 1 : 0) + (proj.working.sleeveD ? 1 : 0) + (proj.working.sleeveE ? 1 : 0) + (proj.working.sleeveF ? 1 : 0) + (proj.working.sleeveG ? 1 : 0) + (proj.working.sleeveH ? 1 : 0) + (proj.working.sleeveI ? 1 : 0) + (proj.working.sleeveJ ? 1 : 0) + (proj.working.sleeveK ? 1 : 0) + (proj.working.sleeveL ? 1 : 0) + (proj.working.sleeveM ? 1 : 0) + (proj.working.sleeveN ? 1 : 0) + (proj.working.sleeveO ? 1 : 0) + (proj.working.sleeveP ? 1 : 0) + (proj.working.sleeveQ ? 1 : 0);
     if (lineCount > 1) return { ok: false, fails: ["sleeve-line-conflict"], capLengths: null, ease: null };
+    if (proj.working.sleeveQ) return checkQ(proj);
     if (proj.working.sleeveP) return checkP(proj);
     if (proj.working.sleeveO) return checkO(proj);
     if (proj.working.sleeveN) return checkN(proj);
@@ -87,7 +95,7 @@
     // 이세(사실값)
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(isFinite(fe) && isFinite(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -132,7 +140,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -177,7 +185,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -221,7 +229,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -261,7 +269,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -299,7 +307,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -338,7 +346,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -394,7 +402,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -438,7 +446,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -446,6 +454,47 @@
       lower: null, cap: null, mode: "preset", preset: PRESET_N, _prim: prim, _bodice: bodice, _a: d };
   }
   function inputsN(d) { var p = d.parameters; return { sleeveLengthCm: p.sleeveLengthCm, cutOffsetCm: p.cutOffsetCm, centerTuckCm: p.centerTuckCm, sideTuckCm: p.sideTuckCm, stitchEndCm: p.stitchEndCm }; }
+  // ── 소매 Ⓠ 분기(P.48 하단 캡 슬리브, bunka-sleeve-Q) — Ⓟ 와 같은 결. 입력 = 소매산 높이 비율(기본 0.25). 앞/뒤 분할 = geometry.capSplit(중심선) · 이세 = 공용 실측 − AH(전체 — 구간 이세는 meta). ──
+  var PRESET_Q = "bunka-sleeve-Q";
+  var Q_ORIGIN = { kind: "preset", presetId: PRESET_Q, method: "cap-sleeve-horizontal-hem-on-sleeve-A-cap", methodPage: 48 };
+  function checkQ(proj) {
+    var fails = [];
+    var BC = window.bodiceCheckpoint, DS = window.designSleeve, SQA = window.sleeveQApply;
+    var d = proj.working.sleeveQ;
+    var bodice = BC && BC.latest(proj);
+    if (!bodice) fails.push("no-bodice");
+    else if (BC.isCurrentBodiceChanged(proj)) fails.push("bodice-stale");
+    if (d.blocked) fails.push("sleeve-q-blocked");
+    if (d.presetId !== PRESET_Q) fails.push("sleeve-preset-unsupported");
+    if (bodice && d.sourceBodiceHash !== bodice.hash) fails.push("source-mismatch");
+    var pp = d.parameters || {};
+    if (!fin(pp.heightRatio)) fails.push("invalid-input");
+    var geom = proj.working.geometry && proj.working.geometry.sleeve;
+    var prim = (geom && DS) ? DS.capPrimitives(geom) : null;
+    if (!prim) fails.push("cap-unmeasured");
+    if (prim && d.meta && d.meta.checks && (d.meta.checks.selfIntersection !== false || d.meta.checks.singlePiece !== true || d.meta.checks.piecesOverlap !== false)) fails.push("self-intersection");
+    if (!fails.length) {
+      if (!SQA || !window.designSleeveQ) fails.push("no-module");
+      else {
+        var r = SQA.draft(proj, pp);
+        if (!r.ok) fails.push("sleeve-q-redraft-failed");
+        else if (JSON.stringify(canonGeom(r.geometry)) !== JSON.stringify(canonGeom(geom)) || JSON.stringify(r.meta) !== JSON.stringify(d.meta)
+          || JSON.stringify(r.geometry.construction) !== JSON.stringify(geom.construction) || JSON.stringify(r.geometry.capSplit) !== JSON.stringify(geom.capSplit)   // capSplit = 앞/뒤 계측 분할 기준
+          || r.sourceSleeveAHash !== d.sourceSleeveAHash) fails.push("sleeve-q-geometry-mismatch");
+      }
+    }
+    var ease = null;
+    if (prim && bodice) {
+      // Ⓠ: 구간 이세 = 남은 소매산 − 남은 AH(AH − 소매에서 빠진 호) — 전체 AH 와 혼동하지 않는다(김님 2026-10-26)
+      var exq = d.meta && d.meta.excludedArcCm;
+      var fe = exq ? prim.lengths.front - ((sewnAH(bodice) || {}).front - exq.front) : NaN, be = exq ? prim.lengths.back - ((sewnAH(bodice) || {}).back - exq.back) : NaN;
+      if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
+      else ease = { front: fe, back: be, total: fe + be };
+    }
+    return { ok: fails.length === 0, fails: fails, capLengths: prim ? prim.lengths : null, ease: ease,
+      lower: null, cap: null, mode: "preset", preset: PRESET_Q, _prim: prim, _bodice: bodice, _a: d };
+  }
+  function inputsQ(d) { var p = d.parameters; return { heightRatio: p.heightRatio }; }
   // ── 소매 Ⓟ 분기(P.48 반소매 플레어, bunka-sleeve-P) — Ⓜ 와 같은 결. 입력 = 소매길이(기본 20) · 플레어 계수(기본 0.7). 앞/뒤 분할 = geometry.capSplit(중심선). ──
   var PRESET_P = "bunka-sleeve-P";
   var P_ORIGIN = { kind: "preset", presetId: PRESET_P, method: "short-flare-cap-pivot-five-slashes-from-sleeve-A", methodPage: 48 };
@@ -478,7 +527,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -518,7 +567,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -558,7 +607,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -597,7 +646,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -636,7 +685,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -674,7 +723,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -724,7 +773,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -775,7 +824,7 @@
     }
     var ease = null;
     if (prim && bodice) {
-      var fe = prim.lengths.front - bodice.armholeLengths.front, be = prim.lengths.back - bodice.armholeLengths.back;
+      var fe = prim.lengths.front - (sewnAH(bodice) || {}).front, be = prim.lengths.back - (sewnAH(bodice) || {}).back;
       if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured");
       else ease = { front: fe, back: be, total: fe + be };
     }
@@ -812,6 +861,7 @@
     if (!proj) return { ok: false, reason: "no-project" };
     var c = check(proj);
     if (!c.ok) return { ok: false, reason: c.fails[0], check: c };
+    if (proj.working.sleeveQ) return completeQ(proj, c);
     if (proj.working.sleeveP) return completeP(proj, c);
     if (proj.working.sleeveO) return completeO(proj, c);
     if (proj.working.sleeveN) return completeN(proj, c);
@@ -1025,7 +1075,43 @@
     proj.working.sleeveResult = result;
     return { ok: true, result: result, check: c };
   }
-  function completeP(proj, c) {
+  function completeQ(proj, c) {
+    var dd = c._a, sb = proj.sourceBlock || {};
+    var result = {
+      schemaVersion: 1,
+      origin: clone(Q_ORIGIN),
+      sourceBodiceHash: dd.sourceBodiceHash,
+      sourceSleeveAHash: dd.sourceSleeveAHash,
+      sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+      inputs: inputsQ(dd),
+      geometry: clone(proj.working.geometry.sleeve),
+      meta: clone(dd.meta), warnings: dd.warnings.slice(),
+      cap: capBlock(c),
+      completedAt: Date.now()
+    };
+    result.hash = hashStr(signature(result));
+    deepFreeze(result);
+    proj.working.sleeveResult = result;
+    return { ok: true, result: result, check: c };
+  }  function completeM(proj, c) {
+    var dd = c._a, sb = proj.sourceBlock || {};
+    var result = {
+      schemaVersion: 1,
+      origin: clone(M_ORIGIN),
+      sourceBodiceHash: dd.sourceBodiceHash,
+      sourceSleeveAHash: dd.sourceSleeveAHash,
+      sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+      inputs: inputsM(dd),
+      geometry: clone(proj.working.geometry.sleeve),
+      meta: clone(dd.meta), warnings: dd.warnings.slice(),
+      cap: capBlock(c),
+      completedAt: Date.now()
+    };
+    result.hash = hashStr(signature(result));
+    deepFreeze(result);
+    proj.working.sleeveResult = result;
+    return { ok: true, result: result, check: c };
+  }  function completeP(proj, c) {
     var dd = c._a, sb = proj.sourceBlock || {};
     var result = {
       schemaVersion: 1,
@@ -1212,6 +1298,10 @@
     var res = proj.working.sleeveResult; if (!res) return true;
     var c = check(proj);
     if (!c.ok || !c._prim) return true;   // 현재 유효하지 않으면 변경으로 간주(재완료 필요)
+    if (proj.working.sleeveQ) {   // 소매 Ⓠ: 같은 signature 형식(입력 = 높이 비율)
+      return signature({ origin: Q_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsQ(c._a),
+        geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);
+    }
     if (proj.working.sleeveP) {   // 소매 Ⓟ: 같은 signature 형식(입력 = 소매길이·플레어 계수)
       return signature({ origin: P_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsP(c._a),
         geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);

@@ -121,7 +121,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   ok(!r.ok && r.reason === "no-bodice" && Q.working.sleeveC === undefined && J(Q.working.geometry.sleeve) === g0, "4: 몸판 미완료 → no-bodice · 상태 불변(폴백 없음)");
   ok(SCA.apply(null, { sleeveLengthCm: 52 }).reason === "no-project", "4: 프로젝트 없음");
   ["M", "N"].forEach(sym => {   // 2026-10-21: Ⓖ 는 지원으로 바뀜 — 지원 밖 예시는 Ⓜ·Ⓝ
-    const U = projectWithBodice(sym), g1 = J(U.working.geometry.sleeve), x = SCA.apply(U, { sleeveLengthCm: 52, elbowLengthCm: 31.4 });
+    const U = stripRestore(projectWithBodice(sym)), g1 = J(U.working.geometry.sleeve), x = SCA.apply(U, { sleeveLengthCm: 52, elbowLengthCm: 31.4 });
     ok(!x.ok && x.reason === "armhole-underarm-mismatch" && x.stage === "A" && /^출발 소매 Ⓐ: /.test(x.text) && U.working.sleeveC === undefined && J(U.working.geometry.sleeve) === g1, "4: 몸판 " + sym + " → 출발 Ⓐ 단계 사유·폴백 없음");
   });
   [5, 0, NaN, undefined].forEach(len => { const R = projectWithBodice("A"), x = SCA.apply(R, { sleeveLengthCm: len, elbowLengthCm: 31.4 }); ok(!x.ok && x.reason === "invalid-sleeve-length" && R.working.sleeveC === undefined, "4: 소매길이 " + len + " → invalid-sleeve-length"); });
@@ -155,7 +155,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   ok(r2.ok && Q.working.sleeveC.sourceBodiceHash === Q.working.bodiceResult.hash && Q.working.sleeveC.blocked === null && Q.working.sleeveC.parameters.elbowLengthCm === 30, "5: 새 몸판 hash 로 재제도(같은 소매길이·EL)");
   Q.working.parameters = { neckline: Q.working.parameters.neckline, body: BP.bodyParams(presetOf("M")) };
   Q.working.geometry = DB.computeGeometry(Q.referenceGeometry, { body: BP.bodyParams(presetOf("M")) });
-  ok(BC.complete(Q).ok, "5: Ⓖ 몸판 재완료");
+  ok(BC.complete(Q).ok && !!stripRestore(Q), "5: Ⓜ 몸판 재완료(복원 기록 뺀 합성 완료본)");
   const gBefore = J(Q.working.geometry.sleeve), r3 = SCA.rederive(Q);
   ok(!r3.ok && r3.reason === "armhole-underarm-mismatch" && Q.working.sleeveC.blocked && Q.working.sleeveC.blocked.reason === "armhole-underarm-mismatch", "5: 지원 밖 몸판 → blocked 사유");
   ok(J(Q.working.geometry.sleeve) === gBefore && SCA.isActive(Q) && SCA.isBlocked(Q), "5: blocked 일 때 geometry 를 몰래 바꾸지 않는다 · Ⓒ 는 활성 유지");
@@ -193,7 +193,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/designSleeveB.js", "js/sleeveBApply.js", "js/designSleeveC.js", "js/sleeveCApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(Ⓐ → Ⓑ → 엔진 Ⓒ → 연결 Ⓒ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(ver("ui.js") === "2026102602" && ["designSleeveC.js", "sleeveCApply.js"].every(f => ver(f) === "2026100901") && ver("sleevePresets.js") === "2026102602" && ver("sleeveCheckpoint.js") === "2026102602", "7: 캐시 버전 갱신(Ⓒ 엔진·연결 2026100901)");
+  ok(ver("ui.js") === "2026102802" && (["designSleeveC.js"].every(f => ver(f) === "2026100901") && ver("sleeveCApply.js") === "2026102802") && ver("sleevePresets.js") === "2026102703" && ver("sleeveCheckpoint.js") === "2026102802", "7: 캐시 버전 갱신(Ⓒ 엔진·연결 2026100901)");
   ok(/id="rowSleeveElbow"[^>]*hidden/.test(html) && /id="inpSleeveElbow"[^>]*type="number"[^>]*value="31\.4"/.test(html) && />팔꿈치 길이 EL \(cm\)</.test(html), "7: EL 입력(라벨 «팔꿈치 길이 EL (cm)»·기본 31.4·기본 숨김)");
   ok(html.indexOf('id="rowSleeveElbow"') > html.indexOf('id="rowSleevePalm"') && html.indexOf('id="rowSleeveElbow"') < html.indexOf('id="inpSleeveCuff"'), "7: EL 입력은 소매길이·손바닥 다음 줄");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo", "btnApplySleeve", "btnResetSleeve", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "inpSleevePalm", "rowSleevePalm", "designSleeveCheckNote", "designSleeveStatusNote"]
@@ -214,3 +214,6 @@ console.log("══════════════════════�
 if (FAIL) { console.log("실패 목록:"); fails.forEach(f => console.log("  ✗ " + f)); }
 console.log(`결과: ${PASS} PASS / ${FAIL} FAIL`);
 process.exit(FAIL ? 1 : 0);
+
+// 2026-10-27: 몸판 Ⓗ·Ⓜ·Ⓝ 은 완료본의 변환 기록(flareSlash·waistSeam)으로 원형 등가 복원해 지원 — «지원 밖» 예시는 그 기록을 뺀 완료본(합성)
+function stripRestore(P) { const r = JSON.parse(JSON.stringify(P.working.bodiceResult)); delete r.flareSlash; r.waistSeam = null; P.working.bodiceResult = r; return P; }

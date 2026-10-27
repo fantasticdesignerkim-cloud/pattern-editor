@@ -16,6 +16,13 @@
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
+
+  // 봉제(소매 제도)용 진동 길이 — 저장 AH 에서 확인된 틈 메움 직선만 뺀 값(허리 이음선 Ⓜ·Ⓝ). 그 밖의 몸판은 저장 AH 그대로(2026-10-27).
+  //   designSleeveA 가 없는 맥락(소매 Ⓐ 미사용 단독 계산)에서는 빼야 할 틈 기록(waistSeam.closedDart)이 없을 때만 저장 AH 와 같다고 확정할 수 있다 — 있으면 null.
+  function sewnAH(b) {
+    if (!b) return null; var S = window.designSleeveA; if (S && S.sewnArmholeLengths) return S.sewnArmholeLengths(b);
+    var ws = b.waistSeam; return (ws && ((ws.front && ws.front.closedDart) || (ws.back && ws.back.closedDart))) ? null : (b.armholeLengths || null);
+  }
   var PRESET_ID = "bunka-sleeve-C";
   var DEFAULT_EL = 31.4;
   var DISPLAY_CONSTRUCTION = { "center-line": 1, "elbow-line": 1, "cut-axis-back": 1, "cut-axis-front": 1, "front-axis-lower": 1 };   // front-axis-lower = 앞 EL→소매구 맞댐선(2026-10-09 복원)
@@ -146,8 +153,8 @@
     lines.push("소매산: 맞댄 뒤 꺾임 양쪽 " + f2(m.redraw.ellCm) + "cm 국소 재제도(임시 시작 설정)");
     var BC = window.bodiceCheckpoint, DS = window.designSleeve, bodice = BC && BC.latest(project);
     var prim = (DS && w.geometry && w.geometry.sleeve) ? DS.capPrimitives(w.geometry.sleeve) : null;
-    if (bodice && bodice.armholeLengths) {
-      var ah = bodice.armholeLengths;
+    if (bodice && sewnAH(bodice)) {
+      var ah = sewnAH(bodice);
       lines.push("AH 앞 " + f2(ah.front) + " · 뒤 " + f2(ah.back) + " · 총 " + f2(ah.front + ah.back) + " cm");
       if (prim) {   // 지배 ease = 최종 geometry 실측(cap.ease 와 같은 계산)
         var ef = prim.lengths.front - ah.front, eb = prim.lengths.back - ah.back;

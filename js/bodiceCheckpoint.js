@@ -1912,6 +1912,11 @@
       });
       result.princess = g.princess ? clone(g.princess) : null;
     }
+    // 플레어 Ⓗ 절개 기록(진동 기준점 pivot·각): 소매가 원형 등가 진동을 재구성할 변환 출처(2026-10-27 김님 확정 — 원형 기준 측정).
+    //   절개가 있을 때만 키를 둔다(없으면 기존 완료본 바이트 동일) · 형상 hash signature 미포함(형상 identity 불변).
+    if ((g.front.flareCm && g.front.flareCm.slash) || (g.back.flareCm && g.back.flareCm.slash)) {
+      result.flareSlash = { front: g.front.flareCm ? clone(g.front.flareCm) : null, back: g.back.flareCm ? clone(g.back.flareCm) : null };
+    }
     deepFreeze(result);
     proj.working.bodiceResult = result;   // 세션 전용(reload 시 소멸). reference·원본 불변.
     return { ok: true, result: result, check: c };

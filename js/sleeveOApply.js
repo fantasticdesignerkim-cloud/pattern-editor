@@ -7,6 +7,13 @@
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
+
+  // 봉제(소매 제도)용 진동 길이 — 저장 AH 에서 확인된 틈 메움 직선만 뺀 값(허리 이음선 Ⓜ·Ⓝ). 그 밖의 몸판은 저장 AH 그대로(2026-10-27).
+  //   designSleeveA 가 없는 맥락(소매 Ⓐ 미사용 단독 계산)에서는 빼야 할 틈 기록(waistSeam.closedDart)이 없을 때만 저장 AH 와 같다고 확정할 수 있다 — 있으면 null.
+  function sewnAH(b) {
+    if (!b) return null; var S = window.designSleeveA; if (S && S.sewnArmholeLengths) return S.sewnArmholeLengths(b);
+    var ws = b.waistSeam; return (ws && ((ws.front && ws.front.closedDart) || (ws.back && ws.back.closedDart))) ? null : (b.armholeLengths || null);
+  }
   var PRESET_ID = "bunka-sleeve-O";
   var DISPLAY_CONSTRUCTION = { "center-line": 1, "tuck-crease-edge": 1, "tuck-place-edge": 1, "tuck-mid": 1, "tuck-crease": 1, "tuck-place": 1, "tuck-stitch-end": 1 };
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -118,8 +125,8 @@
     lines.push("접은 상태 = Ⓐ 선(정리할 꺾임 없음 · 파임 " + f2(fo.cutCm) + " · 덧댐 " + f2(fo.addedCm) + ") → 거울/평행 역변환으로 펼친 재단선 · 소맷부리는 직선 · 소매산 턱 입구는 접기로 정해진 모양");
     lines.push("길이: 입력 소매길이(SP → 출발 밑단) " + f2(m.centerLength.inputCm) + " · 가운데 띠 고정이라 중심 길이 " + f2(m.centerLength.spreadCm) + " cm");
     var BC = window.bodiceCheckpoint, bodice = BC && BC.latest(project);
-    if (bodice && bodice.armholeLengths) {
-      var ah = bodice.armholeLengths, tf = cp.sewn.front - ah.front, tb = cp.sewn.back - ah.back;
+    if (bodice && sewnAH(bodice)) {
+      var ah = sewnAH(bodice), tf = cp.sewn.front - ah.front, tb = cp.sewn.back - ah.back;
       lines.push("소매산(턱 접음) 앞 " + f2(cp.sewn.front) + " · 뒤 " + f2(cp.sewn.back) + " · AH 앞 " + f2(ah.front) + " · 뒤 " + f2(ah.back) + " · 이세 앞 " + sgn(tf) + " · 뒤 " + sgn(tb) + " · 총 " + sgn(tf + tb) + " cm");
     }
     return lines;

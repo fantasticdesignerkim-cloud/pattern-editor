@@ -7,6 +7,13 @@
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
+
+  // 봉제(소매 제도)용 진동 길이 — 저장 AH 에서 확인된 틈 메움 직선만 뺀 값(허리 이음선 Ⓜ·Ⓝ). 그 밖의 몸판은 저장 AH 그대로(2026-10-27).
+  //   designSleeveA 가 없는 맥락(소매 Ⓐ 미사용 단독 계산)에서는 빼야 할 틈 기록(waistSeam.closedDart)이 없을 때만 저장 AH 와 같다고 확정할 수 있다 — 있으면 null.
+  function sewnAH(b) {
+    if (!b) return null; var S = window.designSleeveA; if (S && S.sewnArmholeLengths) return S.sewnArmholeLengths(b);
+    var ws = b.waistSeam; return (ws && ((ws.front && ws.front.closedDart) || (ws.back && ws.back.closedDart))) ? null : (b.armholeLengths || null);
+  }
   var PRESET_ID = "bunka-sleeve-L";
   var DISPLAY_CONSTRUCTION = { "center-line": 1, "cut-center-back": 1, "cut-center-front": 1, "cut-axis-back": 1, "cut-axis-front": 1, "cut-edge-back": 1, "cut-edge-front": 1 };
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -116,8 +123,8 @@
     lines.push("길이: 입력 소매길이(SP → 출발 밑단) " + f2(m.centerLength.inputCm) + " · 벌린 뒤 중심 길이(최종 꼭대기 → 소맷부리 곡선, 실측) " + f2(m.centerLength.spreadCm) + " cm");
     var BC = window.bodiceCheckpoint, DS = window.designSleeve, bodice = BC && BC.latest(project);
     var prim = (DS && w.geometry && w.geometry.sleeve) ? DS.capPrimitives(w.geometry.sleeve) : null;
-    if (bodice && bodice.armholeLengths && prim) {
-      var ah = bodice.armholeLengths, ef = prim.lengths.front - ah.front, eb = prim.lengths.back - ah.back, ca = m.capLengthsA;
+    if (bodice && sewnAH(bodice) && prim) {
+      var ah = sewnAH(bodice), ef = prim.lengths.front - ah.front, eb = prim.lengths.back - ah.back, ca = m.capLengthsA;
       lines.push("소매산(최종 실측) 앞 " + f2(prim.lengths.front) + " · 뒤 " + f2(prim.lengths.back) + " · 총 " + f2(prim.lengths.total) + " cm" + (ca ? " (Ⓐ 대비 앞 " + sgn(prim.lengths.front - ca.front) + " · 뒤 " + sgn(prim.lengths.back - ca.back) + ")" : "") + " · AH 앞 " + f2(ah.front) + " · 뒤 " + f2(ah.back));
       lines.push("이세(실측 = 최종 소매산 − AH · 소매산 개더 없음) 앞 " + sgn(ef) + " · 뒤 " + sgn(eb) + " · 총 " + sgn(ef + eb) + " cm");
     }

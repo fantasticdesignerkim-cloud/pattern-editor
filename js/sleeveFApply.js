@@ -12,6 +12,13 @@
 // ══════════════════════════════════════════════
 (function () {
   "use strict";
+
+  // 봉제(소매 제도)용 진동 길이 — 저장 AH 에서 확인된 틈 메움 직선만 뺀 값(허리 이음선 Ⓜ·Ⓝ). 그 밖의 몸판은 저장 AH 그대로(2026-10-27).
+  //   designSleeveA 가 없는 맥락(소매 Ⓐ 미사용 단독 계산)에서는 빼야 할 틈 기록(waistSeam.closedDart)이 없을 때만 저장 AH 와 같다고 확정할 수 있다 — 있으면 null.
+  function sewnAH(b) {
+    if (!b) return null; var S = window.designSleeveA; if (S && S.sewnArmholeLengths) return S.sewnArmholeLengths(b);
+    var ws = b.waistSeam; return (ws && ((ws.front && ws.front.closedDart) || (ws.back && ws.back.closedDart))) ? null : (b.armholeLengths || null);
+  }
   var PRESET_ID = "bunka-sleeve-F";
   var DISPLAY_CONSTRUCTION = { "center-line": 1, "tuck-fold": 1, "tuck-place": 1 };   // tuck-mid(접혀 숨는 안쪽 꺾임)는 meta 에만
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -109,8 +116,8 @@
     if (s.warnings.indexOf("inner-tuck-layers-overlap") >= 0) lines.push("⚠ 턱 분량이 2cm 를 넘어 안쪽 두 턱의 접힌 천이 가운데 띠 아래에서 겹칩니다(두께 확인)");
     var BC = window.bodiceCheckpoint, SF = window.designSleeveF, bodice = BC && BC.latest(project);
     var lens = (SF && w.geometry && w.geometry.sleeve) ? SF.capLengthsOf(w.geometry.sleeve) : null;
-    if (bodice && bodice.armholeLengths) {
-      var ah = bodice.armholeLengths;
+    if (bodice && sewnAH(bodice)) {
+      var ah = sewnAH(bodice);
       lines.push("AH 앞 " + f2(ah.front) + " · 뒤 " + f2(ah.back) + " · 총 " + f2(ah.front + ah.back) + " cm");
       if (lens) {
         var ef = lens.sewn.front - ah.front, eb = lens.sewn.back - ah.back;

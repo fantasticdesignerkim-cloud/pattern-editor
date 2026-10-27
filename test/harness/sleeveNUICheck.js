@@ -44,9 +44,9 @@ const VER = "2026102101";
 {
   const f = SP.family("short-sleeve"), rec = SP.get("bunka-sleeve-N");
   ok(f.variants.map(v => v.symbol).join("") === "LMNOPQ" && f.variants[2].availability === "available" && f.variants[2].presetId === "bunka-sleeve-N" && f.variants[2].page === 47
-    && f.variants.slice(5).every(v => v.availability === "pending-page" && typeof v.blockedBy === "string"), "1: 반소매 = Ⓛ·Ⓜ·Ⓝ·Ⓞ·Ⓟ 실행 · Ⓠ 보류(blockedBy)");
+    && f.variants.every(v => v.availability === "available"), "1: 반소매 = Ⓛ~Ⓠ 모두 실행");
   ok(rec && rec.methodPage === 47 && rec.inputs.map(i => i.key + "=" + i.defaultValue).join() === "sleeveLengthCm=20,cutOffsetCm=2.5,centerTuckCm=4,sideTuckCm=2,stitchEndCm=1.5" && Object.isFrozen(rec), "1: Ⓝ 레코드 · 책 기본 설정값 5개 — 커프스·위팔·손바닥·상승 없음");
-  ok(SP.resolve("short-sleeve", "bunka-sleeve-N").ok && SP.resolve("short-sleeve", "bunka-sleeve-Q").reason === "sleeve-preset-unavailable", "1: resolve Ⓝ 가능 · Ⓠ 보류");
+  ok(SP.resolve("short-sleeve", "bunka-sleeve-N").ok && SP.resolve("short-sleeve", "bunka-sleeve-Q").ok, "1: resolve Ⓝ · Ⓠ 가능");
 }
 const P = projectWithBodice("A");
 const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodice: J(bodice), ref: J(P.referenceGeometry) };
@@ -133,11 +133,11 @@ const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodi
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveN.js") > pos("sleeveMApply.js") && pos("sleeveNApply.js") > pos("designSleeveN.js") && pos("ui.js") > pos("sleeveNApply.js"), "7: 스크립트 순서");
-  ok(["designSleeveN.js", "sleeveNApply.js"].every(f => ver(f) === VER) && ["sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js", "render.js"].every(f => ver(f) === "2026102602") && ["designSleeveM.js", "sleeveMApply.js", "designSleeveL.js"].every(f => ver(f) === "2026102001"), "7: 캐시 버전 " + VER + " · 바뀌지 않은 Ⓛ·Ⓜ 파일은 그대로");
+  ok((["designSleeveN.js"].every(f => ver(f) === VER) && ver("sleeveNApply.js") === "2026102802") && (["sleevePresets.js", "render.js"].every(f => ver(f) === "2026102703") && ver("sleeveCheckpoint.js") === "2026102802" && ver("ui.js") === "2026102802") && ver("sleeveAnnotation.js") === "2026102802" && (["designSleeveM.js", "designSleeveL.js"].every(f => ver(f) === "2026102001") && ver("sleeveMApply.js") === "2026102802"), "7: 캐시 버전 " + VER + " · 바뀌지 않은 Ⓛ·Ⓜ 파일은 그대로");
   ok(["inpSleeveNCut\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"2.5\"", "inpSleeveNCenter\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"4\"", "inpSleeveNSide\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"2\"", "inpSleeveNStitch\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"1.5\""].every(s => html.indexOf('id="' + s) > 0)
     && ["rowSleeveNCut", "rowSleeveNCenter", "rowSleeveNSide", "rowSleeveNStitch"].every(id => new RegExp('id="' + id + '" hidden').test(html)), "7: 입력칸 4 · 기본값 · 숨김 시작");
   ok(/function sleeveNOn\(project\)/.test(ui) && /function applySleeveN\(project\)/.test(ui) && /keep !== "N" && window\.sleeveNApply/.test(ui) && /if \(isN\) \{/.test(ui) && /window\.sleeveNApply\.rederive\(project\)/.test(ui) && /_sm\.line === "N"/.test(rn), "7: ui·render 배선");
-  ok(/sleeveMOn\(project\) \|\| sleeveNOn\(project\) \|\| sleeveOOn\(project\) \|\| sleevePOn\(project\)\)\);\n    const hPcRow/.test(ui) && /hPcRow\.hidden = !\(project && \([^;]*sleeveNOn\(project\) \|\| sleeveOOn\(project\) \|\| sleevePOn\(project\)\)\)/.test(ui) && /sleeveNOn\(project \|\| null\) \|\| sleeveOOn\(project \|\| null\) \|\| sleevePOn\(project \|\| null\)\) && \(!refChk/.test(ui), "7: 녹색·비교 도안 토글 행 Ⓝ 에서 보임");
+  ok(/sleeveMOn\(project\) \|\| sleeveNOn\(project\) \|\| sleeveOOn\(project\) \|\| sleevePOn\(project\) \|\| sleeveQOn\(project\)\)\);\n    const hPcRow/.test(ui) && /hPcRow\.hidden = !\(project && \([^;]*sleeveNOn\(project\) \|\| sleeveOOn\(project\) \|\| sleevePOn\(project\) \|\| sleeveQOn\(project\)\)\)/.test(ui) && /sleeveNOn\(project \|\| null\) \|\| sleeveOOn\(project \|\| null\) \|\| sleevePOn\(project \|\| null\) \|\| sleeveQOn\(project \|\| null\)\) && \(!refChk/.test(ui), "7: 녹색·비교 도안 토글 행 Ⓝ 에서 보임");
   const fn = ui.slice(ui.indexOf("function applySleeveN(project)"), ui.indexOf("function applySleeveM(project)"));
   ok(/attemptedInputs: raw/.test(fn) && fn.indexOf("inpSleeveUpperArm") < 0 && fn.indexOf("inpSleeveRise") < 0 && fn.indexOf("Math.min") < 0 && fn.indexOf("Math.max") < 0 && /readPos\(f\[1\]\)/.test(fn), "7: Ⓝ 적용은 위팔·상승을 읽지 않고 값을 깎지 않는다 · 거부 입력 원문 보관");
   ok(/if \(at\) SLEEVE_N_FIELDS\.forEach\(f => setRaw\(f\[1\], at\[f\[0\]\]\)\)/.test(ui), "7: 차단 중 Ⓝ 입력칸도 원문 유지");

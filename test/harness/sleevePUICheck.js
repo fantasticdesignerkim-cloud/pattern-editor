@@ -44,7 +44,7 @@ const VER = "2026102602";
 {
   const f = SP.family("short-sleeve"), rec = SP.get("bunka-sleeve-P");
   ok(f.variants.map(v => v.symbol).join("") === "LMNOPQ" && f.variants[4].availability === "available" && f.variants[4].presetId === "bunka-sleeve-P" && f.variants[4].page === 48
-    && f.variants[5].availability === "pending-page" && typeof f.variants[5].blockedBy === "string", "1: 반소매 = Ⓛ~Ⓟ 실행 · Ⓠ 보류(blockedBy)");
+    && f.variants.every(v => v.availability === "available"), "1: 반소매 = Ⓛ~Ⓠ 모두 실행");
   ok(rec && rec.methodPage === 48 && rec.inputs.map(i => i.key + "=" + i.defaultValue).join() === "sleeveLengthCm=20,flareRatio=0.7" && Object.isFrozen(rec), "1: Ⓟ 레코드 · 입력 = 기장 20 · 계수 0.7(⊠ 입력 없음)");
 }
 const P = projectWithBodice("A");
@@ -118,7 +118,7 @@ const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodi
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveP.js") > pos("sleeveOApply.js") && pos("sleevePApply.js") > pos("designSleeveP.js") && pos("ui.js") > pos("sleevePApply.js"), "7: 스크립트 순서");
-  ok(["designSleeveP.js", "sleevePApply.js", "sleevePresets.js", "sleeveCheckpoint.js", "sleeveAnnotation.js", "ui.js", "render.js"].every(f => ver(f) === VER) && ["designSleeveO.js", "sleeveOApply.js"].every(f => ver(f) === "2026102102"), "7: 캐시 버전 " + VER + " · Ⓞ 파일은 그대로");
+  ok((["designSleeveP.js"].every(f => ver(f) === VER) && ver("sleevePApply.js") === "2026102802") && (["sleevePresets.js", "render.js"].every(f => ver(f) === "2026102703") && ver("sleeveCheckpoint.js") === "2026102802" && ver("ui.js") === "2026102802") && ver("sleeveAnnotation.js") === "2026102802" && ((ver("designSleeveO.js") === "2026102802") && ver("sleeveOApply.js") === "2026102802"), "7: 캐시 버전 " + VER + " · Ⓞ 파일은 그대로");
   ok(/id="rowSleevePFlare" hidden/.test(html) && /id="inpSleevePFlare" type="number" min="0\.05" step="0\.05" value="0\.7"/.test(html), "7: 계수 입력칸 · 기본 0.7 · 숨김 시작");
   ok(/function sleevePOn\(project\)/.test(ui) && /function applySleeveP\(project\)/.test(ui) && /keep !== "P" && window\.sleevePApply/.test(ui) && /if \(isP\) \{/.test(ui) && /window\.sleevePApply\.rederive\(project\)/.test(ui) && /_sm\.line === "P"/.test(rn), "7: ui·render 배선");
   const fn = ui.slice(ui.indexOf("function applySleeveP(project)"), ui.indexOf("// Ⓞ 입력칸"));

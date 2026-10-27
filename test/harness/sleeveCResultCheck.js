@@ -232,7 +232,7 @@ let HASH_C, RES_C;
   setCollar(P);
   ok(CC.complete(P).ok && DR.complete(P).ok && DR.latest(P) !== oldDesign && DR.latest(P).sleeveHash === rn.hash, "6: 카라·Design 재완료");
   const keep = P.working.sleeveResult;
-  ok(setBodice(P, "M").ok, "6: Ⓜ 몸판 재완료(지원 밖 예시 — 2026-10-21 Ⓖ 는 지원으로 바뀜)");
+  ok(setBodice(P, "M").ok && !!stripRestore(P), "6: Ⓜ 몸판 재완료(복원 기록 뺀 합성 완료본 · 지원 밖 예시 — 2026-10-21 Ⓖ 는 지원으로 바뀜)");
   const rb = SCA.rederive(P);
   ok(!rb.ok && P.working.sleeveC.blocked && SC.check(P).ok === false && SC.check(P).fails.includes("sleeve-c-blocked"), "6: 지원 밖 몸판 → sleeve-c-blocked");
   const cr = SC.complete(P);
@@ -294,3 +294,6 @@ let HASH_C, RES_C;
 
 console.log("sleeveCResultCheck: " + PASS + " PASS / " + FAIL + " FAIL");
 if (FAIL) { fails.forEach(f => console.log("  ✗ " + f)); process.exit(1); }
+
+// 2026-10-27: 몸판 Ⓗ·Ⓜ·Ⓝ 은 완료본의 변환 기록(flareSlash·waistSeam)으로 원형 등가 복원해 지원 — «지원 밖» 예시는 그 기록을 뺀 완료본(합성)
+function stripRestore(P) { const r = JSON.parse(JSON.stringify(P.working.bodiceResult)); delete r.flareSlash; r.waistSeam = null; P.working.bodiceResult = r; return P; }
