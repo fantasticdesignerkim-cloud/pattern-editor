@@ -47,7 +47,7 @@ const VER = "2026102001";
   ok(f.variants[0].availability === "available" && f.variants[0].presetId === "bunka-sleeve-L" && f.variants.every(v => v.availability === "available"), "1: Ⓛ·Ⓜ·Ⓝ·Ⓞ·Ⓟ 실행 · Ⓠ 는 보류(blockedBy 보유)");
   ok(f.variants.map(v => v.page).join() === "46,46,47,47,48,48" && SP.resolve("short-sleeve", "bunka-sleeve-L").ok && SP.resolve("short-sleeve", "bunka-sleeve-N").ok && SP.resolve("short-sleeve", "bunka-sleeve-Q").ok, "1: 쪽 · resolve");
   ok(rec && rec.methodPage === 46 && rec.inputs.map(i => i.key + "=" + (i.defaultValue === undefined ? "" : i.defaultValue)).join() === "sleeveLengthCm=20,upperArmCm=26" && Object.isFrozen(rec), "1: Ⓛ 레코드 · 입력 소매길이(기본 20) + 위팔 둘레(기본 26) — 손바닥·상승 없음");
-  ok(SP.get("bunka-sleeve-K").inputs[0].defaultValue === undefined && SP.family("dolman-sleeve").availability !== "available", "1: 다른 라인의 소매길이 기본값 없음 · 다음 계열(돌먼)은 보류");
+  ok(SP.get("bunka-sleeve-K").inputs[0].defaultValue === undefined && SP.family("shirt-sleeve").availability !== "available", "1: 다른 라인의 소매길이 기본값 없음 · 다음 계열(셔츠)은 보류");
 }
 const P = projectWithBodice("A");
 const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodice: J(bodice), ref: J(P.referenceGeometry) };
@@ -130,7 +130,7 @@ const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodi
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveL.js") > pos("sleeveKApply.js") && pos("sleeveLApply.js") > pos("designSleeveL.js") && pos("ui.js") > pos("sleeveLApply.js"), "7: 스크립트 순서");
-  ok((["designSleeveL.js"].every(f => ver(f) === VER) && ver("sleeveLApply.js") === "2026102802") && (["sleevePresets.js", "render.js"].every(f => ver(f) === "2026102703") && ver("sleeveCheckpoint.js") === "2026102802" && ver("ui.js") === "2026102802") && ver("sleeveAnnotation.js") === "2026102802", "7: 캐시 버전 " + VER);
+  ok((["designSleeveL.js"].every(f => ver(f) === VER) && ver("sleeveLApply.js") === "2026102802") && (ver("sleevePresets.js") === "2026102901" && ver("render.js") === "2026102906" && ver("sleeveCheckpoint.js") === "2026102901" && ver("ui.js") === "2026102901") && ver("sleeveAnnotation.js") === "2026102906", "7: 캐시 버전 " + VER);
   ok(/function sleeveLOn\(project\)/.test(ui) && /function applySleeveL\(project\)/.test(ui) && /keep !== "L" && window\.sleeveLApply/.test(ui) && /if \(isL\) \{/.test(ui) && /window\.sleeveLApply\.rederive\(project\)/.test(ui) && /_sm\.line === "L"/.test(rn), "7: ui·render 배선");
   ok(/id="rowSleeveUpperArm" hidden/.test(html) && /id="inpSleeveUpperArm" type="number" min="0\.1" step="0\.1" value="26"/.test(html) && /armRow\.hidden = !\(sleeveLOn\(project\)/.test(ui) && /"inpSleeveUpperArm"\]\.forEach/.test(ui), "7: 위팔 둘레 입력칸(기본 26) — Ⓛ 에서만 보임");
   ok(/function applySleeveLengthDefault\(\)/.test(ui) && /sleeveVarSel\.addEventListener\("change", \(\) => \{ applySleeveLengthDefault\(\); syncSleeveLineUI\(\); \}\)/.test(ui) && /rebuildSleeveVariantOptions\(\); applySleeveLengthDefault\(\); syncSleeveLineUI\(\);/.test(ui), "7: 소매길이 기본 20 — 선택한 순간 입력칸에 넣음(수정 가능)");

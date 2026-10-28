@@ -258,23 +258,35 @@
   // 세로: **앞판은 가슴선 정렬** — front U.y + front.dy == back U.y + back.dy (U = sideSeamUnderarm).
   //   U 를 식별할 수 없을 때만(legacy/모호) 앵커 세로중심 정렬로 폴백. 소매는 앵커(뒤판) 세로중심 정렬.
   const DISPLAY_ORDER = ["back", "front", "sleeve"];
-  function autoLayout(geometry) {
+  // extents(선택): 피스별 표시 범위(몸판 좌표 bbox) — 소매 Ⓡ 처럼 피스 밖으로 나오는 표시 레이어가 있을 때만 넘긴다.
+  //   가로 간격만 그 범위로 잡고(세로 정렬은 outline 기준 그대로), 없으면 결과가 이전과 완전히 같다(A–Q 배치 보존).
+  function autoLayout(geometry, extents) {
     const f = outlineBBoxOf(geometry, "front");
     if (!f) return null;
     const out = { front: { dx: 0, dy: 0 }, back: { dx: 0, dy: 0 }, sleeve: { dx: 0, dy: 0 } };
     let prevMaxX = null, cy = null, anchor = null;
     DISPLAY_ORDER.forEach(k => {
-      const bb = outlineBBoxOf(geometry, k); if (!bb) return;
-      const bcy = (bb.minY + bb.maxY) / 2;
+      const ob = outlineBBoxOf(geometry, k); if (!ob) return;
+      const bb = extents && extents[k] ? unionBB(ob, extents[k]) : ob;
+      const bcy = (ob.minY + ob.maxY) / 2;
       if (prevMaxX === null) { anchor = k; cy = bcy; prevMaxX = bb.maxX; return; }   // 앵커(자연 위치)
       let dy = cy - bcy;
       if (k === "front" && anchor === "back") {
         const uB = sideSeamUnderarm(geometry, "back"), uF = sideSeamUnderarm(geometry, "front");
         if (uB && uF) dy = (uB.y + out.back.dy) - uF.y;   // 가슴선(BL) 정렬
       }
+      if (k === "sleeve" && extents && extents.sleeveBelow) return;   // 아래 줄 배치(아래)
       out[k] = { dx: (prevMaxX + GAP) - bb.minX, dy };
       prevMaxX = bb.maxX + out[k].dx;
     });
+    // extents.sleeveBelow(소매 Ⓡ 한 장 소매 — 가로로 넓다): 소매를 앞뒤 몸판 아래 줄 가운데에 둔다(몸판 표시 범위 아래 2×GAP — 조각 이름 글자 자리).
+    const sb = extents && extents.sleeveBelow ? outlineBBoxOf(geometry, "sleeve") : null;
+    if (sb) {
+      let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
+      ["back", "front"].forEach(k => { const ob = outlineBBoxOf(geometry, k); if (!ob) return; const e = extents[k] ? unionBB(ob, extents[k]) : ob;
+        minX = Math.min(minX, e.minX + out[k].dx); maxX = Math.max(maxX, e.maxX + out[k].dx); maxY = Math.max(maxY, e.maxY + out[k].dy); });
+      out.sleeve = { dx: (minX + maxX) / 2 - (sb.minX + sb.maxX) / 2, dy: maxY + 2 * GAP - sb.minY };
+    }
     return out;
   }
 
@@ -302,6 +314,11 @@
     return L;
   }
 
+  // 피스 밖 표시 레이어 범위(소매 Ⓡ 돌먼 파생 몸판·제도선·비교 상자 — sleeveAnnotation). 없으면 null → 기존 배치·fit 그대로.
+  function displayExtents(p) {
+    const SA = window.sleeveAnnotation;
+    return SA && typeof SA.dolmanExtents === "function" ? SA.dolmanExtents(p) : null;
+  }
   // ── DOM/view 연동 ──
   function currentProject() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
   function inDesign() { return typeof window.isDesignStageActive === "function" && window.isDesignStageActive() && !!currentProject(); }
@@ -350,7 +367,7 @@
   function refreshAutoLayout() {
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
-    const auto = autoLayout(p.working.geometry); if (!auto) return;
+    const auto = autoLayout(p.working.geometry, displayExtents(p)); if (!auto) return;
     PIECES.forEach(k => { if (L.placement[k] === "auto") L[k] = { dx: auto[k].dx, dy: auto[k].dy }; });
     // 카라(별도 조각, 스탠드∪본체): 우선 소매 오른쪽 GAP. 그 배치로 union fit 이 작아지면 아래 행 reflow.
     const cbb = collarLocalBBox(p);
@@ -383,6 +400,8 @@
     const p = currentProject(); if (!p) return;
     const L = ensureLayout(p);
     let u = unionBB(unionOf(p.working.geometry, L, PIECES), collarDispBBox(p, L)); if (!u) return;
+    const ext = displayExtents(p);
+    if (ext) PIECES.forEach(k => { if (ext[k]) u = unionBB(u, offBBox(ext[k], L[k])); });
     u = withSleeveOverhang(u, p.working.geometry, L);
     const uCx = (u.minX + u.maxX) / 2, uCy = (u.minY + u.maxY) / 2;
     const { W, H } = viewportWH();

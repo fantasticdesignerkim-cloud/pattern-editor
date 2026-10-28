@@ -24,7 +24,7 @@
 | [book/SCHOOL-BLOCK.md](book/SCHOOL-BLOCK.md) | [학교책] 원형 기준값(a~f 배분·총량·여유) |
 | `book/PNNN.md` | [패턴학교] 쪽별 판독 노트 |
 
-## 착수 전 스펙 (`spec/`)
+## 설계 스펙 (`spec/`)
 
 | 문서 | 내용 |
 |---|---|

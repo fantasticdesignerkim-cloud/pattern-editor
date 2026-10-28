@@ -440,11 +440,53 @@ function _appendPeplumAnnotation(grp, model, dy){
   grp.appendChild(g);
 }
 
+// 소매 Ⓡ 돌먼 몸판 표시(표시 전용 · hit·계측·hash 무관): 파생 몸판 재단 외곽(굵은 자홍 실선)은 **항상**(제작 정보 토글과 무관 — 최종 재단선),
+//   몸판 위 소매 반쪽 제도선(청록 점선)·점 표식·뒤 어깨 다트 닫힘 비교는 info(제작 정보 토글)일 때만.
+function _appendDolmanBodice(grp, m, pc, info){
+  const g=E("g",{ "data-design-sleeve":"dolman-bodice", "data-anno-piece":pc, class:"sleeve-anno" });
+  const segD=s=>{ if(s.kind==="line"){ const [x1,y1]=c2p(s.from.x,s.from.y), [x2,y2]=c2p(s.to.x,s.to.y); return "M"+x1+","+y1+" L"+x2+","+y2; }
+    return s.commands.map(c=>{ const q=c.points.map(p=>c2p(p.x,p.y)); return c.type==="M" ? "M"+q[0][0]+","+q[0][1] : " C"+q.map(v=>v[0]+","+v[1]).join(" "); }).join(""); };
+  const ln=(l,pre)=>{ const [x1,y1]=c2p(l.from.x,l.from.y), [x2,y2]=c2p(l.to.x,l.to.y); return E("line",{ x1,y1,x2,y2, class:"dolman-sh dolman-sh-"+l.cls, "data-anno":pre+l.id }); };
+  if(info){
+    const gd=E("g",{ "data-dolman-layer":"draft" });
+    m.draft.forEach((s,i)=>gd.appendChild(E("path",{ d:segD(s), class:"dolman-draft", "data-anno":"draft-"+i })));
+    g.appendChild(gd);
+  }
+  const gc=E("g",{ "data-dolman-layer":"cut" });
+  m.cut.forEach((s,i)=>gc.appendChild(E("path",{ d:segD(s), class:"dolman-cut", "data-anno":"cut-"+(s.edge||i) })));
+  g.appendChild(gc);
+  if(info){
+    if(m.anno){   // 원래 몸판 글자(다트 폭·WL 등, 이미 grp 에 그려짐)를 장애물로 넘겨 그 자리를 피한다(표시 전용)
+      const o=c2p(0,0), fsz=10;
+      m.anno.obstacles=[...grp.querySelectorAll("text")].map(t=>{ const tx=t.textContent||"", w=[...tx].reduce((a,ch)=>a+(ch.charCodeAt(0)>255?1:0.58)*fsz,0), x=+t.getAttribute("x")-o[0], y=+t.getAttribute("y")-o[1], an=t.getAttribute("text-anchor"), x0=an==="end"?x-w:an==="middle"?x-w/2:x;
+        return { x0:x0, x1:x0+w, y0:y-fsz*0.85-1, y1:y+fsz*0.2+1 }; }).filter(b=>isFinite(b.x0)&&isFinite(b.y0));
+      const gm=E("g",{ "data-dolman-layer":"marks" }); _appendSleeveAnnotation(gm, m.anno); g.appendChild(gm); }   // 제도 공정 ①~⑧ · 치수선 · 맞춤 ‖/| (겹침 배치 = sleeveAnnotation.layout)
+    if(m.shoulder){   // 뒤 어깨 다트 닫힘 비교: 몸판 위 1배 + 위쪽 확대 상자(입구 주변 창만 잘라 보임)
+      const sh=m.shoulder, gs=E("g",{ "data-dolman-layer":"shoulder" });
+      sh.lines.forEach(l=>gs.appendChild(ln(l,"sh-")));
+      const ib=sh.inset.box, [bx0,by0]=c2p(ib.minX,ib.minY), [bx1,by1]=c2p(ib.maxX,ib.maxY);
+      const rx=Math.min(bx0,bx1), ry=Math.min(by0,by1), rw=Math.abs(bx1-bx0), rh=Math.abs(by1-by0), cid="dolmanShClip-"+pc;
+      const cp=E("clipPath",{ id:cid }); cp.appendChild(E("rect",{ x:rx, y:ry, width:rw, height:rh })); gs.appendChild(cp);
+      gs.appendChild(E("rect",{ x:rx, y:ry, width:rw, height:rh, class:"dolman-sh-box", "data-anno":"sh-box" }));
+      const gi=E("g",{ "clip-path":"url(#"+cid+")" });
+      sh.inset.lines.forEach(l=>gi.appendChild(ln(l,"sh-inset-")));
+      const [dx0,dy0]=c2p(sh.inset.dev.at.x,sh.inset.dev.at.y);
+      gi.appendChild(E("circle",{ cx:dx0, cy:dy0, r:3, class:"sleeve-anno-mark", "data-anno":"sh-inset-neck-mouth" }));
+      gs.appendChild(gi);
+      gs.appendChild(E("text",{ x:rx, y:ry-6, class:"sleeve-anno-text sleeve-anno-ref", "data-anno-text":"sh-title" }, sh.inset.title));
+      gs.appendChild(E("text",{ x:rx+4, y:ry+rh-6, class:"sleeve-anno-text dolman-sh-devtext", "data-anno-text":"sh-dev" }, sh.inset.dev.text));   // 상자 안 아래(범례와 겹치지 않게)
+      sh.inset.legend.forEach((t,i)=>gs.appendChild(E("text",{ x:rx+rw+6, y:ry+12+i*14, class:"sleeve-anno-text sleeve-anno-ref", "data-anno-text":"sh-legend-"+i }, t)));
+      g.appendChild(gs);
+    }
+  }
+  grp.appendChild(g);
+}
+
 // 소매 제작 정보 오버레이(표시 전용): sleeveAnnotation 표시 모델(geometry 좌표)을 소매 피스 그룹에 동승시켜 그린다. geometry·hit·계측·hash 무관.
 //   재단 외곽(남색 실선)과 구분: 설명용 = 청록 점선/가는 치수선/옅은 음영. 선 굵기·글자 크기는 px 고정(줌 무관), 글자는 흰 후광으로 읽히게 한다.
 function _appendSleeveAnnotation(grp, model){
   if(!model) return;
-  const g=E("g",{ "data-design-sleeve":model.key==="sleeveRef"?"reference":"annotation", "data-sleeve-line":model.line, class:"sleeve-anno" });
+  const g=E("g",{ "data-design-sleeve":model.key==="sleeveRef"?"reference":String(model.key).indexOf("dolman-")===0?"dolman-anno":"annotation", "data-sleeve-line":model.line, class:"sleeve-anno" });
   const TICK=3.5, sc=Math.abs(c2p(1,0)[0]-c2p(0,0)[0]);
   const LY=window.sleeveAnnotation.layout(model, sc);   // 화면 배율 기준 배치(겹치면 이동+리더선, 그래도 안 되면 번호 표식+번호 설명)
   if(LY.compact) g.setAttribute("data-anno-compact","1");
@@ -661,6 +703,9 @@ function render(){
           grp.appendChild(_g); }
       }
       if (_pepOn && _pepAll[pc]) _appendPeplumAnnotation(grp, _pepAll[pc], dp.working.geometry.waistSeam ? window.designLayout.peplumDrop(dp.working.geometry, pc + "Peplum") : 0);
+      if ((pc === "front" || pc === "back") && window.sleeveAnnotation && window.sleeveAnnotation.dolmanBodice) {   // 소매 Ⓡ 돌먼(몸판 설명 글자 뒤 — 그 글자를 피해 배치): 파생 몸판 재단선(항상) + 제도 레이어·비교(토글)
+        const _db = window.sleeveAnnotation.dolmanBodice(dp); if (_db && _db[pc]) _appendDolmanBodice(grp, _db[pc], pc, !_slvInfoChk || _slvInfoChk.checked);
+      }
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
       if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay
       if (_snap && _snap.piece === pc) _appendSnapHint(grp, _snap.point);              // 흡착 표시(cyan)

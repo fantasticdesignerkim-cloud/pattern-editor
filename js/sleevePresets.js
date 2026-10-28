@@ -6,6 +6,7 @@
 // ★ 소매 10종류의 이름·시작 쪽·표지 기호는 P036 판독 표만 근거다. 아직 판독하지 않은 라인의 변형(Ⓑ 다음 기호 등)은
 //   **슬롯을 만들지 않는다** — 표지 대표 기호 하나만 «보류»로 두고, 왜 못 만드는지(blockedBy)를 들고 있게 한다.
 //
+// (돌먼 Ⓡ 은 소매 Ⓐ 가 아니라 몸판 Ⓐ 에서 몸판·소매를 함께 제도한다 — designSleeveR.)
 // 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ · 턱 Ⓕ · Ⓖ · 퍼프 Ⓗ · Ⓘ · Ⓙ · Ⓚ · 반소매 Ⓛ · Ⓜ 열세 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
 // 그중 Ⓐ 는: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
 //   (`designSleeveA.draftSleeveA`, [패턴학교] P.137–139 «타입 4»). 이 레코드는 수치를 갖지 않는다 — 소매 길이만
@@ -149,7 +150,22 @@
     //   직선 소맷부리로 잇는다. 기장·앞뒤 호 길이는 입력하지 않는다. 김님 확정 2026-10-26(docs/book/P048.md § Ⓠ). 화면 검토용 시안.
     { id: "bunka-sleeve-Q", familyId: "short-sleeve", symbol: "Q",
       method: "cap-sleeve-horizontal-hem-on-sleeve-A-cap", methodPage: 48,
-      inputs: [{ key: "heightRatio", label: "소매산 높이 비율(위팔선에서 위로)", unit: "", defaultValue: 0.25 }] }
+      inputs: [{ key: "heightRatio", label: "소매산 높이 비율(위팔선에서 위로)", unit: "", defaultValue: 0.25 }] },
+    // Ⓡ(P.49 «돌먼 슬리브» — 몸판에 직접 제도): 소매 Ⓐ 가 아니라 **완료 몸판 Ⓐ** 에서 몸판과 소매를 새로 제도하는 결합 파생(파생 몸판 + 한 장 소매).
+    //   책 수치는 전부 설정값(어깨 연장 5 · 옆 여유 뒤 3 / 앞 1.5 · 소매 폭선 5 · 소매 길이 26 · 소맷부리 아래 1.5), 팔꿈치 둘레 기본 22(P.8 참고 치수표) · 커프스 = 팔꿈치 + 4.
+    //   곡선 핸들(0.4 · 1/3)은 구현 관례. 김님 확정 2026-10-27(docs/book/P049.md). 화면 검토용 시안. 몸판 Ⓐ 외 출발 몸판은 형상 게이트가 거부한다.
+    { id: "bunka-sleeve-R", familyId: "dolman-sleeve", symbol: "R",
+      method: "dolman-drafted-on-bodice-A-one-piece-sleeve", methodPage: 49,
+      inputs: [{ key: "shoulderExtCm", label: "어깨 연장", unit: "cm", defaultValue: 5 },
+        { key: "backSideEaseCm", label: "옆 여유(뒤)", unit: "cm", defaultValue: 3 },
+        { key: "frontSideEaseCm", label: "옆 여유(앞)", unit: "cm", defaultValue: 1.5 },
+        { key: "capHeightCm", label: "소매 폭선 위치(새 SP 에서)", unit: "cm", defaultValue: 5 },
+        { key: "sleeveLengthCm", label: "소매 길이(새 SP 에서)", unit: "cm", defaultValue: 26 },
+        { key: "elbowGirthCm", label: "팔꿈치 둘레", unit: "cm", defaultValue: 22 },
+        { key: "cuffAddCm", label: "커프스 더하기(팔꿈치 + )", unit: "cm", defaultValue: 4 },
+        { key: "hemDropCm", label: "소맷부리 아래(밑선 연장)", unit: "cm", defaultValue: 1.5 },
+        { key: "armholeHandle", label: "몸판 진동 부푼 정도(핸들 × 현)", unit: "", defaultValue: 0.4 },
+        { key: "capHandle", label: "소매산 부푼 정도(핸들 × 현)", unit: "", defaultValue: 1 / 3 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -226,7 +242,14 @@
         { id: "bunka-sleeve-Q", symbol: "Q", label: "Q · 소맷부리선을 그린다(캡) · 소매산 높이 1/4 수평 · 직선 소맷부리(소매 Ⓐ 소매산, 시안)", page: 48, methodPage: 48,
           availability: "available", presetId: "bunka-sleeve-Q", note: null }
       ] },
-    pendingFamily("dolman-sleeve", 7, "돌먼 소매", "R", 49),
+    { id: "dolman-sleeve", order: 7, label: "돌먼 소매", symbol: "R", page: 49, availability: "available", note: null,
+      familyNote: "Ⓡ — 몸판 Ⓐ 에 직접 제도한다: 뒤 어깨 다트를 닫아 진동 쪽으로 벌리고, 어깨 5 연장 · 옆 여유 뒤 3 / 앞 1.5 · 진동 아랫점을 WL 까지. 연장한 어깨선 = 소매 중심선(새 SP 에서 26), 소매 폭선에서 소매 밑점(교차점 아래 몸판 진동과 같은 길이), 소맷부리 ● = 팔꿈치 둘레 + 4(개더 1배). 앞뒤 소매 중심선을 맞대 한 장 소매. 앞 AH 다트는 박지 않는다. 화면 검토용 시안(몸판 Ⓐ 만).",
+      variants: [
+        { id: "bunka-sleeve-R", symbol: "R", label: "R · 몸판 Ⓐ 에 직접 제도 · 한 장 소매 · 커프스 개더 1배(몸판 Ⓐ 만, 시안)", page: 49, methodPage: 49,
+          availability: "available", presetId: "bunka-sleeve-R", note: null },
+        { id: "bunka-sleeve-S", symbol: "S", label: "S · Ⓡ 방법 + 소매 중심에 개더 분량 추가", page: 49, availability: "pending-page",
+          presetId: null, blockedBy: "Ⓡ 시안 확인(김님) 전 — 개더 분량·벌림 위치(본문 «소매 중심에 개더 분량 추가») 판독과 확정이 아직 없다", note: PENDING_NOTE }
+      ] },
     pendingFamily("shirt-sleeve", 8, "셔츠 소매", "T", 50),
     pendingFamily("raglan-sleeve", 9, "래글런 소매", "V", 52),
     pendingFamily("kimono-sleeve", 10, "기모노 소매", "X", 54)
