@@ -51,7 +51,7 @@ const f2 = v => (Math.round(v * 100) / 100).toFixed(2), sg = v => (v >= 0 ? "+" 
   ok(rec.familyId === "tight-sleeve" && rec.method === "tight-back-dart-from-sleeve-A" && rec.methodPage === 41, "1: 레코드 = 제도 방식·P.41");
   ok(rec.inputs.length === 2 && rec.inputs[0].key === "sleeveLengthCm" && rec.inputs[1].key === "elbowLengthCm" && rec.inputs[1].label === "팔꿈치 길이 EL" && rec.inputs[1].defaultValue === 31.4 && !rec.inputs[1].optional, "1: 입력 = 소매길이 + 팔꿈치 길이 EL(기본 31.4, 필수)");
   ok(SP.resolve("tight-sleeve", "bunka-sleeve-C").ok && SP.resolve("tight-sleeve", "bunka-sleeve-C").presetId === "bunka-sleeve-C" && Object.isFrozen(rec), "1: Ⓒ resolve · 레코드 동결");
-  ok(SP.families().filter(f => f.availability !== "available").length === 3 && SP.get("bunka-bodice-C") === null, "1: 나머지 3종 보류 유지(돌먼 Ⓡ 실행 가능)(Ⓓ·Ⓔ 플레어·Ⓕ·Ⓖ 턱·Ⓗ~Ⓚ 퍼프·Ⓛ 반소매 실행 가능) · 네임스페이스 분리");
+  ok(SP.families().filter(f => f.availability !== "available").length === 2 && SP.get("bunka-bodice-C") === null, "1: 나머지 2종 보류 유지(돌먼 Ⓡ · 셔츠 Ⓣ 실행 가능)(Ⓓ·Ⓔ 플레어·Ⓕ·Ⓖ 턱·Ⓗ~Ⓚ 퍼프·Ⓛ 반소매 실행 가능) · 네임스페이스 분리");
   ok(SP.displayTitle("tight-sleeve", "bunka-sleeve-C").symbol === "C", "1: displayTitle Ⓒ");
 }
 
@@ -193,7 +193,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/designSleeveB.js", "js/sleeveBApply.js", "js/designSleeveC.js", "js/sleeveCApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(Ⓐ → Ⓑ → 엔진 Ⓒ → 연결 Ⓒ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(ver("ui.js") === "2026102901" && (["designSleeveC.js"].every(f => ver(f) === "2026100901") && ver("sleeveCApply.js") === "2026102802") && ver("sleevePresets.js") === "2026102901" && ver("sleeveCheckpoint.js") === "2026102901", "7: 캐시 버전 갱신(Ⓒ 엔진·연결 2026100901)");
+  ok(ver("ui.js") === "2026102911" && (["designSleeveC.js"].every(f => ver(f) === "2026100901") && ver("sleeveCApply.js") === "2026102802") && ver("sleevePresets.js") === "2026102911" && ver("sleeveCheckpoint.js") === "2026102911", "7: 캐시 버전 갱신(Ⓒ 엔진·연결 2026100901)");
   ok(/id="rowSleeveElbow"[^>]*hidden/.test(html) && /id="inpSleeveElbow"[^>]*type="number"[^>]*value="31\.4"/.test(html) && />팔꿈치 길이 EL \(cm\)</.test(html), "7: EL 입력(라벨 «팔꿈치 길이 EL (cm)»·기본 31.4·기본 숨김)");
   ok(html.indexOf('id="rowSleeveElbow"') > html.indexOf('id="rowSleevePalm"') && html.indexOf('id="rowSleeveElbow"') < html.indexOf('id="inpSleeveCuff"'), "7: EL 입력은 소매길이·손바닥 다음 줄");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo", "btnApplySleeve", "btnResetSleeve", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "inpSleevePalm", "rowSleevePalm", "designSleeveCheckNote", "designSleeveStatusNote"]

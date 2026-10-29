@@ -106,7 +106,7 @@ const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.refe
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveI.js") > pos("sleeveHApply.js") && pos("sleeveIApply.js") > pos("designSleeveI.js") && pos("ui.js") > pos("sleeveIApply.js"), "7: 스크립트 순서");
-  ok((["designSleeveI.js"].every(f => ver(f) === "2026101303") && ver("sleeveIApply.js") === "2026102802") && (ver("sleevePresets.js") === "2026102901" && ver("render.js") === "2026102906" && ver("sleeveCheckpoint.js") === "2026102901" && ver("ui.js") === "2026102901") && ver("sleeveAnnotation.js") === "2026102906", "7: 캐시 버전 Ⓘ 2026101303 · 공용 2026102703");
+  ok((["designSleeveI.js"].every(f => ver(f) === "2026101303") && ver("sleeveIApply.js") === "2026102802") && (ver("sleevePresets.js") === "2026102911" && ver("render.js") === "2026102906" && ver("sleeveCheckpoint.js") === "2026102911" && ver("ui.js") === "2026102911") && ver("sleeveAnnotation.js") === "2026102911", "7: 캐시 버전 Ⓘ 2026101303 · 공용 2026102703");
   ok(/function sleeveIOn\(project\)/.test(ui) && /keep !== "I" && window\.sleeveIApply/.test(ui) && /if \(isI\) \{/.test(ui) && /window\.sleeveIApply\.rederive\(project\)/.test(ui) && /_sm\.line === "H" \|\| _sm\.line === "I"/.test(rn), "7: ui·render 배선");
   ok(/id="chkSleeveHPieces" checked/.test(html) && /id="chkSleeveHRef">/.test(html), "7: 녹색 토글 기본 켜짐 · 비교 도안 기본 꺼짐");
 }

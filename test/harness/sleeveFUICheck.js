@@ -45,7 +45,7 @@ const T = (m, id) => { const l = m.lines.find(x => x.id === id) || m.dims.find(x
   ok(f && f.availability === "available" && f.order === 4 && f.variants.map(v => v.id).join() === "bunka-sleeve-F,bunka-sleeve-G" && f.variants[0].presetId === "bunka-sleeve-F", "1: 턱 소매 = Ⓕ(실행) + Ⓖ(sleeveGUICheck)");
   const rec = SP.get("bunka-sleeve-F");
   ok(rec && rec.method === "tuck-parallel-slash-from-sleeve-A" && rec.methodPage === 43 && rec.inputs.map(i => i.key).join() === "sleeveLengthCm,tuckCm" && rec.inputs[1].defaultValue === 1.5 && Object.isFrozen(rec), "1: Ⓕ 레코드 · 입력 소매길이 + 턱 분량(기본 1.5)");
-  ok(SP.resolve("tuck-sleeve", "bunka-sleeve-F").ok && SP.family("shirt-sleeve").availability !== "available", "1: resolve Ⓕ · 다음 라인은 계속 보류");
+  ok(SP.resolve("tuck-sleeve", "bunka-sleeve-F").ok && SP.family("raglan-sleeve").availability !== "available", "1: resolve Ⓕ · 다음 라인(래글런)은 계속 보류 — 셔츠 Ⓣ 는 실행 가능");
 }
 const P = projectWithBodice("A");
 const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.referenceGeometry) };
@@ -123,7 +123,7 @@ const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.refe
   const pos = f => html.indexOf('src="js/' + f);
   ok(pos("designSleeveF.js") > pos("sleeveEApply.js") && pos("sleeveFApply.js") > pos("designSleeveF.js") && pos("ui.js") > pos("sleeveFApply.js") && pos("sleeveCheckpoint.js") > 0, "7: 스크립트 순서");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok((["designSleeveF.js"].every(f => ver(f) === "2026101003") && ver("sleeveFApply.js") === "2026102802") && (["sleevePresets.js"].every(f => ver(f) === "2026102901") && ver("sleeveCheckpoint.js") === "2026102901") && ver("ui.js") === "2026102901" && ver("sleeveAnnotation.js") === "2026102906", "7: 캐시 버전(Ⓕ 2026101003 · 공용 2026101101)");
+  ok((["designSleeveF.js"].every(f => ver(f) === "2026101003") && ver("sleeveFApply.js") === "2026102802") && (["sleevePresets.js"].every(f => ver(f) === "2026102911") && ver("sleeveCheckpoint.js") === "2026102911") && ver("ui.js") === "2026102911" && ver("sleeveAnnotation.js") === "2026102911", "7: 캐시 버전(Ⓕ 2026101003 · 공용 2026101101)");
   ok(/id="rowSleeveTuck" hidden/.test(html) && /id="inpSleeveTuck" type="number" min="0.1" max="3" step="0.1" value="1.5"/.test(html), "7: 턱 분량 입력 행(기본 숨김, 0.1–3, 기본 1.5)");
   ok(/function sleeveFOn\(project\)/.test(ui) && /keep !== "F" && window\.sleeveFApply/.test(ui) && /if \(isF\) \{/.test(ui) && /window\.sleeveFApply\.rederive\(project\)/.test(ui) && /"inpSleeveTuck", "inpSleeveStar"/.test(ui), "7: ui 배선");
 }

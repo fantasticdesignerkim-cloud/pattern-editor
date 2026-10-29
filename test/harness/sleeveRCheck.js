@@ -49,10 +49,10 @@ const near = (a, b, t) => Math.abs(a - b) <= t;
 {
   const f = SP.family("dolman-sleeve"), rec = SP.get("bunka-sleeve-R");
   ok(f && f.availability === "available" && f.variants.map(v => v.symbol).join("") === "RS" && f.variants[0].presetId === "bunka-sleeve-R" && f.variants[0].page === 49, "1: 돌먼 = Ⓡ 실행 · Ⓢ 보류");
-  ok(f.variants[1].availability === "pending-page" && f.variants[1].presetId === null && typeof f.variants[1].blockedBy === "string" && f.variants[1].blockedBy.length > 0, "1: Ⓢ 보류 사유(blockedBy) 보유");
+  ok(f.variants[1].availability === "available" && f.variants[1].presetId === "bunka-sleeve-S" && !f.variants[1].blockedBy, "1: Ⓢ 실행 가능(2026-10-28 김님 확정 — 전용 회귀 sleeveSCheck)");
   ok(rec && rec.methodPage === 49 && rec.inputs.map(i => i.key + "=" + (Math.round(i.defaultValue * 1e6) / 1e6)).join() === "shoulderExtCm=5,backSideEaseCm=3,frontSideEaseCm=1.5,capHeightCm=5,sleeveLengthCm=26,elbowGirthCm=22,cuffAddCm=4,hemDropCm=1.5,armholeHandle=0.4,capHandle=0.333333", "1: Ⓡ 레코드 기본값 = 책 수치 + 팔꿈치 22 + 핸들(구현 관례)");
   ok(J(rec.inputs.map(i => i.key)) === J(SRA.KEYS) && J(Object.keys(SR.RULES.defaults)) === J(SRA.KEYS), "1: 입력 키 = 엔진 기본값 키 = Apply 키");
-  ok(SP.resolve("dolman-sleeve", "bunka-sleeve-R").ok && !SP.resolve("dolman-sleeve", "bunka-sleeve-S").ok && SP.family("shirt-sleeve").availability !== "available", "1: resolve Ⓡ · Ⓢ 거부 · 셔츠 보류 유지");
+  ok(SP.resolve("dolman-sleeve", "bunka-sleeve-R").ok && SP.resolve("dolman-sleeve", "bunka-sleeve-S").ok && SP.family("shirt-sleeve").availability === "available" && SP.resolve("shirt-sleeve", "bunka-sleeve-T").ok, "1: resolve Ⓡ · Ⓢ · 셔츠 Ⓣ 실행 가능");
 }
 
 // ── 2. 몸판 Ⓐ 형상 게이트 ──
@@ -212,9 +212,9 @@ const r = SRA.apply(P, {}), S = P.working.sleeveR, g = P.working.geometry.sleeve
   const ver = (f) => { const mm = html.match(new RegExp("js/" + f.replace(".", "\\.") + "\\?v=(\\d+)")); return mm ? mm[1] : null; };
   const idx = (f) => html.indexOf("js/" + f + "?v=");
   ok(idx("sleeveQApply.js") < idx("designSleeveR.js") && idx("designSleeveR.js") < idx("sleeveRApply.js") && idx("sleeveRApply.js") < idx("ui.js") && idx("designSleeveA.js") < idx("designSleeveR.js"), "11: 스크립트 순서");
-  ok(["sleevePresets.js", "ui.js", "sleeveCheckpoint.js"].every(f => ver(f) === "2026102901") && ["designSleeveR.js", "designLayout.js", "sleeveRApply.js"].every(f => ver(f) === "2026102904") && ver("sleeveAnnotation.js") === "2026102906" && ver("render.js") === "2026102906" && /css\/style\.css\?v=2026102904/.test(html), "11: 변경 파일 캐시 버전(1차 2026102901 · 배치 2026102902 · 소맷부리·설명 2026102904)");
+  ok(["sleevePresets.js", "ui.js", "sleeveCheckpoint.js"].every(f => ver(f) === "2026102911") && ["designSleeveR.js", "designLayout.js", "sleeveRApply.js"].every(f => ver(f) === "2026102904") && ver("sleeveAnnotation.js") === "2026102911" && ver("render.js") === "2026102906" && /css\/style\.css\?v=2026102907/.test(html), "11: 변경 파일 캐시 버전(Ⓡ 2026102904 · 공용 Ⓢ 연결 2026102907)");
   ok(SRA.KEYS.every(k => { const mm = html.match(new RegExp('id="inpSleeveR_' + k + '"[^>]*value="([^"]+)"')); return mm && Math.abs(Number(mm[1]) - SR.RULES.defaults[k]) < 1e-12; }) && /id="rowSleeveR" hidden/.test(html), "11: 입력칸 10개 · 기본값 = 엔진 기본값 · 기본 숨김");
-  ok(/function applySleeveR\(/.test(ui) && /sleeveQOn\(project\) \|\| sleeveROn\(project\); \}/.test(ui) && /keep !== "R" && window\.sleeveRApply/.test(ui) && /sleeveROn\(project\)\) \{ window\.sleeveRApply\.rederive/.test(ui), "11: ui 연결(적용·배타·재제도)");
+  ok(/function applySleeveR\(/.test(ui) && /sleeveQOn\(project\) \|\| sleeveROn\(project\)( \|\| sleeveSOn\(project\))?( \|\| sleeveTOn\(project\))?( \|\| sleeveUOn\(project\))?; \}/.test(ui) && /keep !== "R" && window\.sleeveRApply/.test(ui) && /sleeveROn\(project\)\) \{ window\.sleeveRApply\.rederive/.test(ui), "11: ui 연결(적용·배타·재제도)");
   ok(/function _appendDolmanBodice\(/.test(rd) && /dolmanBodice\(dp\)/.test(rd), "11: render 몸판 표시 연결");
 }
 

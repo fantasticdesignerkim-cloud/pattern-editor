@@ -395,6 +395,7 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .sleeve-anno{pointer-events:none}
 .sleeve-anno-zone{fill:rgba(14,116,144,.10);stroke:#0E7490;stroke-width:0.8;stroke-dasharray:1.5 3}
 .sleeve-anno-paper{fill:rgba(76,160,90,.22);stroke:#2E7D32;stroke-width:0.9}   /* Ⓗ 원래 종이 조각(책 P.44 절개 그림 녹색) — 표시 전용 */
+.sleeve-anno-band{fill:rgba(234,179,8,.28);stroke:#CA8A04;stroke-width:0.9;stroke-dasharray:3 2}   /* 소매 Ⓢ 새 중앙 개더 띠(덧댄 종이) — 표시 전용 */
 .sleeve-anno-keep{fill:rgba(76,160,90,.28);stroke:none}   /* 소매 Ⓠ 남기는 영역(녹색) — 표시 전용 */
 .sleeve-anno-cut{fill:url(#capSleeveCutHatch);stroke:#94A3B8;stroke-width:0.9;stroke-dasharray:4 3}   /* 소매 Ⓠ 잘라내는 영역(회색 사선 · 점선 경계 = 원래 Ⓐ 외곽) — 표시 전용 */
 .sleeve-anno-dim{stroke:#0E7490;stroke-width:0.9;fill:none}

@@ -46,7 +46,7 @@ const IN = { sleeveLengthCm: 52, elbowLengthCm: 31.4, palmCircumferenceCm: 21, d
   ok(f && f.availability === "available" && f.order === 5 && f.variants.map(v => v.id).slice(0, 2).join() === "bunka-sleeve-H,bunka-sleeve-I", "1: 퍼프 소매 = Ⓗ + Ⓘ(실행) · 뒤에 Ⓙ");
   const rec = SP.get("bunka-sleeve-H");
   ok(rec && rec.methodPage === 44 && rec.inputs.map(i => i.key + "=" + (i.defaultValue === undefined ? "" : i.defaultValue)).join() === "sleeveLengthCm=,elbowLengthCm=31.4,palmCircumferenceCm=21,dropCm=3.5" && Object.isFrozen(rec), "1: Ⓗ 레코드 · 김님 기본값");
-  ok(SP.resolve("puff-sleeve", "bunka-sleeve-H").ok && SP.family("shirt-sleeve").availability !== "available", "1: resolve Ⓗ · 다음 라인 보류 유지");
+  ok(SP.resolve("puff-sleeve", "bunka-sleeve-H").ok && SP.family("raglan-sleeve").availability !== "available", "1: resolve Ⓗ · 다음 라인(래글런) 보류 유지 — 셔츠 Ⓣ 는 실행 가능");
 }
 const P = projectWithBodice("A");
 const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.referenceGeometry) };
@@ -170,7 +170,7 @@ const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.refe
   const pos = f => html.indexOf('src="js/' + f);
   ok(pos("designSleeveH.js") > pos("sleeveGApply.js") && pos("sleeveHApply.js") > pos("designSleeveH.js") && pos("ui.js") > pos("sleeveHApply.js"), "7: 스크립트 순서");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok((["sleevePresets.js"].every(f => ver(f) === "2026102901") && ver("sleeveCheckpoint.js") === "2026102901") && (["render.js"].every(f => ver(f) === "2026102906") && ver("ui.js") === "2026102901") && (["designSleeveH.js"].every(f => ver(f) === "2026101302") && ver("sleeveHApply.js") === "2026102802") && ver("sleeveAnnotation.js") === "2026102906", "7: 캐시 버전(소맷부리 truing 2026101301)");
+  ok((["sleevePresets.js"].every(f => ver(f) === "2026102911") && ver("sleeveCheckpoint.js") === "2026102911") && (["render.js"].every(f => ver(f) === "2026102906") && ver("ui.js") === "2026102911") && (["designSleeveH.js"].every(f => ver(f) === "2026101302") && ver("sleeveHApply.js") === "2026102802") && ver("sleeveAnnotation.js") === "2026102911", "7: 캐시 버전(소맷부리 truing 2026101301)");
   ok(/id="rowSleeveHRef" hidden><label><input type="checkbox" id="chkSleeveHRef"> 비교: 벌리기 전 도안\(참고\)/.test(html) && /chkSleeveHRef/.test(fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8")), "7: 비교용 벌리기 전 도안 토글(기본 꺼짐 — 의도 정정) · render 연결");
   ok(/id="rowSleeveHPieces" hidden><label><input type="checkbox" id="chkSleeveHPieces" checked> 원래 종이 조각\(녹색\)/.test(html) && /chkSleeveHPieces/.test(fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8")) && /\.sleeve-anno-paper\{/.test(fs.readFileSync(path.join(ROOT, "css", "style.css"), "utf8")), "7: 원래 종이 조각 토글(기본 켜짐) · render · css");
   ok(/id="rowSleeveHPalm" hidden/.test(html) && /id="inpSleeveHPalm" type="number" min="0\.1" step="0\.1" value="21"/.test(html) && /id="inpSleeveDrop" type="number" min="0\.1" step="0\.1" value="3\.5"/.test(html), "7: 손바닥(21)·★(3.5) 입력 행");

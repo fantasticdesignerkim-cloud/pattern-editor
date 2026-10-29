@@ -6,7 +6,7 @@
 // ★ 소매 10종류의 이름·시작 쪽·표지 기호는 P036 판독 표만 근거다. 아직 판독하지 않은 라인의 변형(Ⓑ 다음 기호 등)은
 //   **슬롯을 만들지 않는다** — 표지 대표 기호 하나만 «보류»로 두고, 왜 못 만드는지(blockedBy)를 들고 있게 한다.
 //
-// (돌먼 Ⓡ 은 소매 Ⓐ 가 아니라 몸판 Ⓐ 에서 몸판·소매를 함께 제도한다 — designSleeveR.)
+// (돌먼 Ⓡ 은 소매 Ⓐ 가 아니라 몸판 Ⓐ 에서 몸판·소매를 함께 제도한다 — designSleeveR. Ⓢ 는 그 Ⓡ 한 장 소매에 중심 개더 띠를 평행으로 넣는다 — designSleeveS.)
 // 지금 실행 가능한 것은 **스트레이트 Ⓐ · 타이트 Ⓑ · Ⓒ · 플레어 Ⓓ · Ⓔ · 턱 Ⓕ · Ⓖ · 퍼프 Ⓗ · Ⓘ · Ⓙ · Ⓚ · 반소매 Ⓛ · Ⓜ 열세 개**다(Ⓒ = 뒤 소맷부리 다트, `designSleeveC`). Ⓑ(P.41)는 Ⓐ 를 출발 원형으로 소맷부리를 W×3/4 로 맞댄다(`designSleeveB`).
 // 그중 Ⓐ 는: 완성한 몸판의 진동둘레(다트 닫은 봉제 상태)에서 소매산을 제도한다
 //   (`designSleeveA.draftSleeveA`, [패턴학교] P.137–139 «타입 4»). 이 레코드는 수치를 갖지 않는다 — 소매 길이만
@@ -165,7 +165,46 @@
         { key: "cuffAddCm", label: "커프스 더하기(팔꿈치 + )", unit: "cm", defaultValue: 4 },
         { key: "hemDropCm", label: "소맷부리 아래(밑선 연장)", unit: "cm", defaultValue: 1.5 },
         { key: "armholeHandle", label: "몸판 진동 부푼 정도(핸들 × 현)", unit: "", defaultValue: 0.4 },
-        { key: "capHandle", label: "소매산 부푼 정도(핸들 × 현)", unit: "", defaultValue: 1 / 3 }] }
+        { key: "capHandle", label: "소매산 부푼 정도(핸들 × 현)", unit: "", defaultValue: 1 / 3 }] },
+    // Ⓢ(P.49 하단 «Ⓡ 방법 + 소매 중심에 개더 분량 추가»): 같은 몸판 Ⓐ 의 Ⓡ 한 장 소매를 중심선에서 나눠 뒤 −G/2 · 앞 +G/2 평행 이동, 가운데 개더 띠 G.
+    //   입력 = Ⓡ 설정값 10개(같은 입력칸) + 총 벌림 G(책 12) + 띠 바깥 소매산 개더 범위 각(책 6 — 이동량이 아님). 김님 확정 2026-10-28(docs/book/P049.md § Ⓢ). 화면 검토용 시안.
+    { id: "bunka-sleeve-S", familyId: "dolman-sleeve", symbol: "S",
+      method: "dolman-R-one-piece-parallel-center-gather-band", methodPage: 49,
+      inputs: [{ key: "spreadCm", label: "총 벌림 G(중심 개더 띠)", unit: "cm", defaultValue: 12 },
+        { key: "capGatherSideCm", label: "띠 바깥 소매산 개더 범위(각)", unit: "cm", defaultValue: 6 }] },
+    // Ⓣ(P.50 «셔츠 슬리브» — 몸판에 직접 제도 · 제도 방법 P.140–141): 완료 몸판 Ⓐ 의 진동 둘레에 겹쳐 제도하는 결합 파생(앞 AH 다트 → 옆 다트 + 한 장 소매).
+    //   소매길이 = 공용 소매길이 칸(기본값 없음). 책 수치는 설정값(경사 8 · 뒤 4 / 앞 3.4 · 소매산 높이 = 평균 어깨 길이 × 3/4 · 옆 다트 3 · 소매산 차이 0.7 / 앞 0.5 · 소맷부리 = 뒤 소매 폭 × 3/4).
+    //   ★ 위치(진동 호 비율)는 구현 관례. 화면 검토용 시안(docs/book/P050.md). 몸판 Ⓐ 외 출발 몸판은 형상 게이트가 거부한다.
+    { id: "bunka-sleeve-T", familyId: "shirt-sleeve", symbol: "T",
+      method: "shirt-sleeve-drafted-on-bodice-A-armhole", methodPage: 50,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "slopeRunCm", label: "경사 안내(어깨선 연장)", unit: "cm", defaultValue: 8 },
+        { key: "backSlopeDropCm", label: "경사 직각(뒤)", unit: "cm", defaultValue: 4 },
+        { key: "frontSlopeDropCm", label: "경사 직각(앞)", unit: "cm", defaultValue: 3.4 },
+        { key: "capHeightRatio", label: "소매산 높이(평균 어깨 길이 ×)", unit: "", defaultValue: 0.75 },
+        { key: "sideDartDropCm", label: "옆 다트 위치(진동 아랫점 아래)", unit: "cm", defaultValue: 3 },
+        { key: "capOutCm", label: "소매산 차이(위 · 몸판 쪽)", unit: "cm", defaultValue: 0.7 },
+        { key: "frontCapInCm", label: "소매산 차이(앞 아래 · 소매 쪽)", unit: "cm", defaultValue: 0.5 },
+        { key: "cuffRatio", label: "소맷부리(뒤 소매 폭 ×)", unit: "", defaultValue: 0.75 },
+        { key: "backStar", label: "뒤 ★ 위치(진동 호 비율)", unit: "", defaultValue: 0.6 },
+        { key: "frontStar1", label: "앞 ★1 위치(진동 호 비율)", unit: "", defaultValue: 0.5 },
+        { key: "frontStar2", label: "앞 ★2 위치(진동 호 비율)", unit: "", defaultValue: 0.8 }] },
+    // Ⓤ(P.51 «Ⓣ 와 같이 제도한다» · 소매산 높이 = 평균 어깨 길이 × 1/2): Ⓣ 와 같은 기하 엔진(designSleeveT.draftSleeveU) · 같은 키 · 다른 책 기본값.
+    //   책(F): 경사 8 ⟂ 뒤 1.3 / 앞 0.5(도해 ★ = 소매 경사) · 1/2 · 소매산 차이 뒤 위 0.5 · 앞 위 0.5 · 앞 아래 0.5. Ⓣ 승계: 옆 다트 3 · 소맷부리 뒤 폭 × 3/4(김님 지시) · 진동 접점 위치(Ⓣ 관례).
+    { id: "bunka-sleeve-U", familyId: "shirt-sleeve", symbol: "U",
+      method: "shirt-sleeve-U-drafted-on-bodice-A-armhole(T-engine)", methodPage: 51,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "slopeRunCm", label: "경사 안내(어깨선 연장)", unit: "cm", defaultValue: 8 },
+        { key: "backSlopeDropCm", label: "경사 직각(뒤)", unit: "cm", defaultValue: 1.3 },
+        { key: "frontSlopeDropCm", label: "경사 직각(앞)", unit: "cm", defaultValue: 0.5 },
+        { key: "capHeightRatio", label: "소매산 높이(평균 어깨 길이 ×)", unit: "", defaultValue: 0.5 },
+        { key: "sideDartDropCm", label: "옆 다트 위치(진동 아랫점 아래)", unit: "cm", defaultValue: 3 },
+        { key: "capOutCm", label: "소매산 차이(위 · 몸판 쪽)", unit: "cm", defaultValue: 0.5 },
+        { key: "frontCapInCm", label: "소매산 차이(앞 아래 · 소매 쪽)", unit: "cm", defaultValue: 0.5 },
+        { key: "cuffRatio", label: "소맷부리(뒤 소매 폭 ×)", unit: "", defaultValue: 0.75 },
+        { key: "backStar", label: "뒤 진동 접점 위치(진동 호 비율 · Ⓣ 관례)", unit: "", defaultValue: 0.6 },
+        { key: "frontStar1", label: "앞 진동 접점1 위치(진동 호 비율 · Ⓣ 관례)", unit: "", defaultValue: 0.5 },
+        { key: "frontStar2", label: "앞 진동 접점2 위치(진동 호 비율 · Ⓣ 관례)", unit: "", defaultValue: 0.8 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -247,10 +286,17 @@
       variants: [
         { id: "bunka-sleeve-R", symbol: "R", label: "R · 몸판 Ⓐ 에 직접 제도 · 한 장 소매 · 커프스 개더 1배(몸판 Ⓐ 만, 시안)", page: 49, methodPage: 49,
           availability: "available", presetId: "bunka-sleeve-R", note: null },
-        { id: "bunka-sleeve-S", symbol: "S", label: "S · Ⓡ 방법 + 소매 중심에 개더 분량 추가", page: 49, availability: "pending-page",
-          presetId: null, blockedBy: "Ⓡ 시안 확인(김님) 전 — 개더 분량·벌림 위치(본문 «소매 중심에 개더 분량 추가») 판독과 확정이 아직 없다", note: PENDING_NOTE }
+        { id: "bunka-sleeve-S", symbol: "S", label: "S · Ⓡ + 소매 중심 평행 개더 띠 12 · 소매산 개더 띠 + 양쪽 6(몸판 Ⓐ 만, 시안)", page: 49, methodPage: 49,
+          availability: "available", presetId: "bunka-sleeve-S", note: null }
       ] },
-    pendingFamily("shirt-sleeve", 8, "셔츠 소매", "T", 50),
+    { id: "shirt-sleeve", order: 8, label: "셔츠 소매", symbol: "T", page: 50, availability: "available", note: null,
+      familyNote: "Ⓣ — 몸판 Ⓐ 의 진동 둘레에 겹쳐 직접 제도한다(P.50 · 제도 방법 P.140–141): 앞 AH 다트를 닫아 옆으로 이동 · 어깨선 연장 8 에서 직각 뒤 4 / 앞 3.4 로 소매 경사 · 소매산 높이 = 평균 어깨 길이 × 3/4(P.137) · 소매산은 진동과 같은 길이(위 0.7 · 앞 아래 0.5 차이, 여유분 줄임 없음) · 소맷부리 = 뒤 소매 폭 × 3/4, 앞은 같은 분량을 자른다 · 앞뒤 중심선을 맞대 한 장 소매. Ⓤ(P.51)는 Ⓣ 와 같이 — 소매산 높이 1/2 · 경사 직각 뒤 1.3 / 앞 0.5 · 소매산 차이 0.5. 화면 검토용 시안(몸판 Ⓐ 만).",
+      variants: [
+        { id: "bunka-sleeve-T", symbol: "T", label: "T · 몸판 Ⓐ 에 직접 제도 · 소매산 높이 = 평균 어깨 길이 × 3/4 · 한 장 소매(몸판 Ⓐ 만, 시안)", page: 50, methodPage: 50,
+          availability: "available", presetId: "bunka-sleeve-T", note: null },
+        { id: "bunka-sleeve-U", symbol: "U", label: "U · Ⓣ 와 같이 · 소매산 높이 = 평균 어깨 길이 × 1/2 · 경사 ★ 뒤 1.3 / 앞 0.5 · 한 장 소매(몸판 Ⓐ 만, 시안)", page: 51, methodPage: 51,
+          availability: "available", presetId: "bunka-sleeve-U", note: null }
+      ] },
     pendingFamily("raglan-sleeve", 9, "래글런 소매", "V", 52),
     pendingFamily("kimono-sleeve", 10, "기모노 소매", "X", 54)
   ];
