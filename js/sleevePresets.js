@@ -174,7 +174,7 @@
         { key: "capGatherSideCm", label: "띠 바깥 소매산 개더 범위(각)", unit: "cm", defaultValue: 6 }] },
     // Ⓣ(P.50 «셔츠 슬리브» — 몸판에 직접 제도 · 제도 방법 P.140–141): 완료 몸판 Ⓐ 의 진동 둘레에 겹쳐 제도하는 결합 파생(앞 AH 다트 → 옆 다트 + 한 장 소매).
     //   소매길이 = 공용 소매길이 칸(기본값 없음). 책 수치는 설정값(경사 8 · 뒤 4 / 앞 3.4 · 소매산 높이 = 평균 어깨 길이 × 3/4 · 옆 다트 3 · 소매산 차이 0.7 / 앞 0.5 · 소맷부리 = 뒤 소매 폭 × 3/4).
-    //   ★ 위치(진동 호 비율)는 구현 관례. 화면 검토용 시안(docs/book/P050.md). 몸판 Ⓐ 외 출발 몸판은 형상 게이트가 거부한다.
+    //   ★ 위치(진동 호 비율 0.72 / 0.44 · 0.72 — P.140–141 도해 참고값, 2026-10-30 소매산 재보완)는 구현 관례. 화면 검토용 시안(docs/book/P050.md). 몸판 Ⓐ 외 출발 몸판은 형상 게이트가 거부한다.
     { id: "bunka-sleeve-T", familyId: "shirt-sleeve", symbol: "T",
       method: "shirt-sleeve-drafted-on-bodice-A-armhole", methodPage: 50,
       inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
@@ -186,9 +186,9 @@
         { key: "capOutCm", label: "소매산 차이(위 · 몸판 쪽)", unit: "cm", defaultValue: 0.7 },
         { key: "frontCapInCm", label: "소매산 차이(앞 아래 · 소매 쪽)", unit: "cm", defaultValue: 0.5 },
         { key: "cuffRatio", label: "소맷부리(뒤 소매 폭 ×)", unit: "", defaultValue: 0.75 },
-        { key: "backStar", label: "뒤 ★ 위치(진동 호 비율)", unit: "", defaultValue: 0.6 },
-        { key: "frontStar1", label: "앞 ★1 위치(진동 호 비율)", unit: "", defaultValue: 0.5 },
-        { key: "frontStar2", label: "앞 ★2 위치(진동 호 비율)", unit: "", defaultValue: 0.8 }] },
+        { key: "backStar", label: "뒤 ★ 위치(진동 호 비율)", unit: "", defaultValue: 0.72 },
+        { key: "frontStar1", label: "앞 ★1 위치(진동 호 비율)", unit: "", defaultValue: 0.44 },
+        { key: "frontStar2", label: "앞 ★2 위치(진동 호 비율)", unit: "", defaultValue: 0.72 }] },
     // Ⓤ(P.51 «Ⓣ 와 같이 제도한다» · 소매산 높이 = 평균 어깨 길이 × 1/2): Ⓣ 와 같은 기하 엔진(designSleeveT.draftSleeveU) · 같은 키 · 다른 책 기본값.
     //   책(F): 경사 8 ⟂ 뒤 1.3 / 앞 0.5(도해 ★ = 소매 경사) · 1/2 · 소매산 차이 뒤 위 0.5 · 앞 위 0.5 · 앞 아래 0.5. Ⓣ 승계: 옆 다트 3 · 소맷부리 뒤 폭 × 3/4(김님 지시) · 진동 접점 위치(Ⓣ 관례).
     { id: "bunka-sleeve-U", familyId: "shirt-sleeve", symbol: "U",
@@ -202,9 +202,9 @@
         { key: "capOutCm", label: "소매산 차이(위 · 몸판 쪽)", unit: "cm", defaultValue: 0.5 },
         { key: "frontCapInCm", label: "소매산 차이(앞 아래 · 소매 쪽)", unit: "cm", defaultValue: 0.5 },
         { key: "cuffRatio", label: "소맷부리(뒤 소매 폭 ×)", unit: "", defaultValue: 0.75 },
-        { key: "backStar", label: "뒤 진동 접점 위치(진동 호 비율 · Ⓣ 관례)", unit: "", defaultValue: 0.6 },
-        { key: "frontStar1", label: "앞 진동 접점1 위치(진동 호 비율 · Ⓣ 관례)", unit: "", defaultValue: 0.5 },
-        { key: "frontStar2", label: "앞 진동 접점2 위치(진동 호 비율 · Ⓣ 관례)", unit: "", defaultValue: 0.8 }] }
+        { key: "backStar", label: "뒤 진동 접점 위치(진동 호 비율 · Ⓣ 관례)", unit: "", defaultValue: 0.72 },
+        { key: "frontStar1", label: "앞 진동 접점1 위치(진동 호 비율 · Ⓣ 관례)", unit: "", defaultValue: 0.44 },
+        { key: "frontStar2", label: "앞 진동 접점2 위치(진동 호 비율 · Ⓣ 관례)", unit: "", defaultValue: 0.72 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {

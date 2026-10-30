@@ -28,6 +28,7 @@
     "sleeve-length-too-short": "소매길이가 소매산 높이(◉)보다 길어야 합니다",
     "underarm-point-not-found": "소매 아랫점을 정할 수 없습니다 — 소매 폭선 위에서 소매산이 진동 둘레와 같은 길이가 되는 점이 없습니다",
     "underarm-point-not-unique": "소매 아랫점이 하나로 정해지지 않습니다(같은 길이 해가 여럿)",
+    "cap-offset-not-converged": "소매산이 진동에서 떨어진 최대 차이를 책 값(0.7 / 0.5 등)에 맞추지 못했습니다 — 소매산 차이·접점 위치·경사를 확인하세요",
     "cap-length-unmatched": "소매산을 진동 둘레와 같은 길이로 맞추지 못함(수치)",
     "front-cuff-nonpositive": "앞 소맷부리가 0 이하입니다 — 뒤에서 자른 분량 ● 이 앞 소매 폭보다 큽니다(소맷부리 비율 확인)",
     "center-butt-mismatch": "앞뒤 소매 중심선이 맞닿지 않음(기하)",

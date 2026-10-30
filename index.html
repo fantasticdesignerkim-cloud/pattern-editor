@@ -313,9 +313,9 @@
             <div class="row"><label for="inpSleeveT_capOutCm">소매산 차이 위 (몸판 쪽, cm)</label><input id="inpSleeveT_capOutCm" type="number" step="0.1" value="0.7" title="Ⓣ 소매산 위쪽이 몸판 진동에서 몸판 쪽으로 떨어진 양(책 0.7 — 설정값)"></div>
             <div class="row"><label for="inpSleeveT_frontCapInCm">소매산 차이 앞 아래 (소매 쪽, cm)</label><input id="inpSleeveT_frontCapInCm" type="number" step="0.1" value="0.5" title="Ⓣ 앞 소매산 아래쪽이 진동에서 소매 쪽으로 떨어진 양(책 0.5 — 설정값)"></div>
             <div class="row"><label for="inpSleeveT_cuffRatio">소맷부리 (뒤 소매 폭 ×)</label><input id="inpSleeveT_cuffRatio" type="number" step="0.05" value="0.75" title="Ⓣ 뒤 소맷부리 = 뒤 소매 폭 × 이 값(책 3/4), 앞은 뒤와 같은 분량을 자른다"></div>
-            <div class="row"><label for="inpSleeveT_backStar">뒤 ★ 위치 (진동 호 비율)</label><input id="inpSleeveT_backStar" type="number" step="0.05" value="0.6" title="Ⓣ 소매산이 몸판 진동과 만나는 ★ — 진동 호 길이 비율(구현 관례 · 도해 눈대중, 책 수치 아님)"></div>
-            <div class="row"><label for="inpSleeveT_frontStar1">앞 ★1 위치 (진동 호 비율)</label><input id="inpSleeveT_frontStar1" type="number" step="0.05" value="0.5" title="Ⓣ 앞 위쪽 ★(구현 관례 · 책 수치 아님)"></div>
-            <div class="row"><label for="inpSleeveT_frontStar2">앞 ★2 위치 (진동 호 비율)</label><input id="inpSleeveT_frontStar2" type="number" step="0.05" value="0.8" title="Ⓣ 앞 아래쪽 ★(구현 관례 · 책 수치 아님)"></div>
+            <div class="row"><label for="inpSleeveT_backStar">뒤 ★ 위치 (진동 호 비율)</label><input id="inpSleeveT_backStar" type="number" step="0.01" value="0.72" title="Ⓣ 소매산이 몸판 진동과 만나는 ★ — 진동 호 길이 비율(구현 관례 · P.140–141 도해 참고값, 책 수치 아님)"></div>
+            <div class="row"><label for="inpSleeveT_frontStar1">앞 ★1 위치 (진동 호 비율)</label><input id="inpSleeveT_frontStar1" type="number" step="0.01" value="0.44" title="Ⓣ 앞 위쪽 ★(구현 관례 · 책 수치 아님)"></div>
+            <div class="row"><label for="inpSleeveT_frontStar2">앞 ★2 위치 (진동 호 비율)</label><input id="inpSleeveT_frontStar2" type="number" step="0.01" value="0.72" title="Ⓣ 앞 아래쪽 ★(구현 관례 · 책 수치 아님)"></div>
           </div>
           <!-- 소매 Ⓤ(P.51 «Ⓣ 와 같이») 전용 설정값: Ⓣ 와 같은 키 · Ⓤ 책 기본값(경사 1.3 / 0.5 · 1/2 · 차이 0.5). 소매길이는 공용 칸. -->
           <div id="rowSleeveU" hidden>
@@ -327,9 +327,9 @@
             <div class="row"><label for="inpSleeveU_capOutCm">소매산 차이 위 (몸판 쪽, cm)</label><input id="inpSleeveU_capOutCm" type="number" step="0.1" value="0.5" title="Ⓤ 소매산 위쪽이 몸판 진동에서 몸판 쪽으로 떨어진 양(책 P.51 뒤·앞 0.5 — 설정값)"></div>
             <div class="row"><label for="inpSleeveU_frontCapInCm">소매산 차이 앞 아래 (소매 쪽, cm)</label><input id="inpSleeveU_frontCapInCm" type="number" step="0.1" value="0.5" title="Ⓤ 앞 소매산 아래쪽이 진동에서 소매 쪽으로 떨어진 양(책 P.51 0.5 — 설정값)"></div>
             <div class="row"><label for="inpSleeveU_cuffRatio">소맷부리 (뒤 소매 폭 ×)</label><input id="inpSleeveU_cuffRatio" type="number" step="0.05" value="0.75" title="Ⓤ 뒤 소맷부리 = 뒤 소매 폭 × 이 값(Ⓣ 방식 승계 3/4 — P.51 에 수치 없음), 앞은 뒤와 같은 분량을 자른다"></div>
-            <div class="row"><label for="inpSleeveU_backStar">뒤 진동 접점 위치 (진동 호 비율)</label><input id="inpSleeveU_backStar" type="number" step="0.05" value="0.6" title="Ⓤ 소매산이 몸판 진동과 만나는 점 — 진동 호 길이 비율(Ⓣ 구현 관례 승계 · 책 수치 아님 · 도해 ★ 는 경사)"></div>
-            <div class="row"><label for="inpSleeveU_frontStar1">앞 진동 접점1 위치 (진동 호 비율)</label><input id="inpSleeveU_frontStar1" type="number" step="0.05" value="0.5" title="Ⓤ 앞 위쪽 접점(Ⓣ 구현 관례 승계 · 책 수치 아님)"></div>
-            <div class="row"><label for="inpSleeveU_frontStar2">앞 진동 접점2 위치 (진동 호 비율)</label><input id="inpSleeveU_frontStar2" type="number" step="0.05" value="0.8" title="Ⓤ 앞 아래쪽 접점(Ⓣ 구현 관례 승계 · 책 수치 아님)"></div>
+            <div class="row"><label for="inpSleeveU_backStar">뒤 진동 접점 위치 (진동 호 비율)</label><input id="inpSleeveU_backStar" type="number" step="0.01" value="0.72" title="Ⓤ 소매산이 몸판 진동과 만나는 점 — 진동 호 길이 비율(Ⓣ 구현 관례 승계 · 책 수치 아님 · 도해 ★ 는 경사)"></div>
+            <div class="row"><label for="inpSleeveU_frontStar1">앞 진동 접점1 위치 (진동 호 비율)</label><input id="inpSleeveU_frontStar1" type="number" step="0.01" value="0.44" title="Ⓤ 앞 위쪽 접점(Ⓣ 구현 관례 승계 · 책 수치 아님)"></div>
+            <div class="row"><label for="inpSleeveU_frontStar2">앞 진동 접점2 위치 (진동 호 비율)</label><input id="inpSleeveU_frontStar2" type="number" step="0.01" value="0.72" title="Ⓤ 앞 아래쪽 접점(Ⓣ 구현 관례 승계 · 책 수치 아님)"></div>
           </div>
           <!-- 소매 Ⓟ(P.48) 전용 입력: 플레어 계수(× Ⓐ 소매 폭) — 책 기본 0.7(수정 가능 설정값). 틈 비율 1:2:4:2:1 은 자동. 상한은 엔진 수치 가드가 판정한다. -->
           <div class="row" id="rowSleevePFlare" hidden><label for="inpSleevePFlare">플레어 계수 (× 소매 폭)</label><input id="inpSleevePFlare" type="number" min="0.05" step="0.05" value="0.7" title="Ⓟ 플레어 분량 ∅ = Ⓐ 소매 폭 × 계수(책 기본 0.7 — 수정 가능)"></div>
@@ -518,7 +518,7 @@
 <!-- 페플럼 제작 정보 표시 모델(순수·표시 전용): window.peplumAnnotation. 형상·hash·hit 무관. -->
 <script src="js/peplumAnnotation.js?v=2026100404"></script>
 <!-- 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시 모델(순수·표시 전용): window.sleeveAnnotation. 형상·hash·완료본·hit 무관. -->
-<script src="js/sleeveAnnotation.js?v=2026102911"></script>
+<script src="js/sleeveAnnotation.js?v=2026103001"></script>
 <script src="js/designLayout.js?v=2026102904"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026091620"></script>
@@ -541,7 +541,7 @@
 <script src="js/sleeveCheckpoint.js?v=2026102911"></script>
 <!-- 소매 Ⓐ(P.137–139 타입 4): window.designSleeveA 엔진 코어 · window.sleevePresets 카탈로그 · window.sleeveAApply 상태 연결(전부 순수·DOM 미접근). -->
 <script src="js/designSleeveA.js?v=2026102802"></script>
-<script src="js/sleevePresets.js?v=2026102911"></script>
+<script src="js/sleevePresets.js?v=2026103001"></script>
 <script src="js/sleeveAApply.js?v=2026102802"></script>
 <!-- 소매 Ⓑ(P.41 타이트): window.designSleeveB 엔진 코어 · window.sleeveBApply 상태 연결(순수·DOM 미접근). Ⓐ 모듈 뒤에 로드. -->
 <script src="js/designSleeveB.js?v=2026100601"></script>
@@ -582,10 +582,10 @@
 <script src="js/designSleeveS.js?v=2026102907"></script>
 <script src="js/sleeveSApply.js?v=2026102907"></script>
 <!-- 소매 Ⓣ(P.50 셔츠 슬리브 — 몸판 Ⓐ 진동에 직접 제도, 시안): window.designSleeveT 엔진(순수) · window.sleeveTApply 상태 연결. 게이트는 designSleeveR · 높이 측정은 designSleeveA 를 쓴다. -->
-<script src="js/designSleeveT.js?v=2026102911"></script>
-<script src="js/sleeveTApply.js?v=2026102908"></script>
+<script src="js/designSleeveT.js?v=2026103001"></script>
+<script src="js/sleeveTApply.js?v=2026103001"></script>
 <!-- 소매 Ⓤ(P.51 «Ⓣ 와 같이», 시안): 엔진 = designSleeveT.draftSleeveU(같은 기하 · Ⓤ 기본값) · window.sleeveUApply 상태 연결. -->
-<script src="js/sleeveUApply.js?v=2026102911"></script>
+<script src="js/sleeveUApply.js?v=2026103001"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
 <script src="js/designCollar.js?v=2026092520"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->

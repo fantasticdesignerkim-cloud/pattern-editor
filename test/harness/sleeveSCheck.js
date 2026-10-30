@@ -176,7 +176,7 @@ ok(J(S.derivedBodice) === J(rr.derivedBodice) && J(S.rMeta) === J(rr.meta) && m.
   const ver = (f) => { const mm = html.match(new RegExp("js/" + f.replace(".", "\\.") + "\\?v=(\\d+)")); return mm ? mm[1] : null; };
   const idx = (f) => html.indexOf("js/" + f + "?v=");
   ok(idx("sleeveRApply.js") < idx("designSleeveS.js") && idx("designSleeveS.js") < idx("sleeveSApply.js") && idx("sleeveSApply.js") < idx("ui.js"), "9: 스크립트 순서(Ⓡ → Ⓢ 엔진 → Ⓢ 연결 → ui)");
-  ok(["designSleeveS.js", "sleeveSApply.js"].every(f => ver(f) === "2026102907") && ["sleevePresets.js", "ui.js", "sleeveCheckpoint.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026102911") && /css\/style\.css\?v=2026102907/.test(html), "9: 변경 파일 캐시 버전 2026102907");
+  ok(["designSleeveS.js", "sleeveSApply.js"].every(f => ver(f) === "2026102907") && (["ui.js", "sleeveCheckpoint.js"].every(f => ver(f) === "2026102911") && ["sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026103001")) && /css\/style\.css\?v=2026102907/.test(html), "9: 변경 파일 캐시 버전 2026102907");
   ok(SSA.S_KEYS.every(k => { const mm = html.match(new RegExp('id="inpSleeveS_' + k + '"[^>]*value="([^"]+)"')); return mm && Number(mm[1]) === SS.RULES.defaults[k]; }) && /id="rowSleeveS" hidden/.test(html), "9: Ⓢ 입력칸 2개 · 기본값 = 엔진 · 기본 숨김");
   ok(/function applySleeveS\(/.test(ui) && /keep !== "S" && window\.sleeveSApply/.test(ui) && /sleeveSOn\(project\)\) \{ window\.sleeveSApply\.rederive/.test(ui) && /sleeveROn\(project\) \|\| sleeveSOn\(project\)( \|\| sleeveTOn\(project\))?( \|\| sleeveUOn\(project\))?; \}/.test(ui), "9: ui 연결(적용 · 배타 · 재제도 · 라인 켜짐)");
 }

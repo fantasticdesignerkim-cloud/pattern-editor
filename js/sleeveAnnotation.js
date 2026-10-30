@@ -711,10 +711,12 @@
       "소매산 " + f2(m.cap.total) + " = 몸판 진동 " + f2(m.armhole.total) + " (여유분 줄임 없음 · 이세 " + sg(m.ease.total) + ")",
       "소맷부리: 뒤 = 뒤 소매 폭 × " + f2(cuf.ratio) + " · ● = 잘라 낸 분량 · 앞 = 앞 소매 폭 − ●(뒤와 같은 분량) → 밑선 앞뒤 " + f2(m.seams.underarm.back) + " / " + f2(m.seams.underarm.front),
       "남색 실선 = 재단선 · 청록 점선 = 기준선(소매 폭선 · 소매 밑 안내선 · 소맷부리선 — 재단선 아님) · ‖ | = 몸판과 맞춤"];
-    if (sym === "U" && m.lineage) body.splice(body.length - 1, 0, "책 P.51: 1/2 · 경사 ★ 8:1.3 / 8:0.5 · 차이 0.5 · 이세 0 / Ⓣ 승계: 소맷부리 뒤 폭 × 3/4 · 옆 다트 3 / 시안 관례: SP 직각 접속 · 진동 접점 위치");
+    if (sym === "U" && m.lineage) body.splice(body.length - 1, 0, "책 P.51: 1/2 · 경사 ★ 8:1.3 / 8:0.5 · 차이 0.5 · 이세 0 / Ⓣ 승계: 소맷부리 뒤 폭 × 3/4 · 옆 다트 3 / 시안 관례: 소매산 곡률 연속 한 곡선 · 진동 접점 위치");
     body.forEach(function (t, i) { add("block-" + i, { x: 0, y: bb.maxY }, 0, 56 + i * 12, "middle", t, i === 0 ? "title" : (i === body.length - 1 ? "note" : "label"), "block"); lines[lines.length - 1].block = i; });
     (g.construction || []).forEach(function (c) { bb.minX = Math.min(bb.minX, c.from.x, c.to.x); bb.maxX = Math.max(bb.maxX, c.from.x, c.to.x); bb.maxY = Math.max(bb.maxY, c.from.y, c.to.y); });
-    return { key: "sleeve", line: sym, title: title, lines: lines, dims: dims, leaders: leaders, zones: [], refs: refs, marks: marks, bbox: bb };
+    var model = { key: "sleeve", line: sym, title: title, lines: lines, dims: dims, leaders: leaders, zones: [], refs: refs, marks: marks, bbox: bb };
+    var dx = dolmanExtents(project), ko = shirtKeepOut(project, "sleeve", dx); if (ko) model.keepOutCm = ko;   // 한 장 소매 설명이 몸판(제도 표시 범위 포함)으로 넘치지 않게
+    return model;
   }
 
   // ── 화면 배치(표시 전용, 순수): 글자 상자가 겹치면 가까운 빈 곳으로 옮기고(리더선), 그래도 안 되면 번호 표식 + 아래 «번호 설명»으로 모은다.
@@ -739,14 +741,22 @@
     order.sort(function (a, b) { return prio(a) - prio(b); });
     var placed = (model.obstacles || []).slice(), tags = [], legend = [], leaders = [];   // obstacles = 이미 그려진 다른 글자 상자(화면 px, 배치 원점 기준) — 피해서 놓는다
     var boxesOf = function (g, sx, sy) { return groups[g].map(function (it) { return boxOf(it.at.x * s + it.dx + sx, it.at.y * s + it.dy + sy, it.anchor, it.text, fsOf(it.cls)); }); };
-    var free = function (bxs) { return bxs.every(function (b) { return placed.every(function (p) { return !hit(b, p); }); }); };
+    // keepOutCm(선택 · 셔츠 Ⓣ/Ⓤ 만 넘긴다): 다른 피스 자리(피스 좌표 cm) — 글자·번호 표식·리더선이 그 위에 놓이지 않게 한다. 없으면 이전과 같다.
+    var keep = (model.keepOutCm || []).map(function (b) { return { x0: b.minX * s - 3, x1: b.maxX * s + 3, y0: b.minY * s - 3, y1: b.maxY * s + 3 }; });
+    var free = function (bxs) { return bxs.every(function (b) { return placed.every(function (p) { return !hit(b, p); }) && keep.every(function (k) { return !hit(b, k); }); }); };
+    var leaderClear = function (it, sx, sy) {   // 리더선(기준점 → 옮긴 글자)이 다른 피스를 지나지 않는지(옮기지 않으면 리더선 없음)
+      if (!keep.length || Math.abs(sx) + Math.abs(sy) <= 6) return true;
+      var ax = it.at.x * s, ay = it.at.y * s, bx2 = ax + it.dx + sx, by2 = ay + it.dy + sy - 3;
+      for (var q = 0; q <= 24; q++) { var x = ax + (bx2 - ax) * q / 24, y = ay + (by2 - ay) * q / 24; for (var j = 0; j < keep.length; j++) if (x > keep[j].x0 && x < keep[j].x1 && y > keep[j].y0 && y < keep[j].y1) return false; }
+      return true;
+    };
     order.forEach(function (g) {
       var its = groups[g], h = Math.max.apply(null, its.map(function (i) { return fsOf(i.cls); })) + 2;
       var w = Math.max.apply(null, boxesOf(g, 0, 0).map(function (b) { return b.x1 - b.x0; })) + 4;
       var cands = [[0, 0]]; for (var k = 1; k <= 4; k++) cands.push([0, -k * h], [0, k * h]);
       cands.push([w, 0], [-w, 0], [w, -h], [-w, -h], [w, h], [-w, h], [0, -5 * h], [0, 5 * h]);
       var chosen = null;
-      for (var c = 0; c < cands.length && !chosen; c++) { var bxs = boxesOf(g, cands[c][0], cands[c][1]); if (free(bxs)) chosen = { sx: cands[c][0], sy: cands[c][1], bxs: bxs }; }
+      for (var c = 0; c < cands.length && !chosen; c++) { var bxs = boxesOf(g, cands[c][0], cands[c][1]); if (free(bxs) && leaderClear(its[0], cands[c][0], cands[c][1])) chosen = { sx: cands[c][0], sy: cands[c][1], bxs: bxs }; }
       if (chosen) {
         its.forEach(function (it, i) { it.fdx = it.dx + chosen.sx; it.fdy = it.dy + chosen.sy; });
         chosen.bxs.forEach(function (b) { placed.push(b); });
@@ -766,7 +776,26 @@
     var blocks = [], row = 0;
     var bx = num(model.blockX) ? model.blockX : 0;   // 설명 블록 가로 기준(기본 = 소매 중심선 x 0, 참고 도안 = 그 도안 중심)
     var nBl = model.lines.filter(function (l) { return l.block !== undefined; }).length;
+    // keepOutCm 가 있으면(셔츠 Ⓣ/Ⓤ) 설명 줄도 이 피스 띠 안에: 양쪽 경계가 있으면 띠 너비로 줄을 나눠 가운데 · 한쪽만 있으면 그 경계에 붙여 바깥으로 쓴다.
+    var laneL = -Infinity, laneR = Infinity;
+    keep.forEach(function (k) { if (k.x0 < -1e4 * s) laneL = Math.max(laneL, k.x1 + 4); else if (k.x1 > 1e4 * s) laneR = Math.min(laneR, k.x0 - 4); });   // 띠 경계(겹친 피스 상자는 경계가 아님)
+    // 바깥 피스(한쪽 경계만): 바깥쪽 열 너비를 BLOCK_W_PX 로 제한해 줄을 나눈다(설명이 화면 맞춤 범위를 끝없이 넓히지 않게).
+    if (keep.length && isFinite(laneR) && !isFinite(laneL)) laneL = laneR - Math.max(BLOCK_W_PX, laneR - bb.minX * s);
+    if (keep.length && isFinite(laneL) && !isFinite(laneR)) laneR = laneL + Math.max(BLOCK_W_PX, bb.maxX * s - laneL);
+    var wrapRow = function (text, cls) {
+      if (!(isFinite(laneL) && isFinite(laneR))) return [text];
+      var wmax = Math.max(40, laneR - laneL), f = fsOf(cls), parts = text.split(/(?= · | — | \/ | → |, )/), rows = [], cur = "";
+      parts.forEach(function (p) { var t = cur + p; if (cur && textW(t, f) > wmax) { rows.push(cur); cur = p.replace(/^ /, ""); } else cur = t; });
+      if (cur) rows.push(cur);
+      var out = []; rows.forEach(function (r) { while (textW(r, f) > wmax && r.length > 4) { var n = Math.max(2, Math.floor(r.length * wmax / textW(r, f))); out.push(r.slice(0, n)); r = r.slice(n); } out.push(r); });
+      return out;
+    };
     var addRow = function (id, text, cls) {   // blockAbove: 도안 위에 제목부터 아래로 쌓아 마지막 줄이 도안 위끝 16px 위
+      if (keep.length && !above) {
+        var an = "middle", xpx = isFinite(laneL) && isFinite(laneR) ? (laneL + laneR) / 2 : bx * s;
+        wrapRow(text, cls).forEach(function (t, i) { blocks.push({ id: id + (i ? "-" + i : ""), at: { x: xpx / s, y: bb.maxY }, dx: 0, dy: top + row * 12, anchor: an, text: t, cls: cls }); row++; });
+        return;
+      }
       if (above) blocks.push({ id: id, at: { x: bx, y: bb.minY }, dx: 0, dy: -16 - (nBl - 1 - row) * 12, anchor: "middle", text: text, cls: cls });
       else blocks.push({ id: id, at: { x: bx, y: bb.maxY }, dx: 0, dy: top + row * 12, anchor: "middle", text: text, cls: cls });
       row++;
@@ -968,8 +997,8 @@
   //   원래 몸판(원종이)은 기존 작업 그룹이 그대로 그린다 — 이 표시는 그 위에 «새로 그린 선»만 얹는다.
   function dolmanBodice(project) {
     var w = project && project.working, st = w && w.sleeveR;
-    if (w && w.sleeveU) return shirtBodice(w.sleeveU, "U");   // Ⓤ: Ⓣ 와 같은 표시 틀(P.51 «Ⓣ 와 같이»)
-    if (w && w.sleeveT) return shirtBodice(w.sleeveT);   // Ⓣ: 몸판 진동에 겹쳐 그린 셔츠 슬리브 반쪽(같은 표시 틀 — 재단선 상시 · 제도선·공정은 토글)
+    if (w && w.sleeveU) return shirtBodice(w.sleeveU, "U", project);   // Ⓤ: Ⓣ 와 같은 표시 틀(P.51 «Ⓣ 와 같이»)
+    if (w && w.sleeveT) return shirtBodice(w.sleeveT, "T", project);   // Ⓣ: 몸판 진동에 겹쳐 그린 셔츠 슬리브 반쪽(같은 표시 틀 — 재단선 상시 · 제도선·공정은 토글)
     if (w && w.sleeveS) st = { meta: w.sleeveS.rMeta, derivedBodice: w.sleeveS.derivedBodice, blocked: w.sleeveS.blocked };   // Ⓢ: 몸판 위 제도는 Ⓡ 와 같은 의미(Ⓢ 가 들고 있는 Ⓡ meta 읽기 전용)
     if (!st || st.blocked || !st.meta || !st.derivedBodice) return null;
     var out = {};
@@ -1064,16 +1093,43 @@
     return out;
   }
 
+  // 셔츠 Ⓣ/Ⓤ 설명 배치용 «다른 피스 몫»(표시 전용 · 피스 좌표 cm): 현재 배치(working.layout)에서 이웃 피스(외곽 ∪ 몸판 제도 범위)와의 간격 한가운데를 경계로,
+  //   그 너머 전체(세로 무한)를 이 피스의 설명이 쓰지 않는 자리로 돌려준다 → 피스마다 가로 띠가 나뉘어 글자·번호 표식·리더선·설명 줄이 이웃 피스나 이웃 설명과 겹치지 않는다.
+  //   글자는 화면 px 고정이라 작은 배율에서 이웃 피스로 넘쳤다(5b00d15 부터 있던 겹침 — 2026-10-30 보완). Ⓣ/Ⓤ 가 아니거나 배치 정보가 없으면 null(이전 배치 규칙 그대로).
+  var LANE_FAR = 1e5, BLOCK_W_PX = 260;   // 바깥 피스 설명 열 최소 너비(px)
+  function shirtKeepOut(project, pc, bodiceExt) {
+    var w = project && project.working, L = w && w.layout, DL = window.designLayout;
+    if (!w || !L || !DL || !DL.outlineBBoxOf || !(w.sleeveT || w.sleeveU) || !L[pc]) return null;
+    var area = function (k) {
+      var b = DL.outlineBBoxOf(w.geometry, k); if (!b || !L[k]) return null;
+      var e = bodiceExt && bodiceExt[k]; if (e) b = { minX: Math.min(b.minX, e.minX), minY: Math.min(b.minY, e.minY), maxX: Math.max(b.maxX, e.maxX), maxY: Math.max(b.maxY, e.maxY) };
+      var ddx = (L[k].dx || 0) - (L[pc].dx || 0), ddy = (L[k].dy || 0) - (L[pc].dy || 0);
+      return { minX: b.minX + ddx, minY: b.minY + ddy, maxX: b.maxX + ddx, maxY: b.maxY + ddy };
+    };
+    var me = area(pc); if (!me) return null;
+    var out = [];
+    ["back", "front", "sleeve"].forEach(function (k) {
+      if (k === pc) return; var o = area(k); if (!o) return;
+      if (o.minX >= me.maxX) out.push({ piece: k, side: "right", minX: (me.maxX + o.minX) / 2, maxX: LANE_FAR, minY: -LANE_FAR, maxY: LANE_FAR });
+      else if (o.maxX <= me.minX) out.push({ piece: k, side: "left", minX: -LANE_FAR, maxX: (o.maxX + me.minX) / 2, minY: -LANE_FAR, maxY: LANE_FAR });
+      else out.push({ piece: k, side: "overlap", minX: o.minX, maxX: o.maxX, minY: o.minY, maxY: o.maxY });   // 배치가 겹친 경우(수동 이동 등) — 그 피스 자리만 피한다
+    });
+    return out;
+  }
   // 소매 Ⓣ(셔츠 슬리브) 몸판 위 표시(표시 전용 · geometry·hash 무관 · 값은 working.sleeveT 엔진 meta — 재계산 없음):
   //   파생 몸판 재단선(앞 = AH 다트 → 옆 다트, 뒤 = 그대로) · 몸판 진동에 겹쳐 그린 소매 반쪽 제도선 · 제도 순서 번호(P.140–141 단계).
-  function shirtBodice(st, sym) {
+  function shirtBodice(st, sym, project) {
     if (!st || st.blocked || !st.meta || !st.derivedBodice) return null;
-    var m = st.meta, out = {};
+    var m = st.meta, out = {}, ext = {};
     ["back", "front"].forEach(function (pc) {
       var dl = m.draftLayer[pc];
       out[pc] = { cut: st.derivedBodice[pc].outline,
         draft: [dl.cap, dl.center, dl.shoulderExt, dl.slopeDrop, dl.width, dl.underarmGuide, dl.cuffLine, dl.underarm] };
-      out[pc].anno = shirtAnno(m, pc, segsBBox(out[pc].cut.concat(out[pc].draft)), sym || "T");
+      ext[pc] = segsBBox(out[pc].cut.concat(out[pc].draft));
+    });
+    ["back", "front"].forEach(function (pc) {
+      out[pc].anno = shirtAnno(m, pc, ext[pc], sym || "T");
+      var ko = shirtKeepOut(project, pc, ext); if (ko) out[pc].anno.keepOutCm = ko;
     });
     return out;
   }
@@ -1127,5 +1183,5 @@
     return { key: "dolman-" + pc, line: sym || "T", title: "", lines: lines, dims: [], leaders: leaders, zones: [], refs: refs, marks: marks, bbox: bb, blockX: (bb.minX + bb.maxX) / 2, blockTopPx: 52 };
   }
 
-  window.sleeveAnnotation = Object.freeze({ buildModel: buildModel, layout: layout, overhang: overhang, refModel: refModel, bodiceMarks: bodiceMarks, dolmanBodice: dolmanBodice, dolmanExtents: dolmanExtents });
+  window.sleeveAnnotation = Object.freeze({ buildModel: buildModel, layout: layout, overhang: overhang, refModel: refModel, bodiceMarks: bodiceMarks, dolmanBodice: dolmanBodice, dolmanExtents: dolmanExtents, shirtKeepOut: shirtKeepOut });
 })();
