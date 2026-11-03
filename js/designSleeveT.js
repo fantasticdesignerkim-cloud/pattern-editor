@@ -521,6 +521,7 @@
 
   window.designSleeveT = Object.freeze({ draftSleeveT: draftSleeveT, draftSleeveU: draftSleeveU, KEYS: KEYS,
     solver: Object.freeze({ signChanges: signChanges, rootVerdict: rootVerdict, settleAmplitudes: settleAmplitudes }),   // 순수 경계(엔진이 쓰는 그 함수 — 회귀가 직접 시험)
+    parts: Object.freeze({ moveFrontDart: moveFrontDart }),   // 소매 Ⓥ(P.142 1 — 같은 앞 AH 다트 → 옆 이동)가 읽기 전용으로 재사용 · Ⓣ/Ⓤ 결과 무변경
     RULES: Object.freeze({ defaults: DEFAULTS, bodicePresetId: "bunka-bodice-A" }),
     RULES_U: Object.freeze({ defaults: DEFAULTS_U, bodicePresetId: "bunka-bodice-A", lineage: VARIANT_U.lineage }) });
 })();
