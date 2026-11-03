@@ -232,6 +232,32 @@
         { key: "releaseHandleRatio", label: "뒤 해제 곡선 핸들 비(시안)", unit: "", defaultValue: 0.5 },
         { key: "shoulderFairCm", label: "다듬기 — 뒤 어깨 닫은 자리(시안)", unit: "cm", defaultValue: 2 },
         { key: "spFairCm", label: "다듬기 — SP(시안)", unit: "cm", defaultValue: 3 },
+        { key: "cuffFairCm", label: "다듬기 — 소맷부리 모서리(시안)", unit: "cm", defaultValue: 3 }] },
+    // Ⓦ(P.53 «몸판에 소매 달림선을 그리고 직접 제도한다(소매산 높이 = 평균 어깨 길이의 1/2)» · P.137 · P.142–143 · 맞댄다 P.157 · 닫는다 P.160):
+    //   «Ⓥ 와 같이 제도» — 몸판 쪽 공정·파생 몸판은 Ⓥ 와 같다. 소매만: ◉ × 1/2 · 경사 8 ⟂ 뒤 1.3 / 앞 2 · 앞뒤 중심선을 맞대 **한 장 소매** · 목 ~ SP = 열린 어깨 다트(끝 = SP) ·
+    //   SP 다듬기 없음. 폭 19.5 / 19.1 = 몸판 곡선 반전 기준 시안(B83 · 소매길이 54 — 일반 공식 아님) · 나머지 시안 값은 Ⓥ 확정값(docs/book/P053.md).
+    { id: "bunka-sleeve-W", familyId: "raglan-sleeve", symbol: "W",
+      method: "raglan-sleeve-drafted-on-bodice-A(one-piece, butted center, shoulder dart)", methodPage: 53,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "slopeRunCm", label: "경사 안내(어깨선 연장)", unit: "cm", defaultValue: 8 },
+        { key: "backSlopeDropCm", label: "경사 직각(뒤)", unit: "cm", defaultValue: 1.3 },
+        { key: "frontSlopeDropCm", label: "경사 직각(앞)", unit: "cm", defaultValue: 2 },
+        { key: "capHeightRatio", label: "소매산 높이(평균 어깨 길이 ×)", unit: "", defaultValue: 0.5 },
+        { key: "sideDartDropCm", label: "옆 다트 위치(진동 아랫점 아래)", unit: "cm", defaultValue: 3 },
+        { key: "frontBulgeCm", label: "앞 달림선 부풂(안내선에서 SP 쪽)", unit: "cm", defaultValue: 0.6 },
+        { key: "cuffRatio", label: "소맷부리(뒤 소매 폭 ×)", unit: "", defaultValue: 0.75 },
+        { key: "backStarAboveMCm", label: "뒤 ★ 위치(M 위 · 시안)", unit: "cm", defaultValue: 2 },
+        { key: "frontStarAboveMCm", label: "앞 ★ 위치(M 위 · 시안)", unit: "cm", defaultValue: 3.5 },
+        { key: "backLowerJoinCm", label: "뒤 진동 합류(진동 아랫점 위 · 시안)", unit: "cm", defaultValue: 1 },
+        { key: "frontLowerJoinCm", label: "앞 진동 합류(진동 아랫점 위 · 시안)", unit: "cm", defaultValue: 2 },
+        { key: "lowerHandleRatio", label: "몸판 아래 곡선 핸들(현 × · 시안)", unit: "", defaultValue: 0.45 },
+        { key: "backUnderarmWidthCm", label: "뒤 소매 아랫점(폭선 위 중심에서 · 시안 — 반전 기준)", unit: "cm", defaultValue: 19.5 },
+        { key: "frontUnderarmWidthCm", label: "앞 소매 아랫점(폭선 위 중심에서 · 시안 — 반전 기준)", unit: "cm", defaultValue: 19.1 },
+        { key: "backUnderHandleRatio", label: "뒤 소매 아래 곡선 핸들 비(시안)", unit: "", defaultValue: 1.4 },
+        { key: "frontUnderHandleRatio", label: "앞 소매 아래 곡선 핸들 비(시안)", unit: "", defaultValue: 0.35 },
+        { key: "releaseBeyondApCm", label: "뒤 해제 곡선 끝(Ap 너머 · 시안)", unit: "cm", defaultValue: 4 },
+        { key: "releaseHandleRatio", label: "뒤 해제 곡선 핸들 비(시안)", unit: "", defaultValue: 0.5 },
+        { key: "shoulderFairCm", label: "다듬기 — 뒤 어깨 닫은 자리(시안)", unit: "cm", defaultValue: 2 },
         { key: "cuffFairCm", label: "다듬기 — 소맷부리 모서리(시안)", unit: "cm", defaultValue: 3 }] }
   ];
 
@@ -326,10 +352,12 @@
           availability: "available", presetId: "bunka-sleeve-U", note: null }
       ] },
     { id: "raglan-sleeve", order: 9, label: "래글런 소매", symbol: "V", page: 52, availability: "available", note: null,
-      familyNote: "Ⓥ — 몸판 Ⓐ 에 소매 달림선(목 2/3 → 진동 가장 안쪽 ⟂ BL 의 뒤 중간점 / 앞 2/3)을 그리고 직접 제도한다(P.52 · 제도 방법 P.142–143): 앞 AH 다트 → 옆 · 경사 8 ⟂ 뒤 3.4 / 앞 4 · 소매산 높이 = 평균 어깨 길이 × 3/4 · 소매 달림선은 몸판과 같은 치수 · 소맷부리 = 뒤 소매 폭 × 3/4 · 뒤 어깨 다트는 소매 쪽에서 닫는다(P.160). 소매 중심선 = 솔기 → 소매 두 장(뒤·앞). 김님 확정 시안(2026-11-01 · 몸판 Ⓐ 만).",
+      familyNote: "Ⓥ — 몸판 Ⓐ 에 소매 달림선(목 2/3 → 진동 가장 안쪽 ⟂ BL 의 뒤 중간점 / 앞 2/3)을 그리고 직접 제도한다(P.52 · 제도 방법 P.142–143): 앞 AH 다트 → 옆 · 경사 8 ⟂ 뒤 3.4 / 앞 4 · 소매산 높이 = 평균 어깨 길이 × 3/4 · 소매 달림선은 몸판과 같은 치수 · 소맷부리 = 뒤 소매 폭 × 3/4 · 뒤 어깨 다트는 소매 쪽에서 닫는다(P.160). 소매 중심선 = 솔기 → 소매 두 장(뒤·앞). 김님 확정 시안(2026-11-01 · 몸판 Ⓐ 만). Ⓦ — Ⓥ 와 같이 제도(P.53) · 소매산 높이 × 1/2 · 경사 뒤 1.3 / 앞 2 · 앞뒤 중심선을 맞대 한 장 소매(P.157) · 목 ~ SP = 어깨 다트(끝 = SP) · 폭 19.5 / 19.1 = 몸판 곡선 반전 기준 시안(2026-11-03 · 몸판 Ⓐ 만).",
       variants: [
         { id: "bunka-sleeve-V", symbol: "V", label: "V · 몸판 Ⓐ 에 소매 달림선을 그리고 직접 제도 · 소매산 높이 = 평균 어깨 길이 × 3/4 · 두 장 소매(중심 솔기 · 몸판 Ⓐ 만)", page: 52, methodPage: 52,
-          availability: "available", presetId: "bunka-sleeve-V", note: null }
+          availability: "available", presetId: "bunka-sleeve-V", note: null },
+        { id: "bunka-sleeve-W", symbol: "W", label: "W · Ⓥ 와 같이 · 소매산 높이 = 평균 어깨 길이 × 1/2 · 경사 뒤 1.3 / 앞 2 · 한 장 소매(앞뒤 맞댐 · 어깨 다트 · 몸판 Ⓐ 만, 시안)", page: 53, methodPage: 53,
+          availability: "available", presetId: "bunka-sleeve-W", note: null }
       ] },
     pendingFamily("kimono-sleeve", 10, "기모노 소매", "X", 54)
   ];
