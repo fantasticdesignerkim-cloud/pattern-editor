@@ -423,6 +423,8 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .sleeve-anno-side{font-size:13px;font-weight:700;fill:#0E7490}
 .sleeve-anno-edge,.sleeve-anno-ref{fill:#475569}
 .sleeve-anno-note{font-size:8.5px;fill:#64748B}
+/* 소매 Ⓥ 설정값 묶음 제목(책 수치 / 이번 확정 시안 설정값) — 입력칸 아님 */
+.sleeve-v-group span{font-size:11px;font-weight:600;color:#475569}
 /* 소매 라인(Ⓐ/Ⓑ/Ⓒ)의 construction(중심선·EL 선·절개축 등)은 설명용 — 재단 외곽(남색 실선)과 구분되는 청록 점선. 기본 소매에는 적용하지 않는다. */
 .design-working [data-sleeve-line] [data-geometry-role="construction"],
 .design-working[data-sleeve-line] [data-geometry-role="construction"]{stroke:#0E7490;opacity:.7;stroke-dasharray:4 3}

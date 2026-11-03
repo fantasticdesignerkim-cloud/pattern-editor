@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026102907">
+<link rel="stylesheet" href="css/style.css?v=2026110101">
 </head>
 <body>
 
@@ -331,6 +331,32 @@
             <div class="row"><label for="inpSleeveU_frontStar1">앞 진동 접점1 위치 (진동 호 비율)</label><input id="inpSleeveU_frontStar1" type="number" step="0.01" value="0.44" title="Ⓤ 앞 위쪽 접점(Ⓣ 구현 관례 승계 · 책 수치 아님)"></div>
             <div class="row"><label for="inpSleeveU_frontStar2">앞 진동 접점2 위치 (진동 호 비율)</label><input id="inpSleeveU_frontStar2" type="number" step="0.01" value="0.72" title="Ⓤ 앞 아래쪽 접점(Ⓣ 구현 관례 승계 · 책 수치 아님)"></div>
           </div>
+          <!-- 소매 Ⓥ(P.52 래글런) 전용 설정값: 책 수치 7 + 이번 확정 시안 설정값 14(김님 2026-11-01 확정 그림 — 일반 공식 아님). 소매길이는 공용 칸. -->
+          <div id="rowSleeveV" hidden>
+            <div class="row sleeve-v-group"><span>책 수치 (P.52 · P.142–143)</span></div>
+            <div class="row"><label for="inpSleeveV_slopeRunCm">경사 안내 (어깨선 연장, cm)</label><input id="inpSleeveV_slopeRunCm" type="number" step="0.1" value="8" title="Ⓥ 몸판 어깨선을 SP 에서 연장한 안내선 위 이 거리에서 직각을 세운다(책 P.52 8 — 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_backSlopeDropCm">경사 직각 뒤 (cm)</label><input id="inpSleeveV_backSlopeDropCm" type="number" step="0.1" value="3.4" title="Ⓥ 뒤 소매 경사 = 안내선 8 에서 직각으로 이 거리(책 P.52 3.4 — 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_frontSlopeDropCm">경사 직각 앞 (cm)</label><input id="inpSleeveV_frontSlopeDropCm" type="number" step="0.1" value="4" title="Ⓥ 앞 소매 경사 = 안내선 8 에서 직각으로 이 거리(책 P.52 4 — 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_capHeightRatio">소매산 높이 (평균 어깨 길이 ×)</label><input id="inpSleeveV_capHeightRatio" type="number" step="0.05" value="0.75" title="Ⓥ 소매산 높이 ◉ = 평균 어깨 길이(P.137, 다트를 닫은 봉제 상태) × 이 값(책 P.52 3/4 — 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_sideDartDropCm">옆 다트 위치 (진동 아랫점 아래, cm)</label><input id="inpSleeveV_sideDartDropCm" type="number" step="0.1" value="3" title="Ⓥ 앞 AH 다트를 닫아 옆선의 이 위치로 옮긴다(책 P.142 «치수는 적당하게» 3 — 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_frontBulgeCm">앞 달림선 부풂 (cm)</label><input id="inpSleeveV_frontBulgeCm" type="number" step="0.1" value="0.6" title="Ⓥ 앞 소매 달림선이 안내선에서 SP 쪽으로 부푸는 최대 거리(책 P.52 0.6 — 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_cuffRatio">소맷부리 (뒤 소매 폭 ×)</label><input id="inpSleeveV_cuffRatio" type="number" step="0.05" value="0.75" title="Ⓥ 뒤 소맷부리 = 뒤 소매 폭 × 이 값(책 P.143 3/4), 앞은 뒤와 같은 분량을 자른다"></div>
+            <div class="row sleeve-v-group"><span>이번 확정 시안 설정값 (일반 공식 아님)</span></div>
+            <div class="row"><label for="inpSleeveV_backStarAboveMCm">뒤 ★ 위치 (M 위, cm)</label><input id="inpSleeveV_backStarAboveMCm" type="number" step="0.1" value="2" title="Ⓥ 소매 달림선이 몸판 곡선을 반전하기 시작하는 점 — M 에서 위로 달림선 호 길이(책 «적당히» · 이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_frontStarAboveMCm">앞 ★ 위치 (M 위, cm)</label><input id="inpSleeveV_frontStarAboveMCm" type="number" step="0.1" value="3.5" title="Ⓥ 앞 ★ — M 에서 위로 달림선 호 길이(이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_backLowerJoinCm">뒤 진동 합류 (진동 아랫점 위, cm)</label><input id="inpSleeveV_backLowerJoinCm" type="number" step="0.1" value="1" title="Ⓥ 몸판 달림선 아래 곡선이 원래 진동선에 접선으로 합류하는 위치(이번 확정 시안 설정값 · 종이 밖이면 거부)"></div>
+            <div class="row"><label for="inpSleeveV_frontLowerJoinCm">앞 진동 합류 (진동 아랫점 위, cm)</label><input id="inpSleeveV_frontLowerJoinCm" type="number" step="0.1" value="2" title="Ⓥ 앞 몸판 달림선 아래 곡선의 진동 합류 위치(이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_lowerHandleRatio">몸판 아래 곡선 핸들 (현 ×)</label><input id="inpSleeveV_lowerHandleRatio" type="number" step="0.05" value="0.45" title="Ⓥ M → 진동 합류 곡선의 핸들 길이 비(이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_backUnderarmWidthCm">뒤 소매 아랫점 (폭선 위 중심에서, cm)</label><input id="inpSleeveV_backUnderarmWidthCm" type="number" step="0.05" value="16.75" title="Ⓥ 뒤 소매 폭 — 소매 폭선 위 소매 아랫점 위치(책 «소매 아랫점 위치를 변경해서 조정» · 이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_frontUnderarmWidthCm">앞 소매 아랫점 (폭선 위 중심에서, cm)</label><input id="inpSleeveV_frontUnderarmWidthCm" type="number" step="0.05" value="16.25" title="Ⓥ 앞 소매 폭 — 소매 폭선 위 소매 아랫점 위치(이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_backUnderHandleRatio">뒤 소매 아래 곡선 핸들 비</label><input id="inpSleeveV_backUnderHandleRatio" type="number" step="0.05" value="1.4" title="Ⓥ 뒤 소매 아래 곡선(★ → 소매 아랫점)의 앞·뒤 핸들 비(이번 확정 시안 설정값 · 길이는 몸판과 같게 자동)"></div>
+            <div class="row"><label for="inpSleeveV_frontUnderHandleRatio">앞 소매 아래 곡선 핸들 비</label><input id="inpSleeveV_frontUnderHandleRatio" type="number" step="0.05" value="0.35" title="Ⓥ 앞 소매 아래 곡선의 핸들 비(이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_releaseBeyondApCm">뒤 해제 곡선 끝 (Ap 너머, cm)</label><input id="inpSleeveV_releaseBeyondApCm" type="number" step="0.1" value="4" title="Ⓥ 뒤 다트를 닫은 소매 목 쪽 꺾임을 푸는 곡선이 안내선에 접하는 점 — Ap 에서 이 거리(이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_releaseHandleRatio">뒤 해제 곡선 핸들 비</label><input id="inpSleeveV_releaseHandleRatio" type="number" step="0.05" value="0.5" title="Ⓥ 해제 곡선 핸들 비(이번 확정 시안 설정값 · 길이 = 원래 경로)"></div>
+            <div class="row"><label for="inpSleeveV_shoulderFairCm">다듬기 — 뒤 어깨 닫은 자리 (cm)</label><input id="inpSleeveV_shoulderFairCm" type="number" step="0.1" value="2" title="Ⓥ 뒤 소매 어깨선의 닫은 다트 자리 꺾임을 다듬는 폭(양쪽 · 이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_spFairCm">다듬기 — SP (cm)</label><input id="inpSleeveV_spFairCm" type="number" step="0.1" value="3" title="Ⓥ SP 가 각지지 않도록 다듬는 폭(책 P.143 ⑦ · 폭은 이번 확정 시안 설정값)"></div>
+            <div class="row"><label for="inpSleeveV_cuffFairCm">다듬기 — 소맷부리 모서리 (cm)</label><input id="inpSleeveV_cuffFairCm" type="number" step="0.1" value="3" title="Ⓥ 소맷부리가 소매 밑선과 직각으로 만나도록 모서리 쪽을 다듬는 폭(이번 확정 시안 설정값)"></div>
+          </div>
           <!-- 소매 Ⓟ(P.48) 전용 입력: 플레어 계수(× Ⓐ 소매 폭) — 책 기본 0.7(수정 가능 설정값). 틈 비율 1:2:4:2:1 은 자동. 상한은 엔진 수치 가드가 판정한다. -->
           <div class="row" id="rowSleevePFlare" hidden><label for="inpSleevePFlare">플레어 계수 (× 소매 폭)</label><input id="inpSleevePFlare" type="number" min="0.05" step="0.05" value="0.7" title="Ⓟ 플레어 분량 ∅ = Ⓐ 소매 폭 × 계수(책 기본 0.7 — 수정 가능)"></div>
           <!-- 소매 Ⓞ(P.47 하단) 전용 입력: 안쪽 절개(중심에서 좌우 각 — 도해 «2.5» 는 가운데 띠 폭) · 절개 간격 · 벌림(틈마다) · 소맷부리 박기 끝 — 책 기본 설정값(수정 가능). -->
@@ -518,7 +544,7 @@
 <!-- 페플럼 제작 정보 표시 모델(순수·표시 전용): window.peplumAnnotation. 형상·hash·hit 무관. -->
 <script src="js/peplumAnnotation.js?v=2026100404"></script>
 <!-- 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시 모델(순수·표시 전용): window.sleeveAnnotation. 형상·hash·완료본·hit 무관. -->
-<script src="js/sleeveAnnotation.js?v=2026103001"></script>
+<script src="js/sleeveAnnotation.js?v=2026110101"></script>
 <script src="js/designLayout.js?v=2026102904"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026091620"></script>
@@ -538,10 +564,10 @@
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
 <script src="js/sleeveMeasure.js?v=2026082011"></script>
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
-<script src="js/sleeveCheckpoint.js?v=2026102911"></script>
+<script src="js/sleeveCheckpoint.js?v=2026110101"></script>
 <!-- 소매 Ⓐ(P.137–139 타입 4): window.designSleeveA 엔진 코어 · window.sleevePresets 카탈로그 · window.sleeveAApply 상태 연결(전부 순수·DOM 미접근). -->
 <script src="js/designSleeveA.js?v=2026102802"></script>
-<script src="js/sleevePresets.js?v=2026103001"></script>
+<script src="js/sleevePresets.js?v=2026110101"></script>
 <script src="js/sleeveAApply.js?v=2026102802"></script>
 <!-- 소매 Ⓑ(P.41 타이트): window.designSleeveB 엔진 코어 · window.sleeveBApply 상태 연결(순수·DOM 미접근). Ⓐ 모듈 뒤에 로드. -->
 <script src="js/designSleeveB.js?v=2026100601"></script>
@@ -582,10 +608,13 @@
 <script src="js/designSleeveS.js?v=2026102907"></script>
 <script src="js/sleeveSApply.js?v=2026102907"></script>
 <!-- 소매 Ⓣ(P.50 셔츠 슬리브 — 몸판 Ⓐ 진동에 직접 제도, 시안): window.designSleeveT 엔진(순수) · window.sleeveTApply 상태 연결. 게이트는 designSleeveR · 높이 측정은 designSleeveA 를 쓴다. -->
-<script src="js/designSleeveT.js?v=2026103001"></script>
+<script src="js/designSleeveT.js?v=2026110101"></script>
 <script src="js/sleeveTApply.js?v=2026103001"></script>
 <!-- 소매 Ⓤ(P.51 «Ⓣ 와 같이», 시안): 엔진 = designSleeveT.draftSleeveU(같은 기하 · Ⓤ 기본값) · window.sleeveUApply 상태 연결. -->
 <script src="js/sleeveUApply.js?v=2026103001"></script>
+<!-- 소매 Ⓥ(P.52 래글런, 김님 확정 시안): 엔진 = designSleeveV.draftSleeveV(앞 AH 다트 이동만 designSleeveT.parts 재사용) · window.sleeveVApply 상태 연결. -->
+<script src="js/designSleeveV.js?v=2026110101"></script>
+<script src="js/sleeveVApply.js?v=2026110101"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
 <script src="js/designCollar.js?v=2026092520"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
@@ -600,7 +629,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026102911"></script>
+<script src="js/ui.js?v=2026110101"></script>
 
 </body>
 </html>
