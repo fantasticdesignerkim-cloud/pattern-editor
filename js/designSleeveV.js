@@ -123,7 +123,9 @@
 
   // ── 닫힌 점열 검사 ──
   function crossSign(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
-  function segCross(a, b, c, d) { var d1 = crossSign(c, d, a), d2 = crossSign(c, d, b), d3 = crossSign(a, b, c), d4 = crossSign(a, b, d); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)); }
+  // 진짜 교차만(부호가 허용오차 너머로 갈림) — 같은 직선 위 두 토막(공선)의 부동소수 잡음을 교차로 보지 않는다(Ⓦ 수치 소매길이 66·70 오판 수정)
+  var CROSS_EPS = 1e-9;
+  function segCross(a, b, c, d) { var d1 = crossSign(c, d, a), d2 = crossSign(c, d, b), d3 = crossSign(a, b, c), d4 = crossSign(a, b, d), e = CROSS_EPS; return ((d1 > e && d2 < -e) || (d1 < -e && d2 > e)) && ((d3 > e && d4 < -e) || (d3 < -e && d4 > e)); }
   function loopSelfIntersects(loop) {   // 마지막 = 처음
     var n = loop.length;
     for (var i = 0; i < n - 1; i++) for (var j = i + 2; j < n - 1; j++) {
@@ -262,7 +264,9 @@
   }
   function cornerDeg(prev, at, next) { return deg(Math.abs(angOf(sub(prev, at), sub(next, at)))); }   // 내부각(°)
 
-  function draftSleeveV(bodice, aGeometry, params) {
+  // opts(Ⓦ 전용 · 생략하면 Ⓥ 그대로): spCorner "keep" = SP 모서리를 다듬지 않는다(SP = 어깨 다트 끝 — P.53) · pieceGapCm 0 = 두 장을 중심선에서 맞댄 자리에 둔다.
+  function draftSleeveV(bodice, aGeometry, params, opts) {
+    var spKeep = !!(opts && opts.spCorner === "keep"), GAP = opts && opts.pieceGapCm === 0 ? 0 : PIECE_GAP_CM;
     var SA = window.designSleeveA, SR = window.designSleeveR, ST = window.designSleeveT;
     if (!SA || !SA.readBodiceArmhole || !SR || !SR.gateBodiceA || !ST || !ST.parts || !ST.parts.moveFrontDart) return fail("no-module");
     var p = {}, bad = [];
@@ -321,10 +325,12 @@
     var Dm = mid(L1r, bb.L2);
     var chkFair = function (pts, corners) { for (var i = 1; i < pts.length - 1; i++) { var c = corners[i]; if (!c) continue; var prevRoom = dist(pts[i - 1], pts[i]) - (corners[i - 1] || 0), nextRoom = dist(pts[i], pts[i + 1]) - (corners[i + 1] || 0); if (!(c < prevRoom && c < nextRoom)) return false; } return true; };
     var topPtsB = [SNPr, Dm, bb.SP, FB.E], topCB = { 1: p.shoulderFairCm, 2: p.spFairCm }, topPtsF = [bf.SNP, bf.SP, FF.E], topCF = { 1: p.spFairCm };
+    if (spKeep) { topCB = { 1: p.shoulderFairCm }; topCF = {}; }
     if (!chkFair(topPtsB, topCB) || !chkFair(topPtsF, topCF)) return fail("fair-too-wide");
     var CB = add(FB.E, mul(FB.n, p.backUnderarmWidthCm - cut)), CF = add(FF.E, mul(FF.n, p.frontUnderarmWidthCm - cut));
     if (!(p.cuffFairCm < dist(FB.E, CB) && p.cuffFairCm < dist(FF.E, CF))) return fail("fair-too-wide", { cuff: true });
     var topB = fairPolyline(topPtsB, topCB), topF = fairPolyline(topPtsF, topCF);
+    if (spKeep) { topB = fairPolyline(topPtsB.slice(0, 3), topCB).concat([lineQ(bb.SP, FB.E)]); topF = [lineQ(bf.SNP, bf.SP), lineQ(bf.SP, FF.E)]; }   // SP 를 마디로 남긴다(다트 끝)
     var cuffB = cuffTrue(FB.E, CB, uB.Ustar, p.cuffFairCm), cuffF = cuffTrue(FF.E, CF, uF.Ustar, p.cuffFairCm);
 
     // ── 조각 외곽(몸판 좌표 · 반시계/시계 무관 — 닫힌 순서) ──
@@ -350,8 +356,8 @@
     if (loopSelfIntersects(lsB.loop) || loopSelfIntersects(lsF.loop)) return fail("self-intersection");
 
     // ── 소매 좌표(두 장 · 중심 솔기 세로): 뒤 Tb(q) = (−n·v − gap/2, u·v) · 앞 Tf(q) = (n·v + gap/2, u·v) — 회전(거울 아님) ──
-    var Tb = function (q) { var v = sub(q, bb.SP); return { x: -dot(FB.n, v) - PIECE_GAP_CM / 2, y: dot(FB.u, v) }; };
-    var Tf = function (q) { var v = sub(q, bf.SP); return { x: dot(FF.n, v) + PIECE_GAP_CM / 2, y: dot(FF.u, v) }; };
+    var Tb = function (q) { var v = sub(q, bb.SP); return { x: -dot(FB.n, v) - GAP / 2, y: dot(FB.u, v) }; };
+    var Tf = function (q) { var v = sub(q, bf.SP); return { x: dot(FF.n, v) + GAP / 2, y: dot(FF.u, v) }; };
     if (!(cross(FB.u, FB.n) > 0.999999) || !(cross(FF.n, FF.u) > 0.999999)) return fail("sleeve-mirror", { why: "sleeve placement must be a rotation" });
     var mapSeg = function (s, T) { var o = clone(s); if (o.kind === "line") { o.from = T(o.from); o.to = T(o.to); } else o.commands.forEach(function (c) { c.points = c.points.map(T); }); return o; };
     var outline = sleeveBodice.back.map(function (s) { return mapSeg(s, Tb); }).concat(sleeveBodice.front.map(function (s) { return mapSeg(s, Tf); }));
@@ -385,12 +391,12 @@
     };
     var out = {
       ok: true,
-      geometry: { outline: outline, construction: construction, pieces: ["back", "front"], centerSeam: true, layoutGapCm: PIECE_GAP_CM },
+      geometry: { outline: outline, construction: construction, pieces: ["back", "front"], centerSeam: true, layoutGapCm: GAP },
       derivedBodice: derivedBodice,
       meta: {
         rule: "pattern-school-p52-raglan-sleeve-V(2026-11-01 confirmed draft)",
         settings: { inputs: clone(p), defaults: clone(DEFAULTS), book: Object.keys(BOOK), draftChoices: Object.keys(DRAFT),
-          constants: { fairHandle: FAIR_HANDLE, cuffHandle: CUFF_HANDLE, pieceGapCm: PIECE_GAP_CM } },
+          constants: { fairHandle: FAIR_HANDLE, cuffHandle: CUFF_HANDLE, pieceGapCm: GAP } },
         gate: g,
         sleeveLengthCm: p.sleeveLengthCm,
         capHeight: { averageShoulderCm: avg, ratio: p.capHeightRatio, cm: capH, shoulderHeightsCm: { back: rb.back.heightCm, front: rb.front.heightCm },
@@ -432,7 +438,7 @@
           backShoulderKinkBeforeDeg: deg(angOf(sub(L1r, SNPr), sub(bb.SP, bb.L2))),
           note: "봉제 상태 연결각 — 목 꺾임 0 · 겨드랑이 180 · 소맷부리 180 이면 이어짐(실측 기록)"
         },
-        fairing: { shoulderCm: p.shoulderFairCm, spCm: p.spFairCm, cuffCm: p.cuffFairCm, handle: FAIR_HANDLE, cuffHandle: CUFF_HANDLE,
+        fairing: { shoulderCm: p.shoulderFairCm, spCm: spKeep ? null : p.spFairCm, cuffCm: p.cuffFairCm, handle: FAIR_HANDLE, cuffHandle: CUFF_HANDLE,
           before: { centerBackCm: dist(SNPr, L1r) + dist(L1r, bb.L2) + dist(bb.L2, bb.SP) + dist(bb.SP, FB.E), centerBackTrueCm: dist(SNPr, Dm) + dist(Dm, bb.SP) + dist(bb.SP, FB.E), centerFrontCm: dist(bf.SNP, bf.SP) + dist(bf.SP, FF.E),
             cuffBackCm: dist(FB.E, CB), cuffFrontCm: dist(FF.E, CF) } },
         notches: { back: { neckCm: nB, mark: "‖" }, front: { neckCm: nF, mark: "|" }, note: "맞춤 ① = 목에서 같은 호 길이(몸판·소매) · ★ = 몸판/소매 곡선이 갈리는 점" },
