@@ -98,8 +98,8 @@ function originalOf(bodice) {
 // ── 1. 카탈로그 ──
 {
   const f = SP.family("kimono-sleeve"), r = SP.get("bunka-sleeve-Y");
-  ok(f && f.availability === "available" && f.variants.map(v => v.symbol).join() === "X,Y" && SP.resolve("kimono-sleeve", "bunka-sleeve-Y").ok, "1: 기모노 family = Ⓧ·Ⓨ 실행 가능");
-  ok(!SP.get("bunka-sleeve-Z"), "1: Ⓩ(P.55 아래)는 레코드 없음 — 이번 범위 밖");
+  ok(f && f.availability === "available" && f.variants.map(v => v.symbol).join() === "X,Y,Z" && SP.resolve("kimono-sleeve", "bunka-sleeve-Y").ok, "1: 기모노 family = Ⓧ·Ⓨ·Ⓩ 실행 가능(Ⓩ 2026-11-04 추가)");
+  ok(SP.resolve("kimono-sleeve", "bunka-sleeve-Z").ok && SP.get("bunka-sleeve-Z").method !== SP.get("bunka-sleeve-Y").method, "1: Ⓩ(P.55 아래)는 별도 레코드 — Ⓨ 와 다른 공정(옆선에 연결)");
   ok(r && r.methodPage === 55 && J(r.inputs.map(i => i.key)) === J(SY.KEYS) && J(SYA.keys()) === J(SY.KEYS) && r.inputs.every(i => i.defaultValue === SY.RULES.defaults[i.key]), "1: 레코드 입력 = 엔진 키 · 기본값 = 엔진 기본값(소매길이 5 포함)");
   ok(J(SY.RULES.book) === J({ sleeveLengthCm: 5, dropCm: 0.5 }) && J(SY.RULES.convention) === J({ sideDartDropCm: 3, joinFromBottomCm: 3 }), "1: 책 수치(5 · 0.5)와 구현 관례(옆 다트 3 · 합류점 3) 구분");
 }
@@ -309,11 +309,11 @@ const P = projectWithBodice(A_ID); PROJECT = P;
   const ver = f => { const m = new RegExp("js/" + f.replace(".", "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
   ok(/function sleeveYOn\(project\)/.test(ui) && /sleeveYOn\(project\) \? "Ⓨ"/.test(ui) && /id === "bunka-sleeve-Y" \? "Ⓨ"/.test(ui) && /getElementById\("rowSleeveY"\)/.test(ui) && /"inpSleeveY_"/.test(ui) && /isY \? "Ⓨ"/.test(ui), "10: 기호 · 칸 표시 · 입력칸 동기화");
   ok(/keep !== "Y" && window\.sleeveYApply\) window\.sleeveYApply\.clear\(project\)/.test(ui) && /clearOtherSleeveLines\(project, "Y"\)/.test(ui) && /sleeveYOn\(project\)\) \{ window\.sleeveYApply\.rederive\(project\)/.test(ui), "10: 라인 배타 해제 · 몸판 변경 시 재제도");
-  ok(/const inputsOk = sleeveYOn\(project\) \? readNum\("inpSleeveLength", -Infinity, Infinity\)\.valid :/.test(ui), "10: Ⓨ 는 공용 소매길이 10–90 으로 적용 버튼을 잠그지 않음(소매길이 5 · 범위는 엔진 사유)");
+  ok(/const inputsOk = \(sleeveYOn\(project\) \|\| sleeveZOn\(project\)\) \? readNum\("inpSleeveLength", -Infinity, Infinity\)\.valid :/.test(ui), "10: Ⓨ 는 공용 소매길이 10–90 으로 적용 버튼을 잠그지 않음(소매길이 5 · 범위는 엔진 사유)");
   ok(SY.KEYS.filter(k => k !== "sleeveLengthCm").every(k => html.indexOf('id="inpSleeveY_' + k + '"') >= 0) && html.indexOf('id="rowSleeveY" hidden') >= 0 && /책 수치 \(P\.55/.test(html) && /구현 관례 \(책에 수치 없음/.test(html), "10: index.html 입력칸 3개 + 행(rowSleeveY) · 책/관례 구역 구분");
   const iY = html.indexOf('src="js/designSleeveY.js?v='), iYA = html.indexOf('src="js/sleeveYApply.js?v='), iUI = html.indexOf('src="js/ui.js?v='), iT = html.indexOf('src="js/designSleeveT.js?v='), iR = html.indexOf('src="js/sleeveRApply.js?v=');
   ok(iY > iT && iY > iR && iYA > iY && iYA < iUI, "10: 스크립트 순서(Ⓡ·Ⓣ 뒤 · ui 앞)");
-  ok(["designSleeveY.js", "sleeveYApply.js", "ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110402") && ["designSleeveX.js", "sleeveXApply.js"].every(f => ver(f) === "2026110401"), "10: 변경 파일 캐시 버전 2026110402(Ⓧ 파일은 그대로)");
+  ok(["designSleeveY.js", "sleeveYApply.js"].every(f => ver(f) === "2026110402") && ["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110403") && ["designSleeveX.js", "sleeveXApply.js"].every(f => ver(f) === "2026110401"), "10: 변경 파일 캐시 버전 2026110402(Ⓧ 파일은 그대로) · Ⓩ 연결로 공용 파일 2026110403(Ⓨ 엔진·연결 파일은 그대로)");
   ok(!/bodiceResult\s*=/.test(apply) && !/sleeveResult\s*=/.test(apply) && !/localStorage|document\./.test(apply) && !/window\.sleeve[A-XZ]Apply\.(apply|clear)/.test(apply), "10: sleeveYApply 는 bodiceResult·sleeveResult 를 쓰지 않고 DOM·storage 미접근 · 다른 라인을 건드리지 않음");
   const eng = fs.readFileSync(path.join(ROOT, "js/designSleeveY.js"), "utf8");
   ok(!/localStorage|document\.|bodiceResult\s*=/.test(eng) && /designSleeveT|ST\.parts\.moveFrontDart/.test(eng) && /SR\.gateBodiceA/.test(eng), "10: 엔진은 순수 · Ⓐ 게이트·앞 다트 이동만 재사용");

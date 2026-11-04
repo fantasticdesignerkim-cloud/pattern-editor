@@ -85,7 +85,7 @@ const toP = a => ({ x: a[0], y: a[1] });
   ok(SW.KEYS.indexOf("spFairCm") < 0 && SW.RULES.book.capHeightRatio === 0.5 && SW.RULES.book.backSlopeDropCm === 1.3 && SW.RULES.book.frontSlopeDropCm === 2 && SW.RULES.book.slopeRunCm === 8 && SW.RULES.book.frontBulgeCm === 0.6 && SW.RULES.book.cuffRatio === 0.75, "1: 책 수치(P.53 1/2 · 8 ⟂ 1.3 / 2 · 0.6 · 3/4) · SP 다듬기 입력 없음");
   ok(SW.RULES.draft.backUnderarmWidthCm === 19.5 && SW.RULES.draft.frontUnderarmWidthCm === 19.1 && J(SW.RULES.newForW) === J(["backUnderarmWidthCm", "frontUnderarmWidthCm"])
     && Object.keys(SW.RULES.draft).filter(k => SW.RULES.newForW.indexOf(k) < 0).every(k => SW.RULES.draft[k] === SV.RULES.draft[k]), "1: 시안 설정값 — 폭 19.5 / 19.1 만 Ⓦ 새 값 · 나머지 = Ⓥ 확정값");
-  ok(!SP.get("bunka-sleeve-Z"), "1: 다음 라인(기모노 Ⓩ — 레코드 없음)은 보류 유지");
+  ok(SP.resolve("kimono-sleeve", "bunka-sleeve-Z").ok, "1: 기모노 Ⓩ 실행 가능(2026-11-04 추가)");
 }
 
 // ── 2. 승인 시안과 제품 기하 독립 비교(외곽 점열 · 제어점 · 주요 점) ──
@@ -312,7 +312,7 @@ const P = projectWithBodice(A_ID); SWA.apply(P, { sleeveLengthCm: SL });
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8");
   const ver = (f) => { const mm = html.match(new RegExp("js/" + f.replace(".", "\\.") + "\\?v=(\\d+)")); return mm ? mm[1] : null; };
-  ok(["designSleeveW.js", "sleeveWApply.js", "designSleeveV.js"].every(f => ver(f) === "2026110301") && ["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110402"), "12: 변경 파일 캐시 버전 2026110301");
+  ok(["designSleeveW.js", "sleeveWApply.js", "designSleeveV.js"].every(f => ver(f) === "2026110301") && ["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110403"), "12: 변경 파일 캐시 버전 2026110301");
   ok(html.indexOf("js/designSleeveV.js") < html.indexOf("js/designSleeveW.js") && html.indexOf("js/designSleeveW.js") < html.indexOf("js/sleeveWApply.js") && html.indexOf("js/sleeveWApply.js") < html.indexOf("js/ui.js"), "12: 스크립트 순서(Ⓥ 엔진 → Ⓦ 엔진 → 상태 → ui)");
   const rec = SP.get("bunka-sleeve-W");
   ok(/id="rowSleeveW" hidden/.test(html) && rec.inputs.slice(1).every(i => new RegExp('id="inpSleeveW_' + i.key + '" type="number" step="[0-9.]+" value="' + String(i.defaultValue).replace(".", "\\.") + '"').test(html)) && !/inpSleeveW_spFairCm/.test(html), "12: Ⓦ 입력 칸 20개 = 레코드 기본값 · SP 다듬기 칸 없음");

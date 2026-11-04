@@ -56,8 +56,9 @@
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
     // 소매 Ⓐ 는 working.sleeveA + geometry.sleeve 만 쓰고 sleeveDraft 는 모른다 — 기본 소매 파라미터로 서명하지 않도록 별도 분기.
-    var lineCount = (proj.working.sleeveA ? 1 : 0) + (proj.working.sleeveB ? 1 : 0) + (proj.working.sleeveC ? 1 : 0) + (proj.working.sleeveD ? 1 : 0) + (proj.working.sleeveE ? 1 : 0) + (proj.working.sleeveF ? 1 : 0) + (proj.working.sleeveG ? 1 : 0) + (proj.working.sleeveH ? 1 : 0) + (proj.working.sleeveI ? 1 : 0) + (proj.working.sleeveJ ? 1 : 0) + (proj.working.sleeveK ? 1 : 0) + (proj.working.sleeveL ? 1 : 0) + (proj.working.sleeveM ? 1 : 0) + (proj.working.sleeveN ? 1 : 0) + (proj.working.sleeveO ? 1 : 0) + (proj.working.sleeveP ? 1 : 0) + (proj.working.sleeveQ ? 1 : 0) + (proj.working.sleeveR ? 1 : 0) + (proj.working.sleeveS ? 1 : 0) + (proj.working.sleeveT ? 1 : 0) + (proj.working.sleeveU ? 1 : 0) + (proj.working.sleeveV ? 1 : 0) + (proj.working.sleeveW ? 1 : 0) + (proj.working.sleeveX ? 1 : 0) + (proj.working.sleeveY ? 1 : 0);
+    var lineCount = (proj.working.sleeveA ? 1 : 0) + (proj.working.sleeveB ? 1 : 0) + (proj.working.sleeveC ? 1 : 0) + (proj.working.sleeveD ? 1 : 0) + (proj.working.sleeveE ? 1 : 0) + (proj.working.sleeveF ? 1 : 0) + (proj.working.sleeveG ? 1 : 0) + (proj.working.sleeveH ? 1 : 0) + (proj.working.sleeveI ? 1 : 0) + (proj.working.sleeveJ ? 1 : 0) + (proj.working.sleeveK ? 1 : 0) + (proj.working.sleeveL ? 1 : 0) + (proj.working.sleeveM ? 1 : 0) + (proj.working.sleeveN ? 1 : 0) + (proj.working.sleeveO ? 1 : 0) + (proj.working.sleeveP ? 1 : 0) + (proj.working.sleeveQ ? 1 : 0) + (proj.working.sleeveR ? 1 : 0) + (proj.working.sleeveS ? 1 : 0) + (proj.working.sleeveT ? 1 : 0) + (proj.working.sleeveU ? 1 : 0) + (proj.working.sleeveV ? 1 : 0) + (proj.working.sleeveW ? 1 : 0) + (proj.working.sleeveX ? 1 : 0) + (proj.working.sleeveY ? 1 : 0) + (proj.working.sleeveZ ? 1 : 0);
     if (lineCount > 1) return { ok: false, fails: ["sleeve-line-conflict"], capLengths: null, ease: null };
+    if (proj.working.sleeveZ) return checkZ(proj);
     if (proj.working.sleeveY) return checkY(proj);
     if (proj.working.sleeveX) return checkX(proj);
     if (proj.working.sleeveW) return checkW(proj);
@@ -756,6 +757,39 @@
     return { ok: fails.length === 0, fails: fails, capLengths: null, ease: null, lower: null, cap: null, mode: "preset", preset: PRESET_Y, _prim: { integrated: true, kind: "none-integrated", sleevePiece: false }, _bodice: bodice, _a: d };
   }
   function inputsY(d) { var o = {}; (window.sleeveYApply ? window.sleeveYApply.keys() : Object.keys(d.parameters)).forEach(function (k) { o[k] = d.parameters[k]; }); return o; }
+  // ── 소매 Ⓩ 분기(P.55 아래 프렌치 슬리브 소매길이 12, bunka-sleeve-Z) — 출발 = 완료 몸판 Ⓐ(형상 게이트) · 결과 = 몸판 일체형 뒤·앞(derivedBodice — 소매 포함)만.
+  //   별도 소매 조각이 없다 — geometry.sleeve 는 빈 버킷(sleevePiece:false)이어야 하고, 소매산·AH 길이/이세는 null(만들지 않는다). Ⓨ 분기와 같은 틀(Ⓨ 는 무변경).
+  var PRESET_Z = "bunka-sleeve-Z";
+  var Z_ORIGIN = { kind: "preset", presetId: PRESET_Z, method: "french-sleeve-to-side-seam-integrated-with-bodice-A(shoulder extension, front AH dart to side)", methodPage: 55, bodicePresetId: "bunka-bodice-A" };
+  function checkZ(proj) {
+    var fails = [];
+    var BC = window.bodiceCheckpoint, SZA = window.sleeveZApply;
+    var d = proj.working.sleeveZ;
+    var bodice = BC && BC.latest(proj);
+    if (!bodice) fails.push("no-bodice");
+    else if (BC.isCurrentBodiceChanged(proj)) fails.push("bodice-stale");
+    if (d.blocked) fails.push("sleeve-z-blocked");
+    if (d.presetId !== PRESET_Z) fails.push("sleeve-preset-unsupported");
+    if (bodice && d.sourceBodiceHash !== bodice.hash) fails.push("source-mismatch");
+    var pp = d.parameters || {};
+    if (!SZA || !SZA.keys().length || !SZA.keys().every(function (k) { return fin(pp[k]); })) fails.push("invalid-input");
+    var geom = proj.working.geometry && proj.working.geometry.sleeve;
+    if (!geom || geom.integratedBodice !== true || geom.sleevePiece !== false || !Array.isArray(geom.outline) || geom.outline.length !== 0) fails.push("sleeve-piece-unexpected");
+    var ck = d.meta && d.meta.checks;
+    if (!ck || ck.closed !== true || ck.selfIntersection !== false || ck.curveInsideOriginal !== 0 || ck.originalPaperCut !== 0 || ck.pieces !== 2 || ck.sleevePiece !== false) fails.push("self-intersection");
+    if (!d.derivedBodice || !d.derivedBodice.front || !d.derivedBodice.back) fails.push("derived-bodice-missing");
+    if (!fails.length) {
+      if (!SZA || !window.designSleeveZ) fails.push("no-module");
+      else {
+        var r = SZA.draft(proj, pp);   // 다시 제도(같은 몸판·입력) — 다른 형상이 Ⓩ 로 서명되지 않게 · 몸판이 Ⓐ 가 아니면 여기서 거부된다
+        if (!r.ok) fails.push(r.reason === "bodice-not-a" ? "bodice-not-a" : "sleeve-z-redraft-failed");
+        else if (JSON.stringify(canonGeom(r.geometry)) !== JSON.stringify(canonGeom(geom)) || JSON.stringify(r.meta) !== JSON.stringify(d.meta)
+          || JSON.stringify(r.derivedBodice) !== JSON.stringify(d.derivedBodice)) fails.push("sleeve-z-geometry-mismatch");
+      }
+    }
+    return { ok: fails.length === 0, fails: fails, capLengths: null, ease: null, lower: null, cap: null, mode: "preset", preset: PRESET_Z, _prim: { integrated: true, kind: "none-integrated", sleevePiece: false }, _bodice: bodice, _a: d };
+  }
+  function inputsZ(d) { var o = {}; (window.sleeveZApply ? window.sleeveZApply.keys() : Object.keys(d.parameters)).forEach(function (k) { o[k] = d.parameters[k]; }); return o; }
   function inputsW(d) { var o = {}; (window.sleeveWApply ? window.sleeveWApply.keys() : Object.keys(d.parameters)).forEach(function (k) { o[k] = d.parameters[k]; }); return o; }
   function inputsV(d) { var o = {}; (window.sleeveVApply ? window.sleeveVApply.keys() : Object.keys(d.parameters)).forEach(function (k) { o[k] = d.parameters[k]; }); return o; }
   function inputsT(d) { var o = {}; (window.sleeveTApply ? window.sleeveTApply.keys() : Object.keys(d.parameters)).forEach(function (k) { o[k] = d.parameters[k]; }); return o; }
@@ -1170,6 +1204,7 @@
     if (!proj) return { ok: false, reason: "no-project" };
     var c = check(proj);
     if (!c.ok) return { ok: false, reason: c.fails[0], check: c };
+    if (proj.working.sleeveZ) return completeZ(proj, c);
     if (proj.working.sleeveY) return completeY(proj, c);
     if (proj.working.sleeveX) return completeX(proj, c);
     if (proj.working.sleeveW) return completeW(proj, c);
@@ -1406,6 +1441,26 @@
       derivedBodice: clone(dd.derivedBodice),   // 돌먼 파생 몸판(앞·뒤 외곽) — 이 완료본 소유 · bodiceResult 무변경
       meta: clone(dd.meta), warnings: dd.warnings.slice(),
       cap: capBlock(c),
+      completedAt: Date.now()
+    };
+    result.hash = hashStr(signature(result));
+    deepFreeze(result);
+    proj.working.sleeveResult = result;
+    return { ok: true, result: result, check: c };
+  }
+  function completeZ(proj, c) {
+    var dd = c._a, sb = proj.sourceBlock || {};
+    var result = {
+      schemaVersion: 1,
+      origin: clone(Z_ORIGIN),
+      sourceBodiceHash: dd.sourceBodiceHash,
+      sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
+      inputs: inputsZ(dd),
+      geometry: clone(proj.working.geometry.sleeve),   // 빈 버킷 — 별도 소매 조각 없음(sleevePiece:false)
+      derivedBodice: clone(dd.derivedBodice),   // 몸판 일체형 뒤·앞(소매 포함) — 이 완료본 소유 · bodiceResult 무변경
+      meta: clone(dd.meta), warnings: dd.warnings.slice(),
+      cap: { mode: "preset", kind: "none-integrated", applicable: false, lengths: null, ease: null, manualSource: null,
+        note: "소매 달림선·별도 소매 조각이 없는 몸판 일체형(P.55 프렌치 슬리브 소매길이 12) — 소매산·AH 길이/이세는 적용되지 않는다" },
       completedAt: Date.now()
     };
     result.hash = hashStr(signature(result));
@@ -1718,6 +1773,10 @@
     var res = proj.working.sleeveResult; if (!res) return true;
     var c = check(proj);
     if (!c.ok || !c._prim) return true;   // 현재 유효하지 않으면 변경으로 간주(재완료 필요)
+    if (proj.working.sleeveZ) {   // 소매 Ⓩ: 파생 몸판(소매 포함) + 빈 소매 버킷 서명(소매산·AH 길이 없음 — cap.lengths = null)
+      return signature({ origin: Z_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsZ(c._a), derivedBodice: c._a.derivedBodice,
+        geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: null } }) !== signature(res);
+    }
     if (proj.working.sleeveY) {   // 소매 Ⓨ: 파생 몸판(소매 포함) + 빈 소매 버킷 서명(소매산·AH 길이 없음 — cap.lengths = null)
       return signature({ origin: Y_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsY(c._a), derivedBodice: c._a.derivedBodice,
         geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: null } }) !== signature(res);

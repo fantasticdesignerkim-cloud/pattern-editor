@@ -279,7 +279,18 @@
       inputs: [{ key: "sleeveLengthCm", label: "소매길이(SP 에서 어깨선 연장)", unit: "cm", defaultValue: 5 },
         { key: "dropCm", label: "끝 내림(연장선 직각)", unit: "cm", defaultValue: 0.5 },
         { key: "sideDartDropCm", label: "옆 다트 위치(진동 아랫점에서 · 구현 관례)", unit: "cm", defaultValue: 3 },
-        { key: "joinFromBottomCm", label: "합류점(진동 아랫점에서 호 · 구현 관례)", unit: "cm", defaultValue: 3 }] }
+        { key: "joinFromBottomCm", label: "합류점(진동 아랫점에서 호 · 구현 관례)", unit: "cm", defaultValue: 3 }] },
+    // Ⓩ(P.55 아래 «몸판에서 이어진 소매를 제도한다(소매길이 12cm)» · 조금 긴 프렌치 슬리브): 별도 소매 조각·덧천 없이 몸판 일체형 뒤·앞만.
+    //   어깨선 연장 12(끝 내림 없음) → E 직각 → 가이드 E–C(원래 진동 아랫점)에서 뒤 0.7 / 앞 0.3 부풀림 → C 둥글림(가이드 위 2.5 = T · 옆선 아래 2 = H) → 옆선 접선 · 앞 AH 다트 → 옆.
+    //   옆 다트 위치 3 = 책에 수치 없는 구현 관례(수정 가능 · docs/book/P055.md).
+    { id: "bunka-sleeve-Z", familyId: "kimono-sleeve", symbol: "Z",
+      method: "french-sleeve-to-side-seam-integrated-with-bodice-A(shoulder extension, front AH dart to side)", methodPage: 55,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이(SP 에서 어깨선 연장 · 끝 내림 없음)", unit: "cm", defaultValue: 12 },
+        { key: "bulgeBackCm", label: "부풀림(뒤 · 가이드 E–C 에서)", unit: "cm", defaultValue: 0.7 },
+        { key: "bulgeFrontCm", label: "부풀림(앞 · 가이드 E–C 에서)", unit: "cm", defaultValue: 0.3 },
+        { key: "chordLegCm", label: "둥글림 가이드 위(C → T)", unit: "cm", defaultValue: 2.5 },
+        { key: "sideLegCm", label: "둥글림 옆선 아래(C → H 소맷부리 끝)", unit: "cm", defaultValue: 2 },
+        { key: "sideDartDropCm", label: "옆 다트 위치(진동 아랫점에서 · 구현 관례)", unit: "cm", defaultValue: 3 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -381,12 +392,14 @@
           availability: "available", presetId: "bunka-sleeve-W", note: null }
       ] },
     { id: "kimono-sleeve", order: 10, label: "기모노 소매", symbol: "X", page: 54, availability: "available", note: null,
-      familyNote: "Ⓧ — 몸판 Ⓐ 에서 소매 붙임선 없이 이어 제도한다(P.54 · 제도 방법 P.144–145): 앞 AH 다트 → 목둘레(옆 이동 불가) · 경사 8 ⟂ 뒤 1.6 / 앞 0.7 · ★선–옆선 중점 Ⓑ · 앞 Ⓕ = 뒤와 같은 ø · 소맷부리 = 소매 폭 × 3/4 · 겨드랑이 별도 덧천(폭선 ø+ø). 소매산·AH 이세는 적용되지 않는다(소매 달림선 없음). Ⓨ(P.55 위 프렌치 슬리브) — 어깨선 연장 5 → 연장선 직각 0.5 내림 → 직각 → 원래 진동에 곡선 합류 · 앞 AH 다트 → 옆 · 별도 소매 조각 없음. Ⓩ(P.55 아래)는 아직 구현하지 않았다(Ⓨ 와 다른 공정 — 옆선에 연결).",
+      familyNote: "Ⓧ — 몸판 Ⓐ 에서 소매 붙임선 없이 이어 제도한다(P.54 · 제도 방법 P.144–145): 앞 AH 다트 → 목둘레(옆 이동 불가) · 경사 8 ⟂ 뒤 1.6 / 앞 0.7 · ★선–옆선 중점 Ⓑ · 앞 Ⓕ = 뒤와 같은 ø · 소맷부리 = 소매 폭 × 3/4 · 겨드랑이 별도 덧천(폭선 ø+ø). 소매산·AH 이세는 적용되지 않는다(소매 달림선 없음). Ⓨ(P.55 위 프렌치 슬리브) — 어깨선 연장 5 → 연장선 직각 0.5 내림 → 직각 → 원래 진동에 곡선 합류 · 앞 AH 다트 → 옆 · 별도 소매 조각 없음. Ⓩ(P.55 아래 프렌치 슬리브 소매길이 12) — 어깨선 연장 12(경사 없음) → 직각 → 가이드 E–C 에서 뒤 0.7 / 앞 0.3 부풀림 → C 둥글림 2.5 · 2 → 옆선에 연결 · 앞 AH 다트 → 옆 · 별도 소매 조각 없음.",
       variants: [
         { id: "bunka-sleeve-X", symbol: "X", label: "X · 몸판에서 이어진 소매 + 덧천(몸판 Ⓐ 만 · 앞 AH 다트 → 목둘레, 시안)", page: 54, methodPage: 54,
           availability: "available", presetId: "bunka-sleeve-X", note: null },
         { id: "bunka-sleeve-Y", symbol: "Y", label: "Y · 프렌치 슬리브 — 몸판에서 이어진 소매(소매길이 5 · 끝 0.5 · 몸판 Ⓐ 만 · 앞 AH 다트 → 옆, 시안)", page: 55, methodPage: 55,
-          availability: "available", presetId: "bunka-sleeve-Y", note: null }
+          availability: "available", presetId: "bunka-sleeve-Y", note: null },
+        { id: "bunka-sleeve-Z", symbol: "Z", label: "Z · 프렌치 슬리브 — 몸판에서 이어진 소매(소매길이 12 · 경사 없음 · 옆선에 연결 · 몸판 Ⓐ 만 · 앞 AH 다트 → 옆, 시안)", page: 55, methodPage: 55,
+          availability: "available", presetId: "bunka-sleeve-Z", note: null }
       ] }
   ];
 

@@ -33,6 +33,7 @@
 
   function lineOf(project) {
     var w = project && project.working; if (!w) return null;
+    if (w.sleeveZ) return { key: "Z", st: w.sleeveZ };
     if (w.sleeveY) return { key: "Y", st: w.sleeveY };
     if (w.sleeveX) return { key: "X", st: w.sleeveX };
     if (w.sleeveW) return { key: "W", st: w.sleeveW };
@@ -100,6 +101,7 @@
     if (L.key === "W") return buildModelW(project, L.st);
     if (L.key === "X") return buildModelX(project, L.st);
     if (L.key === "Y") return null;   // Ⓨ: 별도 소매 조각 없음 — 소매 피스 설명 없음(몸판 위 표시는 dolmanBodice)
+    if (L.key === "Z") return null;   // Ⓩ: 별도 소매 조각 없음 — 소매 피스 설명 없음(몸판 위 표시는 dolmanBodice)
     var w = project.working, g = w.geometry && w.geometry.sleeve, st = L.st, m = st && st.meta;
     var DS = window.designSleeve, BC = window.bodiceCheckpoint;
     if (!g || !Array.isArray(g.outline) || !m || st.blocked || !DS || !BC) return null;   // 차단 중에는 낡은 형상에 설명을 붙이지 않는다
@@ -1008,6 +1010,7 @@
   //   원래 몸판(원종이)은 기존 작업 그룹이 그대로 그린다 — 이 표시는 그 위에 «새로 그린 선»만 얹는다.
   function dolmanBodice(project) {
     var w = project && project.working, st = w && w.sleeveR;
+    if (w && w.sleeveZ) return frenchBodiceZ(w.sleeveZ, project);   // Ⓩ: 몸판 일체형 뒤·앞(소매 포함 · 옆선에 연결) + 몸판 위 제도(별도 소매 조각 없음)
     if (w && w.sleeveY) return frenchBodice(w.sleeveY, project);   // Ⓨ: 몸판 일체형 뒤·앞(소매 포함) + 몸판 위 제도(별도 소매 조각 없음)
     if (w && w.sleeveX) return kimonoBodice(w.sleeveX, project);   // Ⓧ: 몸판 일체형 뒤·앞(소매 포함) + 몸판 위 제도(별도 덧천은 소매 피스)
     if (w && w.sleeveW) return raglanBodice(w.sleeveW, project, "W");   // Ⓦ: Ⓥ 와 같은 몸판 공정 · 소매만 낮은 산 · 한 장(같은 표시 틀)
@@ -1104,7 +1107,7 @@
       if (sh) { var x = sh.inset.box; b = { minX: Math.min(b.minX, x.minX), minY: Math.min(b.minY, x.minY), maxX: Math.max(b.maxX, x.maxX), maxY: Math.max(b.maxY, x.maxY) }; }
       out[pc] = b;
     });
-    out.sleeveBelow = !(project.working && (project.working.sleeveT || project.working.sleeveU || project.working.sleeveV || project.working.sleeveW || project.working.sleeveX || project.working.sleeveY));   // Ⓧ 덧천(폭 ≈ 5)도 기존 자리   // Ⓥ 두 장 소매(폭 ≈ 45)도 기존 자리   // 돌먼 한 장 소매(폭 ≈ 74)는 몸판 아래 줄(designLayout.autoLayout) · Ⓣ(폭 ≈ 30)는 기존 자리(오른쪽)
+    out.sleeveBelow = !(project.working && (project.working.sleeveT || project.working.sleeveU || project.working.sleeveV || project.working.sleeveW || project.working.sleeveX || project.working.sleeveY || project.working.sleeveZ));   // Ⓧ 덧천(폭 ≈ 5)도 기존 자리   // Ⓥ 두 장 소매(폭 ≈ 45)도 기존 자리   // 돌먼 한 장 소매(폭 ≈ 74)는 몸판 아래 줄(designLayout.autoLayout) · Ⓣ(폭 ≈ 30)는 기존 자리(오른쪽)
     return out;
   }
 
@@ -1114,7 +1117,7 @@
   var LANE_FAR = 1e5, BLOCK_W_PX = 260;   // 바깥 피스 설명 열 최소 너비(px)
   function shirtKeepOut(project, pc, bodiceExt) {
     var w = project && project.working, L = w && w.layout, DL = window.designLayout;
-    if (!w || !L || !DL || !DL.outlineBBoxOf || !(w.sleeveT || w.sleeveU || w.sleeveV || w.sleeveW || w.sleeveX || w.sleeveY) || !L[pc]) return null;
+    if (!w || !L || !DL || !DL.outlineBBoxOf || !(w.sleeveT || w.sleeveU || w.sleeveV || w.sleeveW || w.sleeveX || w.sleeveY || w.sleeveZ) || !L[pc]) return null;
     var area = function (k) {
       var b = DL.outlineBBoxOf(w.geometry, k); if (!b || !L[k]) return null;
       var e = bodiceExt && bodiceExt[k]; if (e) b = { minX: Math.min(b.minX, e.minX), minY: Math.min(b.minY, e.minY), maxX: Math.max(b.maxX, e.maxX), maxY: Math.max(b.maxY, e.maxY) };
@@ -1448,6 +1451,68 @@
     if (!back) add("y9", pt.U, o * 6, 56, "end", "팔구멍 둘레 합 " + f2(sc.opening.total) + " (원래 진동 " + f2(m.armhole.totalOrigCm) + ")", "title");
     [["SP", SP, "SP"], ["K", K, "K"], ["E", E, "E"]].forEach(function (e) { marks.push({ id: e[0], at: P(e[1]), cls: "mark" }); add("pt-" + e[0], e[1], 0, -7, "middle", e[2], "edge"); });
     return { key: "dolman-" + pc, line: "Y", title: "", lines: lines, dims: [], leaders: leaders, zones: [], refs: refs, marks: marks, bbox: bb, blockX: (bb.minX + bb.maxX) / 2, blockTopPx: 52 };
+  }
+  // ── 소매 Ⓩ(프렌치 슬리브 소매길이 12) 몸판 위 표시(표시 전용 · 몸판 좌표 · 값은 working.sleeveZ 엔진 meta — 재계산 없음) ──
+  //   재단선(자홍 실선) = 몸판 일체형 뒤·앞(어깨 연장 SP–E · 소맷부리 E→T→H · H 아래 옆선 · 앞 옆 다트 · 뒤 어깨 다트 열린 채).
+  //   제도선(청록 점선 — 참고 공정, 외곽 아님) = 가이드 E→C · E 직각 표시 · 부풀림 위치 · 원래 진동선 · 원래 옆선 위 C→H(2) · 앞 원래 AH 다트(닫힌 자리).
+  //   별도 소매 조각이 없으므로 소매 피스 설명은 없다(buildModel → null). 원래 몸판 Ⓐ 는 기존 작업 그룹이 그린다.
+  function frenchBodiceZ(st, project) {
+    if (!st || st.blocked || !st.meta || !st.derivedBodice) return null;
+    var m = st.meta, out = {}, ext = {};
+    ["back", "front"].forEach(function (pc) {
+      var dl = m.draftLayer[pc], draft = [dl.guide, dl.sideOriginal, dl.bulge, dl.armhole].concat(dl.rightAngle, dl.oldDart || []);
+      out[pc] = { cut: st.derivedBodice[pc].outline, draft: draft };
+      ext[pc] = segsBBox(out[pc].cut.concat(out[pc].draft));
+    });
+    ["back", "front"].forEach(function (pc) {
+      out[pc].anno = frenchAnnoZ(m, pc, ext[pc], out[pc].cut);
+      var ko = shirtKeepOut(project, pc, ext); if (ko) out[pc].anno.keepOutCm = ko;
+    });
+    return out;
+  }
+  function frenchAnnoZ(m, pc, bb, cut) {
+    var back = pc === "back", pt = m.points[pc], dl = m.draftLayer[pc], inp = m.settings.inputs, sc = m.seams, o = back ? 1 : -1;   // o = 진동 바깥 쪽(뒤 +x · 앞 −x)
+    var lines = [], refs = [], marks = [], leaders = [], f3 = function (v) { return (Math.round(v * 1000) / 1000).toFixed(3); };
+    var subv = function (a, b) { return { x: a.x - b.x, y: a.y - b.y }; }, addv = function (a, b) { return { x: a.x + b.x, y: a.y + b.y }; }, mul = function (a, k) { return { x: a.x * k, y: a.y * k }; };
+    var unit = function (v) { var l = Math.hypot(v.x, v.y); return { x: v.x / l, y: v.y / l }; };
+    var cubAt = function (q, t) { var u = 1 - t; return { x: u * u * u * q[0].x + 3 * u * u * t * q[1].x + 3 * u * t * t * q[2].x + t * t * t * q[3].x, y: u * u * u * q[0].y + 3 * u * u * t * q[1].y + 3 * u * t * t * q[2].y + t * t * t * q[3].y }; };
+    var add = function (id, at, dx, dy, anchor, text, cls) { lines.push({ id: id, at: P(at), px: { dx: dx, dy: dy }, anchor: anchor, text: text, cls: cls || "label", group: id }); };
+    var adim = function (id, A, B, nn, off, text) {
+      var a2 = addv(A, mul(nn, off)), b2 = addv(B, mul(nn, off)), md = mul(addv(a2, b2), 0.5);
+      refs.push({ id: id + "-ext-a", from: P(A), to: a2, cls: "ext" }, { id: id + "-ext-b", from: P(B), to: b2, cls: "ext" }, { id: id + "-dim", from: a2, to: b2, cls: "dim" });
+      add(id, md, nn.x * 10, nn.y * 10 + 3, Math.abs(nn.x) > 0.6 ? (nn.x > 0 ? "start" : "end") : "middle", text, "dim");
+    };
+    var SP = pt.SP, E = pt.E, C = pt.C, T = pt.T, H = pt.H, us = unit(subv(E, SP)), up = { x: us.y, y: -us.x }; if (up.y > 0) up = mul(up, -1);   // 연장선 위쪽(몸 바깥)
+    var opening = cut.filter(function (s) { return s.role === "sleeve-opening"; })[0], sh = cut.filter(function (s) { return s.role === "shoulder"; });
+    var anc = back ? "start" : "end", ancIn = back ? "end" : "start";
+    if (!back) {
+      var fd = m.frontDart; marks.push({ id: "bp", at: P(fd.apex), cls: "mark" });
+      leaders.push({ id: "z0", from: P(fd.apex), toAt: P(fd.apex), toPx: { dx: 10, dy: 16 } });
+      add("z0", fd.apex, 12, 24, "start", "⓪ AH 다트 닫음 → 옆 다트 " + f2(fd.angleDeg) + "° · 폭 " + f2(fd.widthCm) + " · 진동 아랫점에서 " + f2(fd.positionFromUnderarmCm) + " (관례) · H 에서 " + f2(fd.hToDartCm), "ref");
+    } else add("z0b", m.backDart.apex, 8, 14, "start", "뒤 어깨 다트는 열린 채(도해)", "ref");
+    adim("z1", SP, E, up, 1.2, "① 소매길이(어깨 연장) " + f2(inp.sleeveLengthCm) + " · 책 · 끝 내림 없음");
+    add("z2", E, o * 8, -2, anc, "② E 직각 " + f2(pt.angleAtEDeg) + "°", "label");
+    // ③ 부풀림 — 가이드에서 가장 멀어진 곳(제도선 bulge-offset)
+    var bo = unit(subv(pt.bulgePoint, pt.bulgeFoot));
+    leaders.push({ id: "z3", from: P(pt.bulgePoint), toAt: P(pt.bulgePoint), toPx: { dx: bo.x * 26, dy: bo.y * 26 } });
+    add("z3", pt.bulgePoint, bo.x * 30, bo.y * 30 + 4, bo.x >= 0 ? "start" : "end", "③ 부풀림 " + f2(back ? inp.bulgeBackCm : inp.bulgeFrontCm) + " (가이드 E–C 에서 · 책)", "dim");
+    // ④⑤ C 둥글림 — T(가이드 위 2.5) · H(옆선 아래 2 = 소맷부리 끝)
+    marks.push({ id: "C", at: P(C), cls: "mark" }, { id: "T", at: P(T), cls: "mark" }, { id: "H", at: P(H), cls: "mark" });
+    add("pt-C", C, -o * 7, -4, ancIn, "C", "edge");
+    add("pt-T", T, o * 7, -2, anc, "T", "edge");
+    add("pt-H", H, -o * 7, 6, ancIn, "H", "edge");
+    leaders.push({ id: "z4", from: P(T), toAt: P(T), toPx: { dx: o * 40, dy: -18 } });
+    add("z4", T, o * 44, -20, anc, "④ T = 가이드 위 C 에서 " + f2(inp.chordLegCm) + " · 책 (접선)", "dim");
+    leaders.push({ id: "z5", from: P(H), toAt: P(H), toPx: { dx: o * 40, dy: 16 } });
+    add("z5", H, o * 44, 20, anc, "⑤ H 소맷부리 끝 = 옆선 아래 C 에서 " + f2(inp.sideLegCm) + " · 책 (옆선 접선 — 봉제하면 겨드랑이 끝이 뾰족)", "dim");
+    if (opening) { var oc = opening.commands, q0 = [oc[0].points[0], oc[1].points[0], oc[1].points[1], oc[1].points[2]]; add("z6", cubAt(q0, 0.35), o * 12, 0, anc, "소맷부리 E → H " + f2(sc.opening[pc]) + " (재단선)", "dim"); }
+    var ac = dl.armhole && dl.armhole.commands, am = ac && ac.length > 1 ? cubAt([ac[0].points[0], ac[1].points[0], ac[1].points[1], ac[1].points[2]], 0.6) : null;
+    if (am) add("z7", am, -o * 8, 0, ancIn, "원래 진동 " + f2(back ? m.armhole.backOrigCm : m.armhole.frontOrigCm) + " (참고 · 전부 새 외곽 안)", "ref");
+    if (sh.length) { var s0 = sh[sh.length - 1]; add("z8", { x: (s0.from.x + s0.to.x) / 2, y: (s0.from.y + s0.to.y) / 2 }, 0, -12, "middle", "어깨 봉제 " + f3(sc.shoulder[pc]) + " (다트 제외 + 연장)", "dim"); }
+    add("z9", H, -o * 8, 64, ancIn, "옆선 봉제 " + f3(sc.sideSeam[pc]) + (back ? " (H 아래)" : " (H 아래 · 옆 다트 닫은 길이)"), "dim");
+    if (!back) add("z10", H, -o * 8, 82, ancIn, "팔구멍(소맷부리) 둘레 합 " + f2(sc.opening.total) + " (원래 진동 " + f2(m.armhole.totalOrigCm) + ")", "title");
+    [["SP", SP, "SP"], ["E", E, "E"]].forEach(function (e) { marks.push({ id: e[0], at: P(e[1]), cls: "mark" }); add("pt-" + e[0], e[1], 0, -7, "middle", e[2], "edge"); });
+    return { key: "dolman-" + pc, line: "Z", title: "", lines: lines, dims: [], leaders: leaders, zones: [], refs: refs, marks: marks, bbox: bb, blockX: (bb.minX + bb.maxX) / 2, blockTopPx: 52 };
   }
   // ── 소매 Ⓧ(기모노) 몸판 위 표시(표시 전용 · 몸판 좌표 · 값은 working.sleeveX 엔진 meta — 재계산 없음) ──
   //   재단선(자홍 실선) = 몸판 일체형 뒤·앞(소매 포함 · 열린 어깨/목 다트 · 소매 밑선 → Ⓒ → Ⓑ → Ⓓ) · 제도선(청록 점선) = 경사 8·직각 · ★선 · ☆ 소매 폭 · 팔꿈치 안내 · 원래 진동선(참고 — 외곽 아님).
