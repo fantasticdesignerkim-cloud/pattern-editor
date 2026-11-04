@@ -612,13 +612,67 @@
     lines().forEach(l => { if (l.piece !== piece) return; anchorsFromSegments(l.segments).forEach(a => { if (exclude && Math.abs(a.x - exclude.x) < EPS && Math.abs(a.y - exclude.y) < EPS) return; pts.push(a); }); });
     return pts;
   }
-  // 커서(형상 cm)를 같은 피스의 working geometry 기준으로 snap. Alt 면 해제(자유).
+  // ── 편집 기준 몸판(2026-11-04 김님 승인 «최종 몸판 기준 절개선 편집 정합성») ──
+  //   designResult 완료 판정의 «최종 몸판»(finalBodiceOf: 완료 소매의 derivedBodice ∥ bodiceResult)과 몸판 탭 절개선 상태·snap 이 같은 형상을 보게 한다.
+  //   · original: 소매 파생 몸판이 화면(작업 중 Ⓡ~Ⓩ)에도 완료본에도 없음(Ⓐ~Ⓠ·원형·기존 몸판 편집) → **종전 경로 그대로**.
+  //   · sleeve-derived: 완료 소매가 파생 몸판을 갖고 현재 상태와 일치 → 판정 = finalBodiceOf 의 frozen 조각(같은 validateCut · 같은 외곽 유틸 · 복제 없음).
+  //   · pending: 화면 파생 몸판(작업 중)과 완료본이 어긋남(미완료·변경·차단·몸판 변경) → 판정하지 않고 재완료 이유만(옛 frozen 으로 판정하지 않음).
+  //   snap 은 **화면에 그려진 형상**(작업 중 파생 몸판이 그려지면 그것 — sleeveAnnotation.dolmanBodice 와 같은 조건, 아니면 원래)에 붙는다.
+  //     sleeve-derived 일 때 화면 = frozen(소매 체크포인트가 derivedBodice 바이트 동일을 «현재» 조건으로 본다).
+  //   파트 분리(splitRingByCut)는 원래 몸판 ring 전용 → original 이 아닐 때는 실행·표시하지 않는다(파생 몸판을 원래 형상으로 자른 가짜 결과 금지).
+  const DERIVED_SLEEVE_KEYS = ["sleeveZ", "sleeveY", "sleeveX", "sleeveW", "sleeveV", "sleeveU", "sleeveT", "sleeveS", "sleeveR"];   // dolmanBodice 와 같은 우선순위
+  function symOfPresetId(id) { const m = /^bunka-sleeve-([A-Z])$/.exec(id || ""); return m ? String.fromCharCode(0x24B6 + m[1].charCodeAt(0) - 65) : (id || "?"); }
+  function liveDerivedSleeve(p) {
+    const w = p && p.working; if (!w) return null;
+    for (const k of DERIVED_SLEEVE_KEYS) if (w[k]) return { key: k, state: w[k], presetId: w[k].presetId || ("bunka-sleeve-" + k.slice(-1)), sym: symOfPresetId(w[k].presetId || ("bunka-sleeve-" + k.slice(-1))) };
+    return null;
+  }
+  // 화면에 그려진 작업 중 파생 몸판 조각(차단·미완성 상태면 그려지지 않으므로 null).
+  function displayedDerivedPiece(p, piece) {
+    const live = liveDerivedSleeve(p), st = live && live.state;
+    if (!st || st.blocked || !st.derivedBodice || !(st.meta || st.rMeta)) return null;
+    const pc = st.derivedBodice[piece];
+    return pc && Array.isArray(pc.outline) && pc.outline.length ? pc : null;
+  }
+  // 원래 몸판 전용 동작(파트 분리)이 의미 있는지 — 싸다(완료 판정 없음). render 의 파트 미리보기도 이것으로 가린다.
+  function isOriginalBodiceContext(p) {
+    p = p || project(); if (!p) return true;
+    if (liveDerivedSleeve(p)) return false;
+    const SCk = window.sleeveCheckpoint, s = SCk && SCk.latest ? SCk.latest(p) : null;
+    return !(s && s.derivedBodice);
+  }
+  function editBodiceRef(p) {
+    p = p || project(); if (!p) return { source: "original" };
+    if (isOriginalBodiceContext(p)) return { source: "original" };
+    const live = liveDerivedSleeve(p), SCk = window.sleeveCheckpoint, BCk = window.bodiceCheckpoint, DR = window.designResult;
+    const sleeve = SCk && SCk.latest ? SCk.latest(p) : null;
+    const doneId = sleeve && sleeve.origin ? sleeve.origin.presetId : null, doneSym = doneId ? symOfPresetId(doneId) : null;
+    const curSym = live ? live.sym : null;
+    const pend = reason => ({ source: "pending", sym: curSym || doneSym, reason: reason });
+    if (!SCk || !BCk || !DR || !DR.finalBodiceOf) return pend("최종 몸판 조회 모듈 없음");
+    if (live && live.state.blocked) return pend("소매 " + curSym + " 적용이 차단됨(" + (live.state.blocked.text || live.state.blocked.reason || "차단") + ") — 화면은 원래 몸판만 보입니다 · 소매 탭에서 고쳐 다시 적용·완료하세요");
+    const bodice = BCk.latest(p);
+    if (!bodice) return pend("몸판 모양 완료 전");
+    if (BCk.isCurrentBodiceChanged(p)) return pend("몸판이 완료 후 바뀜 — 몸판·소매 모양을 다시 완료해야 최종 몸판이 정해집니다");
+    if (!sleeve) return pend("소매 " + curSym + " 모양 완료 전 — 완료하면 그 파생 몸판 기준으로 판정합니다");
+    if (live && live.presetId !== doneId) return pend("완료된 소매는 " + doneSym + ", 현재 소매는 " + curSym + " — 소매 모양을 다시 완료해야 합니다");
+    if (!live) return pend("완료된 소매 " + doneSym + "(파생 몸판)와 현재 소매가 다름 — 소매 모양을 다시 완료해야 합니다");
+    if (sleeve.sourceBodiceHash !== bodice.hash || SCk.invalidatedByBodice(p)) return pend("소매 " + doneSym + " 완료본의 출처가 현재 몸판과 다름 — 소매 모양을 다시 완료하세요");
+    if (SCk.isCurrentSleeveChanged(p)) return pend("소매 " + curSym + " 가 완료 후 바뀜(입력·형상) — 소매 모양을 다시 완료해야 합니다");
+    const fin = DR.finalBodiceOf({ bodice: bodice, sleeve: sleeve });
+    if (!fin || fin.source !== "sleeve-derived") return pend("최종 몸판을 정할 수 없음");
+    return { source: "sleeve-derived", sym: doneSym, fin: fin, bodice: bodice };
+  }
+  // 커서(형상 cm)를 같은 피스의 **화면에 그려진 형상** 기준으로 snap. Alt 면 해제(자유).
+  //   원래 몸판 맥락이면 종전대로 working geometry, 작업 중 파생 몸판이 그려지면 그 외곽·다트 다리 끝점(같은 피스 좌표 — 피스 transform 동승).
   // exclude = 선택 편집 중 자기 자신 anchor(있으면 후보에서 제외).
   function snapForCursor(cursor, piece, altKey, exclude) {
     if (altKey) return null;
     const p = project(); if (!p) return null;
-    const geom = p.working.geometry, keys = PIECE_GEOM_KEYS[piece] || [piece];
     const thr = SNAP_PX * pxToCm();
+    const dpc = (piece === "front" || piece === "back") ? displayedDerivedPiece(p, piece) : null;
+    if (dpc) return chooseSnap(cursor, { anchors: patternAnchorPts(piece, exclude), endpoints: geomEndpoints({ d: dpc }, ["d"]), outlineSegs: outlinePrimsToSegs(dpc.outline) }, thr, GRID_CM);
+    const geom = p.working.geometry, keys = PIECE_GEOM_KEYS[piece] || [piece];
     return chooseSnap(cursor, { anchors: patternAnchorPts(piece, exclude), endpoints: geomEndpoints(geom, keys), outlineSegs: outlineSegsOf(geom, keys) }, thr, GRID_CM);
   }
   function pxToCm() { const s = SC * viewZ; return s > 0 ? 1 / s : 1; }
@@ -720,10 +774,30 @@
     const line = (mode === "select" && selectedId) ? findLine(selectedId) : null;
     if (!line || line.role !== "cut") return null;
     const p = project(); if (!p) return null;
-    const outlineFlat = flattenLine(currentOutlineSegs(p, line.piece));   // 합성 design outline 이 있으면 그 기준
-    const others = lines().filter(l => l.piece === line.piece && l.role === "cut" && l.id !== line.id).map(l => flattenLine(l.segments));
-    return validateCut(line, outlineFlat, others);
+    return cutStatusOf(p, line);
   }
+  // 절개선 한 개의 상태(순수 판정 · geometry 무변경). 반환 {ok, reason, basis?, ...}.
+  //   basis 없음 = 원래 몸판 맥락(종전 판정 그대로 — 합성 design outline 우선). 파트 분리는 이 경우에만.
+  //   basis "sleeve-derived" = designResult 와 같은 최종 몸판(frozen) · 같은 3분류(유효 / 원래에서만 유효 = 최종 몸판 불일치 / 둘 다 무효 = 작성 중).
+  //   basis "pending" = 최종 몸판 미확정(재완료 필요) — 유효라고 하지 않는다.
+  function cutStatusOf(p, line, ref) {
+    const others = lines().filter(l => l.piece === line.piece && l.role === "cut" && l.id !== line.id).map(l => flattenLine(l.segments));
+    ref = (line.piece === "front" || line.piece === "back") ? (ref || editBodiceRef(p)) : { source: "original" };
+    if (ref.source === "original") return validateCut(line, flattenLine(currentOutlineSegs(p, line.piece)), others);   // 합성 design outline 이 있으면 그 기준(종전)
+    if (ref.source === "pending") return { ok: false, basis: "pending", sym: ref.sym, reason: ref.reason };
+    const v = validateCut(line, flattenLine(outlinePrimsToSegs(ref.fin[line.piece].outline)), others);
+    const onOriginal = v.ok ? true : validateCut(line, flattenLine(outlinePrimsToSegs(ref.bodice[line.piece].outline)), others).ok;   // designResult 의 «원래 몸판» = frozen bodiceResult
+    return { ok: v.ok, reason: v.reason, basis: "sleeve-derived", sym: ref.sym, onOriginal: onOriginal, state: v.ok ? "valid" : onOriginal ? "final-mismatch" : "draft" };
+  }
+  function cutStatusText(v) {
+    if (!v.basis) return v.ok ? "분리 가능" : v.reason;   // 원래 몸판 맥락: 종전 문구
+    if (v.basis === "pending") return "판정 보류(최종 몸판 미확정): " + v.reason;
+    const on = "소매 " + v.sym + " 까지 반영한 최종 몸판 기준";
+    if (v.ok) return "유효 절개선 — " + on + " · Design 완료에 포함 · 파트 분리는 원래 몸판 전용이라 여기서 하지 않음";
+    if (v.onOriginal) return "최종 몸판 불일치: " + v.reason + " — " + on + " · 원래 몸판에서는 맞던 선 · 이대로면 Design 완료가 거부됩니다";
+    return "작성 중: " + v.reason + " — " + on + " · Design 완료에서 제외";
+  }
+  function splitAllowed(v) { return !!(v && v.ok && !v.basis); }
   // Design 통합용: 유효한 role:"cut" 절개선을 **완료된 몸판(frozen bodiceResult)의 최종 effective
   //   outline 기준으로 재검증**해 수집한다(mutable working outline 아님 — 몸판 완료 후 표류 방지).
   //   반환 [{ piece, segments(형상 cm 복사) }], **canonical 정렬**(patternLine 배열·id 순서 무관 →
@@ -757,10 +831,11 @@
   function syncCutStatus() {
     const el = document.getElementById("designCutStatus"); if (!el) return;
     const v = validateSelectedCut();
-    if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); syncSplitButton(); syncBoundaryStatus(); syncComposeButton(); return; }
-    el.textContent = v.ok ? "분리 가능" : v.reason;
+    if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); el.removeAttribute("data-basis"); syncSplitButton(v); syncBoundaryStatus(); syncComposeButton(); return; }
+    el.textContent = cutStatusText(v);
     el.setAttribute("data-ok", v.ok ? "1" : "0");
-    syncSplitButton();
+    if (v.basis) el.setAttribute("data-basis", v.basis); else el.removeAttribute("data-basis");
+    syncSplitButton(v);
     syncBoundaryStatus();
     syncComposeButton();
   }
@@ -792,9 +867,12 @@
     return ch;
   }
   // 파트 분리 버튼: 유효 절개선 선택 시에만 활성.
-  function syncSplitButton() {
+  //   v 를 넘기면 재판정하지 않는다(최종 몸판 판정은 소매 현재성 검사를 포함해 비싸다). 원래 몸판 맥락이 아니면 비활성(분리는 원래 ring 전용).
+  function syncSplitButton(v) {
     const b = document.getElementById("btnDesignSplit"); if (!b) return;
-    const v = validateSelectedCut(); b.disabled = !(v && v.ok);
+    if (arguments.length === 0) v = validateSelectedCut();
+    b.disabled = !splitAllowed(v);
+    if (v && v.basis) b.title = "파트 분리는 원래 몸판 전용 — 소매 파생 몸판은 여기서 자르지 않습니다(재단 단계 범위)"; else b.removeAttribute("title");
   }
   function setSplitNote(m) { const el = document.getElementById("designSplitNote"); if (el) el.textContent = m; }
   // 선택된 유효 절개선 1개로 실제 분할 실행. 분할 직전 validateCut 재실행 → ring 구성 →
@@ -805,6 +883,7 @@
     if (line.piece !== "front" && line.piece !== "back") { setSplitNote("front·back 만 지원(소매는 후속)"); return; }
     const p = project(); if (!p) return;
     const v = validateSelectedCut();                       // ★ 분할 직전 재검증
+    if (v && v.basis) { setSplitNote("분할 불가: 파트 분리는 원래 몸판 전용 — 소매 " + v.sym + " 파생 몸판은 여기서 자르지 않습니다(재단 단계 범위)"); return; }   // 원래 형상을 잘라 «분리됨»처럼 보이지 않게
     if (!v || !v.ok) { setSplitNote("분할 불가: " + (v ? v.reason : "절개선 아님")); return; }
     const rb = buildRingForPiece(p, line.piece);
     if (!rb.ok) { setSplitNote("분할 불가: " + rb.reason); return; }
@@ -1010,7 +1089,9 @@
         else if (edited && isCollarBodyLine(edited)) { if (window.recomposeCollarBody) window.recomposeCollarBody(); }   // 칼라 본체 편집 → 본체 재합성
         else if (edited && edited.role === "boundary") recomposeAfterBoundaryEdit();   // 대체선 편집 → designOutline 재합성
         else invalidateParts();                                                   // 그 외(cut/guide) → 파생 무효화
-        editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {} rerender(); notifyDesignResult();
+        editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {}
+        if (edited && edited.role === "cut") syncCutStatus();                   // 앵커·핸들을 옮긴 뒤의 실제 상태(이동 전 문구를 남기지 않음)
+        rerender(); notifyDesignResult();
       }
     };
     svg.addEventListener("pointerup", endDrag);
@@ -1192,6 +1273,8 @@
     convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen, isNeckAutoLine, isSleeveCapLine, isCollarBodyLine, findLine: (id) => findLine(id),
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
     validateSelectedCut, revalidate, validateCut, gatherValidCuts, flattenLine, segCross, distPtToSegs,
+    // 편집 기준 몸판(최종 몸판 정합) — 판정·snap·파트 분리 경계
+    editBodiceRef, cutStatusOf, cutStatusText, snapForCursor, isOriginalBodiceContext, displayedDerivedPiece, syncCutStatus: () => syncCutStatus(),
     doSplit, invalidateParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,

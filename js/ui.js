@@ -1790,6 +1790,17 @@
     });
   }
   // 라인 적용: «원형 소매 기준» = Ⓐ 해제(기존 파생 복원), Ⓐ = 완성 몸판에서 제도. 실패하면 이전 소매를 그대로 둔다.
+  // 선택 계열 ≠ 현재 활성 소매일 때 적용이 실패하면(사용자 확정 2026-11-04 · 표시 전용 · 상태·완료 대상 무변경):
+  //   실패한 선택 기호와, 그대로 남은 활성 소매(= «소매 모양 완료» 가 완료할 대상)를 실제 기호로 덧붙인다. 같은 계열의 실패(차단 표시)는 기존 문구 그대로.
+  function sleeveKeptSuffix(selSym, keptSym) {
+    if (!selSym || selSym === keptSym) return "";
+    const kept = keptSym ? "소매 " + keptSym : "원형 소매 기준";
+    return " — 선택한 " + selSym + " 적용 실패 · 현재 " + kept + " 유지 · 완료 대상 " + kept;
+  }
+  function noteSleeveKept(project, selSym) {
+    const n = document.getElementById("designSleeveNote"); if (!n) return;
+    n.textContent = n.textContent + sleeveKeptSuffix(selSym, sleeveLineOn(project) ? sleeveLineSymbol(project) : null);
+  }
   function onApplySleevePreset() {
     const project = designProjectNow(); if (!project || !window.sleevePresets || !window.sleeveAApply) return;
     if (!sleeveGateOk(project)) { setSleeveNote("몸판 완료 후 소매 라인을 적용할 수 있습니다"); return; }
@@ -1831,111 +1842,112 @@
     const isX = !!(window.sleeveXApply && r.presetId === window.sleeveXApply.PRESET_ID);
     const isY = !!(window.sleeveYApply && r.presetId === window.sleeveYApply.PRESET_ID);
     const isZ = !!(window.sleeveZApply && r.presetId === window.sleeveZApply.PRESET_ID);
+    const selSym = presetSymbolOfResult({ origin: { presetId: r.presetId } });   // 선택 계열 기호(실패 안내용 · 표시 전용)
     if (sleeveManual(project)) { setSleeveNote("소매산 직접 수정 중에는 소매 " + (isZ ? "Ⓩ" : isY ? "Ⓨ" : isX ? "Ⓧ" : isV ? "Ⓥ" : isW ? "Ⓦ" : isU ? "Ⓤ" : isT ? "Ⓣ" : isS ? "Ⓢ" : isR ? "Ⓡ" : isQ ? "Ⓠ" : isP ? "Ⓟ" : isO ? "Ⓞ" : isN ? "Ⓝ" : isM ? "Ⓜ" : isL ? "Ⓛ" : isK ? "Ⓚ" : isJ ? "Ⓙ" : isI ? "Ⓘ" : isH ? "Ⓗ" : isG ? "Ⓖ" : isF ? "Ⓕ" : isE ? "Ⓔ" : isD ? "Ⓓ" : isC ? "Ⓒ" : isB ? "Ⓑ" : "Ⓐ") + " 를 적용할 수 없습니다 · 기본 소매산으로 돌아가기 후 적용"); return; }
     if (isV) {
-      if (applySleeveV(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveV(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isX) {
-      if (applySleeveX(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveX(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isZ) {
-      if (applySleeveZ(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveZ(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isY) {
-      if (applySleeveY(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveY(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isW) {
-      if (applySleeveW(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveW(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isU) {
-      if (applySleeveU(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveU(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isT) {
-      if (applySleeveT(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveT(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isS) {
-      if (applySleeveS(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveS(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isR) {
-      if (applySleeveR(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveR(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isQ) {
-      if (applySleeveQ(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveQ(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isP) {
-      if (applySleeveP(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveP(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isO) {
-      if (applySleeveO(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveO(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isN) {
-      if (applySleeveN(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveN(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isM) {
-      if (applySleeveM(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveM(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isL) {
-      if (applySleeveL(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveL(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isK) {
-      if (applySleeveK(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveK(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isJ) {
-      if (applySleeveJ(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveJ(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isI) {
-      if (applySleeveI(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveI(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isH) {
-      if (applySleeveH(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveH(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isG) {
-      if (applySleeveG(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveG(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isF) {
-      if (applySleeveF(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveF(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isE) {
-      if (applySleeveE(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveE(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isD) {
-      if (applySleeveD(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveD(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isC) {
-      if (applySleeveC(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveC(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     if (isB) {
-      if (applySleeveB(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); }
+      if (applySleeveB(project)) { updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project); } else noteSleeveKept(project, selSym);
       return;
     }
     const len = readNum("inpSleeveLength", 10, 90);
-    if (!len.valid || !(len.v > 0)) { setSleeveNote("소매길이 10–90 범위를 확인하세요"); return; }
+    if (!len.valid || !(len.v > 0)) { setSleeveNote("소매길이 10–90 범위를 확인하세요"); noteSleeveKept(project, selSym); return; }
     const a = window.sleeveAApply.apply(project, { sleeveLengthCm: len.v });
-    if (!a.ok) { setSleeveNote("소매 Ⓐ 차단: " + a.text + " · 이전 소매 유지"); return; }   // 추측 폴백 없음 — 사유만 표시
+    if (!a.ok) { setSleeveNote("소매 Ⓐ 차단: " + a.text + " · 이전 소매 유지"); noteSleeveKept(project, selSym); return; }   // 추측 폴백 없음 — 사유만 표시
     clearOtherSleeveLines(project, "A");   // 기본/Ⓐ/Ⓑ/Ⓒ 배타
     relayoutSleeve();
     if (typeof render === "function") render();
@@ -3546,8 +3558,17 @@
     const m = { "no-bodice": "몸판 완료 필요", "bodice-changed": "몸판 변경됨 · 다시 완료 필요", "no-sleeve": "소매 완료 필요",
       "sleeve-changed": "소매 변경됨 · 다시 완료 필요", "sleeve-bodice-mismatch": "소매 출처가 몸판과 다름", "no-collar": "카라 완료 필요",
       "collar-changed": "카라 변경됨 · 다시 완료 필요", "collar-bodice-mismatch": "카라 출처가 몸판과 다름", "collar-sleeve-order": "카라 소매 순서 확인 필요",
-      "sleeve-source-mismatch": "소매 출처가 몸판과 다름", "collar-source-mismatch": "카라 출처가 몸판과 다름", "no-project": "프로젝트 없음", "no-module": "" };
+      "sleeve-source-mismatch": "소매 출처가 몸판과 다름", "collar-source-mismatch": "카라 출처가 몸판과 다름", "no-project": "프로젝트 없음", "no-module": "",
+      "cut-invalid-on-final-bodice": "절개선이 소매까지 반영한 최종 몸판에 맞지 않음" };
     return m[reason] != null ? m[reason] : reason;
+  }
+  // 거부 사유 + 구체 안내(절개선 거부일 때만 · 표시 전용): 어느 조각의 어느 선이 최종 몸판(어느 소매의 파생 몸판)에서 왜 무효인지, 어떻게 고치는지.
+  function designResultFailText(c, reason) {
+    const base = designResultFailStr(reason);
+    const rj = c && c.cutRejects; if (reason !== "cut-invalid-on-final-bodice" || !rj || !rj.length) return base;
+    const who = c._sleeve ? "소매 " + presetSymbolOfResult(c._sleeve) + " 파생 몸판" : "최종 몸판";
+    const one = rj.map(x => (x.piece === "front" ? "앞판" : x.piece === "back" ? "뒤판" : x.piece) + " 절개선 " + (x.lineId != null ? x.lineId : "?") + ": " + x.reason).join(" / ");
+    return base + "(" + who + " 기준) — " + one + " · 원래 몸판에서는 맞던 선입니다 · 몸판 탭에서 그 절개선을 고치거나 지운 뒤 다시 완료하세요";
   }
   function updateDesignResultUI(project) {
     const checkNote = document.getElementById("designResultCheckNote");
@@ -3555,20 +3576,22 @@
     const btn = document.getElementById("btnCompleteDesign");
     if (!project || !window.designResult) { if (btn) btn.disabled = true; if (checkNote) checkNote.textContent = ""; if (statusNote) statusNote.textContent = "Design 미완료 · 세션 전용"; return; }
     const c = window.designResult.check(project);
-    if (checkNote) checkNote.textContent = c.ok ? ("몸판·소매·카라 완료 · 유효 절개선 " + c._cuts.length + "개") : ("완료 전 검사: " + designResultFailStr(c.fails[0]));
+    if (checkNote) checkNote.textContent = c.ok ? ("몸판·소매·카라 완료 · 유효 절개선 " + c._cuts.length + "개") : ("완료 전 검사: " + designResultFailText(c, c.fails[0]));
     if (btn) btn.disabled = !c.ok;
     const latest = window.designResult.latest(project);
     if (statusNote) {
-      if (!latest) statusNote.textContent = c.ok ? "Design 완료 가능 · 세션 전용" : "완료 전 검사: " + designResultFailStr(c.fails[0]);
+      if (!latest) statusNote.textContent = c.ok ? "Design 완료 가능 · 세션 전용" : "완료 전 검사: " + designResultFailText(c, c.fails[0]);
       else if (window.designResult.isCurrentDesignChanged(project)) statusNote.textContent = "Design 변경됨 · 다시 완료 필요 · 세션 전용";
       else statusNote.textContent = "Design 형상 완료됨(원형 v" + (latest.sourceBlock.version != null ? latest.sourceBlock.version : "?") + ") · 유효 절개선 " + latest.structuralLines.cut.length + "개 · 세션 전용";
     }
+    // 몸판 탭 절개선 상태도 같은 최종 몸판 기준으로 다시 맞춘다(소매 완료·전환·탭 이동 뒤 이전 문구를 남기지 않음 · 선택한 절개선이 없으면 즉시 끝).
+    if (window.designLineTool && window.designLineTool.syncCutStatus) window.designLineTool.syncCutStatus();
   }
   function onCompleteDesign() {
     const project = designProjectNow(); if (!project || !window.designResult) return;
     const r = window.designResult.complete(project);
     const statusNote = document.getElementById("designResultStatusNote");
-    if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + designResultFailStr(r.reason); updateDesignResultUI(project); return; }
+    if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + designResultFailText(r.check, r.reason); updateDesignResultUI(project); return; }
     updateDesignResultUI(project);
     if (statusNote) statusNote.textContent = r.idempotent ? "Design 형상 완료됨(변경 없음) · 세션 전용" : "Design 형상 완료됨(원형 v" + (r.result.sourceBlock.version != null ? r.result.sourceBlock.version : "?") + ") · 유효 절개선 " + r.result.structuralLines.cut.length + "개 · 세션 전용";
   }

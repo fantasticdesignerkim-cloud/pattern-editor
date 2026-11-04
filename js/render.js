@@ -714,7 +714,8 @@ function render(){
     svg.appendChild(workRoot);
 
     // 파트 분리 미리보기(있을 때만): working 위, hit layer 아래. 두 파트 다른 색.
-    if (Array.isArray(dp.working.parts) && dp.working.parts.length) {
+    //   파트는 원래 몸판 ring 을 자른 결과다 → 소매 파생 몸판 맥락(Ⓡ~Ⓩ 작업 중·완료본)에서는 그리지 않는다(원래 형상 조각을 파생 몸판 위에 섞지 않음 · 데이터는 그대로).
+    if (Array.isArray(dp.working.parts) && dp.working.parts.length && !(_dlt && _dlt.isOriginalBodiceContext && !_dlt.isOriginalBodiceContext(dp))) {
       const partsRoot = E("g"); partsRoot.setAttribute("data-design-root", "parts");
       _appendParts(partsRoot, dp.working.parts, L, scale);
       svg.appendChild(partsRoot);

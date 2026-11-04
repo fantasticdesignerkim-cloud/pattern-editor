@@ -752,7 +752,7 @@
     var placed = (model.obstacles || []).slice(), tags = [], legend = [], leaders = [];   // obstacles = 이미 그려진 다른 글자 상자(화면 px, 배치 원점 기준) — 피해서 놓는다
     var boxesOf = function (g, sx, sy) { return groups[g].map(function (it) { return boxOf(it.at.x * s + it.dx + sx, it.at.y * s + it.dy + sy, it.anchor, it.text, fsOf(it.cls)); }); };
     // keepOutCm(선택 · 셔츠 Ⓣ/Ⓤ 만 넘긴다): 다른 피스 자리(피스 좌표 cm) — 글자·번호 표식·리더선이 그 위에 놓이지 않게 한다. 없으면 이전과 같다.
-    var keep = (model.keepOutCm || []).map(function (b) { return { x0: b.minX * s - 3, x1: b.maxX * s + 3, y0: b.minY * s - 3, y1: b.maxY * s + 3 }; });
+    var keep = (model.keepOutCm || []).map(function (b) { var p = 3 + (num(b.padPx) ? b.padPx : 0); return { x0: b.minX * s - p, x1: b.maxX * s + p, y0: b.minY * s - p, y1: b.maxY * s + p }; });   // padPx(선택) = 그 피스의 화면 px 글자 몫(카라 보조수치)
     var free = function (bxs) { return bxs.every(function (b) { return placed.every(function (p) { return !hit(b, p); }) && keep.every(function (k) { return !hit(b, k); }); }); };
     var leaderClear = function (it, sx, sy) {   // 리더선(기준점 → 옮긴 글자)이 다른 피스를 지나지 않는지(옮기지 않으면 리더선 없음)
       if (!keep.length || Math.abs(sx) + Math.abs(sy) <= 6) return true;
@@ -786,7 +786,8 @@
     // 설명 블록(제목·요약·구분 문구) — 치수선 글자 아래에서 시작, 번호 설명이 있으면 그 아래에 이어 붙인다
     var above = !!model.blockAbove, baseY = above ? bb.minY * s : bb.maxY * s, bottom = placed.reduce(function (m, b) { return Math.max(m, b.y1); }, baseY);
     var top = Math.max(num(model.blockTopPx) ? model.blockTopPx : 36, bottom - baseY + 16), bl = model.lines.filter(function (l) { return l.block !== undefined; }).sort(function (a, b) { return a.block - b.block; });
-    var blocks = [], row = 0;
+    var blocks = [], row = 0, rowSkip = 0;
+    var keepBox = keep.filter(function (k) { return k.x0 > -1e4 * s && k.x1 < 1e4 * s; });   // 유한 상자(띠 경계가 아닌 피스 자리)
     var bx = num(model.blockX) ? model.blockX : 0;   // 설명 블록 가로 기준(기본 = 소매 중심선 x 0, 참고 도안 = 그 도안 중심)
     var nBl = model.lines.filter(function (l) { return l.block !== undefined; }).length;
     // keepOutCm 가 있으면(셔츠 Ⓣ/Ⓤ) 설명 줄도 이 피스 띠 안에: 양쪽 경계가 있으면 띠 너비로 줄을 나눠 가운데 · 한쪽만 있으면 그 경계에 붙여 바깥으로 쓴다.
@@ -806,7 +807,14 @@
     var addRow = function (id, text, cls) {   // blockAbove: 도안 위에 제목부터 아래로 쌓아 마지막 줄이 도안 위끝 16px 위
       if (keep.length && !above) {
         var an = "middle", xpx = isFinite(laneL) && isFinite(laneR) ? (laneL + laneR) / 2 : bx * s;
-        wrapRow(text, cls).forEach(function (t, i) { blocks.push({ id: id + (i ? "-" + i : ""), at: { x: xpx / s, y: bb.maxY }, dx: 0, dy: top + row * 12, anchor: an, text: t, cls: cls }); row++; });
+        wrapRow(text, cls).forEach(function (t, i) {
+          // 띠 안의 다른 피스 자리(유한 상자 · 겹친 배치·카라)를 지나면 그 아래로 이어 쓴다(설명은 빼지 않는다 · 2026-11-04 작은 창 카라 겹침 보완)
+          for (var g = 0; g < 8; g++) {
+            var rb = boxOf(xpx, bb.maxY * s + top + rowSkip + row * 12, an, t, fsOf(cls)), kb = keepBox.filter(function (k) { return hit(rb, k); })[0];
+            if (!kb) break; rowSkip += kb.y1 - rb.y0 + 2;
+          }
+          blocks.push({ id: id + (i ? "-" + i : ""), at: { x: xpx / s, y: bb.maxY }, dx: 0, dy: top + rowSkip + row * 12, anchor: an, text: t, cls: cls }); row++;
+        });
         return;
       }
       if (above) blocks.push({ id: id, at: { x: bx, y: bb.minY }, dx: 0, dy: -16 - (nBl - 1 - row) * 12, anchor: "middle", text: text, cls: cls });
@@ -1115,6 +1123,19 @@
   //   그 너머 전체(세로 무한)를 이 피스의 설명이 쓰지 않는 자리로 돌려준다 → 피스마다 가로 띠가 나뉘어 글자·번호 표식·리더선·설명 줄이 이웃 피스나 이웃 설명과 겹치지 않는다.
   //   글자는 화면 px 고정이라 작은 배율에서 이웃 피스로 넘쳤다(5b00d15 부터 있던 겹침 — 2026-10-30 보완). Ⓣ/Ⓤ 가 아니거나 배치 정보가 없으면 null(이전 배치 규칙 그대로).
   var LANE_FAR = 1e5, BLOCK_W_PX = 260;   // 바깥 피스 설명 열 최소 너비(px)
+  var COLLAR_PAD_PX = 16;
+  // 카라 조각 로컬 bbox(카라 좌표 cm) = 그려지는 카라 geometry(스탠드 ∪ 각 종류의 geometry) 합. 카라 초안이 없으면 null.
+  function collarBoxLocal(w) {
+    var cd = w && w.collarDraft, DL = window.designLayout; if (!cd || !DL || !DL.bboxOfStand) return null;
+    var gs = [cd.standGeometry], u = null;
+    Object.keys(cd).forEach(function (k) { var v = cd[k]; if (v && typeof v === "object" && v.geometry && Array.isArray(v.geometry.outline)) gs.push(v.geometry); });
+    gs.forEach(function (g) {
+      if (!g || !Array.isArray(g.outline) || !g.outline.length) return;
+      var b = DL.bboxOfStand(g); if (!b) return;
+      u = u ? { minX: Math.min(u.minX, b.minX), minY: Math.min(u.minY, b.minY), maxX: Math.max(u.maxX, b.maxX), maxY: Math.max(u.maxY, b.maxY) } : b;
+    });
+    return u;
+  }
   function shirtKeepOut(project, pc, bodiceExt) {
     var w = project && project.working, L = w && w.layout, DL = window.designLayout;
     if (!w || !L || !DL || !DL.outlineBBoxOf || !(w.sleeveT || w.sleeveU || w.sleeveV || w.sleeveW || w.sleeveX || w.sleeveY || w.sleeveZ) || !L[pc]) return null;
@@ -1132,6 +1153,13 @@
       else if (o.maxX <= me.minX) out.push({ piece: k, side: "left", minX: -LANE_FAR, maxX: (o.maxX + me.minX) / 2, minY: -LANE_FAR, maxY: LANE_FAR });
       else out.push({ piece: k, side: "overlap", minX: o.minX, maxX: o.maxX, minY: o.minY, maxY: o.maxY });   // 배치가 겹친 경우(수동 이동 등) — 그 피스 자리만 피한다
     });
+    // 카라(별도 조각 · working.layout.collar): 그 조각 자리만 피한다(띠 경계로 쓰지 않음 — 기존 피스 띠는 그대로). 작은 창에서 카라가 몸판·소매 아래 줄로
+    //   내려가면 설명 줄이 카라 보조수치와 겹쳤다(2026-11-04 통합 점검 §6 — 표시 전용 보완). padPx = 카라 보조수치 글자 몫(라벨 +4/+12px · 치수 글자 11px 바깥).
+    var cb = collarBoxLocal(w);
+    if (cb && L.collar) {
+      var cdx = (L.collar.dx || 0) - (L[pc].dx || 0), cdy = (L.collar.dy || 0) - (L[pc].dy || 0);
+      out.push({ piece: "collar", side: "overlap", minX: cb.minX + cdx, maxX: cb.maxX + cdx, minY: cb.minY + cdy, maxY: cb.maxY + cdy, padPx: COLLAR_PAD_PX });
+    }
     return out;
   }
   // 소매 Ⓣ(셔츠 슬리브) 몸판 위 표시(표시 전용 · geometry·hash 무관 · 값은 working.sleeveT 엔진 meta — 재계산 없음):

@@ -154,6 +154,8 @@ const suites = [
   { file: "sleeveXCheck.js",            golden: false },
   { file: "sleeveYCheck.js",            golden: false },
   { file: "sleeveZCheck.js",            golden: false },
+  { file: "sleeveIntegrationCheck.js",  golden: false },   // 소매 Ⓐ~Ⓩ 26종 통합(같은 조건 · designResult 연결 · 무효화 · 전환 · 몸판 경계)
+  { file: "cutEditFinalBodiceCheck.js", golden: false },  // 몸판 탭 절개선 편집(snap·상태·분리) ↔ Design 완료의 같은 최종 몸판(Ⓡ~Ⓩ 파생 · 보류 · 원래 맥락 보존)
   { file: "sleeveCResultCheck.js",      golden: false },
   // 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시(sleeveAnnotation): 라벨·치수가 실제 geometry/meta 와 일치(독립 실측)·EL 변경/라인 전환/몸판 변경 동기화·기본 소매 모델 없음·표시 전용(상태·hash 불변)·글자 겹침·렌더/CSS/토글 배선.
   { file: "sleeveAnnotationCheck.js",   golden: false },
