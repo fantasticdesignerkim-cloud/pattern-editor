@@ -258,7 +258,19 @@
         { key: "releaseBeyondApCm", label: "뒤 해제 곡선 끝(Ap 너머 · 시안)", unit: "cm", defaultValue: 4 },
         { key: "releaseHandleRatio", label: "뒤 해제 곡선 핸들 비(시안)", unit: "", defaultValue: 0.5 },
         { key: "shoulderFairCm", label: "다듬기 — 뒤 어깨 닫은 자리(시안)", unit: "cm", defaultValue: 2 },
-        { key: "cuffFairCm", label: "다듬기 — 소맷부리 모서리(시안)", unit: "cm", defaultValue: 3 }] }
+        { key: "cuffFairCm", label: "다듬기 — 소맷부리 모서리(시안)", unit: "cm", defaultValue: 3 }] },
+    // Ⓧ(P.54 «몸판에서 이어진 소매와 덧천을 제도한다» · 제도 방법 P.144–145 · 닫는다·벌린다 P.161): 소매 붙임선 없이 몸판에서 이어진 소매 + 겨드랑이 별도 덧천.
+    //   앞 AH 다트 → 목둘레(옆 이동 불가) · 어깨선 연장 8 ⟂ 뒤 1.6 / 앞 0.7 → 소매 중심선 · ★선–옆선 중점 Ⓑ · 앞 Ⓕ = 뒤와 같은 ø · 소맷부리 = 소매 폭 × 3/4.
+    //   목 다트 위치 45% · SP 다듬기 2cm = 책에 수치 없는 구현 관례(수정 가능 · docs/book/P054.md).
+    { id: "bunka-sleeve-X", familyId: "kimono-sleeve", symbol: "X",
+      method: "kimono-sleeve-integrated-with-bodice-A(gusset, front AH dart to neckline)", methodPage: 54,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이", unit: "cm" },
+        { key: "slopeRunCm", label: "경사 안내(어깨선 연장)", unit: "cm", defaultValue: 8 },
+        { key: "backSlopeDropCm", label: "경사 직각(뒤)", unit: "cm", defaultValue: 1.6 },
+        { key: "frontSlopeDropCm", label: "경사 직각(앞)", unit: "cm", defaultValue: 0.7 },
+        { key: "cuffRatio", label: "소맷부리(뒤 소매 폭 ×)", unit: "", defaultValue: 0.75 },
+        { key: "neckDartRatio", label: "목 다트 위치(목둘레 SNP 에서 · 구현 관례)", unit: "", defaultValue: 0.45 },
+        { key: "spFairCm", label: "SP 다듬기 폭(구현 관례)", unit: "cm", defaultValue: 2 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -359,7 +371,12 @@
         { id: "bunka-sleeve-W", symbol: "W", label: "W · Ⓥ 와 같이 · 소매산 높이 = 평균 어깨 길이 × 1/2 · 경사 뒤 1.3 / 앞 2 · 한 장 소매(앞뒤 맞댐 · 어깨 다트 · 몸판 Ⓐ 만, 시안)", page: 53, methodPage: 53,
           availability: "available", presetId: "bunka-sleeve-W", note: null }
       ] },
-    pendingFamily("kimono-sleeve", 10, "기모노 소매", "X", 54)
+    { id: "kimono-sleeve", order: 10, label: "기모노 소매", symbol: "X", page: 54, availability: "available", note: null,
+      familyNote: "Ⓧ — 몸판 Ⓐ 에서 소매 붙임선 없이 이어 제도한다(P.54 · 제도 방법 P.144–145): 앞 AH 다트 → 목둘레(옆 이동 불가) · 경사 8 ⟂ 뒤 1.6 / 앞 0.7 · ★선–옆선 중점 Ⓑ · 앞 Ⓕ = 뒤와 같은 ø · 소맷부리 = 소매 폭 × 3/4 · 겨드랑이 별도 덧천(폭선 ø+ø). 소매산·AH 이세는 적용되지 않는다(소매 달림선 없음). Ⓨ·Ⓩ(P.55)는 쪽 판독 후.",
+      variants: [
+        { id: "bunka-sleeve-X", symbol: "X", label: "X · 몸판에서 이어진 소매 + 덧천(몸판 Ⓐ 만 · 앞 AH 다트 → 목둘레, 시안)", page: 54, methodPage: 54,
+          availability: "available", presetId: "bunka-sleeve-X", note: null }
+      ] }
   ];
 
   var AVAIL = { "available": 1, "pending-page": 1 };

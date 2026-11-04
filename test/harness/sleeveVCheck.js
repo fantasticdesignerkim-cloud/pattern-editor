@@ -77,7 +77,7 @@ const innerDeg = (u, v) => deg(Math.acos(Math.max(-1, Math.min(1, dot(u, v)))));
   ok(f && f.availability === "available" && SP.resolve("raglan-sleeve", "bunka-sleeve-V").ok, "1: 래글런 family 실행 가능 · resolve Ⓥ");
   ok(r && r.methodPage === 52 && J(r.inputs.map(i => i.key)) === J(SV.KEYS) && r.inputs[0].defaultValue === undefined, "1: 레코드 입력 키 = 엔진 KEYS · 소매길이 기본값 없음");
   ok(r.inputs.slice(1).every(i => SV.RULES.defaults[i.key] === i.defaultValue), "1: 레코드 기본값 = 엔진 기본값(책 7 + 시안 14)");
-  ok(SP.family("kimono-sleeve").availability !== "available", "1: 다음 라인(기모노)은 보류 유지");
+  ok(!SP.get("bunka-sleeve-Y"), "1: 다음 라인(기모노 Ⓨ·Ⓩ — 레코드 없음)은 보류 유지");
   ok(J(Object.keys(SV.RULES.book)) === J(["slopeRunCm", "backSlopeDropCm", "frontSlopeDropCm", "capHeightRatio", "sideDartDropCm", "frontBulgeCm", "cuffRatio"])
     && SV.RULES.book.backSlopeDropCm === 3.4 && SV.RULES.book.frontSlopeDropCm === 4 && SV.RULES.book.capHeightRatio === 0.75 && SV.RULES.book.frontBulgeCm === 0.6, "1: 책 수치(P.52 뒤 3.4 / 앞 4 · 3/4 · 0.6)");
 }
@@ -297,7 +297,7 @@ const P = projectWithBodice(A_ID); SVA.apply(P, { sleeveLengthCm: SL });
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8");
   const ver = (f) => { const mm = html.match(new RegExp("js/" + f.replace(".", "\\.") + "\\?v=(\\d+)")); return mm ? mm[1] : null; };
-  ok(["sleeveVApply.js", "designSleeveT.js"].every(f => ver(f) === "2026110101") && ["designSleeveV.js", "ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110301") && /css\/style\.css\?v=2026110101/.test(html), "12: 변경 파일 캐시 버전 2026110101 · Ⓦ 연결로 Ⓥ 엔진(옵션 추가)·공용 파일 2026110301");
+  ok(["sleeveVApply.js", "designSleeveT.js"].every(f => ver(f) === "2026110101") && ver("designSleeveV.js") === "2026110301" && ["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110401") && /css\/style\.css\?v=2026110101/.test(html), "12: 변경 파일 캐시 버전 2026110101 · Ⓦ 연결로 Ⓥ 엔진(옵션 추가)·공용 파일 2026110301");
   ok(html.indexOf("js/designSleeveT.js") < html.indexOf("js/designSleeveV.js") && html.indexOf("js/designSleeveV.js") < html.indexOf("js/sleeveVApply.js") && html.indexOf("js/sleeveVApply.js") < html.indexOf("js/ui.js"), "12: 스크립트 순서(Ⓣ 엔진 → Ⓥ 엔진 → 상태 → ui)");
   const rec = SP.get("bunka-sleeve-V");
   ok(/id="rowSleeveV" hidden/.test(html) && rec.inputs.slice(1).every(i => new RegExp('id="inpSleeveV_' + i.key + '" type="number" step="[0-9.]+" value="' + String(i.defaultValue).replace(".", "\\.") + '"').test(html)), "12: Ⓥ 입력 칸 21개 = 레코드 기본값");
