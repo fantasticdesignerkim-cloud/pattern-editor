@@ -75,8 +75,8 @@ const lenOfRole = (segs, role) => byRole(segs, role).reduce((a, s) => a + segLen
 // ── 1. 카탈로그 ──
 {
   const f = SP.family("kimono-sleeve"), r = SP.get("bunka-sleeve-X");
-  ok(f && f.availability === "available" && SP.resolve("kimono-sleeve", "bunka-sleeve-X").ok && f.variants.map(v => v.symbol).join() === "X", "1: 기모노 family = Ⓧ 만 실행 가능");
-  ok(!SP.get("bunka-sleeve-Y") && !SP.get("bunka-sleeve-Z"), "1: 다음 라인(기모노 Ⓨ·Ⓩ — 레코드 없음)은 보류 유지");
+  ok(f && f.availability === "available" && SP.resolve("kimono-sleeve", "bunka-sleeve-X").ok && f.variants.map(v => v.symbol).join() === "X,Y", "1: 기모노 family = Ⓧ·Ⓨ 실행 가능(Ⓨ 2026-11-04 추가)");
+  ok(!SP.get("bunka-sleeve-Z"), "1: 다음 라인(기모노 Ⓩ — 레코드 없음)은 보류 유지");
   ok(r && r.methodPage === 54 && J(r.inputs.map(i => i.key)) === J(SX.KEYS) && J(SXA.keys()) === J(SX.KEYS) && r.inputs.every(i => i.key === "sleeveLengthCm" ? i.defaultValue === undefined : i.defaultValue === SX.RULES.defaults[i.key]), "1: Ⓧ 레코드 입력 = 엔진 KEYS · 소매길이 기본값 없음 · 기본값 = RULES");
   ok(SX.RULES.book.slopeRunCm === 8 && SX.RULES.book.backSlopeDropCm === 1.6 && SX.RULES.book.frontSlopeDropCm === 0.7 && SX.RULES.book.cuffRatio === 0.75 && Object.keys(SX.RULES.book).length === 4, "1: 책 수치 = 8 · 1.6 / 0.7 · 3/4 (4개)");
   ok(SX.RULES.convention.neckDartRatio === 0.45 && SX.RULES.convention.spFairCm === 2 && Object.keys(SX.RULES.convention).length === 2 && SX.KEYS.length === 7, "1: 구현 관례 = 목 다트 위치 45% · SP 다듬기 2cm(책 수치와 분리) · 입력 7개");
@@ -370,7 +370,7 @@ const P = projectWithBodice(A_ID); PROJECT = P; SXA.apply(P, { sleeveLengthCm: S
   ok(/sleeveXOn\(project\) \? "Ⓧ"/.test(ui) && /id === "bunka-sleeve-X" \? "Ⓧ"/.test(ui) && /getElementById\("rowSleeveX"\)/.test(ui) && /inpSleeveX_/.test(ui) && /isX \? "Ⓧ"/.test(ui), "12: 기호 · 칸 표시 · 입력칸 동기화");
   ok(SX.KEYS.filter(k => k !== "sleeveLengthCm").every(k => html.indexOf('id="inpSleeveX_' + k + '"') >= 0) && html.indexOf('id="rowSleeveX"') >= 0, "12: index.html 입력칸 6개 + 행(rowSleeveX) · id 일치");
   ok(html.indexOf('src="js/designSleeveX.js?v=') > 0 && html.indexOf('src="js/sleeveXApply.js?v=') > html.indexOf('src="js/designSleeveX.js?v=') && html.indexOf('src="js/designSleeveX.js?v=') < html.indexOf('src="js/ui.js?v=') && html.indexOf('src="js/sleeveXApply.js?v=') > html.indexOf('src="js/sleeveWApply.js?v='), "12: 스크립트 순서(Ⓦ 뒤 · ui 앞)");
-  ok(["designSleeveX.js", "sleeveXApply.js", "ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110401") && ["designSleeveW.js", "sleeveWApply.js", "designSleeveV.js"].every(f => ver(f) === "2026110301"), "12: 변경 파일 캐시 버전 2026110401(바뀌지 않은 Ⓥ·Ⓦ 파일은 그대로)");
+  ok(["designSleeveX.js", "sleeveXApply.js"].every(f => ver(f) === "2026110401") && ["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110402") && ["designSleeveW.js", "sleeveWApply.js", "designSleeveV.js"].every(f => ver(f) === "2026110301"), "12: 변경 파일 캐시 버전 2026110401(바뀌지 않은 Ⓥ·Ⓦ 파일은 그대로) · Ⓨ 연결로 공용 파일 2026110402");
   ok(!/bodiceResult\s*=/.test(apply) && !/sleeveResult\s*=/.test(apply) && !/localStorage|document\./.test(apply) && !/window\.sleeve[A-WYZ]Apply\.(apply|clear)/.test(apply), "12: sleeveXApply 는 bodiceResult·sleeveResult 를 쓰지 않고 DOM·storage 미접근 · 다른 소매 라인을 건드리지 않음");
   const eng = fs.readFileSync(path.join(ROOT, "js/designSleeveX.js"), "utf8");
   ok(!/localStorage|document\.|bodiceResult\s*=|designSleeveV|designSleeveW|designSleeveT\b/.test(eng) , "12: 엔진은 순수(DOM·storage·bodiceResult 쓰기 없음) · Ⓥ/Ⓦ/Ⓣ 엔진을 재사용하지 않음(다트 엔진·다른 결과 무변경)");

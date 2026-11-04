@@ -291,7 +291,7 @@ ok(m.rule.indexOf("p51") >= 0 && m.lineage && m.lineage.sameAs === "T" && m.unco
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8");
   const ver = (f) => { const mm = html.match(new RegExp("js/" + f.replace(".", "\\.") + "\\?v=(\\d+)")); return mm ? mm[1] : null; };
   // 이력: Ⓤ 연결 때 6 파일 2026102911 → 2026-10-30 소매산 재보완으로 엔진·프리셋·표시 3 파일 2026103001
-  ok(["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110401") && ver("designSleeveT.js") === "2026110101" && ver("sleeveUApply.js") === "2026103001", "11: 변경 파일 캐시 버전(Ⓤ 연결 2026102911 · 재보완 2026103001 — sleeveUApply 는 수렴 실패 사유 추가로 올림 · Ⓥ 연결 2026110101 · Ⓦ 연결로 공용 파일 2026110301)");
+  ok(["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === "2026110402") && ver("designSleeveT.js") === "2026110101" && ver("sleeveUApply.js") === "2026103001", "11: 변경 파일 캐시 버전(Ⓤ 연결 2026102911 · 재보완 2026103001 — sleeveUApply 는 수렴 실패 사유 추가로 올림 · Ⓥ 연결 2026110101 · Ⓦ 연결로 공용 파일 2026110301)");
   ok(html.indexOf("js/designSleeveT.js") < html.indexOf("js/sleeveUApply.js") && html.indexOf("js/sleeveUApply.js") < html.indexOf("js/ui.js"), "11: 스크립트 순서");
   const rec = SP.get("bunka-sleeve-U");
   ok(/id="rowSleeveU" hidden/.test(html) && rec.inputs.slice(1).every(i => new RegExp('id="inpSleeveU_' + i.key + '" type="number" step="[0-9.]+" value="' + String(i.defaultValue).replace(".", "\\.") + '"').test(html)), "11: Ⓤ 입력 칸 11개 = 레코드 기본값");

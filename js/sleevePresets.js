@@ -270,7 +270,16 @@
         { key: "frontSlopeDropCm", label: "경사 직각(앞)", unit: "cm", defaultValue: 0.7 },
         { key: "cuffRatio", label: "소맷부리(뒤 소매 폭 ×)", unit: "", defaultValue: 0.75 },
         { key: "neckDartRatio", label: "목 다트 위치(목둘레 SNP 에서 · 구현 관례)", unit: "", defaultValue: 0.45 },
-        { key: "spFairCm", label: "SP 다듬기 폭(구현 관례)", unit: "cm", defaultValue: 2 }] }
+        { key: "spFairCm", label: "SP 다듬기 폭(구현 관례)", unit: "cm", defaultValue: 2 }] },
+    // Ⓨ(P.55 위 «몸판에서 이어진 소매를 제도한다(소매길이 5cm)» · 프렌치 슬리브): 별도 소매 조각·덧천 없이 몸판 일체형 뒤·앞만.
+    //   어깨선 연장 5 → 연장선 직각 0.5 내림(E) → E 에서 새 어깨선 직각 → 완만한 곡선으로 원래 진동에 합류 · 앞 AH 다트 → 옆.
+    //   옆 다트 위치 3 · 합류점(진동 아랫점에서 호) 3 = 책에 수치 없는 구현 관례(수정 가능 · docs/book/P055.md).
+    { id: "bunka-sleeve-Y", familyId: "kimono-sleeve", symbol: "Y",
+      method: "french-sleeve-integrated-with-bodice-A(shoulder extension, front AH dart to side)", methodPage: 55,
+      inputs: [{ key: "sleeveLengthCm", label: "소매길이(SP 에서 어깨선 연장)", unit: "cm", defaultValue: 5 },
+        { key: "dropCm", label: "끝 내림(연장선 직각)", unit: "cm", defaultValue: 0.5 },
+        { key: "sideDartDropCm", label: "옆 다트 위치(진동 아랫점에서 · 구현 관례)", unit: "cm", defaultValue: 3 },
+        { key: "joinFromBottomCm", label: "합류점(진동 아랫점에서 호 · 구현 관례)", unit: "cm", defaultValue: 3 }] }
   ];
 
   function pendingFamily(id, order, label, symbol, page) {
@@ -372,10 +381,12 @@
           availability: "available", presetId: "bunka-sleeve-W", note: null }
       ] },
     { id: "kimono-sleeve", order: 10, label: "기모노 소매", symbol: "X", page: 54, availability: "available", note: null,
-      familyNote: "Ⓧ — 몸판 Ⓐ 에서 소매 붙임선 없이 이어 제도한다(P.54 · 제도 방법 P.144–145): 앞 AH 다트 → 목둘레(옆 이동 불가) · 경사 8 ⟂ 뒤 1.6 / 앞 0.7 · ★선–옆선 중점 Ⓑ · 앞 Ⓕ = 뒤와 같은 ø · 소맷부리 = 소매 폭 × 3/4 · 겨드랑이 별도 덧천(폭선 ø+ø). 소매산·AH 이세는 적용되지 않는다(소매 달림선 없음). Ⓨ·Ⓩ(P.55)는 쪽 판독 후.",
+      familyNote: "Ⓧ — 몸판 Ⓐ 에서 소매 붙임선 없이 이어 제도한다(P.54 · 제도 방법 P.144–145): 앞 AH 다트 → 목둘레(옆 이동 불가) · 경사 8 ⟂ 뒤 1.6 / 앞 0.7 · ★선–옆선 중점 Ⓑ · 앞 Ⓕ = 뒤와 같은 ø · 소맷부리 = 소매 폭 × 3/4 · 겨드랑이 별도 덧천(폭선 ø+ø). 소매산·AH 이세는 적용되지 않는다(소매 달림선 없음). Ⓨ(P.55 위 프렌치 슬리브) — 어깨선 연장 5 → 연장선 직각 0.5 내림 → 직각 → 원래 진동에 곡선 합류 · 앞 AH 다트 → 옆 · 별도 소매 조각 없음. Ⓩ(P.55 아래)는 아직 구현하지 않았다(Ⓨ 와 다른 공정 — 옆선에 연결).",
       variants: [
         { id: "bunka-sleeve-X", symbol: "X", label: "X · 몸판에서 이어진 소매 + 덧천(몸판 Ⓐ 만 · 앞 AH 다트 → 목둘레, 시안)", page: 54, methodPage: 54,
-          availability: "available", presetId: "bunka-sleeve-X", note: null }
+          availability: "available", presetId: "bunka-sleeve-X", note: null },
+        { id: "bunka-sleeve-Y", symbol: "Y", label: "Y · 프렌치 슬리브 — 몸판에서 이어진 소매(소매길이 5 · 끝 0.5 · 몸판 Ⓐ 만 · 앞 AH 다트 → 옆, 시안)", page: 55, methodPage: 55,
+          availability: "available", presetId: "bunka-sleeve-Y", note: null }
       ] }
   ];
 

@@ -118,11 +118,11 @@ const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.refe
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveK.js") > pos("sleeveJApply.js") && pos("sleeveKApply.js") > pos("designSleeveK.js") && pos("ui.js") > pos("sleeveKApply.js"), "7: 스크립트 순서");
-  ok((["designSleeveK.js"].every(f => ver(f) === VER) && ver("sleeveKApply.js") === "2026102802") && (ver("sleevePresets.js") === "2026110401" && ver("render.js") === "2026102906" && ver("sleeveCheckpoint.js") === "2026110401" && ver("ui.js") === "2026110401") && ver("sleeveAnnotation.js") === "2026110401" && ver("designSleeveJ.js") === "2026102001", "7: 캐시 버전 " + VER + " · Ⓙ 파일은 그대로");
+  ok((["designSleeveK.js"].every(f => ver(f) === VER) && ver("sleeveKApply.js") === "2026102802") && (ver("sleevePresets.js") === "2026110402" && ver("render.js") === "2026102906" && ver("sleeveCheckpoint.js") === "2026110402" && ver("ui.js") === "2026110402") && ver("sleeveAnnotation.js") === "2026110402" && ver("designSleeveJ.js") === "2026102001", "7: 캐시 버전 " + VER + " · Ⓙ 파일은 그대로");
   ok(/function sleeveKOn\(project\)/.test(ui) && /function applySleeveK\(project\)/.test(ui) && /keep !== "K" && window\.sleeveKApply/.test(ui) && /if \(isK\) \{/.test(ui) && /window\.sleeveKApply\.rederive\(project\)/.test(ui) && /_sm\.line === "K"/.test(rn), "7: ui·render 배선");
   ok(/riseRow\.hidden = !\(sleeveJOn\(project\) \|\| sleeveKOn\(project\)/.test(ui) && /id="inpSleeveRise" type="number" min="0" step="0.1" value="0\.7"/.test(html), "7: 상승 입력칸 Ⓙ·Ⓚ 공용(기본 0.7)");
   ok(/id="chkSleeveHPieces" checked/.test(html) && /id="chkSleeveHRef">/.test(html), "7: 녹색 토글 기본 켜짐 · 비교 도안 기본 꺼짐");
-  ok(/const inputsOk = sleeveLineOn\(project\) \? readNum\("inpSleeveLength", 10, 90\)\.valid : readSleeveInputs\(\)\.valid;/.test(ui) && /apply\.disabled = !\(gate && inputsOk && !invalid\)/.test(ui), "7: 라인이 켜져 있으면 표시용 소맷부리 칸(60 초과)으로 적용 버튼을 잠그지 않음");
+  ok(/const inputsOk = sleeveYOn\(project\) \? readNum\("inpSleeveLength", -Infinity, Infinity\)\.valid : sleeveLineOn\(project\) \? readNum\("inpSleeveLength", 10, 90\)\.valid : readSleeveInputs\(\)\.valid;/.test(ui) && /apply\.disabled = !\(gate && inputsOk && !invalid\)/.test(ui), "7: 라인이 켜져 있으면 표시용 소맷부리 칸(60 초과)으로 적용 버튼을 잠그지 않음 (Ⓨ 는 소매길이 = 어깨 연장이라 10–90 잠금 제외 — 2026-11-04)");
 }
 
 console.log("\n══════════════════════════════════════════════");
