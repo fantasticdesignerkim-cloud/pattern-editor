@@ -15,6 +15,8 @@
 // 파트 결속(makeParts/partCurrent): 소매 파트는 sourcePiece:"sleeve" + sourceCutId 에 더해 출처 소매·몸판 hash · 소매 기호 ·
 //   조각 이름 · 절개선 서명을 들고, 하나라도 현재와 다르면 «현재 결과»가 아니다(표시·집계 제외 → prune 으로 제거).
 //
+// 외곽 대체 미리보기(2026-11-06): 같은 고리·같은 현재성(sleeveRef)으로 몸판 replaceArcOnRing 을 재사용한다 — 아래 «외곽 대체 미리보기» 절.
+//
 // 불변: 원형·bodiceResult·sleeveResult·working.geometry 를 읽기만 한다(파트는 새 세그먼트 — cloneSeg/subSegment 경유).
 // 저장·출력 체계 없음: working.parts 는 종전대로 세션 미리보기(마지막 분리 한 쌍)이고 designResult hash 에 들어가지 않는다.
 // ══════════════════════════════════════════════
@@ -42,15 +44,22 @@
     }
     return T().outlinePrimsToSegs([pr]);    // 몸판과 같은 변환(의미 metadata 승계)
   }
-  // 소매 geometry → 조각 목록 [{ name, segs }]. pieces 가 둘 이상이면 primitive.piece 태그로 나눈다(Ⓥ).
+  // 소매 geometry → 조각 목록 [{ name, segs, darts }]. pieces 가 둘 이상이면 primitive.piece 태그로 나눈다(Ⓥ).
+  //   darts[i] = segs[i] 가 열린 다트 V 다리(primitive role 에 "dart" — Ⓒ dart-leg-* · Ⓦ shoulder-dart)인가. 외곽 대체만 쓴다(분리는 종전대로 무시).
+  const DART_ROLE = /dart/;
+  function _groupOf(name, list) {
+    const segs = [], darts = [];
+    list.forEach(pr => primToSegs(pr).forEach(sg => { segs.push(sg); darts.push(DART_ROLE.test(pr.role || "")); }));
+    return { name: name, segs: segs, darts: darts };
+  }
   function pieceGroups(g) {
     const prims = (g && Array.isArray(g.outline)) ? g.outline : [];
     if (!prims.length) return [];
     if (Array.isArray(g.pieces) && g.pieces.length > 1) {
-      return g.pieces.map(name => ({ name: name, segs: [].concat.apply([], prims.filter(pr => pr.piece === name).map(primToSegs)) }))
-        .concat(prims.some(pr => g.pieces.indexOf(pr.piece) < 0) ? [{ name: "?", segs: [].concat.apply([], prims.filter(pr => g.pieces.indexOf(pr.piece) < 0).map(primToSegs)) }] : []);
+      return g.pieces.map(name => _groupOf(name, prims.filter(pr => pr.piece === name)))
+        .concat(prims.some(pr => g.pieces.indexOf(pr.piece) < 0) ? [_groupOf("?", prims.filter(pr => g.pieces.indexOf(pr.piece) < 0))] : []);
     }
-    return [{ name: (Array.isArray(g.pieces) && g.pieces[0]) || "sleeve", segs: [].concat.apply([], prims.map(primToSegs)) }];
+    return [_groupOf((Array.isArray(g.pieces) && g.pieces[0]) || "sleeve", prims)];
   }
   function _d(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
@@ -68,7 +77,7 @@
     });
     if (gaps) return { ok: false, reason: "외곽선 끊김 " + Math.ceil(gaps / 2) + "곳(틈 최대 " + maxGap.toFixed(3) + "cm) — 닫힌 한 고리가 아님" };
     if (forks) return { ok: false, reason: "외곽선 갈래(한 점에 셋 이상 모임) — 닫힌 한 고리가 아님" };
-    const used = new Array(n).fill(false), chain = [];
+    const used = new Array(n).fill(false), chain = [], idx = [0];   // idx = 고리 순서의 원래 세그먼트 번호(외곽 대체가 다트 다리 출처를 되찾는 데 쓴다)
     let first = D.cloneSeg(segs[0]);   // 복사(의미 승계)
     chain.push(first); used[0] = true; let cur = first.to;
     for (let step = 1; step < n; step++) {
@@ -81,11 +90,11 @@
       }
       if (found < 0) return { ok: false, reason: "외곽선이 이어지지 않음 — 닫힌 한 고리가 아님" };
       oriented.from = _pt(cur);                         // 이음점 정확 공유(drift 제거 — buildPieceRing 과 같음)
-      used[found] = true; chain.push(oriented); cur = oriented.to;
+      used[found] = true; chain.push(oriented); idx.push(found); cur = oriented.to;
     }
     if (_d(cur, first.from) > RING_EPS) return { ok: false, reason: "외곽선 고리가 닫히지 않음" };
     chain[chain.length - 1].to = _pt(first.from);
-    return { ok: true, ring: chain.map(s => ({ seg: s, source: "outline" })) };
+    return { ok: true, ring: chain.map((s, i) => ({ seg: s, source: "outline", k: idx[i] })) };
   }
   function _polyOf(ring) { const pts = []; ring.forEach(r => T().flattenSegment(r.seg).forEach(ab => { if (!pts.length) pts.push(ab[0]); pts.push(ab[1]); })); return pts; }
   function _inside(pt, poly) {
@@ -202,5 +211,64 @@
     return !!(line && line.piece === "sleeve" && line.role === "cut" && cutSig(line.segments) === part.sourceCutSig);
   }
 
-  window.sleeveSplit = Object.freeze({ pieceGroups, buildClosedRing, splitSleeve, sleeveRef, quickRef, cutStatus, cutSig, makeParts, partCurrent, symOf, liveLine, ON_TOL, RING_EPS });
+  // ── 외곽 대체 미리보기(2026-11-06 김님 «외곽 선택하면 외곽 대체 미리보기가 있어야지») ──
+  // 몸판 외곽 대체(designLineTool.replaceArcOnRing)를 **그대로 재사용**한다. 다른 점은 고리뿐이다(분리와 같은 닫힌 한 고리).
+  //   · 열린 다트 V(Ⓒ·Ⓦ)의 다리 = 고리에서 dartleg 출처 → 대체 구간이 V 를 품거나 끝점이 다리 위면 거부(V 는 실제 외곽 — 지우지 않음),
+  //     유지 구간의 V 는 결과에 그대로 남는다(keepDartlegs · 결과 = 닫힌 한 고리).
+  //   · 두 장(Ⓥ): 선 양끝이 같은 조각 위여야 한다(다른 조각과 잇지 않음) · 결과는 그 조각만 — 다른 조각은 손대지 않는다.
+  //   · 애매한 대체 구간(양쪽 길이 유사) · 자기교차 · 유지 외곽과 교차 · 폐곡선 무효는 몸판과 같은 판정(계약 그대로).
+  //   미리보기일 뿐 — 원형·bodiceResult·sleeveResult·working.geometry 를 바꾸지 않고 sleeveResult·Design 완료/hash 에 들어가지 않는다.
+  function _bndReason(r) {
+    if (/다트 다리 위/.test(r)) return "대체선 끝점이 열린 다트 V 다리 위 — V 는 실제 외곽이라 그 다리에서 시작·끝내지 않습니다(V 밖 외곽에서 시작·끝내세요)";
+    if (/다트를 포함/.test(r)) return "대체할 구간이 열린 다트 V 를 품음 — V 는 실제 외곽이라 지우지 않습니다";
+    return r;
+  }
+  // 순수: 소매 geometry 의 한 조각 외곽을 대체선으로 바꾼 결과. 반환 { ok, outline(닫힌 한 고리 · 새 세그먼트), piece, code?, reason }.
+  //   code: no-piece | off-outline | cross-piece | ring | replace
+  function boundarySleeve(g, bndSegs, opts) {
+    opts = opts || {}; const tol = opts.onTol != null ? opts.onTol : ON_TOL, D = T();
+    if (!g || g.sleevePiece === false || !Array.isArray(g.outline) || !g.outline.length)
+      return { ok: false, code: "no-piece", reason: "별도 소매 조각이 없음(소매가 몸판과 한 장) — 대체할 소매 외곽이 없습니다" };
+    if (!bndSegs || !bndSegs.length) return { ok: false, code: "replace", reason: "대체선 없음" };
+    const B0 = bndSegs[0].from, B1 = bndSegs[bndSegs.length - 1].to;
+    const groups = pieceGroups(g).map(gr => { const f = D.flattenLine(gr.segs); return Object.assign({}, gr, { d0: D.distPtToSegs(B0, f), d1: D.distPtToSegs(B1, f) }); });
+    const on0 = groups.filter(x => x.d0 <= tol), on1 = groups.filter(x => x.d1 <= tol);
+    if (!on0.length) return { ok: false, code: "off-outline", reason: "대체선 시작점이 소매 외곽선 위에 없음" };
+    if (!on1.length) return { ok: false, code: "off-outline", reason: "대체선 끝점이 소매 외곽선 위에 없음" };
+    const gr = on0.filter(x => on1.indexOf(x) >= 0)[0];
+    if (!gr) return { ok: false, code: "cross-piece", reason: "대체선 양끝이 서로 다른 소매 조각(" + on0[0].name + " ↔ " + on1[0].name + ") 위 — 한 조각의 외곽만 대체합니다(다른 조각과 잇지 않음)" };
+    const rb = buildClosedRing(gr.segs);
+    if (!rb.ok) return { ok: false, code: "ring", reason: "소매 외곽 형태 미지원: " + rb.reason };
+    rb.ring.forEach(r => { if (gr.darts[r.k]) r.source = "dartleg"; });
+    const r = D.replaceArcOnRing(rb.ring, bndSegs, { onTol: tol, keepDartlegs: true });
+    if (!r.ok) return { ok: false, code: "replace", reason: _bndReason(r.reason) };
+    return { ok: true, outline: r.outline, piece: gr.name };
+  }
+  // 대체선 상태(소매) — designLineTool.validateSelectedBoundary 가 소매 선에 부른다(상태 동기화 때만 · render 는 안 부른다).
+  //   기준 = 분리와 같은 현재 소매 완료본(sleeveRef) — 미완료·변경·차단·몸판 변경이면 이전 형상으로 대체하지 않고 재완료 이유.
+  //   반환 { ok, basis:"sleeve", kind: ok|pending|invalid|none, sym, reason, piece?, outline? } (_ref 비열거 = 같은 동기화에서 재사용).
+  function boundaryStatus(p, line) {
+    const ref = sleeveRef(p), base = { basis: "sleeve", sym: ref.sym };
+    Object.defineProperty(base, "_ref", { value: ref, enumerable: false });
+    if (ref.source === "none") return Object.assign(base, { ok: false, kind: "none", reason: ref.reason });
+    if (ref.source !== "current") return Object.assign(base, { ok: false, kind: "pending", reason: ref.reason });
+    const res = boundarySleeve(ref.geometry, T().boundarySegsOf(line));
+    if (!res.ok) return Object.assign(base, { ok: false, kind: res.code === "no-piece" ? "none" : "invalid", code: res.code, reason: res.reason });
+    return Object.assign(base, { ok: true, kind: "ok", piece: res.piece, outline: res.outline, reason: "대체 가능 — 소매 " + ref.sym + " 완료본 기준" });
+  }
+  // 미리보기 결속: 출처 소매·몸판 hash · 소매 기호 · 조각 이름 · 대체선 서명. 하나라도 현재와 다르면 «현재 결과»가 아니다.
+  function makeBoundaryPreview(ref, line, st) {
+    return { sourcePiece: "sleeve", sourceLineId: line.id, outline: st.outline, sourceSleevePiece: st.piece,
+      sourceSleeveSym: ref.sym, sourceSleeveHash: ref.sleeveHash, sourceBodiceHash: ref.bodiceHash, sourceLineSig: cutSig(line.segments) };
+  }
+  function previewCurrent(p, bp, ref) {
+    if (!bp || bp.sourcePiece !== "sleeve") return false;
+    ref = ref || quickRef(p);
+    if (ref.source !== "current" || ref.sym !== bp.sourceSleeveSym || ref.sleeveHash !== bp.sourceSleeveHash || ref.bodiceHash !== bp.sourceBodiceHash) return false;
+    const line = ((p.working && p.working.patternLines) || []).filter(l => l.id === bp.sourceLineId)[0];
+    return !!(line && line.piece === "sleeve" && line.role === "boundary" && cutSig(line.segments) === bp.sourceLineSig);
+  }
+
+  window.sleeveSplit = Object.freeze({ pieceGroups, buildClosedRing, splitSleeve, sleeveRef, quickRef, cutStatus, cutSig, makeParts, partCurrent, symOf, liveLine, ON_TOL, RING_EPS,
+    boundarySleeve, boundaryStatus, makeBoundaryPreview, previewCurrent });
 })();

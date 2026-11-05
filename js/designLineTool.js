@@ -518,14 +518,16 @@
     return { ok: true, kept: kept, replaced: replaced, bnd: bnd, aPos: aPos, bPos: bPos };
   }
   // 대체선으로 ring 의 **짧은 arc** 를 교체한 파생 outline 반환(단일). 원본 geometry 불변.
+  //   opts.keepDartlegs(2026-11-06 소매 외곽 대체): 유지 arc 의 dartleg 구간도 출력에 남긴다 — 소매의 열린 다트 V(Ⓒ·Ⓦ)는
+  //   봉합용 제도선이 아니라 **실제 외곽**이라 지우면 안 된다. 기본(몸판)은 종전대로 다트 다리(construction)를 빼서 입구를 연다.
   function replaceArcOnRing(ring, boundarySegs, opts) {
     const pl = _boundaryPlan(ring, boundarySegs, opts); if (!pl.ok) return pl;
     const testLoop = pl.kept.map(o => o.seg).concat(pl.bnd);        // 다트 포함 닫은 테스트 루프
     const chk = _checkPart(testLoop); if (!chk.ok) return { ok: false, reason: "결과 폐곡선 무효: " + chk.reason };
     const ringArea = _signedArea(_flattenPart(ring.map(r => r.seg)));
     if (Math.sign(chk.area) !== Math.sign(ringArea)) return { ok: false, reason: "결과 방향 오류" };
-    const keptOutline = pl.kept.filter(o => o.source === "outline").map(o => o.seg);
-    return { ok: true, outline: pl.bnd.concat(keptOutline) };       // 대체선 + 유지 outline(다트 입구 열림)
+    const keptOutline = (opts && opts.keepDartlegs) ? pl.kept.map(o => o.seg) : pl.kept.filter(o => o.source === "outline").map(o => o.seg);
+    return { ok: true, outline: pl.bnd.concat(keptOutline) };       // 대체선 + 유지 outline(몸판 = 다트 입구 열림 · keepDartlegs = 닫힌 한 고리)
   }
   // 대체 arc 의 forward position 구간(aPos→bPos)을 세그먼트별 [t0,t1] 범위로.
   function _intervalRanges(a, b, N) {
