@@ -320,7 +320,10 @@ lap("s3");
   clearOthers(P, "A"); API("A").apply(P, defaultsOf("A")); SC.complete(P);
   ok(DLT.isOriginalBodiceContext(P) === true, "4: Ⓐ 로 돌아와 완료 → 다시 원래 몸판 맥락");
   const RSRC = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
-  ok(/dp\.working\.parts\.length && !\(_dlt && _dlt\.isOriginalBodiceContext && !_dlt\.isOriginalBodiceContext\(dp\)\)\)/.test(RSRC), "4: render.js 파트 미리보기 = 원래 몸판 맥락에서만");
+  // 2026-11-05 소매 파트 분리: render 는 designLineTool.visibleParts 하나로 거른다 — 몸판 파트는 그 안에서 종전 그대로 원래 몸판 맥락에서만.
+  const TSRC = fs.readFileSync(path.join(ROOT, "js", "designLineTool.js"), "utf8");
+  ok(/_dlt\.visibleParts\(dp\)/.test(RSRC) && /orig = ps\.some\(q => q\.sourcePiece !== "sleeve"\) \? isOriginalBodiceContext\(p\) : false/.test(TSRC)
+    && /q\.sourcePiece === "sleeve" \? !!\(SS && SS\.partCurrent\(p, q, ref\)\) : orig/.test(TSRC), "4: render.js 파트 미리보기 = visibleParts(몸판 파트는 원래 몸판 맥락에서만 · 종전)");
   ok(/window\.designLineTool && window\.designLineTool\.syncCutStatus\) window\.designLineTool\.syncCutStatus\(\);\n  \}\n  function onCompleteDesign/.test(UI_SRC), "4: ui.js updateDesignResultUI 끝에서 절개선 상태 동기화");
 }
 

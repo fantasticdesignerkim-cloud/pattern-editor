@@ -14,7 +14,8 @@
 //     canFinishDraw·잠금 판정)를 읽어 보이기만 한다. 저장 상태·선 생성·자동 역할 지정 없음.
 //   · 버튼은 기존 명령만 부른다: finishDraw · cancel(= 오른쪽 «그리기 취소»와 같은 setMode("off")) · setRole.
 //     오른쪽 버튼·id·단축키(Enter·Esc·Backspace·Delete)는 그대로이고, 둘 다 같은 명령이라 자동 동기화된다.
-//   · 유일한 UI 상태: «접기(×)» = 지금 선택한 선에 대해서만 막대를 접는다(선·선택 무변경). 캔버스를 다시 누르면 풀린다.
+//   · UI 상태: «접기(×)» = 지금 선택한 선에 대해서만 막대를 접는다(선·선택 무변경). 캔버스를 다시 누르면 풀린다.
+//     «도구»(소형 상태줄 → 전체 막대, 2026-11-05) = 분리 결과 확인용 상태줄을 그 결과에 대해서만 펼친다. 선택·결과 변화·캔버스 누름에 풀린다.
 //   · 위치 기준 = **실제로 그려진 SVG**(선택 선 path · overlay 앵커/핸들 · 작성 중 preview/vertex)의 화면 좌표(getScreenCTM).
 //     피스 offset·파생 몸판·카라 레이어·줌·팬이 무엇이든 화면에 그려진 선과 정합. 커서 위치는 쓰지 않는다(흔들림 없음).
 //   · 배치 = 기준점 위/아래/오른쪽/왼쪽 후보 중 **선·앵커·핸들 점을 가리지 않는 첫 후보**(같으면 위 우선) → 캔버스 안으로 클램프.
@@ -49,6 +50,17 @@
     return null;
   }
 
+  // ── 순수: 표시 형태(2026-11-05 · Codex 후속 «320×640 팝업이 분리 파트를 덮음») ──
+  //   분리가 성공해 파트가 현재 결과로 보이는데(sp.allowed && parts>0) **전체 막대를 놓을 빈자리가 없으면**(배치 최소 가림 > 0)
+  //   결과 확인용 소형 상태줄 «분리됨 · 파트 N개» + «도구»로 줄인다. «도구»를 누르면(expandedKey = 그 결과 키) 전체 막대로 복귀.
+  //   미분리·실패·보류·그리기·관리선·넓은 화면(빈자리 있음)은 언제나 전체 막대(이유·분리 버튼이 보여야 한다).
+  //   버튼을 구겨 작게 만들지 않는다 — 소형 상태줄의 «도구»도 44px.
+  function resultKey(vm) { const sp = vm && vm.kind === "select" ? vm.split : null; return sp && sp.allowed && sp.parts > 0 ? vm.key + ":parts" + sp.parts : null; }
+  function chooseMode(vm, fullHits, expandedKey) {
+    const k = resultKey(vm);
+    return (k && fullHits > 0 && expandedKey !== k) ? "compact" : "full";
+  }
+
   // ── 순수: 배치 ──
   // o = {bounds:{l,t,r,b}, size:{w,h}, refs:[{x,y}], obstacles:[{x,y}]} (모두 canvas-wrap 기준 px)
   // 반환 {x, y, hits, index} — 후보 순서: 각 기준점마다 위 · 아래 · 오른쪽 · 왼쪽. 가림 점 수가 가장 적은 첫 후보.
@@ -63,12 +75,22 @@
       cands.push({ x: p.x + GAP, y: p.y - h / 2 });       // 오른쪽
       cands.push({ x: p.x - GAP - w, y: p.y - h / 2 });   // 왼쪽
     });
+    // 가림 대상 묶음(선·분리 파트) 바깥 네 방향(2026-11-05 소매 파트 분리) — 좁은 화면에서 선 주변 후보가 모두 파트를 덮을 때만 뽑힌다
+    //   (동점이면 앞 후보 유지 → 선 주변에 빈자리가 있으면 종전 위치 그대로).
+    const nRef = cands.length, ob = o.obstacles || [];
+    if (ob.length) {
+      let l = Infinity, r = -Infinity, t = Infinity, bt = -Infinity;
+      ob.forEach(q => { l = Math.min(l, q.x); r = Math.max(r, q.x); t = Math.min(t, q.y); bt = Math.max(bt, q.y); });
+      const mx = (l + r) / 2, my = (t + bt) / 2;
+      cands.push({ x: mx - w / 2, y: bt + GAP }, { x: mx - w / 2, y: t - GAP - h }, { x: l - GAP - w, y: my - h / 2 }, { x: r + GAP, y: my - h / 2 });
+    }
+    (o.extra || []).forEach(c => cands.push({ x: c.x, y: c.y }));   // 호출부가 더하는 자리(소형 상태줄 = 캔버스 네 모서리) — 맨 뒤라 동점이면 앞 후보 우선
     let best = null;
     cands.forEach((c, i) => {
       const x = clampX(c.x), y = clampY(c.y);
       let hits = 0;
       (o.obstacles || []).forEach(q => { if (q.x >= x - PAD && q.x <= x + w + PAD && q.y >= y - PAD && q.y <= y + h + PAD) hits++; });
-      if (!best || hits < best.hits) best = { x: x, y: y, hits: hits, index: i };
+      if (!best || hits < best.hits) best = { x: x, y: y, hits: hits, index: i, around: i >= nRef };
     });
     return best;
   }
@@ -76,6 +98,8 @@
   // ── DOM ──
   let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
   let splitRow = null, splitBtn = null, splitReason = null;
+  let headRow = null, compactRow = null, compactText = null, expandBtn = null;
+  let expandedKey = null;             // 소형 상태줄에서 «도구»로 펼친 결과 키(UI 전용 · 선택·결과가 바뀌거나 캔버스를 누르면 풀림)
   let splitNote = null;                // {key, text}: 막대 «파트 분리»를 눌렀는데 파트가 안 생겼을 때 doSplit 이 남긴 안내(#designSplitNote) — 선택이 바뀌면 버림
   let dismissedKey = null;            // «접기(×)» 한 선택 키(UI 전용)
   let press = null, dragging = false;  // 캔버스 위 누름·드래그 상태
@@ -193,17 +217,37 @@
     let refs = tg.refs.filter(vis);
     if (!refs.length) { const v = tg.obstacles.filter(vis); if (v.length) refs = [v[Math.floor(v.length / 2)]]; }
     if (!refs.length) { bar.style.visibility = ""; hide(); return; }
-    const pos = place({ bounds: bounds, size: size, refs: refs, obstacles: tg.obstacles });
+    let pos = place({ bounds: bounds, size: size, refs: refs, obstacles: tg.obstacles });
+    const rk = resultKey(vm);
+    if (expandedKey && expandedKey !== rk) expandedKey = null;   // 다른 선·다른 결과(무효화·재분리)면 펼침 해제
+    const mode = chooseMode(vm, pos.hits, expandedKey);
+    setCompact(mode === "compact", vm);
+    if (mode === "compact") {   // 줄인 크기로 다시 배치 — 선·파트 둘레 후보 + 캔버스 네 모서리(빈 UI 자리) 중 가장 덜 가리는 곳
+      const cs = { w: bar.offsetWidth, h: bar.offsetHeight };
+      pos = place({ bounds: bounds, size: cs, refs: refs, obstacles: tg.obstacles,
+        extra: [{ x: bounds.l, y: bounds.t }, { x: bounds.r - cs.w, y: bounds.t }, { x: bounds.l, y: bounds.b - cs.h }, { x: bounds.r - cs.w, y: bounds.b - cs.h }] });
+    }
+    bar.setAttribute("data-mode", mode);
     const x = Math.round(pos.x), y = Math.round(pos.y);
     if (!lastPos || lastPos.x !== x || lastPos.y !== y) { bar.style.left = x + "px"; bar.style.top = y + "px"; lastPos = { x: x, y: y }; }
-    bar.setAttribute("data-place", String(pos.index % 4));
+    bar.setAttribute("data-place", pos.around ? "around" : String(pos.index % 4));
     bar.style.visibility = "";
 
     // 포커스가 막대 안에 있었는데 그 버튼이 숨겨졌으면(완료 → 역할 단계) 지금 단계의 주 버튼으로 옮긴다.
     if (hadFocus && !bar.contains(document.activeElement)) focusPrimary(vm);
     else if (hadFocus && document.activeElement && document.activeElement.closest("[hidden]")) focusPrimary(vm);
   }
+  // 소형 상태줄 켜기/끄기 — 전체 막대의 행은 그대로 두고 보이기만 바꾼다(요소 재생성 없음).
+  function setCompact(on, vm) {
+    if (!compactRow) return;
+    if (on) {
+      compactText.textContent = "분리됨 · 파트 " + vm.split.parts + "개";
+      headRow.hidden = true; roleRow.hidden = true; splitRow.hidden = true; drawRow.hidden = true; compactRow.hidden = false;
+      bar.setAttribute("aria-label", "패턴선 빠른 조작 · " + vm.title + " · 분리됨 · 파트 " + vm.split.parts + "개");
+    } else { compactRow.hidden = true; headRow.hidden = false; }
+  }
   function focusPrimary(vm) {
+    if (compactRow && !compactRow.hidden) { try { expandBtn.focus({ preventScroll: true }); } catch (_) { expandBtn.focus(); } return; }
     const t = vm.kind === "draw" ? (finishBtn.disabled ? cancelBtn : finishBtn)
       : (roleBtns.filter(b => b.getAttribute("aria-pressed") === "true" && !b.disabled)[0] || (dismissBtn.hidden ? null : dismissBtn));
     if (t) { try { t.focus({ preventScroll: true }); } catch (_) { t.focus(); } }
@@ -232,6 +276,10 @@
     splitRow = bar.querySelector('[data-lqb="split"]');
     splitBtn = document.getElementById("lineQuickSplit");
     splitReason = document.getElementById("lineQuickSplitReason");
+    headRow = bar.querySelector(".lqb-head");
+    compactRow = bar.querySelector('[data-lqb="compact"]');
+    compactText = document.getElementById("lineQuickCompactText");
+    expandBtn = document.getElementById("lineQuickExpand");
 
     // 막대 위 조작은 캔버스(점 추가·피스 드래그·팬)로 가지 않는다.
     ["pointerdown", "mousedown", "touchstart", "wheel", "dblclick"].forEach(t => bar.addEventListener(t, e => e.stopPropagation(), { passive: true }));
@@ -240,11 +288,14 @@
     roleBtns.forEach(b => b.addEventListener("click", () => { const T = tool(); if (T) T.setRole(b.getAttribute("data-role")); }));
     // 파트 분리 = 오른쪽 버튼과 같은 doSplit. 파트가 안 생기면(분할 직전 재검증·ring 실패) doSplit 이 남긴 안내를 막대에도 보인다.
     splitBtn.addEventListener("click", () => { actSplit(); });
+    // 소형 상태줄 «도구» = 이 결과에 대해 전체 막대(역할·파트 분리)로 복귀.
+    if (expandBtn) expandBtn.addEventListener("click", () => { const vm = describe(snapshot()); expandedKey = resultKey(vm); sync();
+      const t = roleBtns.filter(b => b.getAttribute("aria-pressed") === "true" && !b.disabled)[0]; if (t) { try { t.focus({ preventScroll: true }); } catch (_) { t.focus(); } } });
     dismissBtn.addEventListener("click", () => { const vm = describe(snapshot()); if (vm && vm.kind === "select") { dismissedKey = vm.key; hide(); } });
 
     // 캔버스 드래그 중 숨김 · 손 떼면 재계산. 캔버스를 누르면 «접기» 해제(같은 선 재선택에도 다시 보임).
     const cv = (typeof svg !== "undefined" && svg) ? svg : document.getElementById("cv");
-    if (cv) cv.addEventListener("pointerdown", e => { press = { x: e.clientX, y: e.clientY, id: e.pointerId }; dismissedKey = null; }, true);
+    if (cv) cv.addEventListener("pointerdown", e => { press = { x: e.clientX, y: e.clientY, id: e.pointerId }; dismissedKey = null; expandedKey = null; }, true);
     window.addEventListener("pointermove", e => {
       if (!press || dragging) return;
       if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > DRAG_PX) { dragging = true; hide(); }
@@ -258,7 +309,7 @@
     sync();
   }
 
-  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place,
+  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, chooseMode: chooseMode, resultKey: resultKey,
     viewModel: () => describe(snapshot()), actSplit: actSplit });
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();

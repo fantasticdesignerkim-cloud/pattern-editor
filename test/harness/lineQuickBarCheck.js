@@ -58,6 +58,16 @@ const e2 = P({ bounds: B, size: S, refs: [{ x: 400, y: 300 }], obstacles: cross 
 ok(e.x === e2.x && e.y === e2.y && e.index === e2.index, "2f: 결정적 — 같은 선·같은 뷰 = 같은 위치(커서 무관 · 흔들림 없음)");
 const tiny = P({ bounds: { l: 8, t: 8, r: 150, b: 60 }, size: S, refs: [{ x: 70, y: 30 }], obstacles: [] });
 ok(tiny.x === 8 && tiny.y === 8, "2g: 캔버스보다 큰 막대 = 왼쪽 위 고정(넘침 방향 일관)");
+// 2h(2026-11-05 소매 파트 분리 · 좁은 화면 실측 390px): 선 주변 네 후보가 모두 분리 파트를 덮으면 파트 묶음 바깥 후보 — 가림 0
+{
+  const NB = { l: 8, t: 8, r: 382, b: 476 }, NS = { w: 186, h: 171 }, ring = [];
+  for (let x = 186; x <= 255; x += 3) { ring.push({ x: x, y: 177 }); ring.push({ x: x, y: 288 }); }
+  for (let y = 177; y <= 288; y += 3) { ring.push({ x: 186, y: y }); ring.push({ x: 255, y: y }); }
+  for (let x = 186; x <= 255; x += 3) ring.push({ x: x, y: 226 });   // 절개선(파트 사이)
+  const h = P({ bounds: NB, size: NS, refs: [{ x: 220, y: 226 }, { x: 186, y: 226 }, { x: 255, y: 226 }], obstacles: ring });
+  ok(h.hits === 0 && h.around === true && h.y >= 288, "2h: 선 주변 후보가 모두 파트를 덮으면 파트 묶음 아래(가림 0) (" + h.x + "," + h.y + " hits " + h.hits + ")");
+  ok(a.around === false && b.around === false && e.around === false, "2i: 선 주변에 빈자리가 있으면 종전 후보 그대로(묶음 바깥 후보는 동점에 밀림)");
+}
 
 // §3 연결 계약(소스)
 const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
@@ -74,7 +84,7 @@ const ret = R.indexOf("return; // 라이브 원형 draw"), syncAt = R.lastIndexO
 ok(syncAt > hitAt && hitAt > 0, "3f: design render 는 선·overlay·hit 을 그린 뒤 막대 sync(그려진 SVG 기준)");
 ok(/afterDraftRender\(\);\s*\n\s*if\(window\.designLineQuickBar\) window\.designLineQuickBar\.sync\(\);/.test(R), "3g: design 밖 render 도 sync(→ 숨김)");
 const ver = f => { const m = new RegExp(f.replace(/\./g, "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
-ok(ver("designLineQuickBar.js") === "2026110503" && ver("designLineTool.js") === "2026110504" && ver("render.js") === "2026110502" && /css\/style\.css\?v=2026110502/.test(html), "3h: 캐시 버전(막대 2026110503 · 도구 2026110504 · render 2026110502 · css 2026110502)");
+ok(ver("designLineQuickBar.js") === "2026110507" && ver("designLineTool.js") === "2026110506" && ver("render.js") === "2026110506" && /css\/style\.css\?v=2026110507/.test(html), "3h: 캐시 버전(도구·render 2026110506 — 소매 파트 분리 · 막대·css 2026110507 — 소형 상태줄)");
 ok(html.indexOf('<script src="js/designLineQuickBar.js') > html.indexOf('<script src="js/designLineTool.js'), "3i: 막대 스크립트는 designLineTool 뒤");
 
 // §4 절개선 → «파트 분리» 다음 단계 행(2026-11-05 김님 요청) — 표시 모델은 getSplitState(오른쪽 버튼 판정) 그대로
@@ -91,6 +101,26 @@ const iRole = html.indexOf('data-lqb="role"'), iSplit = html.indexOf('data-lqb="
 ok(iSplit > roleEnd && /data-lqb="split"[^>]*hidden/.test(html) && /id="lineQuickSplit"[^>]*disabled/.test(html) && /id="lineQuickSplitReason"/.test(html), "4g: 분리는 역할 행 밖 별도 행(다음 단계) · 처음 숨김·비활성 · 이유 글 요소");
 ok(/id="btnDesignSplit"[^>]*onclick="designLineTool\.doSplit\(\)"/.test(html), "4h: 오른쪽 «파트 분리» 배선 보존");
 ok(/splitBtn\.addEventListener\("click", \(\) => \{ actSplit\(\); \}\)/.test(CODE) && /!vm\.split\.allowed\) return false;\s*T\.doSplit\(\);/.test(CODE), "4i: 막대 버튼 = actSplit = 허용일 때만 doSplit");
+
+// §5 소형 상태줄(2026-11-05 Codex 후속 — 320×640 에서 막대가 분리 파트를 덮음): 분리 성공 + 빈자리 없음일 때만 · «도구»로 복귀
+{
+  const CM = Q.chooseMode, RK = Q.resultKey;
+  const done = sel("cut", Object.assign({}, OK0, { parts: 2 })), ready = sel("cut", OK0), no = sel("cut", NO);
+  ok(typeof CM === "function" && typeof RK === "function", "5a: chooseMode·resultKey 공개(순수)");
+  ok(CM(done, 5, null) === "compact" && CM(done, 0, null) === "full", "5b: 분리 성공 + 빈자리 없음(가림>0) = 소형 · 빈자리 있으면(넓은 화면) 전체 그대로");
+  ok(CM(ready, 9, null) === "full" && CM(no, 9, null) === "full", "5c: 미분리·불가·보류는 가려도 전체(이유·분리 버튼이 보여야 함)");
+  ok(CM(D({ design: true, mode: "draw", draft: { piece: "sleeve", n: 2 }, canFinish: true }), 9, null) === "full" && CM(sel("cut", Object.assign({}, OK0, { parts: 2 }), "cap"), 9, null) === "full",
+    "5d: 그리기 중·관리선은 소형 없음(그리기 완료/취소·잠금 표시 보존)");
+  ok(RK(done) === "sel:line-7:parts2" && CM(done, 5, RK(done)) === "full", "5e: «도구»로 펼친 결과 키 = 전체 막대");
+  ok(CM(done, 5, "sel:line-8:parts2") === "compact", "5f: 다른 선·다른 결과의 펼침 키는 무시(다시 소형)");
+  const NB = { l: 8, t: 8, r: 312, b: 327 }, cs = { w: 160, h: 54 }, obs = []; for (let x = 120; x <= 220; x += 4) for (let y = 120; y <= 300; y += 30) obs.push({ x: x, y: y });
+  const pc = P({ bounds: NB, size: cs, refs: [{ x: 170, y: 200 }], obstacles: obs, extra: [{ x: NB.l, y: NB.t }, { x: NB.r - cs.w, y: NB.t }, { x: NB.l, y: NB.b - cs.h }, { x: NB.r - cs.w, y: NB.b - cs.h }] });
+  ok(pc.hits === 0 && pc.x >= NB.l && pc.y >= NB.t && pc.x + cs.w <= NB.r && pc.y + cs.h <= NB.b, "5g: 소형 상태줄 배치 = 가림 0 자리(모서리 후보 포함) · 캔버스 안 (" + pc.x + "," + pc.y + ")");
+  ok(/data-lqb="compact"[^>]*hidden/.test(html) && /id="lineQuickExpand"[^>]*>도구</.test(html) && /class="lqb-btn" id="lineQuickExpand"/.test(html), "5h: 소형 상태줄 마크업 · 처음 숨김 · «도구» = lqb-btn(44px · 구기지 않음)");
+  const css = fs.readFileSync(path.join(__dirname, "..", "..", "css", "style.css"), "utf8");
+  ok(/@media \(pointer:coarse\)\{\.lqb-dismiss\{min-width:44px;min-height:44px\}\}/.test(css) && /\.lqb-btn\{min-height:44px;min-width:44px/.test(css), "5i: 손가락 환경 접기 «×» 44×44 · 막대 버튼 44");
+  ok(/expandedKey = null; \}, true\)/.test(CODE) && /if \(expandedKey && expandedKey !== rk\) expandedKey = null;/.test(CODE), "5j: 펼침은 캔버스 누름·선택/결과 변화에 풀림(소형이 기본)");
+}
 
 console.log("══════════════════════════════════════════════");
 fails.forEach(f => console.log("  ✗ " + f));

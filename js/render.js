@@ -731,9 +731,11 @@ function render(){
 
     // 파트 분리 미리보기(있을 때만): working 위, hit layer 아래. 두 파트 다른 색.
     //   파트는 원래 몸판 ring 을 자른 결과다 → 소매 파생 몸판 맥락(Ⓡ~Ⓩ 작업 중·완료본)에서는 그리지 않는다(원래 형상 조각을 파생 몸판 위에 섞지 않음 · 데이터는 그대로).
-    if (Array.isArray(dp.working.parts) && dp.working.parts.length && !(_dlt && _dlt.isOriginalBodiceContext && !_dlt.isOriginalBodiceContext(dp))) {
+    //   소매 파트(2026-11-05)는 출처 결속(현재 소매 완료본·몸판·절개선)이 맞을 때만 그린다 — 판정은 designLineTool.visibleParts 하나.
+    const _parts = (Array.isArray(dp.working.parts) && dp.working.parts.length && _dlt && _dlt.visibleParts) ? _dlt.visibleParts(dp) : [];
+    if (_parts.length) {
       const partsRoot = E("g"); partsRoot.setAttribute("data-design-root", "parts");
-      _appendParts(partsRoot, dp.working.parts, L, scale);
+      _appendParts(partsRoot, _parts, L, scale);
       svg.appendChild(partsRoot);
     }
     // 외곽 대체선 파생 미리보기(있을 때만): 원본 유지한 채 파생 외곽선을 다른 색으로.

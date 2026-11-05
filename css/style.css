@@ -438,7 +438,7 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .lqb-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .lqb-dismiss{flex-shrink:0;min-width:36px;min-height:30px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:17px;line-height:1;cursor:pointer}
 .lqb-dismiss:hover{background:color-mix(in srgb,var(--navy) 8%,var(--surface))}
-@media (pointer:coarse){.lqb-dismiss{min-width:44px;min-height:40px}}   /* 손가락: 접기도 터치 타깃 */
+@media (pointer:coarse){.lqb-dismiss{min-width:44px;min-height:44px}}   /* 손가락: 접기도 터치 타깃 44×44 */
 .lqb-row{display:flex;gap:3px;flex-wrap:wrap}
 .lqb-btn{min-height:44px;min-width:44px;padding:8px 12px;border:1px solid transparent;border-radius:8px;background:var(--surface);color:var(--navy);font:inherit;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer}
 .lqb-btn:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface));border-color:var(--cyan)}
@@ -453,3 +453,6 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .lqb-reason{width:0;min-width:100%;padding:0 4px 1px;font-size:11px;line-height:1.35;color:var(--muted);white-space:normal;overflow-wrap:anywhere}
 .lqb-reason:empty{display:none}
 .lqb-next[data-state="ok"] .lqb-reason,.lqb-next[data-state="done"] .lqb-reason{color:#0E7490}
+/* 소형 상태줄(분리 결과 확인 · 좁은 화면에서 빈자리가 없을 때만): 글 + «도구» 44px. 도구 버튼을 줄이지 않는다. */
+.lqb-compact{display:flex;align-items:center;gap:8px;padding-left:6px}
+.lqb-compact-text{font-size:12px;color:#0E7490;white-space:nowrap}

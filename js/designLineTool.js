@@ -815,8 +815,10 @@
   //   basis 없음 = 원래 몸판 맥락(종전 판정 그대로 — 합성 design outline 우선). 파트 분리는 이 경우에만.
   //   basis "sleeve-derived" = designResult 와 같은 최종 몸판(frozen) · 같은 3분류(유효 / 원래에서만 유효 = 최종 몸판 불일치 / 둘 다 무효 = 작성 중).
   //   basis "pending" = 최종 몸판 미확정(재완료 필요) — 유효라고 하지 않는다.
+  //   basis "sleeve"(2026-11-05) = 소매 선: sleeveSplit.cutStatus — 유효(ok)와 지금 실제 분리 가능(ready)을 따로 낸다(현재 소매 완료본 기준).
   function cutStatusOf(p, line, ref) {
     const others = lines().filter(l => l.piece === line.piece && l.role === "cut" && l.id !== line.id).map(l => flattenLine(l.segments));
+    if (line.piece === "sleeve" && window.sleeveSplit) return window.sleeveSplit.cutStatus(p, line, others);
     ref = (line.piece === "front" || line.piece === "back") ? (ref || editBodiceRef(p)) : { source: "original" };
     if (ref.source === "original") return validateCut(line, flattenLine(currentOutlineSegs(p, line.piece)), others);   // 합성 design outline 이 있으면 그 기준(종전)
     if (ref.source === "pending") return { ok: false, basis: "pending", sym: ref.sym, reason: ref.reason };
@@ -826,6 +828,13 @@
   }
   function cutStatusText(v) {
     if (!v.basis) return v.ok ? "분리 가능" : v.reason;   // 원래 몸판 맥락: 종전 문구
+    if (v.basis === "sleeve") {   // 소매: 유효 절개선 ≠ 지금 분리 가능 — 둘을 섞어 «분리 가능»이라 하지 않는다
+      if (v.kind === "ok") return "분리 가능 — 소매 " + v.sym + " 완료본 기준";
+      if (v.kind === "none") return "소매 조각 없음: " + v.reason;
+      if (!v.ok) return v.kind === "pending" ? "판정 보류: " + v.reason : v.reason;
+      if (v.kind === "pending") return "유효 절개선 · 파트 분리 보류: " + v.reason;
+      return "유효 절개선 · 분리 불가: " + v.reason;
+    }
     if (v.basis === "pending") return "판정 보류(최종 몸판 미확정): " + v.reason;
     const on = "소매 " + v.sym + " 까지 반영한 최종 몸판 기준";
     if (v.ok) return "유효 절개선 — " + on + " · Design 완료에 포함 · 파트 분리는 원래 몸판 전용이라 여기서 하지 않음";
@@ -864,8 +873,9 @@
   }
   // 검사 결과를 UI 상태로만 표시(#designCutStatus). data-ok 로 통과/실패 색 구분.
   function syncCutStatus() {
-    const el = document.getElementById("designCutStatus"); if (!el) return;
     const v = validateSelectedCut();
+    pruneStaleSleeveParts(null, v && v._ref);   // 소매·몸판·입력이 바뀐 뒤 낡은 소매 파트를 데이터에서도 지운다(표시는 visibleParts 가 빠른 판정으로 이미 제외)
+    const el = document.getElementById("designCutStatus"); if (!el) return;
     if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); el.removeAttribute("data-basis"); syncSplitButton(v); syncBoundaryStatus(); syncComposeButton(); return; }
     el.textContent = cutStatusText(v);
     el.setAttribute("data-ok", v.ok ? "1" : "0");
@@ -904,16 +914,27 @@
   // 파트 분리 버튼: 유효 절개선 선택 시에만 활성.
   //   v 를 넘기면 재판정하지 않는다(최종 몸판 판정은 소매 현재성 검사를 포함해 비싸다). 원래 몸판 맥락이 아니면 비활성(분리는 원래 ring 전용).
   //   판정은 splitState 에 남겨 «선 가까이» 막대가 **같은 판정**을 읽는다(getSplitState — 매 render 재판정 없음 · 저장 안 함).
-  //   앞판·뒤판이 아닌 절개선은 doSplit 이 거부하므로 버튼도 같은 조건으로 비활성(2026-11-05 · 막대 연결 때 doSplit 과 정합).
+  //   앞판·뒤판·소매가 아닌 절개선은 doSplit 이 거부하므로 버튼도 같은 조건으로 비활성(2026-11-05 · 막대 연결 때 doSplit 과 정합 · 소매는 같은 날 추가).
   const SPLIT_DERIVED_TIP = "파트 분리는 원래 몸판 전용 — 소매 파생 몸판은 여기서 자르지 않습니다(재단 단계 범위)";
   function _firstClause(t) { return String(t || "").split(" — ")[0]; }
+  function J_(o) { return o ? JSON.stringify(o) : ""; }
+  //   소매(2026-11-05): 허용 = 유효 + 현재 완료본 기준 + 실제 분할 시험 통과(v.ready). 불가 사유는 판정 문구 그대로(재완료 이유 포함).
   function splitStateOf(v, line) {
     if (!v || !line || line.role !== "cut") return null;
+    if (line.piece === "sleeve" && v.basis === "sleeve") {
+      const allowed = !!(v.ok && v.ready);
+      const reason = allowed ? "분리 가능"
+        : v.kind === "pending" ? "소매 재완료 필요 — " + _firstClause(v.reason)
+        : v.kind === "physical" ? "분할 불가 — " + _firstClause(v.reason)
+        : v.kind === "none" ? _firstClause(v.reason)
+        : v.reason;
+      return { lineId: line.id, allowed: allowed, kind: allowed ? "ok" : v.kind, reason: reason };
+    }
     const fb = line.piece === "front" || line.piece === "back";
     const allowed = splitAllowed(v) && fb;
     const kind = allowed ? "ok" : !fb ? "piece" : v.basis === "pending" ? "pending" : v.basis ? "derived" : "invalid";
     const reason = kind === "ok" ? "분리 가능"
-      : kind === "piece" ? "앞판·뒤판 절개선만 분리합니다"
+      : kind === "piece" ? "앞판·뒤판·소매 절개선만 분리합니다"
       : kind === "pending" ? "최종 몸판 미확정 — " + _firstClause(v.reason)
       : kind === "derived" ? "소매 " + v.sym + " 파생 몸판은 파트 분리 미지원(원래 몸판 전용)"
       : v.reason;
@@ -921,17 +942,39 @@
   }
   function syncSplitButton(v) {
     if (arguments.length === 0) v = validateSelectedCut();
+    const prev = J_(splitState);
     splitState = splitStateOf(v, (mode === "select" && selectedId) ? findLine(selectedId) : null);
+    // 판정이 바뀌었으면 막대도 즉시 맞춘다(소매·몸판 패널 동기화는 render 없이 syncCutStatus 만 부를 수 있다 — 막대가 이전 «분리 가능»을 남기지 않게).
+    if (prev !== J_(splitState) && window.designLineQuickBar) window.designLineQuickBar.sync();
     const b = document.getElementById("btnDesignSplit"); if (!b) return;
     b.disabled = !(splitState && splitState.allowed);
-    if (v && v.basis) b.title = SPLIT_DERIVED_TIP; else if (splitState && splitState.kind === "piece") b.title = splitState.reason; else b.removeAttribute("title");
+    if (v && v.basis === "sleeve") { if (splitState && !splitState.allowed) b.title = splitState.reason; else b.removeAttribute("title"); }
+    else if (v && v.basis) b.title = SPLIT_DERIVED_TIP; else if (splitState && splitState.kind === "piece") b.title = splitState.reason; else b.removeAttribute("title");
+  }
+  // 지금 «현재 결과»로 보여 줄 파트(render·막대 집계 공용). 몸판 파트 = 원래 몸판 맥락에서만(종전) · 소매 파트 = sleeveSplit.partCurrent(출처 결속 · 빠른 판정).
+  function visibleParts(p) {
+    p = p || project(); const ps = (p && Array.isArray(p.working.parts)) ? p.working.parts : [];
+    if (!ps.length) return [];
+    const SS = window.sleeveSplit, hasSleeve = ps.some(q => q.sourcePiece === "sleeve");
+    const ref = hasSleeve && SS ? SS.quickRef(p) : null, orig = ps.some(q => q.sourcePiece !== "sleeve") ? isOriginalBodiceContext(p) : false;   // 빠른 판정(매 render) — 전체 판정은 prune
+    return ps.filter(q => q.sourcePiece === "sleeve" ? !!(SS && SS.partCurrent(p, q, ref)) : orig);
+  }
+  // 낡은 소매 파트 제거(소매·몸판·입력·선 변경 뒤 · syncCutStatus 가 부른다). 몸판 파트는 종전 규칙(invalidateParts) 그대로 둔다.
+  //   ref = 같은 동기화에서 이미 낸 전체 판정(sleeveSplit.cutStatus 의 _ref)이 있으면 재사용.
+  function pruneStaleSleeveParts(p, ref) {
+    p = p || project(); const ps = p && Array.isArray(p.working.parts) ? p.working.parts : null;
+    if (!ps || !ps.some(q => q.sourcePiece === "sleeve")) return false;
+    const SS = window.sleeveSplit; ref = ref || (SS ? SS.sleeveRef(p) : null);
+    if (ps.every(q => q.sourcePiece !== "sleeve" || (SS && SS.partCurrent(p, q, ref)))) return false;
+    p.working.parts = ps.filter(q => q.sourcePiece !== "sleeve");
+    return true;
   }
   // 막대용 읽기 전용 조회: 지금 선택한 절개선에 대해 오른쪽 «파트 분리» 버튼이 마지막으로 쓴 판정 + 이 선으로 만든 파트 수.
   //   선택·역할이 바뀌면 syncCutStatus → syncSplitButton 이 다시 쓴다. 판정이 다른 선 것이면 null(추측 안 함).
   function getSplitState() {
     if (mode !== "select" || !selectedId || !splitState || splitState.lineId !== selectedId) return null;
     const line = findLine(selectedId); if (!line || line.role !== "cut") return null;
-    const p = project(), parts = (p && Array.isArray(p.working.parts)) ? p.working.parts.filter(q => q.sourceCutId === selectedId).length : 0;
+    const p = project(), parts = p ? visibleParts(p).filter(q => q.sourceCutId === selectedId).length : 0;   // 현재 결과로 보이는 파트만(낡은 소매 파트 제외)
     return { lineId: splitState.lineId, allowed: splitState.allowed, kind: splitState.kind, reason: splitState.reason, parts: parts };
   }
   function setSplitNote(m) { const el = document.getElementById("designSplitNote"); if (el) el.textContent = m; }
@@ -940,8 +983,9 @@
   function doSplit() {
     if (mode !== "select" || !selectedId) return;
     const line = findLine(selectedId); if (!line || line.role !== "cut") { setSplitNote("절개선을 선택하세요"); return; }
-    if (line.piece !== "front" && line.piece !== "back") { setSplitNote("front·back 만 지원(소매는 후속)"); return; }
     const p = project(); if (!p) return;
+    if (line.piece === "sleeve") { doSplitSleeve(p, line); return; }
+    if (line.piece !== "front" && line.piece !== "back") { setSplitNote("앞판·뒤판·소매 절개선만 분리합니다"); return; }
     const v = validateSelectedCut();                       // ★ 분할 직전 재검증
     if (v && v.basis) { setSplitNote("분할 불가: 파트 분리는 원래 몸판 전용 — 소매 " + v.sym + " 파생 몸판은 여기서 자르지 않습니다(재단 단계 범위)"); return; }   // 원래 형상을 잘라 «분리됨»처럼 보이지 않게
     if (!v || !v.ok) { setSplitNote("분할 불가: " + (v ? v.reason : "절개선 아님")); return; }
@@ -954,6 +998,21 @@
       { id: "part-2", sourcePiece: line.piece, sourceCutId: line.id, outline: res.parts[1] }
     ];
     setSplitNote("분할 완료 · 두 파트(다른 색) 미리보기");
+    rerender();
+  }
+  // 소매 분리(2026-11-05): 분할 직전 같은 판정(sleeveSplit.cutStatus)을 다시 내고, 현재 소매 완료본(frozen = 화면과 동일)을 자른다.
+  //   실패면 working.parts 불변 · 성공이면 출처 결속 파트 두 장으로 원자적 교체(마지막 분리 한 쌍 — 종전 계약).
+  function doSplitSleeve(p, line) {
+    const SS = window.sleeveSplit; if (!SS) { setSplitNote("분할 불가: 소매 분리 모듈 없음"); return; }
+    const v = validateSelectedCut();                        // ★ 분할 직전 재판정
+    if (!v || !v.ok) { setSplitNote("분할 불가: " + (v ? v.reason : "절개선 아님")); syncSplitButton(v); return; }
+    if (!v.ready) { setSplitNote("분할 불가: " + v.reason); syncSplitButton(v); return; }
+    const ref = v._ref || SS.sleeveRef(p);
+    if (ref.source !== "current") { setSplitNote("분할 불가: " + ref.reason); return; }
+    const res = SS.splitSleeve(ref.geometry, line.segments);
+    if (!res.ok) { setSplitNote("분할 불가: " + res.reason); return; }
+    p.working.parts = SS.makeParts(ref, line, res);
+    setSplitNote("분할 완료 · 소매 " + ref.sym + (res.piece !== "sleeve" ? "(" + res.piece + ")" : "") + " 두 파트(다른 색) 미리보기 — 소매·몸판·선이 바뀌면 사라집니다");
     rerender();
   }
   // ── 외곽 대체선(boundary) DOM 연동 ──
@@ -1335,13 +1394,13 @@
     validateSelectedCut, getSplitState, revalidate, validateCut, gatherValidCuts, flattenLine, segCross, distPtToSegs,
     // 편집 기준 몸판(최종 몸판 정합) — 판정·snap·파트 분리 경계
     editBodiceRef, cutStatusOf, cutStatusText, snapForCursor, isOriginalBodiceContext, displayedDerivedPiece, syncCutStatus: () => syncCutStatus(),
-    doSplit, invalidateParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,
+    doSplit, invalidateParts, visibleParts, pruneStaleSleeveParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, segmentDegenerate, lineDegenerate, distToLine, distToSegment, handlesOf,
     chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment, constrainAngle45,
     // 파트 분리·외곽 대체(순수)
-    buildPieceRing, splitRingByCut, subSegment, reverseSeg, projectOntoRing, projectOntoSeg, walkConstruction,
+    buildPieceRing, splitRingByCut, subSegment, reverseSeg, cloneSeg, projectOntoRing, projectOntoSeg, walkConstruction,
     replaceArcOnRing, extractArcTagged, composeDesignOutline, geomToPatternSegments, outlinePrimsToSegs, boundarySegsOf
   });
 })();
