@@ -38,6 +38,7 @@
   let draft = null, drawDrag = null, lastDown = null;   // draw 상태(lastDown = 직전 pointerdown 시각·위치)
   let selectedId = null, editDrag = null;            // select 상태
   let snapHint = null;                               // {piece, point, type} — 흡착 표시(세션 UI)
+  let splitState = null;                              // 마지막 파트 분리 판정(syncSplitButton 이 씀 · getSplitState 로 막대가 읽음 · 세션 UI)
   let lastHandleGeo = null;                           // 핸들 드래그 중 마지막 커서(형상 cm) — Shift 즉시 반영
 
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
@@ -902,11 +903,36 @@
   }
   // 파트 분리 버튼: 유효 절개선 선택 시에만 활성.
   //   v 를 넘기면 재판정하지 않는다(최종 몸판 판정은 소매 현재성 검사를 포함해 비싸다). 원래 몸판 맥락이 아니면 비활성(분리는 원래 ring 전용).
+  //   판정은 splitState 에 남겨 «선 가까이» 막대가 **같은 판정**을 읽는다(getSplitState — 매 render 재판정 없음 · 저장 안 함).
+  //   앞판·뒤판이 아닌 절개선은 doSplit 이 거부하므로 버튼도 같은 조건으로 비활성(2026-11-05 · 막대 연결 때 doSplit 과 정합).
+  const SPLIT_DERIVED_TIP = "파트 분리는 원래 몸판 전용 — 소매 파생 몸판은 여기서 자르지 않습니다(재단 단계 범위)";
+  function _firstClause(t) { return String(t || "").split(" — ")[0]; }
+  function splitStateOf(v, line) {
+    if (!v || !line || line.role !== "cut") return null;
+    const fb = line.piece === "front" || line.piece === "back";
+    const allowed = splitAllowed(v) && fb;
+    const kind = allowed ? "ok" : !fb ? "piece" : v.basis === "pending" ? "pending" : v.basis ? "derived" : "invalid";
+    const reason = kind === "ok" ? "분리 가능"
+      : kind === "piece" ? "앞판·뒤판 절개선만 분리합니다"
+      : kind === "pending" ? "최종 몸판 미확정 — " + _firstClause(v.reason)
+      : kind === "derived" ? "소매 " + v.sym + " 파생 몸판은 파트 분리 미지원(원래 몸판 전용)"
+      : v.reason;
+    return { lineId: line.id, allowed: allowed, kind: kind, reason: reason };
+  }
   function syncSplitButton(v) {
-    const b = document.getElementById("btnDesignSplit"); if (!b) return;
     if (arguments.length === 0) v = validateSelectedCut();
-    b.disabled = !splitAllowed(v);
-    if (v && v.basis) b.title = "파트 분리는 원래 몸판 전용 — 소매 파생 몸판은 여기서 자르지 않습니다(재단 단계 범위)"; else b.removeAttribute("title");
+    splitState = splitStateOf(v, (mode === "select" && selectedId) ? findLine(selectedId) : null);
+    const b = document.getElementById("btnDesignSplit"); if (!b) return;
+    b.disabled = !(splitState && splitState.allowed);
+    if (v && v.basis) b.title = SPLIT_DERIVED_TIP; else if (splitState && splitState.kind === "piece") b.title = splitState.reason; else b.removeAttribute("title");
+  }
+  // 막대용 읽기 전용 조회: 지금 선택한 절개선에 대해 오른쪽 «파트 분리» 버튼이 마지막으로 쓴 판정 + 이 선으로 만든 파트 수.
+  //   선택·역할이 바뀌면 syncCutStatus → syncSplitButton 이 다시 쓴다. 판정이 다른 선 것이면 null(추측 안 함).
+  function getSplitState() {
+    if (mode !== "select" || !selectedId || !splitState || splitState.lineId !== selectedId) return null;
+    const line = findLine(selectedId); if (!line || line.role !== "cut") return null;
+    const p = project(), parts = (p && Array.isArray(p.working.parts)) ? p.working.parts.filter(q => q.sourceCutId === selectedId).length : 0;
+    return { lineId: splitState.lineId, allowed: splitState.allowed, kind: splitState.kind, reason: splitState.reason, parts: parts };
   }
   function setSplitNote(m) { const el = document.getElementById("designSplitNote"); if (el) el.textContent = m; }
   // 선택된 유효 절개선 1개로 실제 분할 실행. 분할 직전 validateCut 재실행 → ring 구성 →
@@ -1306,7 +1332,7 @@
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive, finishDraw, canFinishDraw: () => draftFinishable(),
     convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen, isNeckAutoLine, isSleeveCapLine, isCollarBodyLine, findLine: (id) => findLine(id),
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
-    validateSelectedCut, revalidate, validateCut, gatherValidCuts, flattenLine, segCross, distPtToSegs,
+    validateSelectedCut, getSplitState, revalidate, validateCut, gatherValidCuts, flattenLine, segCross, distPtToSegs,
     // 편집 기준 몸판(최종 몸판 정합) — 판정·snap·파트 분리 경계
     editBodiceRef, cutStatusOf, cutStatusText, snapForCursor, isOriginalBodiceContext, displayedDerivedPiece, syncCutStatus: () => syncCutStatus(),
     doSplit, invalidateParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,

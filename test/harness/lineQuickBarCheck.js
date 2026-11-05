@@ -5,6 +5,7 @@
 //   §2 place: 기준점 위 우선 · 위가 선을 가리면 아래로 반전 · 캔버스 경계 클램프 · 선·핸들 점을 가리지 않는 후보 · 결정적(같은 입력 = 같은 위치)
 //   §3 연결 계약: 막대는 #cv 의 형제(캔버스 밖) · 기존 명령(finishDraw·cancel·setRole)만 호출 · 선 생성/역할 대입/저장 없음 ·
 //       기존 오른쪽 버튼 id·onclick 보존 · render.js 가 그린 뒤 sync · 캐시 버전
+//   §4 절개선 → «파트 분리» 다음 단계 행: 표시 = getSplitState 판정 그대로 · 불가 이유 보임 · 다른 역할·관리선·판정 없음 = 행 없음 · 별도 행 · 배선
 //   node test/harness/lineQuickBarCheck.js
 // ══════════════════════════════════════════════
 const vm = require("vm");
@@ -65,16 +66,31 @@ ok(cvAt > 0 && barAt > cvAt && barAt < mainEnd, "3a: 막대는 #cv 뒤 형제(ca
 ok(["lineQuickTitle", "lineQuickDismiss", "lineQuickCancel", "lineQuickFinish", "lineQuickRoleCut", "lineQuickRoleBoundary", "lineQuickRoleGuide"].every(id => html.indexOf('id="' + id + '"') > 0), "3b: 막대 요소 정적 마크업(재생성 없음)");
 ok(/id="btnDesignLine"[^>]*onclick="designLineTool\.toggle\(\)"/.test(html) && /id="btnDesignFinish"[^>]*onclick="designLineTool\.finishDraw\(\)"/.test(html) && /id="btnRoleCut"[^>]*onclick="designLineTool\.setRole\('cut'\)"/.test(html) && /id="btnDesignSelect"[^>]*onclick="designLineTool\.toggleSelect\(\)"/.test(html), "3c: 기존 오른쪽 버튼 id·onclick 보존");
 const calls = (CODE.match(/T\.(\w+)\(/g) || []).map(s => s.slice(2, -1)).filter((v, i, arr) => arr.indexOf(v) === i).sort();
-const READ = ["canFinishDraw", "findLine", "getDraft", "getMode", "getSelectedId", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine"], CMD = ["cancel", "finishDraw", "setRole"];
-ok(calls.every(f => READ.concat(CMD).indexOf(f) >= 0) && CMD.every(f => calls.indexOf(f) >= 0), "3d: 도구 호출 = 읽기 + 기존 명령(finishDraw·cancel·setRole)뿐 [" + calls.join(",") + "]");
+const READ = ["canFinishDraw", "findLine", "getDraft", "getMode", "getSelectedId", "getSplitState", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine"], CMD = ["cancel", "doSplit", "finishDraw", "setRole"];
+ok(calls.every(f => READ.concat(CMD).indexOf(f) >= 0) && CMD.every(f => calls.indexOf(f) >= 0), "3d: 도구 호출 = 읽기 + 기존 명령(finishDraw·cancel·setRole·doSplit)뿐 [" + calls.join(",") + "]");
 ok(!/patternLines|\.role\s*=[^=]|localStorage|innerHTML|makePatternLine|setMode\(/.test(CODE), "3e: 선 생성·역할 대입·저장·innerHTML·모드 직접 전환 없음");
 const R = fs.readFileSync(path.join(ROOT, "js/render.js"), "utf8");
 const ret = R.indexOf("return; // 라이브 원형 draw"), syncAt = R.lastIndexOf("designLineQuickBar.sync()", ret), hitAt = R.lastIndexOf("_appendDesignHitLayer(hitRoot", ret);
 ok(syncAt > hitAt && hitAt > 0, "3f: design render 는 선·overlay·hit 을 그린 뒤 막대 sync(그려진 SVG 기준)");
 ok(/afterDraftRender\(\);\s*\n\s*if\(window\.designLineQuickBar\) window\.designLineQuickBar\.sync\(\);/.test(R), "3g: design 밖 render 도 sync(→ 숨김)");
 const ver = f => { const m = new RegExp(f.replace(/\./g, "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
-ok(ver("designLineQuickBar.js") === "2026110501" && ver("render.js") === "2026110502" && /css\/style\.css\?v=2026110501/.test(html), "3h: 캐시 버전(막대 2026110501 · render 2026110502 · css 2026110501)");
+ok(ver("designLineQuickBar.js") === "2026110503" && ver("designLineTool.js") === "2026110504" && ver("render.js") === "2026110502" && /css\/style\.css\?v=2026110502/.test(html), "3h: 캐시 버전(막대 2026110503 · 도구 2026110504 · render 2026110502 · css 2026110502)");
 ok(html.indexOf('<script src="js/designLineQuickBar.js') > html.indexOf('<script src="js/designLineTool.js'), "3i: 막대 스크립트는 designLineTool 뒤");
+
+// §4 절개선 → «파트 분리» 다음 단계 행(2026-11-05 김님 요청) — 표시 모델은 getSplitState(오른쪽 버튼 판정) 그대로
+const sel = (role, split, lock) => D({ design: true, mode: "select", sel: { id: "line-7", piece: "front", role: role, lock: lock || null, split: split } });
+const OK0 = { lineId: "line-7", allowed: true, kind: "ok", reason: "분리 가능", parts: 0 };
+ok(sel("cut", OK0).split.allowed === true && sel("cut", OK0).split.text === "분리 가능", "4a: 유효 절개선 = 분리 활성 «분리 가능»");
+ok(/^분리됨 · 파트 2개/.test(sel("cut", Object.assign({}, OK0, { parts: 2 })).split.text), "4b: 분리 뒤 «분리됨 · 파트 2개»");
+const NO = { lineId: "line-7", allowed: false, kind: "derived", reason: "소매 Ⓥ 파생 몸판은 파트 분리 미지원(원래 몸판 전용)", parts: 0 };
+ok(sel("cut", NO).split.allowed === false && sel("cut", NO).split.text === "분리 불가 · " + NO.reason, "4c: 불가 = 비활성 + 보이는 이유(판정 문구 그대로)");
+ok(sel("guide", OK0).split === null && sel("boundary", OK0).split === null, "4d: 절개선이 아니면 분리 행 없음");
+ok(sel("cut", OK0, "neck").split === null, "4e: 관리선이면 분리 행 없음(역할 잠금과 함께)");
+ok(sel("cut", null).split === null, "4f: 판정이 없으면(다른 선 것 · 미계산) 추측하지 않고 행 없음");
+const iRole = html.indexOf('data-lqb="role"'), iSplit = html.indexOf('data-lqb="split"'), roleEnd = html.indexOf("</div>", iRole);
+ok(iSplit > roleEnd && /data-lqb="split"[^>]*hidden/.test(html) && /id="lineQuickSplit"[^>]*disabled/.test(html) && /id="lineQuickSplitReason"/.test(html), "4g: 분리는 역할 행 밖 별도 행(다음 단계) · 처음 숨김·비활성 · 이유 글 요소");
+ok(/id="btnDesignSplit"[^>]*onclick="designLineTool\.doSplit\(\)"/.test(html), "4h: 오른쪽 «파트 분리» 배선 보존");
+ok(/splitBtn\.addEventListener\("click", \(\) => \{ actSplit\(\); \}\)/.test(CODE) && /!vm\.split\.allowed\) return false;\s*T\.doSplit\(\);/.test(CODE), "4i: 막대 버튼 = actSplit = 허용일 때만 doSplit");
 
 console.log("══════════════════════════════════════════════");
 fails.forEach(f => console.log("  ✗ " + f));

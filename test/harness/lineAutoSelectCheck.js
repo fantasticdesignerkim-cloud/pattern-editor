@@ -18,6 +18,8 @@
 //   §16 완료 판정 = 실제 퇴화(길이 0) geometry 만 거부 — 같은 자리 두 앵커라도 핸들이 있는 곡선은 버튼·Enter·더블클릭 모두 완료(종전 Enter 와 같음) ·
 //       완전 퇴화(같은 자리 두 점 · 핸들 없음)는 버튼·Enter·더블클릭 모두 거부 · 순수 판정 대조
 //   버튼 문구: 그리기 중 «선·곡선 그리기» 자리 = «그리기 취소»(종전 «그리기 종료» — 작성 중 선을 버리고 나가므로 «그리기 완료»와 구분) — §1·§5 기대값 갱신
+//   §17 «선 가까이» 막대 «파트 분리» = 오른쪽 «파트 분리»와 같은 판정(getSplitState)·같은 명령(doSplit) — 원래 몸판 유효 → 2파트(오른쪽 결과와 동일 · 면적 합) ·
+//       무효·Ⓥ 완료 전·Ⓥ→Ⓩ 변경·Ⓥ/Ⓩ 파생 = 비활성 + 같은 이유 · 누름 무변경 · 역할 변경 = 행 숨김 · 막대 표시가 최종 몸판 재판정을 반복하지 않음
 //   node test/harness/lineAutoSelectCheck.js
 // ══════════════════════════════════════════════
 const vm = require("vm");
@@ -572,6 +574,87 @@ function autoPlace(P) { const a = DLy.autoLayout(P.working.geometry, W.sleeveAnn
   const p3 = evAt("front", m, { clientX: 500001 }); down(p3); up(p3);   // 직전 눌림과 같은 자리 · 400ms 안 = 더블클릭
   ok(lines().length === 3 && DLT.getMode() === "draw" && /길이 0/.test(note()), "16d: 버튼·Enter·더블클릭 모두 거부(선 없음 · 그리기 유지) (" + note() + ")");
   key("Escape"); DLT.setMode("off");
+}
+
+// §17 «선 가까이» 막대의 «파트 분리»(2026-11-05 김님 요청) — 오른쪽 «파트 분리»와 같은 판정·같은 명령.
+//   막대 모듈(js/designLineQuickBar.js)을 이 designLineTool 에 붙여, 막대 버튼이 부르는 actSplit·막대 표시 모델(viewModel)을 그대로 쓴다.
+{
+  const qb = { window: { designLineTool: DLT, isDesignStageActive: () => true }, Math, JSON };
+  vm.createContext(qb); vm.runInContext(fs.readFileSync(path.join(ROOT, "js/designLineQuickBar.js"), "utf8"), qb, { filename: "designLineQuickBar.js" });
+  const Q = qb.window.designLineQuickBar, pv = () => Q.viewModel(), sp = () => (pv() || {}).split || null;
+  const same = tag => { const v = sp(), b = el("btnDesignSplit"); ok(!!v && v.allowed === (b.disabled === false), tag + ": 막대 활성 = 오른쪽 «파트 분리» 활성 (" + (v && v.allowed) + " / " + !b.disabled + ")"); return v; };
+  const area = segs => { const pts = []; DLT.flattenLine(segs).forEach(([a, b], i) => { if (!i) pts.push(a); pts.push(b); }); let A = 0; for (let i = 0; i < pts.length; i++) { const u = pts[i], w = pts[(i + 1) % pts.length]; A += u.x * w.y - w.x * u.y; } return Math.abs(A / 2); };
+  const drawCut = (P, a, b) => { DLT.toggle(); click("front", a); click("front", b); DLT.finishDraw(); DLT.setRole("cut"); return last(); };
+
+  // (a) 원래 몸판 유효 절개선 → 막대 «분리 가능» → 막대 «파트 분리» → 두 파트 = 오른쪽 버튼(doSplit) 결과와 바이트 동일
+  const P1 = projectOn("A"), [m, h] = splittableFront(P1.working.geometry);
+  const L1 = drawCut(P1, m, h), bJ1 = J(P1.working.bodiceResult), rJ1 = J(P1.referenceGeometry), gJ1 = J(P1.working.geometry);
+  let v = same("17a 원래 몸판 유효");
+  ok(v && v.allowed && v.text === "분리 가능" && el("designCutStatus").textContent === "분리 가능", "17a: 막대 문구 «분리 가능» = 오른쪽 상태 (" + (v && v.text) + ")");
+  ok(Q.actSplit() === true && (P1.working.parts || []).length === 2 && P1.working.parts.every(q => q.sourceCutId === L1.id && q.sourcePiece === "front"), "17a: 막대 «파트 분리» → 파트 2개(이 절개선 · 앞판)");
+  const partsJ = J(P1.working.parts);
+  const legs = (P1.working.geometry.front.construction || []).filter(c => c.kind === "line").map(c => ({ from: c.from, to: c.to }));
+  const ring = DLT.buildPieceRing(DLT.outlinePrimsToSegs(P1.working.geometry.front.outline), legs).ring;
+  const a1 = area(P1.working.parts[0].outline), a2 = area(P1.working.parts[1].outline), aR = area(ring.map(r => r.seg));
+  ok(a1 > 1 && a2 > 1 && Math.abs(a1 + a2 - aR) < 1e-6 * aR, "17a: 두 파트 면적 합 = 앞판 면적(" + (a1 + a2).toFixed(4) + " / " + aR.toFixed(4) + ")");
+  v = sp();
+  ok(v && v.allowed && v.parts === 2 && /^분리됨 · 파트 2개/.test(v.text) && el("btnDesignSplit").disabled === false, "17a: 분리 뒤 막대 «분리됨 · 파트 2개» · 오른쪽 버튼 그대로 (" + (v && v.text) + ")");
+  ok(J(P1.working.bodiceResult) === bJ1 && J(P1.referenceGeometry) === rJ1 && J(P1.working.geometry) === gJ1, "17a: 원형·bodiceResult·geometry 불변(파트만)");
+  // 같은 선을 오른쪽 버튼 경로(index.html onclick = designLineTool.doSplit)로 → 같은 파트
+  P1.working.parts = []; DLT.doSplit();
+  ok(J(P1.working.parts) === partsJ, "17a: 막대 결과 = 오른쪽 «파트 분리»(doSplit) 결과(바이트 동일)");
+  // 역할을 바꾸면 분리 행 없음(파트도 기존 계약대로 무효화)
+  DLT.setRole("guide");
+  ok(pv() && pv().kind === "select" && !sp() && !(P1.working.parts || []).length, "17a: 보조선으로 바꾸면 분리 행 숨김 · 파트 무효화(종전 계약)");
+  DLT.setRole("boundary");
+  ok(!sp(), "17a: 외곽 역할도 분리 행 숨김");
+  DLT.setRole("cut");
+  ok(!!sp() && sp().allowed, "17a: 다시 절개선 → 분리 행 · 분리 가능");
+  DLT.setMode("off");
+  ok(!pv(), "17a: 도구 끄면 막대 없음");
+
+  // (b) 무효 절개선(외곽에 안 닿는 안쪽 선) → 막대 비활성 + 같은 이유 · 눌러도 무변경
+  const P2 = projectOn("A"), [m2, h2] = splittableFront(P2.working.geometry);
+  const mid = (u, w, t) => ({ x: u.x + (w.x - u.x) * t, y: u.y + (w.y - u.y) * t });
+  drawCut(P2, mid(m2, h2, 0.3), mid(m2, h2, 0.7));
+  v = same("17b 무효 절개선");
+  const rs = el("designCutStatus").textContent, nt0 = el("designSplitNote").textContent;
+  ok(v && !v.allowed && v.text === "분리 불가 · " + rs && rs.length > 0 && rs !== "분리 가능", "17b: 막대 «분리 불가 · " + rs + "» = 오른쪽 상태 문구");
+  ok(Q.actSplit() === false && !(P2.working.parts || []).length && el("designSplitNote").textContent === nt0, "17b: 비활성 막대 누름 = 파트·안내 무변경");
+  DLT.setMode("off");
+
+  // (c) 최종 몸판 미확정(소매 Ⓥ 적용 · 완료 전) / (d) 소매 변경(Ⓥ 완료 → Ⓩ 적용) / (e) Ⓥ·Ⓩ 완료(파생 몸판 · 분리 미지원)
+  const cases = [
+    ["c Ⓥ 완료 전", P => { ok(API("V").apply(P, defaultsOf("V")).ok, "17c: Ⓥ 적용"); }, "pending", /^분리 불가 · 최종 몸판 미확정 — 소매 Ⓥ 모양 완료 전$/],
+    ["d Ⓥ→Ⓩ 변경", P => { ok(API("V").apply(P, defaultsOf("V")).ok && doneAll(P) && API("Z").apply(P, defaultsOf("Z")).ok, "17d: Ⓥ 완료 → Ⓩ 적용"); }, "pending", /^분리 불가 · 최종 몸판 미확정 — 완료된 소매는 Ⓥ, 현재 소매는 Ⓩ$/],
+    ["e Ⓥ 완료", P => { ok(API("V").apply(P, defaultsOf("V")).ok && doneAll(P), "17e: Ⓥ 완료"); }, "derived", /^분리 불가 · 소매 Ⓥ 파생 몸판은 파트 분리 미지원\(원래 몸판 전용\)$/],
+    ["e Ⓩ 완료", P => { ok(API("Z").apply(P, defaultsOf("Z")).ok && doneAll(P), "17e: Ⓩ 완료"); }, "derived", /^분리 불가 · 소매 Ⓩ 파생 몸판은 파트 분리 미지원\(원래 몸판 전용\)$/]
+  ];
+  cases.forEach(([tag, setup, kind, re]) => {
+    const P = projectOn("A"); setup(P);
+    const sres = SC.latest(P), b = P.working.bodiceResult, bJ = J(b), sJ = J(sres), rJ = J(P.referenceGeometry);
+    const dPiece = DLT.displayedDerivedPiece(P, "front"), [p0, p1] = dPiece ? derivedOnlyLine(dPiece, b.front) : [null, null];
+    const [q0, q1] = p0 ? [{ x: p0.x + 0.15, y: p0.y }, { x: p1.x - 0.15, y: p1.y }] : splittableFront(P.working.geometry);
+    drawCut(P, q0, q1);
+    v = same("17" + tag);
+    const st = DLT.getSplitState();
+    ok(v && !v.allowed && st && st.kind === kind && re.test(v.text), "17" + tag + ": 막대 «" + (v && v.text) + "» (" + (st && st.kind) + ")");
+    ok(kind !== "derived" || /원래 몸판 전용/.test(el("btnDesignSplit").title || ""), "17" + tag + ": 오른쪽 버튼 설명도 같은 이유(원래 몸판 전용)");
+    ok(Q.actSplit() === false && !(P.working.parts || []).length, "17" + tag + ": 막대 누름 = 분리 없음");
+    ok(J(P.working.bodiceResult) === bJ && J(SC.latest(P)) === sJ && J(P.referenceGeometry) === rJ, "17" + tag + ": 원형·bodiceResult·sleeveResult 불변");
+    DLT.setMode("off");
+  });
+  // 판정 재사용: 막대 표시 모델을 여러 번 만들어도 최종 몸판 판정(editBodiceRef)을 다시 하지 않는다
+  {
+    const P = projectOn("A"); API("V").apply(P, defaultsOf("V")); doneAll(P);
+    const dPiece = DLT.displayedDerivedPiece(P, "front"), [p0, p1] = derivedOnlyLine(dPiece, P.working.bodiceResult.front);
+    drawCut(P, { x: p0.x + 0.15, y: p0.y }, { x: p1.x - 0.15, y: p1.y });
+    const SCk = W.sleeveCheckpoint, orig = SCk.latest; let calls = 0; SCk.latest = function () { calls++; return orig.apply(this, arguments); };
+    for (let i = 0; i < 20; i++) pv();
+    SCk.latest = orig;
+    ok(calls === 0, "17f: 막대 표시 20회 = 최종 몸판 재판정 0회(오른쪽 버튼이 쓴 판정 재사용) (" + calls + ")");
+    DLT.setMode("off");
+  }
 }
 
 // 배선: index.html 버튼 onclick 이 이 검사가 부르는 함수 그대로인지(가짜 경로 방지)

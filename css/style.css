@@ -447,3 +447,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .lqb-main{background:var(--orange);color:#fff}
 .lqb-main:not(:disabled):hover{background:color-mix(in srgb,var(--orange) 88%,#000);border-color:transparent}
 .lqb-btn:focus-visible,.lqb-dismiss:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+/* 다음 단계 행(절개선 → 파트 분리): 역할 행과 분리된 별도 행. 이유 글은 막대 폭을 늘리지 않고 줄바꿈(width:0 + min-width:100%). */
+.lqb-next{display:flex;flex-direction:column;gap:3px;margin-top:3px;padding-top:5px;border-top:1px solid var(--border)}
+.lqb-wide{width:100%}
+.lqb-reason{width:0;min-width:100%;padding:0 4px 1px;font-size:11px;line-height:1.35;color:var(--muted);white-space:normal;overflow-wrap:anywhere}
+.lqb-reason:empty{display:none}
+.lqb-next[data-state="ok"] .lqb-reason,.lqb-next[data-state="done"] .lqb-reason{color:#0E7490}

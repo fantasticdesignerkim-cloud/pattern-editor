@@ -5,6 +5,9 @@
 //   · 그리기 중(점 ≥1) → 마지막 점 근처에 «그리기 취소» · «그리기 완료»(완료 가능 = designLineTool.canFinishDraw 그대로)
 //   · 선 선택(정상 완료 직후 자동 선택 포함 · 기존 선 재선택) → 그 선 근처에 절개선 · 외곽 · 보조선(현재 역할 강조)
 //   · 관리형 선(네크라인 전용 · 소매산 · 칼라 본체)은 역할 버튼 잠금(designLineTool 의 잠금 판정 그대로)
+//   · 선택한 선이 절개선이면 별도 «다음 단계» 행에 «파트 분리»(2026-11-05 김님 요청) — 오른쪽 «파트 분리»와 **같은 판정**
+//     (designLineTool.getSplitState = syncSplitButton 이 마지막으로 쓴 판정 · 재판정 없음)과 **같은 명령**(doSplit).
+//     불가면 비활성 + 보이는 짧은 이유(무효 절개선 · 최종 몸판 미확정 · 파생 몸판 미지원 · 앞/뒤판 아님). 분리되면 «분리됨 · 파트 N개».
 //
 // 계약(제품 엔진 불변):
 //   · 상태를 새로 갖지 않는다 — 매 render 직후 designLineTool 의 공개 상태(getMode·getDraft·getSelectedId·findLine·
@@ -37,7 +40,11 @@
     }
     if (s.mode === "select" && s.sel) {
       const lock = s.sel.lock || null;
-      return { kind: "select", key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: s.sel.role || "guide", locked: !!lock };
+      const role = s.sel.role || "guide";
+      const sp = (!lock && role === "cut" && s.sel.split) ? s.sel.split : null;   // 절개선만 · 관리선·다른 역할은 분리 행 없음
+      const split = sp ? { allowed: !!sp.allowed, kind: sp.kind, parts: sp.parts || 0,
+        text: sp.allowed ? (sp.parts > 0 ? "분리됨 · 파트 " + sp.parts + "개(색으로 미리보기)" : "분리 가능") : "분리 불가 · " + sp.reason } : null;
+      return { kind: "select", key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split };
     }
     return null;
   }
@@ -68,6 +75,8 @@
 
   // ── DOM ──
   let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
+  let splitRow = null, splitBtn = null, splitReason = null;
+  let splitNote = null;                // {key, text}: 막대 «파트 분리»를 눌렀는데 파트가 안 생겼을 때 doSplit 이 남긴 안내(#designSplitNote) — 선택이 바뀌면 버림
   let dismissedKey = null;            // «접기(×)» 한 선택 키(UI 전용)
   let press = null, dragging = false;  // 캔버스 위 누름·드래그 상태
   let lastPos = null;
@@ -86,7 +95,7 @@
       const id = T.getSelectedId(), l = id ? T.findLine(id) : null;
       if (!l) return { design: true, mode: mode, sel: null };
       const lock = T.isNeckAutoLine(id) ? "neck" : T.isSleeveCapLine(l) ? "cap" : T.isCollarBodyLine(l) ? "collar" : null;
-      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock } };
+      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, split: T.getSplitState ? T.getSplitState() : null } };
     }
     return { design: true, mode: mode };
   }
@@ -116,6 +125,8 @@
       vs.forEach(c => { const r = circlePt(c); if (r) obstacles.push(r); });
       if (vs.length) { const r = circlePt(vs[vs.length - 1]); if (r) refs.push(r); }   // 마지막 점
     } else {
+      // 파트 분리 결과(색 미리보기) 외곽도 가리지 않을 대상 — 분리 직후 막대가 작은 파트를 덮지 않게.
+      cv.querySelectorAll('[data-design-root="parts"] path').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));
       const sp = cv.querySelector("path.design-line.selected");
       const anchors = []; cv.querySelectorAll(".design-line-anchor").forEach(c => { const r = circlePt(c); if (r) anchors.push(r); });
       anchors.forEach(r => obstacles.push(r));
@@ -150,11 +161,21 @@
     bar.setAttribute("data-kind", vm.kind);
     drawRow.hidden = vm.kind !== "draw";
     roleRow.hidden = vm.kind !== "select";
+    if (vm.kind !== "select") splitRow.hidden = true;
     dismissBtn.hidden = vm.kind !== "select";        // 그리기 중엔 접기 없음(완료·취소만 명시적으로)
     if (vm.kind === "draw") {
       finishBtn.disabled = !vm.canFinish; finishBtn.setAttribute("aria-disabled", vm.canFinish ? "false" : "true");
       if (vm.canFinish) finishBtn.removeAttribute("title"); else finishBtn.setAttribute("title", "서로 다른 점을 2개 이상 찍으면(또는 곡선을 드래그하면) 누를 수 있습니다");
     } else {
+      const sp = vm.split;
+      splitRow.hidden = !sp;
+      if (sp) {
+        if (splitNote && splitNote.key !== vm.key) splitNote = null;
+        const note = (splitNote && sp.allowed && !sp.parts) ? splitNote.text : null;
+        splitBtn.disabled = !sp.allowed; splitBtn.setAttribute("aria-disabled", sp.allowed ? "false" : "true");
+        splitReason.textContent = note || sp.text;
+        splitRow.setAttribute("data-state", note ? "no" : !sp.allowed ? "no" : sp.parts > 0 ? "done" : "ok");
+      }
       roleBtns.forEach(b => {
         const on = b.getAttribute("data-role") === vm.role;
         b.setAttribute("aria-pressed", on ? "true" : "false");
@@ -188,6 +209,16 @@
     if (t) { try { t.focus({ preventScroll: true }); } catch (_) { t.focus(); } }
   }
 
+  // 막대 «파트 분리» 동작(버튼 click 이 부르는 그대로 · 검사도 이 함수를 부른다). 판정이 허용일 때만 doSplit.
+  function actSplit() {
+    const T = tool(), vm = describe(snapshot()); if (!T || !vm || !vm.split || !vm.split.allowed) return false;
+    T.doSplit();
+    const st = T.getSplitState ? T.getSplitState() : null, el = typeof document !== "undefined" ? document.getElementById("designSplitNote") : null;
+    const done = !!(st && st.parts > 0);
+    splitNote = done ? null : { key: vm.key, text: (el && el.textContent) || "분리되지 않았습니다" };
+    sync(); return done;
+  }
+
   function init() {
     bar = document.getElementById("lineQuickBar");
     if (!bar) return;
@@ -198,12 +229,17 @@
     finishBtn = document.getElementById("lineQuickFinish");
     cancelBtn = document.getElementById("lineQuickCancel");
     roleBtns = Array.prototype.slice.call(roleRow.querySelectorAll("[data-role]"));
+    splitRow = bar.querySelector('[data-lqb="split"]');
+    splitBtn = document.getElementById("lineQuickSplit");
+    splitReason = document.getElementById("lineQuickSplitReason");
 
     // 막대 위 조작은 캔버스(점 추가·피스 드래그·팬)로 가지 않는다.
     ["pointerdown", "mousedown", "touchstart", "wheel", "dblclick"].forEach(t => bar.addEventListener(t, e => e.stopPropagation(), { passive: true }));
     finishBtn.addEventListener("click", () => { const T = tool(); if (T) T.finishDraw(); });
     cancelBtn.addEventListener("click", () => { const T = tool(); if (T && T.getMode() === "draw") T.cancel(); });
     roleBtns.forEach(b => b.addEventListener("click", () => { const T = tool(); if (T) T.setRole(b.getAttribute("data-role")); }));
+    // 파트 분리 = 오른쪽 버튼과 같은 doSplit. 파트가 안 생기면(분할 직전 재검증·ring 실패) doSplit 이 남긴 안내를 막대에도 보인다.
+    splitBtn.addEventListener("click", () => { actSplit(); });
     dismissBtn.addEventListener("click", () => { const vm = describe(snapshot()); if (vm && vm.kind === "select") { dismissedKey = vm.key; hide(); } });
 
     // 캔버스 드래그 중 숨김 · 손 떼면 재계산. 캔버스를 누르면 «접기» 해제(같은 선 재선택에도 다시 보임).
@@ -222,7 +258,8 @@
     sync();
   }
 
-  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place });
+  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place,
+    viewModel: () => describe(snapshot()), actSplit: actSplit });
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
   }
