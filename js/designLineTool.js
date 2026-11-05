@@ -725,12 +725,19 @@
   // ── draw 동작 ──
   // cut 생성·삭제·역할 변경·편집 후 Design 통합 UI 갱신(hidden 이어도 상태 갱신). ui.js 가 훅 설치.
   function notifyDesignResult() { if (window.refreshDesignResultUI) window.refreshDesignResultUI(); }
+  // 완료(Enter·더블클릭) 성공 → 방금 그린 선을 **선택·편집 상태로 자동 전환**(2026-11-05 김님 실사용 피드백 «선택·편집 → 같은 선 재클릭» 두 단계 제거).
+  //   역할은 기본 guide 그대로(자동 지정 없음) — 사용자가 절개선/외곽/보조선을 고른다. 다시 그리려면 «선·곡선 그리기» 버튼.
+  //   점 2개 미만(한 점)·Esc 취소는 이 경로에 오지 않는다(그리기 모드 유지 · 선택 없음).
   function commitDraft() {
     if (!draft || draft.anchors.length < 2) { setNote("점 2개 이상 필요"); return false; }
     const p = project(); const ls = ensurePatternLines(p);
-    ls.push(makePatternLine(nextId(ls), draft.piece, draft.anchors));
+    const line = makePatternLine(nextId(ls), draft.piece, draft.anchors);
+    ls.push(line);
     invalidateParts(p);
-    draft = null; drawDrag = null; lastDown = null; setNote("완료 · 새 선은 다시 첫 점부터"); rerender(); notifyDesignResult(); return true;
+    setMode("select");                       // draft·드래그 상태 정리 + 버튼 문구(그리기 종료 → 선·곡선 그리기 / 편집 종료)
+    selectedId = line.id;
+    setNote("완료 · 방금 그린 선 선택됨 — 역할(절개선·외곽·보조선)을 고르세요 · anchor/핸들 드래그 · Delete 삭제 · 새 선은 «선·곡선 그리기»");
+    syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult(); return true;
   }
   function draftBackspace() {
     if (!draft || !draft.anchors.length) return;
