@@ -791,6 +791,7 @@ function render(){
 
     const sb = document.getElementById("sb");
     if (sb) sb.textContent = "디자인 · 원형 " + dp.sourceBlock.id + " v" + dp.sourceBlock.version + " 참조 · 세션 전용";
+    if (window.designLineQuickBar) window.designLineQuickBar.sync();   // 패턴선 «선 가까이» 막대: 방금 그린 SVG 기준으로 위치·상태(UI 전용)
     return; // 라이브 원형 draw(gRef/pattern/sleeve/overlay/layerVisibility/statusBar) 전부 skip
   }
 
@@ -868,6 +869,7 @@ function render(){
   updateStatusBar(f,p,dr,B,W,BL);
   // 소매 offset 을 실측 봉제선 outline 기준으로 맞춘다(재렌더 없이 그룹 transform 만 보정).
   if(window.draftLayout) window.draftLayout.afterDraftRender();
+  if(window.designLineQuickBar) window.designLineQuickBar.sync();   // design 밖 → 막대 숨김
 }
 
 // ══ DEBUG: 앞판/뒤판 색상 구분 (확인 후 제거) ══════════════

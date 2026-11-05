@@ -428,3 +428,22 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 소매 라인(Ⓐ/Ⓑ/Ⓒ)의 construction(중심선·EL 선·절개축 등)은 설명용 — 재단 외곽(남색 실선)과 구분되는 청록 점선. 기본 소매에는 적용하지 않는다. */
 .design-working [data-sleeve-line] [data-geometry-role="construction"],
 .design-working[data-sleeve-line] [data-geometry-role="construction"]{stroke:#0E7490;opacity:.7;stroke-dasharray:4 3}
+
+/* ── 패턴선 «선 가까이» 빠른 도구막대(js/designLineQuickBar.js · 2026-11-05 시안 «선 가까이») ──
+   canvas-wrap 기준 absolute — 레이아웃·SVG hit 영역은 그대로이고 막대가 덮는 자리만 막대가 받는다.
+   위치(left/top)는 JS 가 그려진 선 기준으로 정한다. 터치 타깃 44px. */
+.line-quickbar{position:absolute;left:0;top:0;z-index:20;display:flex;flex-direction:column;gap:2px;padding:4px 5px 5px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 14px rgba(23,55,107,.14);max-width:calc(100% - 16px);box-sizing:border-box;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+.line-quickbar[hidden],.line-quickbar [hidden]{display:none!important}
+.lqb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:24px;padding-left:6px;font-size:11px;color:var(--muted)}
+.lqb-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lqb-dismiss{flex-shrink:0;min-width:36px;min-height:30px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:17px;line-height:1;cursor:pointer}
+.lqb-dismiss:hover{background:color-mix(in srgb,var(--navy) 8%,var(--surface))}
+@media (pointer:coarse){.lqb-dismiss{min-width:44px;min-height:40px}}   /* 손가락: 접기도 터치 타깃 */
+.lqb-row{display:flex;gap:3px;flex-wrap:wrap}
+.lqb-btn{min-height:44px;min-width:44px;padding:8px 12px;border:1px solid transparent;border-radius:8px;background:var(--surface);color:var(--navy);font:inherit;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer}
+.lqb-btn:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface));border-color:var(--cyan)}
+.lqb-btn[aria-pressed="true"]{background:color-mix(in srgb,var(--cyan) 16%,var(--surface));border-color:var(--cyan)}
+.lqb-btn:disabled{opacity:.45;cursor:default}
+.lqb-main{background:var(--orange);color:#fff}
+.lqb-main:not(:disabled):hover{background:color-mix(in srgb,var(--orange) 88%,#000);border-color:transparent}
+.lqb-btn:focus-visible,.lqb-dismiss:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}

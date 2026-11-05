@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026110101">
+<link rel="stylesheet" href="css/style.css?v=2026110501">
 </head>
 <body>
 
@@ -133,6 +133,20 @@
     </div>
 
     <svg id="cv" xmlns="http://www.w3.org/2000/svg"></svg>
+    <!-- 패턴선 «선 가까이» 빠른 도구막대(UI 전용 · js/designLineQuickBar.js). #cv 의 형제라 막대 클릭은 캔버스로 가지 않는다.
+         버튼은 오른쪽 패턴선 버튼과 같은 명령(finishDraw · cancel · setRole)만 부른다. 요소는 최초부터 존재하고 hidden 으로만 전환. -->
+    <div class="line-quickbar" id="lineQuickBar" role="toolbar" aria-label="패턴선 빠른 조작" hidden>
+      <div class="lqb-head"><span class="lqb-title" id="lineQuickTitle"></span><button type="button" class="lqb-dismiss" id="lineQuickDismiss" aria-label="빠른 도구 접기 — 선과 선택은 그대로" title="접기 — 선과 선택은 그대로" hidden>&times;</button></div>
+      <div class="lqb-row" data-lqb="draw" hidden>
+        <button type="button" class="lqb-btn" id="lineQuickCancel" title="작성 중 선을 버리고 그리기를 끝냅니다">그리기 취소</button>
+        <button type="button" class="lqb-btn lqb-main" id="lineQuickFinish" disabled aria-disabled="true">그리기 완료</button>
+      </div>
+      <div class="lqb-row" data-lqb="role" role="group" aria-label="선 역할" hidden>
+        <button type="button" class="lqb-btn" id="lineQuickRoleCut" data-role="cut" aria-pressed="false">절개선</button>
+        <button type="button" class="lqb-btn" id="lineQuickRoleBoundary" data-role="boundary" aria-pressed="false">외곽</button>
+        <button type="button" class="lqb-btn" id="lineQuickRoleGuide" data-role="guide" aria-pressed="false">보조선</button>
+      </div>
+    </div>
   </main>
 
   <!-- 원형 stage 전용 치수 inspector. design stage 에서는 ui.js 가 hidden 처리하고
@@ -569,7 +583,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026110501"></script>
+<script src="js/render.js?v=2026110502"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -600,6 +614,7 @@
 <script src="js/designLayout.js?v=2026102904"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
 <script src="js/designLineTool.js?v=2026110503"></script>
+<script src="js/designLineQuickBar.js?v=2026110501"></script>
 <!-- 처리 방법 157 맞댄다(순수): window.designJoin. designLineTool 다음. -->
 <script src="js/designJoin.js?v=2026092910"></script>
 <!-- 허리 이음선 Ⓜ 조합(순수): window.designWaistSeam. designLineTool·designJoin 다음, designBodice 앞. -->
