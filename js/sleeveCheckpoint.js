@@ -55,6 +55,9 @@
   function check(proj) {
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
+    // 수동 외곽 수정(sleeveOutlineEdit)이 화면 소매와 일치하면 그 전용 분기 — 프리셋 재제도 검사는 **원본(base)** 에 그대로 적용된다(완화·우회 없음).
+    var SOE = window.sleeveOutlineEdit;
+    if (SOE && proj.working.sleeveEdit && SOE.isActive(proj)) return checkEdit(proj);
     // 소매 Ⓐ 는 working.sleeveA + geometry.sleeve 만 쓰고 sleeveDraft 는 모른다 — 기본 소매 파라미터로 서명하지 않도록 별도 분기.
     var lineCount = (proj.working.sleeveA ? 1 : 0) + (proj.working.sleeveB ? 1 : 0) + (proj.working.sleeveC ? 1 : 0) + (proj.working.sleeveD ? 1 : 0) + (proj.working.sleeveE ? 1 : 0) + (proj.working.sleeveF ? 1 : 0) + (proj.working.sleeveG ? 1 : 0) + (proj.working.sleeveH ? 1 : 0) + (proj.working.sleeveI ? 1 : 0) + (proj.working.sleeveJ ? 1 : 0) + (proj.working.sleeveK ? 1 : 0) + (proj.working.sleeveL ? 1 : 0) + (proj.working.sleeveM ? 1 : 0) + (proj.working.sleeveN ? 1 : 0) + (proj.working.sleeveO ? 1 : 0) + (proj.working.sleeveP ? 1 : 0) + (proj.working.sleeveQ ? 1 : 0) + (proj.working.sleeveR ? 1 : 0) + (proj.working.sleeveS ? 1 : 0) + (proj.working.sleeveT ? 1 : 0) + (proj.working.sleeveU ? 1 : 0) + (proj.working.sleeveV ? 1 : 0) + (proj.working.sleeveW ? 1 : 0) + (proj.working.sleeveX ? 1 : 0) + (proj.working.sleeveY ? 1 : 0) + (proj.working.sleeveZ ? 1 : 0);
     if (lineCount > 1) return { ok: false, fails: ["sleeve-line-conflict"], capLengths: null, ease: null };
@@ -1183,12 +1186,15 @@
       var sig = { g: canonGeom(sleeveResult.geometry), o: sleeveResult.origin.presetId, i: sleeveResult.inputs,
         m: sleeveResult.cap.mode, l: sleeveResult.cap.lengths, sbh: sleeveResult.sourceBodiceHash };
       if (sleeveResult.derivedBodice) sig.db = ["back", "front"].map(function (pc) { return canonGeom(sleeveResult.derivedBodice[pc]); });   // 돌먼 Ⓡ: 파생 몸판 형상도 서명(다른 완료본은 필드 없음 — hash 불변)
+      if (sleeveResult.manualEdit) sig.me = editSig(sleeveResult.manualEdit);   // 수동 외곽 수정 완료본만(다른 완료본은 필드 없음 — hash 불변)
       return JSON.stringify(sig);
     }
-    return JSON.stringify({
+    var dsig = {
       g: canonGeom(sleeveResult.geometry), p: sleeveResult.parameters,
       m: sleeveResult.cap.mode, l: sleeveResult.cap.lengths, sbh: sleeveResult.sourceBodiceHash
-    });
+    };
+    if (sleeveResult.manualEdit) dsig.me = editSig(sleeveResult.manualEdit);
+    return JSON.stringify(dsig);
   }
   function canonGeom(geom) {
     return (geom.outline || []).map(function (s) {
@@ -1204,6 +1210,7 @@
     if (!proj) return { ok: false, reason: "no-project" };
     var c = check(proj);
     if (!c.ok) return { ok: false, reason: c.fails[0], check: c };
+    if (c._edit) return completeEdit(proj, c);
     if (proj.working.sleeveZ) return completeZ(proj, c);
     if (proj.working.sleeveY) return completeY(proj, c);
     if (proj.working.sleeveX) return completeX(proj, c);
@@ -1766,11 +1773,82 @@
     return { ok: true, result: result, check: c };
   }
 
+  // ── 수동 외곽 수정(sleeveOutlineEdit) 분기(2026-11-06) ──
+  //   base(편집 전 frozen 완료본)가 지금도 «현재 프리셋·입력·몸판의 완료본»이어야 하고(= 위 프리셋 검사를 base 형상으로 그대로 통과 ·
+  //   base 를 sleeveResult 로 둔 가상 상태에서 isCurrentSleeveChanged 가 false), base 에 반영 기록을 다시 적용한 결과가 화면 수정 형상과
+  //   바이트 같아야 한다. 소매산 길이·이세는 수정 형상을 완료와 같은 함수(measureCap)로 직접 잰다. SP 는 base 그대로여야 한다.
+  function measureCap(geom, key) {
+    var DS = window.designSleeve; if (!geom) return null;
+    if (key === "F") return primF(geom);
+    if (key === "G") return primG(geom);
+    if (key === "O") return primO(geom);
+    if (key === "V") return raglanPrim(geom);
+    if (key === "W") return geom.butted === true ? raglanPrim(geom) : null;
+    if (key === "X" || key === "Y" || key === "Z") return null;
+    return DS ? DS.capPrimitives(geom) : null;
+  }
+  function editSig(me) { return JSON.stringify({ b: me.baseSleeveHash, ops: (me.ops || []).map(function (o) { return [o.lineId, o.lineSig, o.piece, o.cls]; }) }); }
+  function checkEdit(proj) {
+    var SOE = window.sleeveOutlineEdit, w = proj.working, ed = w.sleeveEdit, base = ed.base, fails = [];
+    var BC = window.bodiceCheckpoint, bodice = BC && BC.latest(proj);
+    if (!base || !base.geometry || base.manualEdit || hashStr(signature(base)) !== base.hash) fails.push("manual-edit-base-invalid");
+    else {
+      var pw = Object.assign({}, w, { geometry: Object.assign({}, w.geometry, { sleeve: base.geometry }), sleeveResult: base, sleeveEdit: null });
+      if (isCurrentSleeveChanged(Object.assign({}, proj, { working: pw }))) fails.push("manual-edit-base-stale");
+    }
+    var ctx = SOE.ctxFor(proj, base);
+    if (!fails.length) {
+      var rp = SOE.replay(base.geometry, ed.ops, ctx);
+      if (!rp.ok || JSON.stringify(rp.geometry) !== JSON.stringify(ed.geometry)) fails.push("manual-edit-replay-mismatch");
+    }
+    var prim = measureCap(ed.geometry, ctx.key);
+    if (ctx.capRequired && !prim) fails.push("cap-unmeasured");
+    if (prim && ctx.splitPoint && prim.splitPoint && Math.hypot(prim.splitPoint.x - ctx.splitPoint.x, prim.splitPoint.y - ctx.splitPoint.y) > 1e-6) fails.push("manual-edit-split-moved");
+    var ease = null;
+    if (prim && prim.lengths && bodice) {
+      var ah = sewnAH(bodice) || {}, fe = prim.lengths.front - ah.front, be = prim.lengths.back - ah.back;
+      if (!(fin(fe) && fin(be))) fails.push("ease-unmeasured"); else ease = { front: fe, back: be, total: fe + be };
+    }
+    var m = SOE.measure(ed.geometry, ctx);
+    return { ok: fails.length === 0, fails: fails, capLengths: prim ? prim.lengths : null, ease: ease, lower: null, cap: null, mode: "manual-edit",
+      preset: base && base.origin ? base.origin.presetId : null, _prim: prim, _bodice: bodice, _edit: ed, _base: base, _measure: m };
+  }
+  function r4o(o) { var out = {}; Object.keys(o).forEach(function (k) { var v = o[k]; out[k] = typeof v === "number" ? round4(v) : (v && typeof v === "object") ? r4o(v) : v; }); return out; }
+  // 수정 완료본: base 의 출처·입력·제도 기록(meta)은 그대로 두고 형상·소매산 블록만 수정 형상 실측으로 · 출처(manualEdit)를 든다.
+  function buildEditResult(proj, c) {
+    var base = c._base, ed = c._edit, prim = c._prim, out = {};
+    Object.keys(base).forEach(function (k) { if (k !== "hash" && k !== "completedAt" && k !== "geometry" && k !== "cap" && k !== "manualEdit") out[k] = clone(base[k]); });
+    out.geometry = clone(ed.geometry);
+    var cap = { mode: base.cap.mode, frontPrimitives: prim ? clone(prim.frontPrimitives) : [], backPrimitives: prim ? clone(prim.backPrimitives) : [], splitPoint: prim && prim.splitPoint ? clone(prim.splitPoint) : null,
+      lengths: prim ? { front: round4(prim.lengths.front), back: round4(prim.lengths.back), total: round4(prim.lengths.total) } : null,
+      ease: c.ease ? { front: round4(c.ease.front), back: round4(c.ease.back), total: round4(c.ease.total) } : null, manualSource: base.cap.manualSource ? clone(base.cap.manualSource) : null };
+    if (prim && prim.kind) cap.kind = prim.kind;
+    out.cap = cap;
+    out.manualEdit = { schemaVersion: 1, baseSleeveHash: base.hash,
+      ops: ed.ops.map(function (o) { return { lineId: o.lineId, lineSig: o.lineSig, piece: o.piece, cls: o.cls, fromHash: o.fromHash, segments: clone(o.segments) }; }),
+      measure: r4o(c._measure) };
+    return out;
+  }
+  function completeEdit(proj, c) {
+    var result = buildEditResult(proj, c);
+    result.completedAt = Date.now();
+    result.hash = hashStr(signature(result));
+    deepFreeze(result);
+    proj.working.sleeveResult = result;   // 세션 전용 · base(편집 전 완료본)는 sleeveEdit.base 가 그대로 든다(불변)
+    return { ok: true, result: result, check: c };
+  }
+
   function latest(proj) { proj = proj || project(); return (proj && proj.working.sleeveResult) || null; }
   // 완료본 없음 → true. 몸판 hash 가 완료본과 다르면 "몸판 변경으로 무효"(별도 함수). 여기선 소매 형상 변경.
   function isCurrentSleeveChanged(proj) {
     proj = proj || project(); if (!proj) return false;
     var res = proj.working.sleeveResult; if (!res) return true;
+    var SOE = window.sleeveOutlineEdit;
+    if (SOE && proj.working.sleeveEdit && SOE.isActive(proj)) {   // 수동 외곽 수정: 수정 완료본(같은 base·같은 반영 기록·같은 실측)이어야 «현재»
+      var ce = check(proj);
+      if (!ce.ok || !ce._edit || !res.manualEdit) return true;
+      return signature(buildEditResult(proj, ce)) !== signature(res);
+    }
     var c = check(proj);
     if (!c.ok || !c._prim) return true;   // 현재 유효하지 않으면 변경으로 간주(재완료 필요)
     if (proj.working.sleeveZ) {   // 소매 Ⓩ: 파생 몸판(소매 포함) + 빈 소매 버킷 서명(소매산·AH 길이 없음 — cap.lengths = null)
@@ -1894,5 +1972,5 @@
     return res.sourceBodiceHash !== bodice.hash;
   }
 
-  window.sleeveCheckpoint = Object.freeze({ check: check, complete: complete, latest: latest, isCurrentSleeveChanged: isCurrentSleeveChanged, invalidatedByBodice: invalidatedByBodice, kindOf: kindOf });
+  window.sleeveCheckpoint = Object.freeze({ check: check, complete: complete, latest: latest, isCurrentSleeveChanged: isCurrentSleeveChanged, invalidatedByBodice: invalidatedByBodice, kindOf: kindOf, measureCap: measureCap });
 })();
