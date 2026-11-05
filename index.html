@@ -154,6 +154,9 @@
       <!-- 다음 단계: 선택한 선이 외곽일 때만(2026-11-06). 오른쪽 «외곽 대체 미리보기»(btnDesignBoundary)와 같은 판정(getBoundaryState)·같은 명령(doBoundaryPreview). 미리보기일 뿐 완성 외곽 아님. -->
       <div class="lqb-next" data-lqb="boundary" hidden>
         <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickBoundary" disabled aria-disabled="true" aria-describedby="lineQuickBoundaryReason">외곽 대체 미리보기</button>
+        <!-- 소매만(2026-11-06): 미리보기 확인 → «외곽 반영»(오른쪽 btnDesignBoundaryApply 와 같은 doBoundaryApply) → 반영됨 · 재완료 안내 · «반영 되돌리기»(doSleeveEditUndo) -->
+        <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickBoundaryApply" hidden disabled aria-disabled="true" aria-describedby="lineQuickBoundaryReason">외곽 반영</button>
+        <button type="button" class="lqb-btn lqb-wide" id="lineQuickBoundaryUndo" hidden aria-describedby="lineQuickBoundaryReason">반영 되돌리기</button>
         <span class="lqb-reason" id="lineQuickBoundaryReason"></span>
       </div>
       <!-- 소형 상태줄(좁은 화면에서 분리 성공·외곽 대체 미리보기 뒤 전체 막대를 놓을 빈자리가 없을 때만): 결과 확인 «분리됨 · 파트 N개»/«외곽 대체 미리보기 표시 중» + «도구»(전체 막대로 복귀) -->
@@ -575,6 +578,9 @@
         <div class="row note" id="designBoundaryStatus" aria-live="polite"></div>
         <div class="row" style="gap:4px">
           <button class="btn" id="btnDesignBoundary" onclick="designLineTool.doBoundaryPreview()" disabled>외곽 대체 미리보기</button>
+          <!-- 소매만: 보이는 미리보기를 확인한 뒤 명시 클릭으로 소매 외곽에 반영(→ 소매 변경됨 · 다시 완료) · 마지막 반영 되돌리기 -->
+          <button class="btn" id="btnDesignBoundaryApply" onclick="designLineTool.doBoundaryApply()" hidden disabled>외곽 반영</button>
+          <button class="btn" id="btnSleeveEditUndo" onclick="designLineTool.doSleeveEditUndo()" hidden disabled>반영 되돌리기</button>
         </div>
         <div class="row note" id="designBoundaryNote" aria-live="polite"></div>
         <!-- 여러 외곽 대체선을 합성해 디자인 외곽선(working.designOutline) 생성. cut 은 이 외곽 기준.
@@ -598,7 +604,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026110601"></script>
+<script src="js/render.js?v=2026110602"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -628,9 +634,10 @@
 <script src="js/sleeveAnnotation.js?v=2026110404"></script>
 <script src="js/designLayout.js?v=2026102904"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026110601"></script>
+<script src="js/designLineTool.js?v=2026110602"></script>
 <script src="js/sleeveSplit.js?v=2026110601"></script>
-<script src="js/designLineQuickBar.js?v=2026110601"></script>
+<script src="js/sleeveOutlineEdit.js?v=2026110601"></script>
+<script src="js/designLineQuickBar.js?v=2026110602"></script>
 <!-- 처리 방법 157 맞댄다(순수): window.designJoin. designLineTool 다음. -->
 <script src="js/designJoin.js?v=2026092910"></script>
 <!-- 허리 이음선 Ⓜ 조합(순수): window.designWaistSeam. designLineTool·designJoin 다음, designBodice 앞. -->
@@ -647,7 +654,7 @@
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
 <script src="js/sleeveMeasure.js?v=2026082011"></script>
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
-<script src="js/sleeveCheckpoint.js?v=2026110403"></script>
+<script src="js/sleeveCheckpoint.js?v=2026110601"></script>
 <!-- 소매 Ⓐ(P.137–139 타입 4): window.designSleeveA 엔진 코어 · window.sleevePresets 카탈로그 · window.sleeveAApply 상태 연결(전부 순수·DOM 미접근). -->
 <script src="js/designSleeveA.js?v=2026102802"></script>
 <script src="js/sleevePresets.js?v=2026110403"></script>
@@ -724,7 +731,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026110405"></script>
+<script src="js/ui.js?v=2026110601"></script>
 
 </body>
 </html>

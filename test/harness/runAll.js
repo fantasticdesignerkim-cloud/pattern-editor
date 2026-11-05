@@ -160,6 +160,7 @@ const suites = [
   { file: "lineQuickBarCheck.js",       golden: false },  // 패턴선 «선 가까이» 빠른 도구막대(UI 전용): 단계별 표시·완료 가능 = canFinishDraw·관리선 잠금·배치(위 우선·반전·클램프·가림 회피·결정적)·기존 명령만 호출
   { file: "sleevePartSplitCheck.js",   golden: false },  // 소매 파트 분리: 기본+Ⓐ~Ⓩ 그리기→절개선→분리(Ⓨ·Ⓩ 구체적 거부)·독립 검산(면적·공유 절개·연속·곡선)·Ⓒ 열린 V·물리 거부·현재성/무효화·몸판 분리 보존·Design hash 무관
   { file: "boundaryPreviewCheck.js",   golden: false },  // 외곽 대체 미리보기: 막대 «외곽» → «외곽 대체 미리보기»(같은 판정·명령) · 원래 몸판 종전 결과 동일 · 파생 몸판 거부 · 기본+Ⓐ~Ⓩ 소매(Ⓨ·Ⓩ 거부)·독립 검산·Ⓒ/Ⓦ V 보존·Ⓥ 같은 조각·현재성/무효화
+  { file: "sleeveOutlineEditCheck.js", golden: false },  // 소매 외곽 반영: 미리보기 확인 → «외곽 반영»(명시) · 원본 불변·출처 · 독립 재계측(옆선·소맷부리·소매산 SP 분할·이세) · 재완료 hash·Design 형상 · 절개선 재검증 · 의미 모호/SP/미완료/낡은 미리보기 거부·원자성 · 기본·Ⓐ·Ⓒ V·Ⓥ 두 장·두 번 연속 · 미편집 회귀
   { file: "sleeveCResultCheck.js",      golden: false },
   // 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시(sleeveAnnotation): 라벨·치수가 실제 geometry/meta 와 일치(독립 실측)·EL 변경/라인 전환/몸판 변경 동기화·기본 소매 모델 없음·표시 전용(상태·hash 불변)·글자 겹침·렌더/CSS/토글 배선.
   { file: "sleeveAnnotationCheck.js",   golden: false },

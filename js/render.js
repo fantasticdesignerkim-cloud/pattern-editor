@@ -700,7 +700,8 @@ function render(){
       if (!_yokeModeOf(dp.working.geometry) && !_princessModeOf(dp.working.geometry)) _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
       if (_princessModeOf(dp.working.geometry)) _appendPrincessAnnotation(grp, window.designLayout && window.designLayout.princessLabels(dp.working.geometry), pc);
       if (_yokeModeOf(dp.working.geometry)) _appendYokeAnnotation(grp, window.designLayout && window.designLayout.yokeLabels(dp.working.geometry), pc);
-      if (pc === "sleeve" && window.sleeveAnnotation) {   // 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보(표시 전용). 기본 소매는 모델 없음 → 기존 표시 그대로. 토글은 설명 오버레이만 끈다.
+      // 수동 외곽 수정(2026-11-06)이 반영된 소매에는 프리셋 제도 공정·치수 표시를 그리지 않는다(수정 전 계산값을 현재 형상의 실측처럼 보이지 않게 · 현재 실측은 소매 탭).
+      if (pc === "sleeve" && window.sleeveAnnotation && !(window.sleeveOutlineEdit && window.sleeveOutlineEdit.isActive(dp))) {   // 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보(표시 전용). 기본 소매는 모델 없음 → 기존 표시 그대로. 토글은 설명 오버레이만 끈다.
         const _hPcChk = document.getElementById("chkSleeveHPieces");   // Ⓗ 원래 종이 조각(녹색) 표시 — 기본 켜짐(표시 전용)
         const _sm = window.sleeveAnnotation.buildModel(dp, { pieces: !_hPcChk || _hPcChk.checked });
         if (_sm) { grp.setAttribute("data-sleeve-line", _sm.line); if (!_slvInfoChk || _slvInfoChk.checked) _appendSleeveAnnotation(grp, _sm); }

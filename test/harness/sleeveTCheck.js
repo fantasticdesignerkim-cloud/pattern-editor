@@ -265,7 +265,7 @@ ok(S.parameters.sleeveLengthCm === SL && STA.keys().every(k => typeof S.paramete
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8");
   const ver = (f) => { const mm = html.match(new RegExp("js/" + f.replace(".", "\\.") + "\\?v=(\\d+)")); return mm ? mm[1] : null; };
   // 이력: 2026102911 = Ⓤ 연결 · 2026103001 = 소매산 재보완(엔진 · ★ 기본값 · 표시 문구)
-  ok(["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === (f === "ui.js" ? "2026110405" : f === "sleeveAnnotation.js" ? "2026110404" : "2026110403")) && ver("sleeveTApply.js") === "2026103001", "11: 캐시 버전(Ⓤ 연결 2026102911 · 재보완 2026103001 — sleeveTApply 는 2026102908 에서 올림 · Ⓥ 연결 2026110101 · Ⓦ 연결로 공용 파일 2026110301)");
+  ok(["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === (f === "ui.js" || f === "sleeveCheckpoint.js" ? "2026110601" : f === "sleeveAnnotation.js" ? "2026110404" : "2026110403")) && ver("sleeveTApply.js") === "2026103001", "11: 캐시 버전(Ⓤ 연결 2026102911 · 재보완 2026103001 — sleeveTApply 는 2026102908 에서 올림 · Ⓥ 연결 2026110101 · Ⓦ 연결로 공용 파일 2026110301)");
   ok(ver("designSleeveT.js") === "2026110101", "11: designSleeveT.js 캐시 버전 2026110101(2026103001 소매산 재보완 → Ⓥ 재사용 경계 parts 추가 · Ⓣ·Ⓤ 결과 무변경)");
   ok(html.indexOf("js/sleeveSApply.js") < html.indexOf("js/designSleeveT.js") && html.indexOf("js/designSleeveT.js") < html.indexOf("js/sleeveTApply.js") && html.indexOf("js/sleeveTApply.js") < html.indexOf("js/ui.js"), "11: 스크립트 순서");
   const rec = SP.get("bunka-sleeve-T");

@@ -49,8 +49,14 @@
       const split = sp ? { allowed: !!sp.allowed, kind: sp.kind, parts: sp.parts || 0,
         text: sp.allowed ? (sp.parts > 0 ? "분리됨 · 파트 " + sp.parts + "개(색으로 미리보기)" : "분리 가능") : "분리 불가 · " + sp.reason } : null;
       const bs = (!lock && role === "boundary" && s.sel.boundary) ? s.sel.boundary : null;   // 외곽만 · 관리선(네크라인 전용선 등)은 잠금 그대로
-      const boundary = bs ? { allowed: !!bs.allowed, kind: bs.kind, shown: !!bs.shown,
-        text: bs.allowed ? (bs.shown ? "미리보기 표시 중 · 보라 외곽(완성 외곽 아님)" : bs.reason) : "대체 불가 · " + bs.reason } : null;
+      // 단계(2026-11-06 소매 «외곽 반영»): preview(미리보기 전) → confirm(미리보기 확인 · 소매만 «외곽 반영») → applied(반영됨 · 재완료 안내).
+      //   몸판은 apply 가 없어 종전 그대로(preview·미리보기 표시 중).
+      const stage = bs ? (bs.applied ? "applied" : (bs.shown && bs.apply) ? "confirm" : "preview") : null;
+      const boundary = bs ? { allowed: !!bs.allowed, kind: bs.kind, shown: !!bs.shown, stage: stage,
+        apply: bs.apply ? { allowed: !!bs.apply.allowed, reason: bs.apply.reason } : null, undo: !!bs.edit,
+        text: stage === "applied" ? (bs.edit && bs.edit.pending ? "반영됨 · 소매 변경됨 — 소매 모양을 다시 완료하세요" : "반영됨 · 소매 외곽의 일부")
+          : stage === "confirm" ? (bs.apply.allowed ? "미리보기 확인 · «외곽 반영»을 눌러야 소매에 반영됩니다" : "반영 불가 · " + bs.apply.reason)
+          : bs.allowed ? (bs.shown ? "미리보기 표시 중 · 보라 외곽(완성 외곽 아님)" : bs.reason) : "대체 불가 · " + bs.reason } : null;
       return { kind: "select", key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };
     }
     return null;
@@ -70,7 +76,7 @@
   }
   function compactText(vm) {
     const sp = vm && vm.split;
-    return (sp && sp.allowed && sp.parts > 0) ? "분리됨 · 파트 " + sp.parts + "개" : "외곽 대체 미리보기 표시 중";
+    return (sp && sp.allowed && sp.parts > 0) ? "분리됨 · 파트 " + sp.parts + "개" : "외곽 대체 미리보기 표시 중 · «도구»에서 반영";
   }
   function chooseMode(vm, fullHits, expandedKey) {
     const k = resultKey(vm);
@@ -114,7 +120,7 @@
   // ── DOM ──
   let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
   let splitRow = null, splitBtn = null, splitReason = null;
-  let bndRow = null, bndBtn = null, bndReason = null;
+  let bndRow = null, bndBtn = null, bndReason = null, bndApply = null, bndUndo = null;
   let headRow = null, compactRow = null, compactText_ = null, expandBtn = null;
   let expandedKey = null;             // 소형 상태줄에서 «도구»로 펼친 결과 키(UI 전용 · 선택·결과가 바뀌거나 캔버스를 누르면 풀림)
   let splitNote = null;                // {key, text}: 막대 «파트 분리»를 눌렀는데 파트가 안 생겼을 때 doSplit 이 남긴 안내(#designSplitNote) — 선택이 바뀌면 버림
@@ -224,10 +230,17 @@
         bndRow.hidden = !bd;
         if (bd) {
           if (bndNote && bndNote.key !== vm.key) bndNote = null;
-          const note = (bndNote && bd.allowed && !bd.shown) ? bndNote.text : null;
+          const note = (bndNote && ((bd.stage === "preview" && bd.allowed && !bd.shown) || bd.stage === "confirm")) ? bndNote.text : null;
+          bndBtn.hidden = bd.stage !== "preview";
           bndBtn.disabled = !bd.allowed; bndBtn.setAttribute("aria-disabled", bd.allowed ? "false" : "true");
+          if (bndApply) {   // 같은 명령(doBoundaryApply) · 같은 판정(getBoundaryState.apply) — 오른쪽 «외곽 반영»과 공용
+            const ap = bd.stage === "confirm" && bd.apply;
+            bndApply.hidden = !ap; const on = !!(ap && bd.apply.allowed);
+            bndApply.disabled = !on; bndApply.setAttribute("aria-disabled", on ? "false" : "true");
+          }
+          if (bndUndo) bndUndo.hidden = !(bd.stage === "applied" && bd.undo);
           bndReason.textContent = note || bd.text;
-          bndRow.setAttribute("data-state", note ? "no" : !bd.allowed ? "no" : bd.shown ? "done" : "ok");
+          bndRow.setAttribute("data-state", note ? "no" : bd.stage === "applied" ? "done" : bd.stage === "confirm" ? (bd.apply.allowed ? "ok" : "no") : !bd.allowed ? "no" : bd.shown ? "done" : "ok");
         }
       }
       roleBtns.forEach(b => {
@@ -279,6 +292,7 @@
   }
   function focusPrimary(vm) {
     if (compactRow && !compactRow.hidden) { try { expandBtn.focus({ preventScroll: true }); } catch (_) { expandBtn.focus(); } return; }
+    if (vm.kind === "select" && bndApply && !bndApply.hidden && !bndApply.disabled && bndRow && !bndRow.hidden) { try { bndApply.focus({ preventScroll: true }); } catch (_) { bndApply.focus(); } return; }   // 미리보기 확인 단계 = 다음 행동
     const t = vm.kind === "draw" ? (finishBtn.disabled ? cancelBtn : finishBtn)
       : (roleBtns.filter(b => b.getAttribute("aria-pressed") === "true" && !b.disabled)[0] || (dismissBtn.hidden ? null : dismissBtn));
     if (t) { try { t.focus({ preventScroll: true }); } catch (_) { t.focus(); } }
@@ -304,6 +318,14 @@
     sync(); return done;
   }
 
+  // 막대 «외곽 반영»(소매 · 미리보기 확인 단계에서만) — 오른쪽 버튼과 같은 doBoundaryApply. 반영이 안 되면 그 안내를 막대에도.
+  function actBoundaryApply() {
+    const T = tool(), vm = describe(snapshot()); if (!T || !vm || !vm.boundary || vm.boundary.stage !== "confirm" || !vm.boundary.apply || !vm.boundary.apply.allowed) return false;
+    const done = !!(T.doBoundaryApply && T.doBoundaryApply());
+    const el = typeof document !== "undefined" ? document.getElementById("designBoundaryNote") : null;
+    bndNote = done ? null : { key: vm.key, text: (el && el.textContent) || "반영되지 않았습니다" };
+    sync(); return done;
+  }
   function init() {
     bar = document.getElementById("lineQuickBar");
     if (!bar) return;
@@ -323,6 +345,8 @@
     bndRow = bar.querySelector('[data-lqb="boundary"]');
     bndBtn = document.getElementById("lineQuickBoundary");
     bndReason = document.getElementById("lineQuickBoundaryReason");
+    bndApply = document.getElementById("lineQuickBoundaryApply");
+    bndUndo = document.getElementById("lineQuickBoundaryUndo");
     expandBtn = document.getElementById("lineQuickExpand");
 
     // 막대 위 조작은 캔버스(점 추가·피스 드래그·팬)로 가지 않는다.
@@ -333,6 +357,8 @@
     // 파트 분리 = 오른쪽 버튼과 같은 doSplit. 파트가 안 생기면(분할 직전 재검증·ring 실패) doSplit 이 남긴 안내를 막대에도 보인다.
     splitBtn.addEventListener("click", () => { actSplit(); });
     if (bndBtn) bndBtn.addEventListener("click", () => { actBoundary(); });   // 외곽 대체 미리보기 = 오른쪽 버튼과 같은 doBoundaryPreview
+    if (bndApply) bndApply.addEventListener("click", () => { actBoundaryApply(); });   // 외곽 반영 = 오른쪽 버튼과 같은 doBoundaryApply
+    if (bndUndo) bndUndo.addEventListener("click", () => { const T = tool(); if (T && T.doSleeveEditUndo) T.doSleeveEditUndo(); sync(); });   // 되돌리기 = 오른쪽과 같은 doSleeveEditUndo
     // 소형 상태줄 «도구» = 이 결과에 대해 전체 막대(역할·파트 분리)로 복귀.
     if (expandBtn) expandBtn.addEventListener("click", () => { const vm = describe(snapshot()); expandedKey = resultKey(vm); sync();
       const t = roleBtns.filter(b => b.getAttribute("aria-pressed") === "true" && !b.disabled)[0]; if (t) { try { t.focus({ preventScroll: true }); } catch (_) { t.focus(); } } });
@@ -355,7 +381,7 @@
   }
 
   window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, chooseMode: chooseMode, resultKey: resultKey,
-    viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary });
+    viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary, actBoundaryApply: actBoundaryApply });
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
   }

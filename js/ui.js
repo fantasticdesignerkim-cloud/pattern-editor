@@ -1693,7 +1693,10 @@
   function renderSleeveAInfo(project) {
     const el = document.getElementById("designSleeveAInfo"); if (!el) return;
     const api = sleeveZOn(project) ? window.sleeveZApply : sleeveYOn(project) ? window.sleeveYApply : sleeveXOn(project) ? window.sleeveXApply : sleeveVOn(project) ? window.sleeveVApply : sleeveWOn(project) ? window.sleeveWApply : sleeveUOn(project) ? window.sleeveUApply : sleeveTOn(project) ? window.sleeveTApply : sleeveSOn(project) ? window.sleeveSApply : sleeveROn(project) ? window.sleeveRApply : sleeveQOn(project) ? window.sleeveQApply : sleevePOn(project) ? window.sleevePApply : sleeveOOn(project) ? window.sleeveOApply : sleeveNOn(project) ? window.sleeveNApply : sleeveMOn(project) ? window.sleeveMApply : sleeveLOn(project) ? window.sleeveLApply : sleeveKOn(project) ? window.sleeveKApply : sleeveJOn(project) ? window.sleeveJApply : sleeveIOn(project) ? window.sleeveIApply : sleeveHOn(project) ? window.sleeveHApply : sleeveGOn(project) ? window.sleeveGApply : sleeveFOn(project) ? window.sleeveFApply : sleeveEOn(project) ? window.sleeveEApply : sleeveDOn(project) ? window.sleeveDApply : sleeveCOn(project) ? window.sleeveCApply : sleeveBOn(project) ? window.sleeveBApply : window.sleeveAApply;
-    const lines = (project && api) ? api.infoLines(project) : [];
+    let lines = (project && api) ? api.infoLines(project) : [];
+    // 수동 외곽 수정(2026-11-06): 위 줄은 프리셋 제도 기록(수정 전 계산값) — 현재 형상 실측과 구분해 표시한다.
+    const SOE = window.sleeveOutlineEdit;
+    if (project && SOE && SOE.isActive(project) && lines.length) lines = ["제도 기록(수정 전 프리셋 계산값 · 현재 형상 아님)"].concat(lines.map(t => "  " + t));
     el.hidden = lines.length === 0;
     el.setAttribute("data-blocked", project && api && api.isBlocked(project) ? "1" : "0");
     el.replaceChildren.apply(el, lines.map(t => { const d = document.createElement("div"); d.textContent = t; return d; }));
@@ -2512,7 +2515,9 @@
   function sleeveCPFailStr(reason) {
     const m = { "no-bodice": "몸판 완료 필요", "bodice-stale": "몸판 변경됨 · 다시 완료 필요", "no-sleeve": "소매를 먼저 적용",
       "source-mismatch": "소매 출처가 몸판 완료본과 다름", "cap-invalid": "소매산 편집 무효", "manual-line-missing": "관리형 소매산 선 없음",
-      "cap-unmeasured": "소매산 앞·뒤 분리 불가", "self-intersection": "소매 형상이 교차함", "ease-unmeasured": "이세 측정 불가", "no-project": "프로젝트 없음",
+      "cap-unmeasured": "소매산 앞·뒤 분리 불가",
+      "manual-edit-base-stale": "수동 외곽 수정의 원래 소매가 지금 소매 입력·몸판과 다름 · 소매를 다시 적용하세요(수정은 해제됨)", "manual-edit-base-invalid": "수동 외곽 수정의 원래 소매 기록이 맞지 않음",
+      "manual-edit-replay-mismatch": "수동 외곽 수정 기록을 다시 적용한 결과가 지금 소매와 다름", "manual-edit-split-moved": "수정 후 소매산 분할점(SP)이 달라짐", "self-intersection": "소매 형상이 교차함", "ease-unmeasured": "이세 측정 불가", "no-project": "프로젝트 없음",
       "sleeve-a-blocked": "소매 Ⓐ 차단 중(위 사유 확인) · 몸판을 확인하거나 원형 소매로 돌아가기",
       "sleeve-x-blocked": "소매 Ⓧ 차단 중(위 사유 확인) · 입력·몸판을 확인하거나 원형 소매로 돌아가기", "sleeve-z-blocked": "소매 Ⓩ 차단 중(위 사유 확인) · 입력·몸판을 확인하거나 원형 소매로 돌아가기", "sleeve-z-redraft-failed": "소매 Ⓩ 를 다시 제도할 수 없음", "sleeve-z-geometry-mismatch": "소매 형상이 Ⓩ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-y-blocked": "소매 Ⓨ 차단 중(위 사유 확인) · 입력·몸판을 확인하거나 원형 소매로 돌아가기", "sleeve-y-redraft-failed": "소매 Ⓨ 를 다시 제도할 수 없음", "sleeve-y-geometry-mismatch": "소매 형상이 Ⓨ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-piece-unexpected": "Ⓨ 는 별도 소매 조각이 없어야 함 · 소매 라인 다시 적용", "sleeve-x-redraft-failed": "소매 Ⓧ 를 다시 제도할 수 없음", "sleeve-x-geometry-mismatch": "소매 형상이 Ⓧ 제도 결과와 다름 · 소매 라인 다시 적용", "gusset-missing": "덧천 형상이 없음 · 소매 라인 다시 적용", "derived-bodice-missing": "몸판 일체형 파생 형상이 없음 · 다시 적용",
       "sleeve-w-blocked": "소매 Ⓦ 차단 중(위 사유 확인) · 입력·몸판을 확인하거나 원형 소매로 돌아가기", "sleeve-w-redraft-failed": "소매 Ⓦ 를 다시 제도할 수 없음", "sleeve-w-geometry-mismatch": "소매 형상이 Ⓦ 제도 결과와 다름 · 소매 라인 다시 적용", "sleeve-preset-unsupported": "지원하지 않는 소매 라인",
@@ -2530,10 +2535,21 @@
     const statusNote = document.getElementById("designSleeveStatusNote");
     const btn = document.getElementById("btnCompleteSleeve");
     if (!project || !window.sleeveCheckpoint) { if (btn) btn.disabled = true; if (checkNote) checkNote.textContent = ""; if (statusNote) statusNote.textContent = "소매 미완료 · 세션 전용"; return; }
+    if (window.sleeveOutlineEdit) window.sleeveOutlineEdit.prune(project);   // 소매를 새로 적용했으면 낡은 수동 외곽 수정 해제(다른 형상에 옮기지 않음)
     const c = window.sleeveCheckpoint.check(project);
     const sgn = v => (v >= 0 ? "+" : "") + fmtL(v);
+    const ed = c._edit || null, dropped = project.working.sleeveEditDropped || null;
     if (checkNote) {
-      if (sleeveZOn(project) && c.ok) checkNote.textContent = "소매 Ⓩ · 몸판 일체형(뒤·앞 · 옆선에 연결) · 별도 소매 조각 없음 · 소매산·AH 이세 적용 안 됨(소매 달림선 없음) · 봉제 길이·소맷부리 둘레는 위 Ⓩ 정보";
+      if (ed) {   // 수동 외곽 수정 = 현재 형상 실측(프리셋 예측값 아님)
+        const m = c._measure || {}, parts = ["현재 실측(수동 외곽 수정 " + ed.ops.length + "회)"];
+        if (c.capLengths) parts.push((sleeveVOn(project) || sleeveWOn(project) ? "소매 달림선 앞 " : "소매산 앞 ") + fmtL(c.capLengths.front) + "·뒤 " + fmtL(c.capLengths.back) + "·총 " + fmtL(c.capLengths.total) + "cm");
+        if (c.ease) parts.push("이세 앞 " + sgn(c.ease.front) + "·뒤 " + sgn(c.ease.back) + "·총 " + sgn(c.ease.total) + "cm");
+        if (m.cuff != null) parts.push("소맷부리 " + fmtL(m.cuff) + "cm");
+        if (m.sideFront != null || m.sideBack != null) parts.push("옆선 앞 " + (m.sideFront != null ? fmtL(m.sideFront) : "—") + "·뒤 " + (m.sideBack != null ? fmtL(m.sideBack) : "—") + "cm");
+        parts.push("소매길이 " + (m.sleeveLength != null ? fmtL(m.sleeveLength) + "cm" : "— (SP 수직선이 소맷부리와 만나지 않아 재지 않음)"));
+        checkNote.textContent = (c.ok ? "" : "완료 전 검사: " + sleeveCPFailStr(c.fails[0]) + " · ") + parts.join(" · ");
+      }
+      else if (sleeveZOn(project) && c.ok) checkNote.textContent = "소매 Ⓩ · 몸판 일체형(뒤·앞 · 옆선에 연결) · 별도 소매 조각 없음 · 소매산·AH 이세 적용 안 됨(소매 달림선 없음) · 봉제 길이·소맷부리 둘레는 위 Ⓩ 정보";
       else if (sleeveYOn(project) && c.ok) checkNote.textContent = "소매 Ⓨ · 몸판 일체형(뒤·앞) · 별도 소매 조각 없음 · 소매산·AH 이세 적용 안 됨(소매 달림선 없음) · 봉제 길이·팔구멍 둘레는 위 Ⓨ 정보";
       else if (sleeveXOn(project) && c.ok) checkNote.textContent = "소매 Ⓧ · 몸판 일체형(뒤·앞) + 덧천 · 소매산·AH 이세 적용 안 됨(소매 달림선 없음) · 봉제 길이는 위 Ⓧ 정보";
       else if (c.capLengths && sleeveLineOn(project) && c.ok) checkNote.textContent = "소매 " + sleeveLineSymbol(project) + (sleeveVOn(project) || sleeveWOn(project) ? " · 소매 달림선 앞 " : " · 소매산 앞 ") + fmtL(c.capLengths.front) + "·뒤 " + fmtL(c.capLengths.back) + "·총 " + fmtL(c.capLengths.total) + "cm (이세는 위 " + sleeveLineSymbol(project) + " 정보)";   // 이세 중복 표기 금지: Ⓐ 정보 줄이 목표/실제를 소유
@@ -2545,8 +2561,9 @@
     if (statusNote) {
       if (!latest) statusNote.textContent = c.ok ? "완료 가능 · 세션 전용" : "완료 전 검사: " + sleeveCPFailStr(c.fails[0]);
       else if (window.sleeveCheckpoint.invalidatedByBodice(project)) statusNote.textContent = "몸판 변경으로 소매 무효 · 다시 완료 필요";
-      else if (window.sleeveCheckpoint.isCurrentSleeveChanged(project)) statusNote.textContent = "소매 변경됨 · 다시 완료 필요 · 세션 전용";
-      else statusNote.textContent = (window.sleeveCheckpoint.kindOf(latest) === "preset" ? "소매 " + presetSymbolOfResult(latest) + " 완료됨(원형 v" : "소매 완료됨(원형 v") + (latest.sourceBlock.version != null ? latest.sourceBlock.version : "?") + ") · 세션 전용";
+      else if (window.sleeveCheckpoint.isCurrentSleeveChanged(project)) statusNote.textContent = "소매 변경됨" + (ed ? "(수동 외곽 수정 " + ed.ops.length + "회 반영)" : "") + " · 다시 완료 필요 · 세션 전용";
+      else statusNote.textContent = (window.sleeveCheckpoint.kindOf(latest) === "preset" ? "소매 " + presetSymbolOfResult(latest) + " 완료됨(원형 v" : "소매 완료됨(원형 v") + (latest.sourceBlock.version != null ? latest.sourceBlock.version : "?") + ")" + (latest.manualEdit ? " · 수동 외곽 수정 " + latest.manualEdit.ops.length + "회 포함" : "") + " · 세션 전용";
+      if (dropped && !ed) statusNote.textContent += " · 수동 외곽 수정 " + dropped.count + "회는 해제됨(" + dropped.reason + " — 이전 수정은 새 소매에 옮기지 않음)";
     }
     refreshCollarUI(project);   // 소매 완료/변경은 카라 탭 게이트에 영향 → 카라 UI 동기화(refresh 종점)
   }
@@ -2556,8 +2573,11 @@
     const r = window.sleeveCheckpoint.complete(project);
     const statusNote = document.getElementById("designSleeveStatusNote");
     if (!r.ok) { if (statusNote) statusNote.textContent = "완료 불가: " + sleeveCPFailStr(r.reason); updateSleeveCheckpointUI(project); return; }
+    project.working.sleeveEditDropped = null;
     updateSleeveCheckpointUI(project);
-    if (statusNote) statusNote.textContent = (window.sleeveCheckpoint.kindOf(r.result) === "preset" ? "소매 " + presetSymbolOfResult(r.result) + " 완료됨(원형 v" : "소매 완료됨(원형 v") + (r.result.sourceBlock.version != null ? r.result.sourceBlock.version : "?") + ") · 세션 전용";
+    if (window.designLineTool && window.designLineTool.syncCutStatus) window.designLineTool.syncCutStatus();   // 재완료 → 소매 절개선·외곽 판정이 새 완료본 기준으로
+    if (typeof render === "function") render();
+    if (statusNote) statusNote.textContent = (window.sleeveCheckpoint.kindOf(r.result) === "preset" ? "소매 " + presetSymbolOfResult(r.result) + " 완료됨(원형 v" : "소매 완료됨(원형 v") + (r.result.sourceBlock.version != null ? r.result.sourceBlock.version : "?") + ")" + (r.result.manualEdit ? " · 수동 외곽 수정 " + r.result.manualEdit.ops.length + "회 포함" : "") + " · 세션 전용";
   }
 
   // ── 카라 모양(C1: 2피스 셔츠 칼라의 칼라 스탠드) ── designCollar.computeStand(bodiceResult) →
@@ -4051,9 +4071,11 @@
     const project = designProjectNow(), chk = document.getElementById("chkSleeveInfo"), refChk = document.getElementById("chkSleeveHRef");
     const info = !chk || chk.checked, ref = (sleeveHOn(project || null) || sleeveIOn(project || null) || sleeveJOn(project || null) || sleeveKOn(project || null) || sleeveLOn(project || null) || sleeveMOn(project || null) || sleeveNOn(project || null) || sleeveOOn(project || null) || sleevePOn(project || null) || sleeveQOn(project || null)) && (!refChk || refChk.checked);   // Ⓗ 참고 도안(표시 전용)도 fit 에 포함
     if (!project || !window.sleeveAnnotation || !sleeveLineOn(project) || (!info && !ref)) return null;
+    if (window.sleeveOutlineEdit && window.sleeveOutlineEdit.isActive(project)) return null;   // 수동 외곽 수정 소매 = 프리셋 제도 표시를 그리지 않음(render.js 와 같은 조건) → 여백도 없음
     return window.sleeveAnnotation.overhang(project, scale, { info: info, ref: ref });
   };
   window.collarAnnotationForRender = collarAnnotationForRender;   // render.js 카라 제도 보조수치 오버레이(표시 전용)   // render.js 등이 읽는 읽기 전용 신호
+  window.refreshSleeveCheckpointUI = () => { const p = designProjectNow(); renderSleeveAInfo(p); updateSleeveCheckpointUI(p); };   // designLineTool 이 소매 외곽 반영·되돌리기 뒤 소매 상태·실측 갱신
   window.refreshDesignBodyPanel = updateDesignBodyPanel;  // designLineTool 이 boundary 편집 후 목둘레·상태 갱신
   window.refreshFrontPlacket = () => refreshFrontPlacket();  // boundary 편집으로 유효 외곽 변경 시 여밈 재파생
   window.recomposeSleeveCap = recomposeSleeveCap;            // designLineTool 이 관리형 소매산 편집 후 소매 재합성

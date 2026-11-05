@@ -879,6 +879,7 @@
     const v = validateSelectedCut();
     const bv = v ? null : validateSelectedBoundary();   // 선 하나 = 역할 하나 → 비싼 소매 판정은 둘 중 하나만
     const p = project(), SS = window.sleeveSplit;
+    if (p && window.sleeveOutlineEdit && window.sleeveOutlineEdit.prune(p)) sleeveUIRefresh();   // 소매를 새로 적용해 낡은 수동 외곽 수정 → 해제(다른 형상에 옮기지 않음)
     let ref = (v && v._ref) || (bv && bv._ref) || null;
     const needRef = p && SS && ((Array.isArray(p.working.parts) && p.working.parts.some(q => q.sourcePiece === "sleeve")) || (p.working.boundaryPreview && p.working.boundaryPreview.sourcePiece === "sleeve"));
     if (!ref && needRef) ref = SS.sleeveRef(p);           // 같은 동기화에서 한 번만(파트·미리보기 prune 공용)
@@ -1031,7 +1032,15 @@
   //     대체해 현재 결과처럼 보이지 않게 거부한다(파생 몸판 외곽 대체 = 범위 밖).
   //   소매(2026-11-06) = sleeveSplit.boundaryStatus — 현재 소매 완료본 기준(분리와 같은 sleeveRef).
   function boundaryStatusOf(p, line) {
-    if (line.piece === "sleeve") return window.sleeveSplit ? window.sleeveSplit.boundaryStatus(p, line) : { ok: false, kind: "invalid", reason: "소매 외곽 대체 모듈 없음" };
+    if (line.piece === "sleeve") {
+      if (!window.sleeveSplit) return { ok: false, kind: "invalid", reason: "소매 외곽 대체 모듈 없음" };
+      const E = window.sleeveOutlineEdit;
+      if (E && E.isApplied(p, line)) return { ok: false, kind: "applied", basis: "sleeve", reason: "이 선은 소매 외곽에 반영됨 — 지금 소매 외곽의 일부(다시 반영하지 않음)" };
+      const sv = window.sleeveSplit.boundaryStatus(p, line);
+      // 반영 가능 판정(2026-11-06): 미리보기 판정과 따로 — 미리보기가 되어도 구간 의미가 모호하면 반영은 막힌다(같은 동기화에서 한 번).
+      if (E) Object.defineProperty(sv, "apply", { value: E.applyStatus(p, line, sv), enumerable: false });
+      return sv;
+    }
     if (line.piece !== "front" && line.piece !== "back") return { ok: false, kind: "piece", reason: "앞판·뒤판·소매 외곽만 대체합니다(카라 미지원)" };
     if (!isOriginalBodiceContext(p)) {
       const live = liveDerivedSleeve(p), SCk = window.sleeveCheckpoint, s = SCk && SCk.latest ? SCk.latest(p) : null;
@@ -1055,6 +1064,7 @@
     if (v.ok) return v.basis === "sleeve" ? v.reason : "대체 가능";
     if (v.kind === "pending") return "소매 재완료 필요 — " + _firstClause(v.reason);
     if (v.kind === "none") return "별도 소매 조각 없음 — 대체할 소매 외곽이 없습니다(소매가 몸판과 한 장)";
+    if (v.kind === "applied") return "반영됨 — 이 선은 지금 소매 외곽의 일부입니다";
     return v.reason;
   }
   //   v 를 넘기면 재판정하지 않는다(소매 현재성 판정은 비싸다 — syncCutStatus 가 한 번 낸 판정을 넘긴다). 막대는 boundaryState 를 읽는다(매 render 재판정 없음).
@@ -1062,7 +1072,8 @@
     if (arguments.length === 0) v = validateSelectedBoundary();
     const line = (mode === "select" && selectedId) ? findLine(selectedId) : null;
     const prev = J_(boundaryState);
-    boundaryState = (v && line && line.role === "boundary") ? { lineId: line.id, allowed: !!v.ok, kind: v.kind || (v.ok ? "ok" : "invalid"), reason: boundaryReasonOf(v) } : null;
+    boundaryState = (v && line && line.role === "boundary") ? { lineId: line.id, allowed: !!v.ok, kind: v.kind || (v.ok ? "ok" : "invalid"), reason: boundaryReasonOf(v),
+      apply: v.apply ? { allowed: !!v.apply.allowed, reason: v.apply.reason } : null } : null;
     if (prev !== J_(boundaryState) && window.designLineQuickBar) window.designLineQuickBar.sync();
     const el = document.getElementById("designBoundaryStatus");
     if (el) {
@@ -1071,6 +1082,26 @@
     }
     const b = document.getElementById("btnDesignBoundary");
     if (b) { b.disabled = !(v && v.ok); if (v && !v.ok) b.title = boundaryReasonOf(v); else b.removeAttribute("title"); }
+    syncApplyButtons();
+  }
+  // 소매 외곽 반영 판정(막대·오른쪽 공용): 반영 허용(applyStatus) + 이 선의 미리보기가 지금 보임 — 미리보기 확인 전엔 반영할 수 없다.
+  function boundaryApplyOf(st, shown) {
+    if (!st || !st.apply) return null;
+    if (!st.apply.allowed) return { allowed: false, reason: st.apply.reason };
+    if (!shown) return { allowed: false, reason: "먼저 «외곽 대체 미리보기»로 확인하세요" };
+    return { allowed: true, reason: st.apply.reason };
+  }
+  // 오른쪽 «외곽 반영»·«수동 외곽 수정 되돌리기» 버튼(소매 전용). 판정은 boundaryState(마지막 동기화) — 재판정 없음.
+  function syncApplyButtons() {
+    const p = project(), E = window.sleeveOutlineEdit;
+    const line = (mode === "select" && selectedId) ? findLine(selectedId) : null;
+    const st = (boundaryState && line && boundaryState.lineId === line.id) ? boundaryState : null;
+    const bp = p ? visibleBoundaryPreview(p) : null, shown = !!(bp && st && bp.sourceLineId === st.lineId);
+    const a = boundaryApplyOf(st, shown);
+    const ab = document.getElementById("btnDesignBoundaryApply");
+    if (ab) { ab.hidden = !(line && line.piece === "sleeve" && line.role === "boundary"); ab.disabled = !(a && a.allowed); if (a && !a.allowed) ab.title = a.reason; else ab.removeAttribute("title"); }
+    const ub = document.getElementById("btnSleeveEditUndo");
+    if (ub) { const on = !!(p && E && E.isActive(p)); ub.hidden = !on; ub.disabled = !on; }
   }
   // 미리보기가 지금도 현재 결과인가(출처 결속). 소매 = sleeveSplit.previewCurrent(ref 없으면 빠른 판정) ·
   //   몸판 = 원래 몸판 맥락 · 같은 선(역할·서명) · 같은 작업 outline(서명). 서명이 없는 옛 미리보기는 현재가 아니다(숨김).
@@ -1096,8 +1127,16 @@
   function getBoundaryState() {
     if (mode !== "select" || !selectedId || !boundaryState || boundaryState.lineId !== selectedId) return null;
     const line = findLine(selectedId); if (!line || line.role !== "boundary") return null;
-    const bp = visibleBoundaryPreview(project());
-    return { lineId: boundaryState.lineId, allowed: boundaryState.allowed, kind: boundaryState.kind, reason: boundaryState.reason, shown: !!(bp && bp.sourceLineId === selectedId) };
+    const p = project(), bp = visibleBoundaryPreview(p), shown = !!(bp && bp.sourceLineId === selectedId);
+    const E = window.sleeveOutlineEdit, ed = (p && E && line.piece === "sleeve" && E.isActive(p)) ? p.working.sleeveEdit : null;
+    return { lineId: boundaryState.lineId, allowed: boundaryState.allowed, kind: boundaryState.kind, reason: boundaryState.reason, shown: shown,
+      apply: boundaryApplyOf(boundaryState, shown), applied: boundaryState.kind === "applied",
+      edit: ed ? { count: ed.ops.length, pending: quickEditPending(p) } : null };
+  }
+  // 빠른 판정: 수정 반영 뒤 아직 재완료 전인가(완료본 outline ≠ 화면 outline) — 비싼 isCurrentSleeveChanged 는 부르지 않는다.
+  function quickEditPending(p) {
+    const s = p.working.sleeveResult, g = p.working.geometry && p.working.geometry.sleeve;
+    return !s || !s.manualEdit || !s.geometry || !g || J_(s.geometry.outline) !== J_(g.outline);
   }
   function setBoundaryNote(m) { const el = document.getElementById("designBoundaryNote"); if (el) el.textContent = m; }
   // 선택된 유효 대체선으로 파생 outline 미리보기 생성. 성공 시에만 working.boundaryPreview
@@ -1114,13 +1153,39 @@
       const ref = v._ref;
       if (!ref || ref.source !== "current") { setBoundaryNote("대체 불가: " + (ref ? ref.reason : "소매 기준 없음")); return false; }
       p.working.boundaryPreview = window.sleeveSplit.makeBoundaryPreview(ref, line, v);
-      setBoundaryNote("대체 미리보기 · 소매 " + ref.sym + (v.piece !== "sleeve" ? "(" + v.piece + ")" : "") + " 파생 외곽선(보라) — 미리보기일 뿐 소매 완료본·Design 결과는 그대로 · 소매·몸판·선이 바뀌면 사라집니다");
+      const ap = v.apply;
+      setBoundaryNote("대체 미리보기 · 소매 " + ref.sym + (v.piece !== "sleeve" ? "(" + v.piece + ")" : "") + " 파생 외곽선(보라) — 미리보기일 뿐 · 확인 후 «외곽 반영»을 눌러야 소매에 반영됩니다" + (ap && !ap.allowed ? " · 반영 불가: " + ap.reason : "") + " · 소매·몸판·선이 바뀌면 사라집니다");
     } else {
       p.working.boundaryPreview = { sourcePiece: line.piece, sourceLineId: line.id, outline: v.outline, sourceLineSig: J_(line.segments), sourceOutlineSig: J_(currentOutlineSegs(p, line.piece)) };
       setBoundaryNote("대체 미리보기 · 파생 외곽선(다른 색)");
     }
     rerender();
+    syncApplyButtons();
     return true;
+  }
+  // 소매 «외곽 반영»(2026-11-06 김님 승인): 보이는 미리보기를 확인한 뒤 **명시 클릭으로만** 소매에 반영한다(역할 선택·미리보기만으로는 반영 없음).
+  //   직전 재판정·원자적 반영은 sleeveOutlineEdit.apply 가 한다(실패면 아무것도 바뀌지 않음). 반영 뒤 = 소매 변경됨 · 다시 완료 필요.
+  function sleeveUIRefresh() { if (typeof window.refreshSleeveCheckpointUI === "function") window.refreshSleeveCheckpointUI(); }
+  function doBoundaryApply() {
+    if (mode !== "select" || !selectedId) return false;
+    const line = findLine(selectedId);
+    if (!line || line.role !== "boundary" || line.piece !== "sleeve") { setBoundaryNote("소매 외곽 대체선을 선택하세요"); return false; }
+    const p = project(), E = window.sleeveOutlineEdit; if (!p || !E) { setBoundaryNote("반영 안 함: 소매 외곽 반영 모듈 없음"); return false; }
+    const r = E.apply(p, line);
+    if (!r.ok) { setBoundaryNote("반영 안 함: " + r.reason); syncCutStatus(); return false; }
+    const bad = r.cuts.invalid.length;
+    setBoundaryNote("외곽 반영됨 · 소매 " + p.working.sleeveEdit.sym + " " + r.label + " 수정(수동 외곽 수정 " + r.count + "회) — 소매 변경됨 · 소매 탭에서 «소매 모양 완료»를 다시 누르세요"
+      + (r.cuts.total ? " · 소매 절개선 " + r.cuts.total + "개 중 " + (bad ? bad + "개는 새 외곽에서 무효(선을 선택하면 이유)" : "모두 새 외곽에서 유효") : ""));
+    syncCutStatus(); rerender(); sleeveUIRefresh();
+    return true;
+  }
+  // 마지막 반영 하나 되돌리기(최소 복귀 동선 — 새 undo 체계 아님). 한 번뿐이었다면 원래 소매 완료본 형상으로.
+  function doSleeveEditUndo() {
+    const p = project(), E = window.sleeveOutlineEdit; if (!p || !E) return false;
+    const r = E.undoLast(p);
+    setBoundaryNote(r.ok ? (r.count ? "마지막 외곽 반영을 되돌림 · 남은 수동 외곽 수정 " + r.count + "회" : "수동 외곽 수정을 모두 되돌림 · 원래 소매 형상") + " — 소매 상태는 소매 탭에서 확인" : "되돌리지 않음: " + r.reason);
+    syncCutStatus(); rerender(); sleeveUIRefresh();
+    return !!r.ok;
   }
   // ── 디자인 외곽 합성 DOM 연동 ──
   function pieceBoundaries(piece) { return lines().filter(l => l.piece === piece && l.role === "boundary"); }
@@ -1468,7 +1533,7 @@
     validateSelectedCut, getSplitState, revalidate, validateCut, gatherValidCuts, flattenLine, segCross, distPtToSegs,
     // 편집 기준 몸판(최종 몸판 정합) — 판정·snap·파트 분리 경계
     editBodiceRef, cutStatusOf, cutStatusText, snapForCursor, isOriginalBodiceContext, displayedDerivedPiece, syncCutStatus: () => syncCutStatus(),
-    doSplit, invalidateParts, visibleParts, pruneStaleSleeveParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,
+    doSplit, invalidateParts, visibleParts, pruneStaleSleeveParts, doBoundaryPreview, doBoundaryApply, doSleeveEditUndo, validateSelectedBoundary, doComposeDesignOutline,
     getBoundaryState, visibleBoundaryPreview, boundaryStatusOf, pruneStaleBoundaryPreview,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
