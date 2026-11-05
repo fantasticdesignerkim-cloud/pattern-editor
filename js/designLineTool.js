@@ -5,7 +5,8 @@
 // 명확히 분리한다. 작성 중(draw)에는 기존 선 선택을 막는다.
 //
 // [draw] 클릭=직선 점 / 클릭-드래그=곡선(베지어) 점. 하나의 patternLine 에 line·cubic
-//   혼합. 완료(Enter·더블클릭)·취소(Esc)·Backspace(마지막 점)·2점미만 불가·다른 피스 거부·
+//   혼합. 완료(«그리기 완료» 버튼 = 주 경로 · Enter·더블클릭 호환)·취소(Esc · 그리기 중 «그리기 취소» 버튼)·
+//   Backspace(마지막 점)·서로 다른 2점 미만 불가·다른 피스 거부·
 //   preview 미커밋. anchor 모델(p, h) → segmentsFromAnchors.
 //
 // [select] 선 클릭=선택 강조 / Delete·Backspace=선택 선 삭제 / 선택 선의 anchor·handle 표시 /
@@ -678,13 +679,36 @@
   function pxToCm() { const s = SC * viewZ; return s > 0 ? 1 / s : 1; }
   function ensurePatternLines(p) { if (!Array.isArray(p.working.patternLines)) p.working.patternLines = []; return p.working.patternLines; }
   function setNote(m) { const el = document.getElementById("designLineNote"); if (el) el.textContent = m; }
-  function rerender() { if (typeof render === "function") render(); }
+  // draw 상태가 바뀌는 모든 경로(점 추가·Backspace·Esc·완료·모드 전환)가 rerender 를 부르므로 «그리기 완료» 활성도 여기서 함께 맞춘다.
+  function rerender() { syncFinishButton(); if (typeof render === "function") render(); }
   function syncButtons() {
     const bd = document.getElementById("btnDesignLine"), bs = document.getElementById("btnDesignSelect");
-    if (bd) { bd.textContent = mode === "draw" ? "그리기 종료" : "선·곡선 그리기"; bd.setAttribute("aria-pressed", mode === "draw" ? "true" : "false"); }
+    // 그리기 중 이 버튼은 작성 중 선을 버리고 나간다 → «그리기 완료»와 헷갈리지 않게 «그리기 취소»(2026-11-05).
+    if (bd) { bd.textContent = mode === "draw" ? "그리기 취소" : "선·곡선 그리기"; bd.setAttribute("aria-pressed", mode === "draw" ? "true" : "false"); }
     if (bs) { bs.textContent = mode === "select" ? "편집 종료" : "선택·편집"; bs.setAttribute("aria-pressed", mode === "select" ? "true" : "false"); }
+    syncFinishButton();
   }
-  const DRAW_NOTE = "클릭=직선 점 · 드래그=곡선 · 더블클릭/Enter 완료";
+  // 완료 가능 = 그리기 모드 · 작성 중 선 · 앵커 2개 이상 · 만들어질 선(segmentsFromAnchors 결과 그대로)이 **실제로 길이 0 으로 퇴화하지 않음**.
+  //   퇴화 = line 은 from=to, cubic 은 from·c1·c2·to 가 모두 한 점. 같은 자리 두 앵커라도 핸들(제어점)이 있는 곡선은 길이가 있으므로 완료 가능(종전 Enter 와 같음).
+  //   버튼·Enter·더블클릭이 모두 commitDraft 를 거치고 commitDraft 가 이 판정을 쓴다(기준 하나).
+  const DEGEN_EPS = 1e-6;
+  function segmentDegenerate(sg) {
+    const d = q => Math.hypot(q.x - sg.from.x, q.y - sg.from.y) <= DEGEN_EPS;
+    return sg.kind === "cubic" ? (d(sg.c1) && d(sg.c2) && d(sg.to)) : d(sg.to);
+  }
+  function lineDegenerate(segs) { return !segs.length || segs.every(segmentDegenerate); }
+  function draftFinishable() {
+    if (mode !== "draw" || !draft || draft.anchors.length < 2) return false;
+    return !lineDegenerate(segmentsFromAnchors(draft.anchors));
+  }
+  const FINISH_OFF_TIP = "서로 다른 점을 2개 이상 찍으면(또는 곡선을 드래그하면) 누를 수 있습니다";
+  function syncFinishButton() {
+    const bf = document.getElementById("btnDesignFinish"); if (!bf) return;
+    const on = draftFinishable();
+    bf.disabled = !on; bf.setAttribute("aria-disabled", on ? "false" : "true");
+    if (on) bf.removeAttribute("title"); else bf.setAttribute("title", FINISH_OFF_TIP);
+  }
+  const DRAW_NOTE = "클릭=직선 점 · 드래그=곡선 · 끝나면 «그리기 완료»(Enter·더블클릭도 됨)";
   const SELECT_NOTE = "선을 클릭해 선택 · Delete 삭제 · anchor/핸들 드래그 편집 · Esc 해제";
 
   // ── 모드 전환(그리기/선택 상호배타) ──
@@ -725,20 +749,23 @@
   // ── draw 동작 ──
   // cut 생성·삭제·역할 변경·편집 후 Design 통합 UI 갱신(hidden 이어도 상태 갱신). ui.js 가 훅 설치.
   function notifyDesignResult() { if (window.refreshDesignResultUI) window.refreshDesignResultUI(); }
-  // 완료(Enter·더블클릭) 성공 → 방금 그린 선을 **선택·편집 상태로 자동 전환**(2026-11-05 김님 실사용 피드백 «선택·편집 → 같은 선 재클릭» 두 단계 제거).
+  // 완료(«그리기 완료» 버튼·Enter·더블클릭) 성공 → 방금 그린 선을 **선택·편집 상태로 자동 전환**(2026-11-05 김님 실사용 피드백 «선택·편집 → 같은 선 재클릭» 두 단계 제거).
   //   역할은 기본 guide 그대로(자동 지정 없음) — 사용자가 절개선/외곽/보조선을 고른다. 다시 그리려면 «선·곡선 그리기» 버튼.
   //   점 2개 미만(한 점)·Esc 취소는 이 경로에 오지 않는다(그리기 모드 유지 · 선택 없음).
   function commitDraft() {
     if (!draft || draft.anchors.length < 2) { setNote("점 2개 이상 필요"); return false; }
+    if (!draftFinishable()) { setNote("길이 0 인 선은 만들 수 없음 · 서로 다른 점 2개 이상 필요"); return false; }   // 실제로 퇴화한 길이 0 선(종이 위에 없는 선)
     const p = project(); const ls = ensurePatternLines(p);
     const line = makePatternLine(nextId(ls), draft.piece, draft.anchors);
     ls.push(line);
     invalidateParts(p);
-    setMode("select");                       // draft·드래그 상태 정리 + 버튼 문구(그리기 종료 → 선·곡선 그리기 / 편집 종료)
+    setMode("select");                       // draft·드래그 상태 정리 + 버튼 문구(그리기 취소 → 선·곡선 그리기 / 편집 종료) · 완료 버튼 비활성
     selectedId = line.id;
     setNote("완료 · 방금 그린 선 선택됨 — 역할(절개선·외곽·보조선)을 고르세요 · anchor/핸들 드래그 · Delete 삭제 · 새 선은 «선·곡선 그리기»");
     syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult(); return true;
   }
+  // «그리기 완료» 버튼(index.html onclick) — Enter·더블클릭과 같은 commitDraft 경로. 그리기 모드가 아니면 아무것도 안 한다.
+  function finishDraw() { if (mode !== "draw") return false; return commitDraft(); }
   function draftBackspace() {
     if (!draft || !draft.anchors.length) return;
     draft.anchors.pop();
@@ -1276,7 +1303,7 @@
   }
 
   window.designLineTool = Object.freeze({
-    toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive,
+    toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive, finishDraw, canFinishDraw: () => draftFinishable(),
     convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen, isNeckAutoLine, isSleeveCapLine, isCollarBodyLine, findLine: (id) => findLine(id),
     getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
     validateSelectedCut, revalidate, validateCut, gatherValidCuts, flattenLine, segCross, distPtToSegs,
@@ -1285,7 +1312,7 @@
     doSplit, invalidateParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
-    anchorsFromSegments, moveAnchor, distToLine, distToSegment, handlesOf,
+    anchorsFromSegments, moveAnchor, segmentDegenerate, lineDegenerate, distToLine, distToSegment, handlesOf,
     chooseSnap, closestOnSeg, nearestOnSegs, flattenSegment, constrainAngle45,
     // 파트 분리·외곽 대체(순수)
     buildPieceRing, splitRingByCut, subSegment, reverseSeg, projectOntoRing, projectOntoSeg, walkConstruction,

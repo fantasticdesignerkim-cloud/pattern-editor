@@ -568,10 +568,13 @@ function _appendCollarHitRect(root, collarDraft, off, scale){
     fill:"transparent", class:"design-layout-hit", "data-layout-piece":"collar", transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")" }));
 }
 
-function _appendDesignHitRect(root, geometry, pieceName, off, scale){
+// extra(선택) = 화면에 그려진 소매 파생 몸판 외곽 bbox(Ⓡ~Ⓩ 작업 중 — designLineTool.displayedDerivedPiece 와 같은 표시 조건).
+//   파생 몸판이 원래 몸판 밖으로 나온 부분(예: Ⓩ 프렌치 소매 연장)도 클릭이 이 피스로 잡히게 hit 범위를 합친다(표시 전용 · 형상 무변경).
+function _appendDesignHitRect(root, geometry, pieceName, off, scale, extra){
   if (!window.designLayout) return;
-  const bb = window.designLayout.bboxOf(geometry, pieceName);
+  let bb = window.designLayout.bboxOf(geometry, pieceName);
   if (!bb) return;
+  if (extra) bb = { minX: Math.min(bb.minX, extra.minX), minY: Math.min(bb.minY, extra.minY), maxX: Math.max(bb.maxX, extra.maxX), maxY: Math.max(bb.maxY, extra.maxY) };
   const [x1,y1]=c2p(bb.minX,bb.minY), [x2,y2]=c2p(bb.maxX,bb.maxY);
   // 패딩은 auto 배치 최소 간격(5cm)이 fit 하한 zoom(0.2)에서 만드는 픽셀 간격(≈11px)의
   // 절반 미만이어야 좁은 화면에서 body/sleeve hit rect 가 겹치지 않는다.
@@ -579,10 +582,23 @@ function _appendDesignHitRect(root, geometry, pieceName, off, scale){
   const r=E("rect",{
     x:Math.min(x1,x2)-pad, y:Math.min(y1,y2)-pad,
     width:Math.abs(x2-x1)+2*pad, height:Math.abs(y2-y1)+2*pad,
-    fill:"transparent", class:"design-layout-hit", "data-layout-piece":pieceName,
+    fill:"transparent", class:"design-layout-hit", "data-layout-piece":pieceName, "data-hit-extent": extra ? "derived" : "original",
     transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")"
   });
   root.appendChild(r);
+}
+
+// Design 투명 hit layer 내용(피스 hit rect + 편집 중 카라). render() 가 부르고, 회귀(lineAutoSelectCheck)가 같은 함수를 직접 부른다.
+//   앞·뒤판은 화면에 그려진 소매 파생 몸판(designLineTool.displayedDerivedPiece — 차단·미완성이면 null)의 외곽 범위까지 hit 에 합친다.
+function _appendDesignHitLayer(hitRoot, dp, pieces, L, scale){
+  const _dlt = window.designLineTool;
+  pieces.forEach(pc => {
+    const _dpc = (pc === "front" || pc === "back") && _dlt && _dlt.displayedDerivedPiece ? _dlt.displayedDerivedPiece(dp, pc) : null;
+    _appendDesignHitRect(hitRoot, dp.working.geometry, pc, L[pc], scale, _dpc ? window.designLayout.bboxOfStand({ outline: _dpc.outline }) : null);
+  });
+  // 카라 hit rect 는 collar-body manual 편집 시에만(그 외엔 카라 비상호작용).
+  if (dp.working.collarDraft && dp.working.collarDraft.body && dp.working.collarDraft.body.mode === "manual")
+    _appendCollarHitRect(hitRoot, dp.working.collarDraft, L.collar || { dx: 0, dy: 0 }, scale);
 }
 
 function render(){
@@ -770,10 +786,7 @@ function render(){
 
     // 투명 hit layer(최상단): reference/working 은 pointer-events:none, hit rect 만 잡는다.
     const hitRoot = E("g"); hitRoot.setAttribute("data-design-root", "hit");
-    SUBS.forEach(([pc]) => _appendDesignHitRect(hitRoot, dp.working.geometry, pc, L[pc], scale));
-    // 카라 hit rect 는 collar-body manual 편집 시에만(그 외엔 카라 비상호작용).
-    if (dp.working.collarDraft && dp.working.collarDraft.body && dp.working.collarDraft.body.mode === "manual")
-      _appendCollarHitRect(hitRoot, dp.working.collarDraft, L.collar || { dx: 0, dy: 0 }, scale);
+    _appendDesignHitLayer(hitRoot, dp, SUBS.map(([pc]) => pc), L, scale);
     svg.appendChild(hitRoot);
 
     const sb = document.getElementById("sb");
