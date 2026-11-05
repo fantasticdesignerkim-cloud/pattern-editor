@@ -8,6 +8,9 @@
 //   · 선택한 선이 절개선이면 별도 «다음 단계» 행에 «파트 분리»(2026-11-05 김님 요청) — 오른쪽 «파트 분리»와 **같은 판정**
 //     (designLineTool.getSplitState = syncSplitButton 이 마지막으로 쓴 판정 · 재판정 없음)과 **같은 명령**(doSplit).
 //     불가면 비활성 + 보이는 짧은 이유(무효 절개선 · 최종 몸판 미확정 · 파생 몸판 미지원 · 앞/뒤판 아님). 분리되면 «분리됨 · 파트 N개».
+//   · 선택한 선이 외곽이면 별도 «다음 단계» 행에 «외곽 대체 미리보기»(2026-11-06 김님 «외곽 선택하면 외곽 대체 미리보기가 있어야지»)
+//     — 오른쪽 «외곽 대체 미리보기»와 같은 판정(designLineTool.getBoundaryState = syncBoundaryStatus 가 마지막으로 쓴 판정)·같은 명령(doBoundaryPreview).
+//     불가면 비활성 + 이유(무효 · 소매 재완료 필요 · 별도 소매 조각 없음 · 파생 몸판 미지원 · 카라). 보이면 «미리보기 표시 중»(완성 외곽 아님). 보조선 = 다음 단계 없음.
 //
 // 계약(제품 엔진 불변):
 //   · 상태를 새로 갖지 않는다 — 매 render 직후 designLineTool 의 공개 상태(getMode·getDraft·getSelectedId·findLine·
@@ -45,7 +48,10 @@
       const sp = (!lock && role === "cut" && s.sel.split) ? s.sel.split : null;   // 절개선만 · 관리선·다른 역할은 분리 행 없음
       const split = sp ? { allowed: !!sp.allowed, kind: sp.kind, parts: sp.parts || 0,
         text: sp.allowed ? (sp.parts > 0 ? "분리됨 · 파트 " + sp.parts + "개(색으로 미리보기)" : "분리 가능") : "분리 불가 · " + sp.reason } : null;
-      return { kind: "select", key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split };
+      const bs = (!lock && role === "boundary" && s.sel.boundary) ? s.sel.boundary : null;   // 외곽만 · 관리선(네크라인 전용선 등)은 잠금 그대로
+      const boundary = bs ? { allowed: !!bs.allowed, kind: bs.kind, shown: !!bs.shown,
+        text: bs.allowed ? (bs.shown ? "미리보기 표시 중 · 보라 외곽(완성 외곽 아님)" : bs.reason) : "대체 불가 · " + bs.reason } : null;
+      return { kind: "select", key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };
     }
     return null;
   }
@@ -55,7 +61,17 @@
   //   결과 확인용 소형 상태줄 «분리됨 · 파트 N개» + «도구»로 줄인다. «도구»를 누르면(expandedKey = 그 결과 키) 전체 막대로 복귀.
   //   미분리·실패·보류·그리기·관리선·넓은 화면(빈자리 있음)은 언제나 전체 막대(이유·분리 버튼이 보여야 한다).
   //   버튼을 구겨 작게 만들지 않는다 — 소형 상태줄의 «도구»도 44px.
-  function resultKey(vm) { const sp = vm && vm.kind === "select" ? vm.split : null; return sp && sp.allowed && sp.parts > 0 ? vm.key + ":parts" + sp.parts : null; }
+  //   외곽 대체 미리보기가 보이는 것도 같은 «결과»(2026-11-06) — 소형 상태줄 «외곽 대체 미리보기 표시 중».
+  function resultKey(vm) {
+    const sp = vm && vm.kind === "select" ? vm.split : null, bd = vm && vm.kind === "select" ? vm.boundary : null;
+    if (sp && sp.allowed && sp.parts > 0) return vm.key + ":parts" + sp.parts;
+    if (bd && bd.allowed && bd.shown) return vm.key + ":bnd";
+    return null;
+  }
+  function compactText(vm) {
+    const sp = vm && vm.split;
+    return (sp && sp.allowed && sp.parts > 0) ? "분리됨 · 파트 " + sp.parts + "개" : "외곽 대체 미리보기 표시 중";
+  }
   function chooseMode(vm, fullHits, expandedKey) {
     const k = resultKey(vm);
     return (k && fullHits > 0 && expandedKey !== k) ? "compact" : "full";
@@ -98,9 +114,11 @@
   // ── DOM ──
   let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
   let splitRow = null, splitBtn = null, splitReason = null;
-  let headRow = null, compactRow = null, compactText = null, expandBtn = null;
+  let bndRow = null, bndBtn = null, bndReason = null;
+  let headRow = null, compactRow = null, compactText_ = null, expandBtn = null;
   let expandedKey = null;             // 소형 상태줄에서 «도구»로 펼친 결과 키(UI 전용 · 선택·결과가 바뀌거나 캔버스를 누르면 풀림)
   let splitNote = null;                // {key, text}: 막대 «파트 분리»를 눌렀는데 파트가 안 생겼을 때 doSplit 이 남긴 안내(#designSplitNote) — 선택이 바뀌면 버림
+  let bndNote = null;                  // {key, text}: 막대 «외곽 대체 미리보기»를 눌렀는데 미리보기가 안 생겼을 때 doBoundaryPreview 가 남긴 안내(#designBoundaryNote)
   let dismissedKey = null;            // «접기(×)» 한 선택 키(UI 전용)
   let press = null, dragging = false;  // 캔버스 위 누름·드래그 상태
   let lastPos = null;
@@ -119,7 +137,7 @@
       const id = T.getSelectedId(), l = id ? T.findLine(id) : null;
       if (!l) return { design: true, mode: mode, sel: null };
       const lock = T.isNeckAutoLine(id) ? "neck" : T.isSleeveCapLine(l) ? "cap" : T.isCollarBodyLine(l) ? "collar" : null;
-      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, split: T.getSplitState ? T.getSplitState() : null } };
+      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, split: T.getSplitState ? T.getSplitState() : null, boundary: T.getBoundaryState ? T.getBoundaryState() : null } };
     }
     return { design: true, mode: mode };
   }
@@ -151,6 +169,7 @@
     } else {
       // 파트 분리 결과(색 미리보기) 외곽도 가리지 않을 대상 — 분리 직후 막대가 작은 파트를 덮지 않게.
       cv.querySelectorAll('[data-design-root="parts"] path').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));
+      cv.querySelectorAll('[data-design-root="boundary"] path').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));   // 외곽 대체 미리보기도 가리지 않을 대상
       const sp = cv.querySelector("path.design-line.selected");
       const anchors = []; cv.querySelectorAll(".design-line-anchor").forEach(c => { const r = circlePt(c); if (r) anchors.push(r); });
       anchors.forEach(r => obstacles.push(r));
@@ -185,7 +204,7 @@
     bar.setAttribute("data-kind", vm.kind);
     drawRow.hidden = vm.kind !== "draw";
     roleRow.hidden = vm.kind !== "select";
-    if (vm.kind !== "select") splitRow.hidden = true;
+    if (vm.kind !== "select") { splitRow.hidden = true; if (bndRow) bndRow.hidden = true; }
     dismissBtn.hidden = vm.kind !== "select";        // 그리기 중엔 접기 없음(완료·취소만 명시적으로)
     if (vm.kind === "draw") {
       finishBtn.disabled = !vm.canFinish; finishBtn.setAttribute("aria-disabled", vm.canFinish ? "false" : "true");
@@ -199,6 +218,17 @@
         splitBtn.disabled = !sp.allowed; splitBtn.setAttribute("aria-disabled", sp.allowed ? "false" : "true");
         splitReason.textContent = note || sp.text;
         splitRow.setAttribute("data-state", note ? "no" : !sp.allowed ? "no" : sp.parts > 0 ? "done" : "ok");
+      }
+      const bd = vm.boundary;
+      if (bndRow) {
+        bndRow.hidden = !bd;
+        if (bd) {
+          if (bndNote && bndNote.key !== vm.key) bndNote = null;
+          const note = (bndNote && bd.allowed && !bd.shown) ? bndNote.text : null;
+          bndBtn.disabled = !bd.allowed; bndBtn.setAttribute("aria-disabled", bd.allowed ? "false" : "true");
+          bndReason.textContent = note || bd.text;
+          bndRow.setAttribute("data-state", note ? "no" : !bd.allowed ? "no" : bd.shown ? "done" : "ok");
+        }
       }
       roleBtns.forEach(b => {
         const on = b.getAttribute("data-role") === vm.role;
@@ -241,9 +271,10 @@
   function setCompact(on, vm) {
     if (!compactRow) return;
     if (on) {
-      compactText.textContent = "분리됨 · 파트 " + vm.split.parts + "개";
-      headRow.hidden = true; roleRow.hidden = true; splitRow.hidden = true; drawRow.hidden = true; compactRow.hidden = false;
-      bar.setAttribute("aria-label", "패턴선 빠른 조작 · " + vm.title + " · 분리됨 · 파트 " + vm.split.parts + "개");
+      const t = compactText(vm);
+      compactText_.textContent = t;
+      headRow.hidden = true; roleRow.hidden = true; splitRow.hidden = true; if (bndRow) bndRow.hidden = true; drawRow.hidden = true; compactRow.hidden = false;
+      bar.setAttribute("aria-label", "패턴선 빠른 조작 · " + vm.title + " · " + t);
     } else { compactRow.hidden = true; headRow.hidden = false; }
   }
   function focusPrimary(vm) {
@@ -263,6 +294,16 @@
     sync(); return done;
   }
 
+  // 막대 «외곽 대체 미리보기» 동작(버튼 click 이 부르는 그대로 · 검사도 이 함수를 부른다). 판정이 허용일 때만 doBoundaryPreview.
+  function actBoundary() {
+    const T = tool(), vm = describe(snapshot()); if (!T || !vm || !vm.boundary || !vm.boundary.allowed) return false;
+    T.doBoundaryPreview();
+    const st = T.getBoundaryState ? T.getBoundaryState() : null, el = typeof document !== "undefined" ? document.getElementById("designBoundaryNote") : null;
+    const done = !!(st && st.shown);
+    bndNote = done ? null : { key: vm.key, text: (el && el.textContent) || "미리보기가 만들어지지 않았습니다" };
+    sync(); return done;
+  }
+
   function init() {
     bar = document.getElementById("lineQuickBar");
     if (!bar) return;
@@ -278,7 +319,10 @@
     splitReason = document.getElementById("lineQuickSplitReason");
     headRow = bar.querySelector(".lqb-head");
     compactRow = bar.querySelector('[data-lqb="compact"]');
-    compactText = document.getElementById("lineQuickCompactText");
+    compactText_ = document.getElementById("lineQuickCompactText");
+    bndRow = bar.querySelector('[data-lqb="boundary"]');
+    bndBtn = document.getElementById("lineQuickBoundary");
+    bndReason = document.getElementById("lineQuickBoundaryReason");
     expandBtn = document.getElementById("lineQuickExpand");
 
     // 막대 위 조작은 캔버스(점 추가·피스 드래그·팬)로 가지 않는다.
@@ -288,6 +332,7 @@
     roleBtns.forEach(b => b.addEventListener("click", () => { const T = tool(); if (T) T.setRole(b.getAttribute("data-role")); }));
     // 파트 분리 = 오른쪽 버튼과 같은 doSplit. 파트가 안 생기면(분할 직전 재검증·ring 실패) doSplit 이 남긴 안내를 막대에도 보인다.
     splitBtn.addEventListener("click", () => { actSplit(); });
+    if (bndBtn) bndBtn.addEventListener("click", () => { actBoundary(); });   // 외곽 대체 미리보기 = 오른쪽 버튼과 같은 doBoundaryPreview
     // 소형 상태줄 «도구» = 이 결과에 대해 전체 막대(역할·파트 분리)로 복귀.
     if (expandBtn) expandBtn.addEventListener("click", () => { const vm = describe(snapshot()); expandedKey = resultKey(vm); sync();
       const t = roleBtns.filter(b => b.getAttribute("aria-pressed") === "true" && !b.disabled)[0]; if (t) { try { t.focus({ preventScroll: true }); } catch (_) { t.focus(); } } });
@@ -310,7 +355,7 @@
   }
 
   window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, chooseMode: chooseMode, resultKey: resultKey,
-    viewModel: () => describe(snapshot()), actSplit: actSplit });
+    viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary });
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
   }

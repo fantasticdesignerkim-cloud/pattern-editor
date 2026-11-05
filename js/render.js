@@ -739,9 +739,11 @@ function render(){
       svg.appendChild(partsRoot);
     }
     // 외곽 대체선 파생 미리보기(있을 때만): 원본 유지한 채 파생 외곽선을 다른 색으로.
-    if (dp.working.boundaryPreview) {
+    //   출처 결속(선·작업 외곽·소매 완료본 — 2026-11-06)이 맞을 때만 그린다. 판정은 designLineTool.visibleBoundaryPreview 하나(빠른 판정 · 무거운 완료본 재계산 없음).
+    const _bp = (dp.working.boundaryPreview && _dlt && _dlt.visibleBoundaryPreview) ? _dlt.visibleBoundaryPreview(dp) : null;
+    if (_bp) {
       const bRoot = E("g"); bRoot.setAttribute("data-design-root", "boundary");
-      _appendBoundaryPreview(bRoot, dp.working.boundaryPreview, L, scale);
+      _appendBoundaryPreview(bRoot, _bp, L, scale);
       svg.appendChild(bRoot);
     }
     // 합성 디자인 외곽선(있을 때만): 여러 대체선 합성 결과. 원본 위 다른 색.

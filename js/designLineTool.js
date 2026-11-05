@@ -39,6 +39,7 @@
   let selectedId = null, editDrag = null;            // select 상태
   let snapHint = null;                               // {piece, point, type} — 흡착 표시(세션 UI)
   let splitState = null;                              // 마지막 파트 분리 판정(syncSplitButton 이 씀 · getSplitState 로 막대가 읽음 · 세션 UI)
+  let boundaryState = null;                           // 마지막 외곽 대체 판정(syncBoundaryStatus 가 씀 · getBoundaryState 로 막대가 읽음 · 세션 UI · 2026-11-06)
   let lastHandleGeo = null;                           // 핸들 드래그 중 마지막 커서(형상 cm) — Shift 즉시 반영
 
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
@@ -876,14 +877,20 @@
   // 검사 결과를 UI 상태로만 표시(#designCutStatus). data-ok 로 통과/실패 색 구분.
   function syncCutStatus() {
     const v = validateSelectedCut();
-    pruneStaleSleeveParts(null, v && v._ref);   // 소매·몸판·입력이 바뀐 뒤 낡은 소매 파트를 데이터에서도 지운다(표시는 visibleParts 가 빠른 판정으로 이미 제외)
+    const bv = v ? null : validateSelectedBoundary();   // 선 하나 = 역할 하나 → 비싼 소매 판정은 둘 중 하나만
+    const p = project(), SS = window.sleeveSplit;
+    let ref = (v && v._ref) || (bv && bv._ref) || null;
+    const needRef = p && SS && ((Array.isArray(p.working.parts) && p.working.parts.some(q => q.sourcePiece === "sleeve")) || (p.working.boundaryPreview && p.working.boundaryPreview.sourcePiece === "sleeve"));
+    if (!ref && needRef) ref = SS.sleeveRef(p);           // 같은 동기화에서 한 번만(파트·미리보기 prune 공용)
+    pruneStaleSleeveParts(null, ref);   // 소매·몸판·입력이 바뀐 뒤 낡은 소매 파트를 데이터에서도 지운다(표시는 visibleParts 가 빠른 판정으로 이미 제외)
+    pruneStaleBoundaryPreview(p, ref);  // 낡은 외곽 대체 미리보기도 같은 기준으로(표시는 visibleBoundaryPreview 가 이미 제외)
     const el = document.getElementById("designCutStatus"); if (!el) return;
-    if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); el.removeAttribute("data-basis"); syncSplitButton(v); syncBoundaryStatus(); syncComposeButton(); return; }
+    if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); el.removeAttribute("data-basis"); syncSplitButton(v); syncBoundaryStatus(bv); syncComposeButton(); return; }
     el.textContent = cutStatusText(v);
     el.setAttribute("data-ok", v.ok ? "1" : "0");
     if (v.basis) el.setAttribute("data-basis", v.basis); else el.removeAttribute("data-basis");
     syncSplitButton(v);
-    syncBoundaryStatus();
+    syncBoundaryStatus(null);           // 절개선 선택 = 대체선 아님(재판정 없음)
     syncComposeButton();
   }
   // ── 파트 분리 DOM 연동 ──
@@ -1018,38 +1025,102 @@
     rerender();
   }
   // ── 외곽 대체선(boundary) DOM 연동 ──
-  // 선택된 boundary 선을 현재 working outline 기준으로 검증 + 파생 outline 계산.
-  // 반환 {ok, reason, outline?} | null(boundary 아님/미선택). geometry 무변경.
+  // 선택된 boundary 선을 현재 작업 기준으로 검증 + 파생 outline 계산. 반환 {ok, kind, reason, outline?, basis?} | null(boundary 아님/미선택). geometry 무변경.
+  //   kind: ok | invalid | piece(카라) | derived(소매 파생 몸판 맥락) | pending(소매 재완료 필요) | none(별도 소매 조각 없음)
+  //   앞판·뒤판 = 원래 몸판 맥락에서만 종전 판정(현재 작업 outline · 합성 design outline 우선). 소매 Ⓡ~Ⓩ 파생 몸판 맥락에서는 원래 몸판 외곽을
+  //     대체해 현재 결과처럼 보이지 않게 거부한다(파생 몸판 외곽 대체 = 범위 밖).
+  //   소매(2026-11-06) = sleeveSplit.boundaryStatus — 현재 소매 완료본 기준(분리와 같은 sleeveRef).
+  function boundaryStatusOf(p, line) {
+    if (line.piece === "sleeve") return window.sleeveSplit ? window.sleeveSplit.boundaryStatus(p, line) : { ok: false, kind: "invalid", reason: "소매 외곽 대체 모듈 없음" };
+    if (line.piece !== "front" && line.piece !== "back") return { ok: false, kind: "piece", reason: "앞판·뒤판·소매 외곽만 대체합니다(카라 미지원)" };
+    if (!isOriginalBodiceContext(p)) {
+      const live = liveDerivedSleeve(p), SCk = window.sleeveCheckpoint, s = SCk && SCk.latest ? SCk.latest(p) : null;
+      const sym = live ? live.sym : (s && s.origin ? symOfPresetId(s.origin.presetId) : "?");
+      return { ok: false, kind: "derived", sym: sym, reason: "소매 " + sym + " 파생 몸판은 외곽 대체 미리보기 미지원 — 원래 몸판 외곽을 대체해 현재 결과처럼 보이지 않게 합니다" };
+    }
+    const rb = buildRingForPiece(p, line.piece);
+    if (!rb.ok) return { ok: false, kind: "invalid", reason: rb.reason };
+    const r = replaceArcOnRing(rb.ring, boundarySegsOf(line));
+    return Object.assign(r, { kind: r.ok ? "ok" : "invalid" });
+  }
   function validateSelectedBoundary() {
     const line = (mode === "select" && selectedId) ? findLine(selectedId) : null;
     if (!line || line.role !== "boundary") return null;
-    if (line.piece !== "front" && line.piece !== "back") return { ok: false, reason: "front·back 만 지원(소매는 후속)" };
     const p = project(); if (!p) return null;
-    const rb = buildRingForPiece(p, line.piece);
-    if (!rb.ok) return { ok: false, reason: rb.reason };
-    return replaceArcOnRing(rb.ring, boundarySegsOf(line));
+    return boundaryStatusOf(p, line);
   }
-  function syncBoundaryStatus() {
+  // 판정 → 사람이 읽는 짧은 문구(오른쪽 상태줄·막대 이유 공용 — 같은 문구).
+  function boundaryReasonOf(v) {
+    if (!v) return "";
+    if (v.ok) return v.basis === "sleeve" ? v.reason : "대체 가능";
+    if (v.kind === "pending") return "소매 재완료 필요 — " + _firstClause(v.reason);
+    if (v.kind === "none") return "별도 소매 조각 없음 — 대체할 소매 외곽이 없습니다(소매가 몸판과 한 장)";
+    return v.reason;
+  }
+  //   v 를 넘기면 재판정하지 않는다(소매 현재성 판정은 비싸다 — syncCutStatus 가 한 번 낸 판정을 넘긴다). 막대는 boundaryState 를 읽는다(매 render 재판정 없음).
+  function syncBoundaryStatus(v) {
+    if (arguments.length === 0) v = validateSelectedBoundary();
+    const line = (mode === "select" && selectedId) ? findLine(selectedId) : null;
+    const prev = J_(boundaryState);
+    boundaryState = (v && line && line.role === "boundary") ? { lineId: line.id, allowed: !!v.ok, kind: v.kind || (v.ok ? "ok" : "invalid"), reason: boundaryReasonOf(v) } : null;
+    if (prev !== J_(boundaryState) && window.designLineQuickBar) window.designLineQuickBar.sync();
     const el = document.getElementById("designBoundaryStatus");
-    const v = validateSelectedBoundary();
     if (el) {
       if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); }
-      else { el.textContent = v.ok ? "대체 가능" : v.reason; el.setAttribute("data-ok", v.ok ? "1" : "0"); }
+      else { el.textContent = boundaryReasonOf(v); el.setAttribute("data-ok", v.ok ? "1" : "0"); }
     }
-    const b = document.getElementById("btnDesignBoundary"); if (b) b.disabled = !(v && v.ok);
+    const b = document.getElementById("btnDesignBoundary");
+    if (b) { b.disabled = !(v && v.ok); if (v && !v.ok) b.title = boundaryReasonOf(v); else b.removeAttribute("title"); }
+  }
+  // 미리보기가 지금도 현재 결과인가(출처 결속). 소매 = sleeveSplit.previewCurrent(ref 없으면 빠른 판정) ·
+  //   몸판 = 원래 몸판 맥락 · 같은 선(역할·서명) · 같은 작업 outline(서명). 서명이 없는 옛 미리보기는 현재가 아니다(숨김).
+  function boundaryPreviewCurrent(p, bp, ref) {
+    if (!p || !bp) return false;
+    if (bp.sourcePiece === "sleeve") return !!(window.sleeveSplit && window.sleeveSplit.previewCurrent(p, bp, ref));
+    if (bp.sourcePiece !== "front" && bp.sourcePiece !== "back") return false;
+    const line = findLine(bp.sourceLineId);
+    if (!line || line.piece !== bp.sourcePiece || line.role !== "boundary" || J_(line.segments) !== bp.sourceLineSig) return false;
+    return isOriginalBodiceContext(p) && J_(currentOutlineSegs(p, bp.sourcePiece)) === bp.sourceOutlineSig;
+  }
+  // 지금 «현재 결과»로 보여 줄 외곽 대체 미리보기(render·막대 공용 · 빠른 판정) — 아니면 null(데이터는 prune 이 지운다).
+  function visibleBoundaryPreview(p) {
+    p = p || project(); const bp = p && p.working.boundaryPreview;
+    return bp && boundaryPreviewCurrent(p, bp, null) ? bp : null;
+  }
+  function pruneStaleBoundaryPreview(p, ref) {
+    p = p || project(); const bp = p && p.working.boundaryPreview;
+    if (!bp || boundaryPreviewCurrent(p, bp, bp.sourcePiece === "sleeve" ? (ref || (window.sleeveSplit ? window.sleeveSplit.sleeveRef(p) : null)) : null)) return false;
+    p.working.boundaryPreview = null; return true;
+  }
+  // 막대용 읽기 전용 조회: 지금 선택한 대체선에 대해 오른쪽 «외곽 대체 미리보기»가 마지막으로 쓴 판정 + 이 선의 미리보기가 지금 보이는지.
+  function getBoundaryState() {
+    if (mode !== "select" || !selectedId || !boundaryState || boundaryState.lineId !== selectedId) return null;
+    const line = findLine(selectedId); if (!line || line.role !== "boundary") return null;
+    const bp = visibleBoundaryPreview(project());
+    return { lineId: boundaryState.lineId, allowed: boundaryState.allowed, kind: boundaryState.kind, reason: boundaryState.reason, shown: !!(bp && bp.sourceLineId === selectedId) };
   }
   function setBoundaryNote(m) { const el = document.getElementById("designBoundaryNote"); if (el) el.textContent = m; }
   // 선택된 유효 대체선으로 파생 outline 미리보기 생성. 성공 시에만 working.boundaryPreview
-  // 원자적 교체. 원본 geometry·patternLines 불변, geometry·대체선 변경 시 무효화.
+  // 원자적 교체. 원본 geometry·patternLines·완료본 불변, 출처(선·외곽·소매 완료본)가 바뀌면 숨김·제거. 반환 = 미리보기 생성 여부.
+  //   미리보기는 완성 외곽이 아니다 — 몸판은 «디자인 외곽 합성»이 반영 경로(종전), 소매는 반영 경로 없음(sleeveResult·Design 결과 그대로).
   function doBoundaryPreview() {
-    if (mode !== "select" || !selectedId) return;
-    const line = findLine(selectedId); if (!line || line.role !== "boundary") { setBoundaryNote("외곽 대체선을 선택하세요"); return; }
-    const p = project(); if (!p) return;
+    if (mode !== "select" || !selectedId) return false;
+    const line = findLine(selectedId); if (!line || line.role !== "boundary") { setBoundaryNote("외곽 대체선을 선택하세요"); return false; }
+    const p = project(); if (!p) return false;
     const v = validateSelectedBoundary();                  // ★ 미리보기 직전 재검증
-    if (!v || !v.ok) { setBoundaryNote("대체 불가: " + (v ? v.reason : "대체선 아님")); return; }
-    p.working.boundaryPreview = { sourcePiece: line.piece, sourceLineId: line.id, outline: v.outline };
-    setBoundaryNote("대체 미리보기 · 파생 외곽선(다른 색)");
+    syncBoundaryStatus(v);
+    if (!v || !v.ok) { setBoundaryNote("대체 불가: " + (v ? boundaryReasonOf(v) : "대체선 아님")); return false; }
+    if (line.piece === "sleeve") {
+      const ref = v._ref;
+      if (!ref || ref.source !== "current") { setBoundaryNote("대체 불가: " + (ref ? ref.reason : "소매 기준 없음")); return false; }
+      p.working.boundaryPreview = window.sleeveSplit.makeBoundaryPreview(ref, line, v);
+      setBoundaryNote("대체 미리보기 · 소매 " + ref.sym + (v.piece !== "sleeve" ? "(" + v.piece + ")" : "") + " 파생 외곽선(보라) — 미리보기일 뿐 소매 완료본·Design 결과는 그대로 · 소매·몸판·선이 바뀌면 사라집니다");
+    } else {
+      p.working.boundaryPreview = { sourcePiece: line.piece, sourceLineId: line.id, outline: v.outline, sourceLineSig: J_(line.segments), sourceOutlineSig: J_(currentOutlineSegs(p, line.piece)) };
+      setBoundaryNote("대체 미리보기 · 파생 외곽선(다른 색)");
+    }
     rerender();
+    return true;
   }
   // ── 디자인 외곽 합성 DOM 연동 ──
   function pieceBoundaries(piece) { return lines().filter(l => l.piece === piece && l.role === "boundary"); }
@@ -1208,10 +1279,11 @@
         const edited = findLine(selectedId);
         if (edited && isSleeveCapLine(edited)) { if (window.recomposeSleeveCap) window.recomposeSleeveCap(); }   // 소매산 편집 → 소매 재합성
         else if (edited && isCollarBodyLine(edited)) { if (window.recomposeCollarBody) window.recomposeCollarBody(); }   // 칼라 본체 편집 → 본체 재합성
+        else if (edited && edited.role === "boundary" && edited.piece === "sleeve") { const p = project(); if (p && p.working.boundaryPreview && p.working.boundaryPreview.sourceLineId === edited.id) p.working.boundaryPreview = null; }   // 소매 대체선 편집 → 그 미리보기만 무효(몸판 합성 외곽은 소매 선과 무관 · 2026-11-06)
         else if (edited && edited.role === "boundary") recomposeAfterBoundaryEdit();   // 대체선 편집 → designOutline 재합성
         else invalidateParts();                                                   // 그 외(cut/guide) → 파생 무효화
         editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {}
-        if (edited && edited.role === "cut") syncCutStatus();                   // 앵커·핸들을 옮긴 뒤의 실제 상태(이동 전 문구를 남기지 않음)
+        if (edited && (edited.role === "cut" || edited.role === "boundary")) syncCutStatus();   // 앵커·핸들을 옮긴 뒤의 실제 상태(이동 전 문구를 남기지 않음 · 대체선 포함 2026-11-06)
         rerender(); notifyDesignResult();
       }
     };
@@ -1397,6 +1469,7 @@
     // 편집 기준 몸판(최종 몸판 정합) — 판정·snap·파트 분리 경계
     editBodiceRef, cutStatusOf, cutStatusText, snapForCursor, isOriginalBodiceContext, displayedDerivedPiece, syncCutStatus: () => syncCutStatus(),
     doSplit, invalidateParts, visibleParts, pruneStaleSleeveParts, doBoundaryPreview, validateSelectedBoundary, doComposeDesignOutline,
+    getBoundaryState, visibleBoundaryPreview, boundaryStatusOf, pruneStaleBoundaryPreview,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, segmentDegenerate, lineDegenerate, distToLine, distToSegment, handlesOf,

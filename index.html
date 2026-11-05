@@ -151,10 +151,15 @@
         <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickSplit" disabled aria-disabled="true" aria-describedby="lineQuickSplitReason">파트 분리</button>
         <span class="lqb-reason" id="lineQuickSplitReason"></span>
       </div>
-      <!-- 소형 상태줄(좁은 화면에서 분리 성공 뒤 전체 막대를 놓을 빈자리가 없을 때만): 결과 확인 «분리됨 · 파트 N개» + «도구»(전체 막대로 복귀) -->
+      <!-- 다음 단계: 선택한 선이 외곽일 때만(2026-11-06). 오른쪽 «외곽 대체 미리보기»(btnDesignBoundary)와 같은 판정(getBoundaryState)·같은 명령(doBoundaryPreview). 미리보기일 뿐 완성 외곽 아님. -->
+      <div class="lqb-next" data-lqb="boundary" hidden>
+        <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickBoundary" disabled aria-disabled="true" aria-describedby="lineQuickBoundaryReason">외곽 대체 미리보기</button>
+        <span class="lqb-reason" id="lineQuickBoundaryReason"></span>
+      </div>
+      <!-- 소형 상태줄(좁은 화면에서 분리 성공·외곽 대체 미리보기 뒤 전체 막대를 놓을 빈자리가 없을 때만): 결과 확인 «분리됨 · 파트 N개»/«외곽 대체 미리보기 표시 중» + «도구»(전체 막대로 복귀) -->
       <div class="lqb-compact" data-lqb="compact" hidden>
         <span class="lqb-compact-text" id="lineQuickCompactText"></span>
-        <button type="button" class="lqb-btn" id="lineQuickExpand" aria-label="빠른 도구 펼치기 — 역할·파트 분리" title="역할·파트 분리 도구 펼치기">도구</button>
+        <button type="button" class="lqb-btn" id="lineQuickExpand" aria-label="빠른 도구 펼치기 — 역할·다음 단계" title="역할·다음 단계(파트 분리·외곽 대체) 도구 펼치기">도구</button>
       </div>
     </div>
   </main>
@@ -566,7 +571,7 @@
         </div>
         <div class="row note" id="designSplitNote" aria-live="polite"></div>
         <!-- 외곽 대체선: boundary 선으로 짧은 arc(네크라인·옆선·밑단)를 교체한 파생 외곽선 미리보기.
-             원본 무변경, working.boundaryPreview 저장. front/back·유효 대체선 1개. -->
+             원본 무변경, working.boundaryPreview 저장. 원래 몸판 front/back · 소매(현재 소매 완료본 기준 · 2026-11-06)·유효 대체선 1개. -->
         <div class="row note" id="designBoundaryStatus" aria-live="polite"></div>
         <div class="row" style="gap:4px">
           <button class="btn" id="btnDesignBoundary" onclick="designLineTool.doBoundaryPreview()" disabled>외곽 대체 미리보기</button>
@@ -593,7 +598,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026110506"></script>
+<script src="js/render.js?v=2026110601"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -623,9 +628,9 @@
 <script src="js/sleeveAnnotation.js?v=2026110404"></script>
 <script src="js/designLayout.js?v=2026102904"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026110506"></script>
-<script src="js/sleeveSplit.js?v=2026110506"></script>
-<script src="js/designLineQuickBar.js?v=2026110507"></script>
+<script src="js/designLineTool.js?v=2026110601"></script>
+<script src="js/sleeveSplit.js?v=2026110601"></script>
+<script src="js/designLineQuickBar.js?v=2026110601"></script>
 <!-- 처리 방법 157 맞댄다(순수): window.designJoin. designLineTool 다음. -->
 <script src="js/designJoin.js?v=2026092910"></script>
 <!-- 허리 이음선 Ⓜ 조합(순수): window.designWaistSeam. designLineTool·designJoin 다음, designBodice 앞. -->
