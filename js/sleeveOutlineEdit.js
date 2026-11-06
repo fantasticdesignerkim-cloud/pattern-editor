@@ -164,8 +164,11 @@
     const classes = touched.map(i => cl.cls[i]).filter((c, k, a) => a.indexOf(c) === k);
     const labels = classes.map(c => LABEL[c] || c);
     if (classes.indexOf("unknown") >= 0) return fail("unknown", "대체되는 외곽 구간의 의미(소매산·옆선·소맷부리)를 정할 수 없음 — 반영하지 않습니다", { classes: classes });
-    if (classes.length > 1) return fail("mixed", "대체 구간이 " + labels.join("·") + "에 걸침 — 새 선을 어느 구간으로 잴지 정할 수 없습니다(필요한 선택: 새 선을 " + labels.join(" 또는 ") + " 중 하나로 지정 · 지금은 구간마다 따로 그려 주세요)", { classes: classes });
-    const cls = classes[0];
+    // 새 소맷부리(2026-11-06 김님 확정 «양쪽 옆선을 잇는 선 = 새 소맷부리 · 아래쪽을 잘라냄»): 걸침 중 이 구성 하나만 의미가 정해진다 — hemCutOf 참고.
+    //   그 밖의 걸침(소매산↔옆선 · 옆선↔소맷부리 모서리 등)은 종전대로 거부한다(일괄 허용 아님).
+    const hemCut = classes.length > 1 ? hemCutOf(g, cl, idx, full, klen, plen, classes, pv.outline, bndSegs.length) : null;
+    if (classes.length > 1 && !hemCut.ok) return fail("mixed", "대체 구간이 " + labels.join("·") + "에 걸침 — 새 선을 어느 구간으로 잴지 정할 수 없습니다(필요한 선택: 새 선을 " + labels.join(" 또는 ") + " 중 하나로 지정 · 지금은 구간마다 따로 그려 주세요)" + (hemCut.why ? " · " + hemCut.why : ""), { classes: classes });
+    const cls = hemCut ? "hem" : classes[0];
     if (cls === "dart") return fail("rule", "열린 다트 V 는 실제 외곽이라 바꾸지 않습니다");
     if (cls === "raglan" || cls === "neck") return fail("rule", LABEL[cls] + "은 몸판 진동·목선과 함께 제도된 봉제선 — 반영 미지원(몸판 쪽을 함께 고칠지 판단 필요)");
     if (cls === "gusset") return fail("rule", "덧천 봉제선 — 반영 미지원");
@@ -190,8 +193,9 @@
     for (let k = 0; k < n; k++) if (inRun(k) && !inRun((k - 1 + n) % n)) { if (st >= 0) return fail("map", "바뀌는 구간이 한 덩어리가 아님 — 반영하지 않습니다"); st = k; }
     if (st < 0) return fail("map", "바뀌는 구간을 찾지 못함");
     const run = []; for (let k = st; run.length < n && inRun(k % n); k++) run.push(k % n);
-    const roles = touched.map(i => g.outline[i].role).filter((r, k, a) => r && a.indexOf(r) === k);
-    const pieces = touched.map(i => g.outline[i].piece).filter((r, k, a) => r && a.indexOf(r) === k);
+    const tagSrc = hemCut ? touched.filter(i => cl.cls[i] === "hem") : touched;   // 새 소맷부리 = 원래 소맷부리의 표시를 잇는다(옆선 표시는 남은 옆선 조각이 그대로 든다)
+    const roles = tagSrc.map(i => g.outline[i].role).filter((r, k, a) => r && a.indexOf(r) === k);
+    const pieces = tagSrc.map(i => g.outline[i].piece).filter((r, k, a) => r && a.indexOf(r) === k);
     const newTags = { role: roles.length === 1 ? roles[0] : ROLE_OF[cls] };
     if (pieces.length === 1) newTags.piece = pieces[0];
     const roleFix = i => (!cl.tagged && ROLE_OF[cl.cls[i]]) ? { role: ROLE_OF[cl.cls[i]] } : {};
@@ -215,7 +219,28 @@
       if (!prim) return fail("measure", "수정한 소매에서 소매산 앞·뒤 길이를 잴 수 없음 — 반영하지 않습니다");
       if (ctx.splitPoint && prim.splitPoint && dist(prim.splitPoint, ctx.splitPoint) > 1e-6) return fail("split-moved", "수정 후 소매산 분할점(SP)이 달라짐(새 꼭대기 등) — 새 SP 를 어디로 둘지 정해야 합니다(필요한 선택: SP 위치)");
     }
-    return { ok: true, geometry: ng, piece: pv.piece, cls: cls, label: LABEL[cls], previewOutline: pv.outline };
+    return { ok: true, geometry: ng, piece: pv.piece, cls: cls, label: hemCut ? HEM_CUT_LABEL : LABEL[cls], hemCut: !!hemCut, previewOutline: pv.outline };
+  }
+  // 새 소맷부리 구성 판정(순수). 모두 만족해야 한다 — 하나라도 아니면 { ok:false, why }(종전 «걸침» 거부 그대로).
+  //   ① 대체되는 원래 구간 = 앞 옆선 · 뒤 옆선 · 소맷부리 셋(그 밖의 의미 없음 — 소매산·다트·중심 솔기 등이 끼면 아님)
+  //   ② 새 선 양끝 = 같은 조각의 서로 다른 앞·뒤 옆선 위(남는 옆선 조각의 끝)
+  //   ③ 대체되는 아래 호가 원래 소맷부리 전부를 포함(소맷부리 조각이 하나도 남지 않음)
+  //   ④ 유지되는 호가 소매산을 그대로 보존(옆선·소맷부리 밖 조각 — 소매산·래글런·다트 — 전부 완전 유지) · 양쪽 옆선이 잘린 길이로 남음(각각 > ON_TOL)
+  const HEM_CUT_LABEL = "새 소맷부리(양쪽 옆선 사이 · 아래 잘라냄)";
+  function hemCutOf(g, cl, idx, full, klen, plen, classes, outSegs, nB) {
+    const set = classes.slice().sort().join("+");
+    if (set !== "hem+side-back+side-front") return { ok: false };
+    const D = T(), ofCls = c => idx.filter(i => cl.cls[i] === c);
+    if (ofCls("hem").some(i => klen[i] > 1e-5)) return { ok: false, why: "원래 소맷부리 일부가 남음" };
+    const rest = idx.filter(i => ["hem", "side-front", "side-back"].indexOf(cl.cls[i]) < 0);   // 소매산(표시 없는 소매산 포함)·래글런·다트 등 = 전부 완전 유지
+    if (!rest.length || rest.some(i => !full[i])) return { ok: false, why: "소매산이 그대로 남지 않음" };
+    const keptOf = c => ofCls(c).reduce((a, i) => a + klen[i], 0);
+    if (!(keptOf("side-front") > ON_TOL && keptOf("side-back") > ON_TOL)) return { ok: false, why: "양쪽 옆선이 남지 않음" };
+    const sideFlat = c => D.flattenLine([].concat.apply([], ofCls(c).map(i => segsOfPrim(g.outline[i]))));
+    const e0 = outSegs[0].from, e1 = outSegs[nB - 1].to, f = sideFlat("side-front"), b = sideFlat("side-back");
+    const on = (p, fl) => D.distPtToSegs(p, fl) <= 1e-4;
+    if (!((on(e0, f) && on(e1, b)) || (on(e0, b) && on(e1, f)))) return { ok: false, why: "새 선 양끝이 앞·뒤 옆선 위가 아님" };
+    return { ok: true };
   }
   // 순수: base geometry 에 ops 를 차례로 다시 적용(출처 검증 — 같은 결과여야 현재 형상으로 인정).
   function replay(baseGeom, ops, ctx) {
@@ -293,7 +318,7 @@
     const ref = v._ref; if (!ref || ref.source !== "current") return { allowed: false, reason: ref ? ref.reason : "소매 기준 없음" };
     const bf = baseFor(p); if (!bf.ok) return { allowed: false, reason: bf.reason };
     const pl = planEdit(ref.geometry, T().boundarySegsOf(line), ctxFor(p, bf.base));
-    return pl.ok ? { allowed: true, cls: pl.cls, reason: LABEL[pl.cls] + " 수정 — «외곽 반영»으로 소매에 반영" } : { allowed: false, code: pl.code, reason: pl.reason };
+    return pl.ok ? { allowed: true, cls: pl.cls, reason: pl.label + (pl.hemCut ? "" : " 수정") + " — «외곽 반영»으로 소매에 반영" } : { allowed: false, code: pl.code, reason: pl.reason };
   }
   // 소매 절개선을 지금 화면 소매(수정 형상)로 다시 판정 — 남기고/이유만 모은다(자동 삭제·이동 없음).
   function cutSummary(p) {
@@ -339,7 +364,7 @@
     w.boundaryPreview = null;
     w.sleeveEditDropped = null;
     if (Array.isArray(w.parts) && w.parts.some(q => q.sourcePiece === "sleeve")) w.parts = w.parts.filter(q => q.sourcePiece !== "sleeve");
-    return { ok: true, op: op, cls: pl.cls, label: pl.label, count: ops.length, cuts: cutSummary(p) };
+    return { ok: true, op: op, cls: pl.cls, label: pl.label, hemCut: !!pl.hemCut, count: ops.length, cuts: cutSummary(p) };
   }
   // 마지막 반영 하나 되돌리기(한 번이면 원래 소매 완료본 형상으로). 활성 편집에서만. 그 사이 완료본이 그대로면 바로 «현재»로 돌아간다.
   function undoLast(p) {
