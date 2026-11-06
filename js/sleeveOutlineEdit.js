@@ -1,10 +1,12 @@
 // ══════════════════════════════════════════════
-// js/sleeveOutlineEdit.js — 소매 수동 외곽 편집(2026-11-06 김님 승인 «미리보기에서 확인한 소매 외곽을 반영 → 실제 형상으로 재계측 → 소매 재완료»).
+// js/sleeveOutlineEdit.js — 소매 수동 외곽 편집(2026-11-06 김님 승인 «미리보기에서 확인한 소매 외곽을 반영 → 실제 형상으로 재계측 → 소매 완료»).
+//   흐름(2026-11-06 김님 승인 UX): 소매 라인 적용 → 선 그리기 → 미리보기 → 외곽 반영(필요한 만큼 · 중간 완료 없음) → «소매 모양 완료»(사용자 확정 한 번).
 //
 // 프리셋 재제도 동일성 검사(sleeveCheckpoint check*)를 우회·완화하지 않는다. 대신 **명시적 수동 편집 기록**을 따로 소유한다.
 //   working.sleeveEdit = deepFrozen {
-//     key(소매 라인 A~Z | base), sym, base(= 편집 전 frozen sleeveResult 그 자체 — 원본 완료본 · 바꾸지 않는다), baseHash,
-//     ops: [{ lineId, lineSig, segments(대체선 복사), piece, cls, fromHash(미리보기를 만든 완료본 hash) }],
+//     key(소매 라인 A~Z | base), sym, base(= 편집 전 원래 소매 — sleeveCheckpoint.editBase 내부 기준(완료하면 나올 완료본과 같은 내용 · completedAt 없음)
+//       또는 그와 같은 hash 의 기존 완료본 · 바꾸지 않는다), baseHash,
+//     ops: [{ lineId, lineSig, segments(대체선 복사), piece, cls, fromHash(미리보기를 만든 현재 형상 hash) }],
 //     geometry(= base.geometry 에 ops 를 차례로 적용한 현재 수정 소매 · frozen) }
 //   working.geometry.sleeve = geometry 의 복사(화면·snap·절개 판정이 같은 형상을 본다 — 원본과 현재 형상을 섞지 않는다).
 //
@@ -298,13 +300,17 @@
     return { key: key, rule: ruleOf(key, p), splitPoint: base && base.cap && base.cap.splitPoint ? pt(base.cap.splitPoint) : null,
       measureCap: SC && SC.measureCap ? (g => SC.measureCap(g, key)) : null, capRequired: !(key === "X" || key === "Y" || key === "Z") };
   }
-  // 지금 완료본의 편집 기준(base). 완료본이 수정 완료본이면 활성 편집의 base(이력이 맞을 때만) · 아니면 완료본 그 자체.
-  function baseFor(p) {
-    const res = C() && C().latest(p); if (!res) return { ok: false, reason: "소매 모양 완료 전" };
-    if (!res.manualEdit) return { ok: true, base: res, prevOps: [] };
+  // 지금 편집 기준(base) — 첫 «소매 모양 완료» 없이(2026-11-06 김님 «소매 모양 완료는 마지막 한 번»).
+  //   수정 중 = 활성 편집의 base(검증은 checkEdit) · 미편집 = sleeveCheckpoint.editBase(지금 적용된 소매 라인을 완료와 같은 검사·같은 build 로
+  //   만든 내부 기준 — sleeveResult 아님 · 저장 안 함). ref(sleeveSplit.sleeveRef 결과)를 넘기면 그 판정의 _shape 를 재사용(재제도 1회).
+  function baseFor(p, ref) {
+    const cs = ref && ref.source === "current" && ref._shape;
+    if (cs) return { ok: true, base: cs.base, prevOps: cs.ops || [] };
     const s = state(p);
-    if (s.kind !== "active" || s.edit.base.hash !== res.manualEdit.baseSleeveHash || opsSig(s.edit.ops) !== opsSig(res.manualEdit.ops)) return { ok: false, reason: "수동 외곽 수정 기록이 완료본과 맞지 않음 — 소매 모양을 다시 완료하세요" };
-    return { ok: true, base: s.edit.base, prevOps: s.edit.ops };
+    if (s.kind === "active") return { ok: true, base: s.edit.base, prevOps: s.edit.ops };
+    const eb = C() && C().editBase ? C().editBase(p) : null;
+    if (!eb || !eb.ok) return { ok: false, reason: "소매 라인 검사 미통과 — 소매 탭에서 확인해 소매 라인을 다시 적용하세요" };
+    return { ok: true, base: eb.base, prevOps: [] };
   }
   function isApplied(p, line) {
     const s = state(p); if (s.kind !== "active" || !line) return false;
@@ -316,7 +322,7 @@
     if (isApplied(p, line)) return { allowed: false, applied: true, reason: "이 선은 소매 외곽에 반영됨" };
     if (!v || !v.ok) return { allowed: false, reason: v ? v.reason : "대체선 아님" };
     const ref = v._ref; if (!ref || ref.source !== "current") return { allowed: false, reason: ref ? ref.reason : "소매 기준 없음" };
-    const bf = baseFor(p); if (!bf.ok) return { allowed: false, reason: bf.reason };
+    const bf = baseFor(p, ref); if (!bf.ok) return { allowed: false, reason: bf.reason };
     const pl = planEdit(ref.geometry, T().boundarySegsOf(line), ctxFor(p, bf.base));
     return pl.ok ? { allowed: true, cls: pl.cls, reason: pl.label + (pl.hemCut ? "" : " 수정") + " — «외곽 반영»으로 소매에 반영" } : { allowed: false, code: pl.code, reason: pl.reason };
   }
@@ -330,7 +336,8 @@
   }
 
   // ── 상태 변경: 반영 · 되돌리기 ──
-  // 반영(«외곽 반영» 명시 클릭만): 현재 소매 완료본으로 만든 **보이는 미리보기**가 있어야 하고, 직전에 같은 판정을 다시 낸다.
+  // 반영(«외곽 반영» 명시 클릭만): 현재 소매 형상(sleeveRef — 첫 완료 불필요 · 수정 중이면 수정 형상)으로 만든 **보이는 미리보기**가 있어야 하고,
+  //   직전에 같은 판정을 다시 낸다. 연속 반영도 중간 완료 없이 — 다음 반영의 기준 = 직전 반영까지의 수정 형상(base + 기록 재적용).
   //   하나라도 어긋나면 아무것도 바꾸지 않는다(원자적). 성공 = sleeveEdit 교체 + 화면 소매 = 수정 형상 · 미리보기·소매 파트 정리.
   function apply(p, line) {
     if (!p || !line || line.piece !== "sleeve" || line.role !== "boundary") return fail("line", "소매 외곽 대체선을 선택하세요");
@@ -342,14 +349,13 @@
     const bp = w.boundaryPreview;
     if (!bp || bp.sourceLineId !== line.id || !SS.previewCurrent(p, bp, ref)) return fail("preview", "확인한 외곽 대체 미리보기가 없거나 낡음 — 미리보기를 다시 만든 뒤 반영하세요");
     if (J(bp.outline) !== J(v.outline)) return fail("preview", "미리보기와 지금 판정이 다름 — 미리보기를 다시 만드세요");
-    const bf = baseFor(p); if (!bf.ok) return fail("history", bf.reason);
+    const bf = baseFor(p, ref); if (!bf.ok) return fail("history", bf.reason);
     const ctx = ctxFor(p, bf.base);
     const bnd = T().boundarySegsOf(line);
     const pl = planEdit(ref.geometry, bnd, ctx);
     if (!pl.ok) return pl;
     if (J(pl.previewOutline) !== J(bp.outline)) return fail("preview", "미리보기와 반영 결과가 다름 — 반영하지 않습니다");
-    const res = SC.latest(p);
-    const op = { lineId: line.id, lineSig: SS.cutSig(line.segments), segments: clone(bnd), piece: pl.piece, cls: pl.cls, fromHash: res.hash };
+    const op = { lineId: line.id, lineSig: SS.cutSig(line.segments), segments: clone(bnd), piece: pl.piece, cls: pl.cls, fromHash: ref.sleeveHash };   // 미리보기를 만든 현재 형상 hash
     const ops = clone(bf.prevOps).concat([op]);
     const rp = replay(bf.base.geometry, ops, ctx);
     if (!rp.ok || J(rp.geometry) !== J(pl.geometry)) return fail("replay", "원본 소매에서 반영 기록을 다시 적용한 결과가 다름 — 반영하지 않습니다");

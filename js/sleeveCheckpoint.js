@@ -1838,6 +1838,39 @@
     return { ok: true, result: result, check: c };
   }
 
+  // ── 수정 기준(2026-11-06 김님 «소매 모양 완료는 마지막 한 번»): 첫 완료 없이 외곽 수정을 시작하는 내부 기준 ──
+  //   editBase = 미편집 현재 소매를 **지금 완료하면 나올 완료본**과 같은 객체로 만들되 상태에 쓰지 않는다
+  //     (그림자 working 에서 complete → 같은 check(제도·기하 검증) · 같은 build · 같은 hash). 사용자 확정 시각(completedAt)은 두지 않는다.
+  //     working.sleeveResult·카라·Design 은 이것을 모른다(사용자 완료본이 아님 · 저장하지 않고 출처에서 매번 다시 만든다 — 낡은 기준 없음).
+  //   currentShape = 지금 편집 가능한 현재 소매 형상 하나(미편집 = editBase · 수정 중 = checkEdit 를 통과한 수정 형상)와
+  //     그 형상의 hash(= 지금 «소매 모양 완료»를 누르면 나올 완료본 hash — completedAt 은 서명 밖이라 결정론적).
+  //     분리·미리보기·반영·파트 결속이 이 하나를 본다(완료 여부와 무관 · 완료 뒤에도 같은 hash).
+  function editBase(proj) {
+    proj = proj || project(); if (!proj) return { ok: false, reason: "no-project", fails: ["no-project"] };
+    var SOE = window.sleeveOutlineEdit;
+    if (SOE && proj.working.sleeveEdit && SOE.isActive(proj)) return { ok: false, reason: "edit-active", fails: ["edit-active"] };
+    var shadow = Object.assign({}, proj, { working: Object.assign({}, proj.working, { sleeveResult: null, sleeveEdit: null }) });
+    var r = complete(shadow);
+    if (!r.ok) return { ok: false, reason: r.reason, fails: (r.check && r.check.fails) || [r.reason] };
+    var b = clone(r.result); delete b.completedAt;
+    if (hashStr(signature(b)) !== b.hash) return { ok: false, reason: "edit-base-hash", fails: ["edit-base-hash"] };
+    return { ok: true, base: deepFreeze(b) };
+  }
+  function currentShape(proj) {
+    proj = proj || project(); if (!proj) return { ok: false, fails: ["no-project"] };
+    var SOE = window.sleeveOutlineEdit;
+    if (SOE && proj.working.sleeveEdit && SOE.isActive(proj)) {
+      var c = checkEdit(proj);
+      if (!c.ok) return { ok: false, edited: true, fails: c.fails };
+      return { ok: true, edited: true, geometry: c._edit.geometry, hash: hashStr(signature(buildEditResult(proj, c))), base: c._base, ops: c._edit.ops };
+    }
+    var eb = editBase(proj);
+    if (!eb.ok) return { ok: false, edited: false, fails: eb.fails };
+    // 같은 내용의 사용자 완료본이 이미 있으면 그 객체를 기준으로 쓴다(종전 «완료 → 수정» 동작과 바이트 동일 · 내부 기준을 완료본으로 만들지는 않는다).
+    var res = proj.working.sleeveResult, base = (res && !res.manualEdit && res.hash === eb.base.hash && JSON.stringify(res.geometry) === JSON.stringify(eb.base.geometry)) ? res : eb.base;
+    return { ok: true, edited: false, geometry: base.geometry, hash: base.hash, base: base, ops: [] };
+  }
+
   function latest(proj) { proj = proj || project(); return (proj && proj.working.sleeveResult) || null; }
   // 완료본 없음 → true. 몸판 hash 가 완료본과 다르면 "몸판 변경으로 무효"(별도 함수). 여기선 소매 형상 변경.
   function isCurrentSleeveChanged(proj) {
@@ -1972,5 +2005,5 @@
     return res.sourceBodiceHash !== bodice.hash;
   }
 
-  window.sleeveCheckpoint = Object.freeze({ check: check, complete: complete, latest: latest, isCurrentSleeveChanged: isCurrentSleeveChanged, invalidatedByBodice: invalidatedByBodice, kindOf: kindOf, measureCap: measureCap });
+  window.sleeveCheckpoint = Object.freeze({ check: check, complete: complete, latest: latest, isCurrentSleeveChanged: isCurrentSleeveChanged, invalidatedByBodice: invalidatedByBodice, kindOf: kindOf, measureCap: measureCap, editBase: editBase, currentShape: currentShape });
 })();

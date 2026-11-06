@@ -9,9 +9,11 @@
 //   · 두 장 소매(Ⓥ: geometry.pieces = [back, front], primitive.piece 태그): 절개선 양끝이 **같은 조각** 위여야 한다.
 //   · 별도 소매 조각이 없는 소매(Ⓨ·Ⓩ: sleevePiece:false · 빈 outline): 자를 대상 없음(소매 파생 몸판 분리는 범위 밖).
 //
-// 현재성(sleeveRef): 분리 기준 = **현재 몸판·입력과 일치하는 sleeveResult**(frozen geometry). 화면 소매(working.geometry.sleeve)와
-//   완료본 outline 이 바이트 동일할 때만 «현재» — 그래서 snap(화면)·검증·분할이 같은 형상을 본다. 미완료·변경·차단·몸판 변경은
-//   이전 형상으로 자르지 않고 재완료 이유를 낸다.
+// 현재성(sleeveRef · 2026-11-06 김님 «소매 모양 완료는 마지막 한 번»): 분리·대체·반영 기준 = **현재 소매 형상 하나**
+//   (sleeveCheckpoint.currentShape — 미편집 = 지금 적용된 소매 라인을 완료와 같은 검사로 확인한 내부 기준 · 수정 중 = 검증된 수정 형상).
+//   첫 소매 완료가 필요 없다. 화면 소매(working.geometry.sleeve)와 기준 outline 이 바이트 동일할 때만 «현재» — snap(화면)·검증·분할이
+//   같은 형상을 본다. 검사 미통과(잘못된 입력·차단)·몸판 미완료/변경은 이전 형상으로 자르지 않고 사용자 조치 이유를 낸다.
+//   기준 hash(sleeveHash) = 지금 «소매 모양 완료»를 누르면 나올 완료본 hash — 완료 전후로 같다(파트·미리보기 결속이 완료로 끊기지 않음).
 // 파트 결속(makeParts/partCurrent): 소매 파트는 sourcePiece:"sleeve" + sourceCutId 에 더해 출처 소매·몸판 hash · 소매 기호 ·
 //   조각 이름 · 절개선 서명을 들고, 하나라도 현재와 다르면 «현재 결과»가 아니다(표시·집계 제외 → prune 으로 제거).
 //
@@ -141,32 +143,38 @@
     for (const s of SYMS) if (w["sleeve" + s]) return { key: "sleeve" + s, state: w["sleeve" + s], sym: symOf("bunka-sleeve-" + s) };
     return null;
   }
-  // 반환 { source:"current", sym, geometry(frozen), sleeveHash, bodiceHash } | { source:"pending", sym, reason, blocked? } | { source:"none", sym, reason }.
+  // 반환 { source:"current", sym, geometry(frozen), sleeveHash, bodiceHash, edited } | { source:"pending", sym, reason, blocked? } | { source:"none", sym, reason }.
+  //   _shape(비열거) = currentShape 결과(편집 기준 base·반영 기록 — 같은 동기화에서 반영 판정이 재계산 없이 쓴다).
+  //   전체 판정은 무겁다(소매 라인 재제도 1회) — 상태 동기화 때만 부르고, render 는 quickRef(아래 캐시)를 쓴다.
+  const _quick = new WeakMap();   // project → 마지막 전체 판정의 가벼운 출처 키(render 마다 재제도하지 않기 위한 캐시 · 출처가 하나라도 다르면 무효)
+  function _stateObj(p) { const live = liveLine(p); return live ? live.state : (p.working.sleeveDraft || null); }
+  function _failText(code) { const f = window.sleeveFailText; return typeof f === "function" ? f(code) : code; }
   function sleeveRef(p) {
     const w = p && p.working; if (!w) return { source: "pending", sym: "?", reason: "Design 프로젝트 없음" };
     const live = liveLine(p), sym = live ? live.sym : "기본", g = w.geometry && w.geometry.sleeve;
-    const pend = (reason, extra) => Object.assign({ source: "pending", sym: sym, reason: reason }, extra || {});
-    if (!g || g.sleevePiece === false || !Array.isArray(g.outline) || !g.outline.length)
+    const pend = (reason, extra) => { _quick.delete(p); return Object.assign({ source: "pending", sym: sym, reason: reason }, extra || {}); };
+    if (!g || g.sleevePiece === false || !Array.isArray(g.outline) || !g.outline.length) {
+      _quick.delete(p);
       return { source: "none", sym: sym, reason: "소매 " + sym + " 는 별도 소매 조각이 없음(소매가 몸판과 한 장) — 소매 파트로 자를 대상이 없습니다 · 파생 몸판 분리는 이번 범위 밖" };
-    if (live && live.state.blocked) return pend("소매 " + sym + " 적용이 차단됨(" + (live.state.blocked.text || live.state.blocked.reason || "차단") + ") — 화면 소매는 이전 형상입니다 · 소매 탭에서 고쳐 다시 적용·완료하세요", { blocked: true });
+    }
+    if (live && live.state.blocked) return pend("소매 " + sym + " 적용이 차단됨(" + (live.state.blocked.text || live.state.blocked.reason || "차단") + ") — 화면 소매는 이전 형상입니다 · 소매 탭에서 입력을 고쳐 소매 라인을 다시 적용하세요", { blocked: true });
     const SCk = window.sleeveCheckpoint, BCk = window.bodiceCheckpoint;
-    if (!SCk || !BCk) return pend("소매·몸판 완료 조회 모듈 없음");
+    if (!SCk || !BCk || !SCk.currentShape) return pend("소매·몸판 검사 모듈 없음");
     const bodice = BCk.latest(p);
-    if (!bodice) return pend("몸판 모양 완료 전 — 몸판·소매 모양을 완료하면 그 소매를 기준으로 자릅니다");
-    if (BCk.isCurrentBodiceChanged(p)) return pend("몸판이 완료 후 바뀜 — 몸판·소매 모양을 다시 완료하세요");
-    const sleeve = SCk.latest(p);
-    if (!sleeve) return pend("소매 " + sym + " 모양 완료 전 — 소매 모양을 완료하면 그 완료본 기준으로 자릅니다");
-    const doneSym = symOf(sleeve.origin && sleeve.origin.presetId);
-    if (doneSym !== sym) return pend("완료된 소매는 " + doneSym + ", 현재 소매는 " + sym + " — 소매 모양을 다시 완료하세요");
-    if (sleeve.sourceBodiceHash !== bodice.hash || SCk.invalidatedByBodice(p)) return pend("소매 완료본의 출처가 현재 몸판과 다름 — 소매 모양을 다시 완료하세요");
-    if (SCk.isCurrentSleeveChanged(p)) return pend("소매(" + sym + ")가 완료 후 바뀜(입력·형상) — 소매 모양을 다시 완료하세요");
-    if (!sleeve.geometry || J(sleeve.geometry.outline) !== J(g.outline)) return pend("화면 소매와 소매 완료본이 다름 — 소매 모양을 다시 완료하세요");
-    return { source: "current", sym: sym, geometry: sleeve.geometry, sleeveHash: sleeve.hash, bodiceHash: bodice.hash };
+    if (!bodice) return pend("몸판 모양 완료 전 — 몸판 모양을 먼저 완료하세요");
+    if (BCk.isCurrentBodiceChanged(p)) return pend("몸판이 완료 후 바뀜 — 몸판 모양을 다시 완료하세요");
+    const cs = SCk.currentShape(p);
+    if (!cs.ok) return pend("소매 " + sym + " 검사 미통과(" + _failText(cs.fails[0]) + ") — 소매 탭에서 확인해 소매 라인을 다시 적용하세요");
+    if (!cs.geometry || J(cs.geometry.outline) !== J(g.outline)) return pend("화면 소매와 현재 소매 형상이 다름 — 소매 라인을 다시 적용하세요");
+    const ref = { source: "current", sym: sym, geometry: cs.geometry, sleeveHash: cs.hash, bodiceHash: bodice.hash, edited: !!cs.edited };
+    Object.defineProperty(ref, "_shape", { value: cs, enumerable: false });
+    _quick.set(p, { sym: sym, state: _stateObj(p), edit: w.sleeveEdit || null, bodiceHash: bodice.hash, outline: J(g.outline), sleeveHash: cs.hash });
+    return ref;
   }
 
   // 절개선 상태(소매) — designLineTool.cutStatusOf 가 소매 선에 부른다. 유효성(validateCut)과 실제 분리 가능(splitSleeve 시험)을 따로 낸다.
   //   반환 { ok(=유효 절개선), basis:"sleeve", kind: ok|pending|physical|invalid|none, ready(=지금 분리 가능), sym, reason, piece? }.
-  //   검증 형상 = 현재면 완료본(= 화면과 바이트 동일), 아니면 화면 소매(snap 과 같은 형상) · 차단이면 이전 형상이라 판정 보류.
+  //   검증 형상 = 현재면 현재 소매 형상(= 화면과 바이트 동일), 아니면 화면 소매(snap 과 같은 형상) · 차단이면 이전 형상이라 판정 보류.
   function cutStatus(p, line, othersFlat) {
     const ref = sleeveRef(p), base = { basis: "sleeve", sym: ref.sym };
     Object.defineProperty(base, "_ref", { value: ref, enumerable: false });   // 같은 동기화 안에서 prune·doSplit 이 재사용(전체 판정 1회)
@@ -192,15 +200,16 @@
     return res.parts.map((outline, i) => ({ id: "part-" + (i + 1), sourcePiece: "sleeve", sourceCutId: line.id, sourceSleevePiece: res.piece,
       sourceSleeveSym: ref.sym, sourceSleeveHash: ref.sleeveHash, sourceBodiceHash: ref.bodiceHash, sourceCutSig: cutSig(line.segments), outline: outline }));
   }
-  // 표시용 빠른 현재성(render·막대가 매번 부른다 — isCurrentSleeveChanged 는 파생 소매 Ⓡ~Ⓦ 에서 250~580ms 라 여기서 부르지 않는다).
-  //   완료본 hash(소매·몸판) · 소매↔몸판 출처 · 현재 소매 기호 · 차단 · **화면 outline = 완료본 outline(바이트)** 만 본다.
-  //   입력만 바뀌고 형상이 같은 경우 등 전체 판정이 필요한 변화는 상태 동기화(syncCutStatus → pruneStaleSleeveParts = sleeveRef 전체)가 지운다.
+  // 표시용 빠른 현재성(render·막대가 매번 부른다 — 전체 판정(재제도)은 파생 소매 Ⓡ~Ⓦ 에서 250~580ms 라 여기서 부르지 않는다).
+  //   마지막 전체 판정(sleeveRef)의 출처 키 — 소매 기호 · 적용 상태 객체(재적용·입력 변경 = 새 객체) · 수정 기록 객체 · 차단 ·
+  //   몸판 완료본 hash · **화면 outline(바이트)** — 가 지금과 모두 같을 때만 «current». 하나라도 다르거나 전체 판정이 아직 없으면 pending
+  //   (표시 제외 → 다음 상태 동기화가 전체 판정으로 다시 정하거나 지운다).
   function quickRef(p) {
     const w = p && p.working; if (!w) return { source: "pending" };
-    const live = liveLine(p), sym = live ? live.sym : "기본", g = w.geometry && w.geometry.sleeve, s = w.sleeveResult, b = w.bodiceResult;
-    if (!g || !Array.isArray(g.outline) || !g.outline.length || (live && live.state.blocked) || !s || !b || !s.geometry) return { source: "pending", sym: sym };
-    if (s.sourceBodiceHash !== b.hash || symOf(s.origin && s.origin.presetId) !== sym || J(s.geometry.outline) !== J(g.outline)) return { source: "pending", sym: sym };
-    return { source: "current", sym: sym, sleeveHash: s.hash, bodiceHash: b.hash };
+    const live = liveLine(p), sym = live ? live.sym : "기본", g = w.geometry && w.geometry.sleeve, b = w.bodiceResult, c = _quick.get(p);
+    if (!c || !g || !Array.isArray(g.outline) || !g.outline.length || (live && live.state.blocked) || !b) return { source: "pending", sym: sym };
+    if (c.sym !== sym || c.state !== _stateObj(p) || c.edit !== (w.sleeveEdit || null) || c.bodiceHash !== b.hash || c.outline !== J(g.outline)) return { source: "pending", sym: sym };
+    return { source: "current", sym: sym, sleeveHash: c.sleeveHash, bodiceHash: c.bodiceHash };
   }
   // 소매 파트가 지금도 현재 결과인가(ref 를 넘기면 재계산하지 않는다 · 기본 = 빠른 판정).
   function partCurrent(p, part, ref) {
@@ -245,7 +254,7 @@
     return { ok: true, outline: r.outline, piece: gr.name };
   }
   // 대체선 상태(소매) — designLineTool.validateSelectedBoundary 가 소매 선에 부른다(상태 동기화 때만 · render 는 안 부른다).
-  //   기준 = 분리와 같은 현재 소매 완료본(sleeveRef) — 미완료·변경·차단·몸판 변경이면 이전 형상으로 대체하지 않고 재완료 이유.
+  //   기준 = 분리와 같은 현재 소매 형상(sleeveRef) — 검사 미통과·차단·몸판 미완료/변경이면 이전 형상으로 대체하지 않고 조치 이유.
   //   반환 { ok, basis:"sleeve", kind: ok|pending|invalid|none, sym, reason, piece?, outline? } (_ref 비열거 = 같은 동기화에서 재사용).
   function boundaryStatus(p, line) {
     const ref = sleeveRef(p), base = { basis: "sleeve", sym: ref.sym };
@@ -254,7 +263,7 @@
     if (ref.source !== "current") return Object.assign(base, { ok: false, kind: "pending", reason: ref.reason });
     const res = boundarySleeve(ref.geometry, T().boundarySegsOf(line));
     if (!res.ok) return Object.assign(base, { ok: false, kind: res.code === "no-piece" ? "none" : "invalid", code: res.code, reason: res.reason });
-    return Object.assign(base, { ok: true, kind: "ok", piece: res.piece, outline: res.outline, reason: "대체 가능 — 소매 " + ref.sym + " 완료본 기준" });
+    return Object.assign(base, { ok: true, kind: "ok", piece: res.piece, outline: res.outline, reason: "대체 가능 — 소매 " + ref.sym + " 현재 형상 기준" });
   }
   // 미리보기 결속: 출처 소매·몸판 hash · 소매 기호 · 조각 이름 · 대체선 서명. 하나라도 현재와 다르면 «현재 결과»가 아니다.
   function makeBoundaryPreview(ref, line, st) {
