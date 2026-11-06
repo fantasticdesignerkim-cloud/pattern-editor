@@ -1174,7 +1174,7 @@
     const r = E.apply(p, line);
     if (!r.ok) { setBoundaryNote("반영 안 함: " + r.reason); syncCutStatus(); return false; }
     const bad = r.cuts.invalid.length;
-    setBoundaryNote("외곽 반영됨 · 소매 " + p.working.sleeveEdit.sym + " " + r.label + " 수정(수동 외곽 수정 " + r.count + "회) — 소매 변경됨 · 소매 탭에서 «소매 모양 완료»를 다시 누르세요"
+    setBoundaryNote("외곽 반영됨 · 소매 " + p.working.sleeveEdit.sym + " " + r.label + (r.hemCut ? "" : " 수정") + "(수동 외곽 수정 " + r.count + "회) — 소매 변경됨 · 소매 탭에서 «소매 모양 완료»를 다시 누르세요"
       + (r.cuts.total ? " · 소매 절개선 " + r.cuts.total + "개 중 " + (bad ? bad + "개는 새 외곽에서 무효(선을 선택하면 이유)" : "모두 새 외곽에서 유효") : ""));
     syncCutStatus(); rerender(); sleeveUIRefresh();
     return true;

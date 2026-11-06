@@ -7,6 +7,7 @@
 //   §2 Ⓐ 소매산(SP 한쪽): 독립 SP 분할 길이 · 이세 실측 · SP 지남/새 꼭대기 = 거부(필요한 선택 보고) · 원자성
 //   §3 의미 모호(소매산→옆선) · 실패 원자성 · 미완료 · 낡은 미리보기 · 재완료 전 두 번째 반영 · 몸판 변경/프리셋 재적용 = 편집 해제(승계 없음)
 //   §4 기본 소매 소맷부리 · §5 Ⓒ 열린 V 보존 · §6 Ⓥ 두 장(같은 조각 · 두 번 연속 · 재적용 검증) · §7 미지원 사유(Ⓕ·Ⓡ·Ⓧ·래글런·Ⓨ·Ⓩ) · §8 미편집 회귀
+//   §9 새 소맷부리(양쪽 옆선을 잇는 선 · 아래 잘라냄 — 김님 확정): Ⓐ 직선·곡선 · 기본 · 독립 옆선/소맷부리/소매길이/소매산 · 재완료·Design·분리·되돌리기 · 보호(모서리·위쪽·Ⓥ·Ⓕ·Ⓒ) 거부 유지
 //   셋업은 boundaryPreviewCheck.js 와 같은 구성(+ sleeveOutlineEdit.js).
 "use strict";
 const vm = require("vm");
@@ -249,7 +250,7 @@ function completeAll(P) { setCollar(P); const c = CC.complete(P); const d = DR.c
   ok(/id="lineQuickBoundaryApply" hidden disabled/.test(html) && /id="lineQuickBoundaryUndo" hidden/.test(html), "0: 막대 «외곽 반영»·«반영 되돌리기» 정적 마크업(기본 숨김)");
   ok(/id="btnDesignBoundary" onclick="designLineTool\.doBoundaryPreview\(\)" disabled/.test(html), "0: 기존 «외곽 대체 미리보기» 보존");
   const at = f => html.indexOf('src="js/' + f + '?v=');
-  ok(at("sleeveOutlineEdit.js") > at("sleeveSplit.js") && at("sleeveOutlineEdit.js") < at("ui.js") && /sleeveOutlineEdit\.js\?v=2026110601/.test(html), "0: sleeveOutlineEdit 로드 순서·캐시 버전");
+  ok(at("sleeveOutlineEdit.js") > at("sleeveSplit.js") && at("sleeveOutlineEdit.js") < at("ui.js") && /sleeveOutlineEdit\.js\?v=2026110602/.test(html), "0: sleeveOutlineEdit 로드 순서·캐시 버전");
   ok(/sleeveOutlineEdit\.isActive\(dp\)/.test(R), "0: render — 수정 소매에는 프리셋 제도 표시 안 그림");
   ok(/if \(SOE && proj\.working\.sleeveEdit && SOE\.isActive\(proj\)\) return checkEdit\(proj\);/.test(CK) && /function checkA\(proj\)/.test(CK), "0: 완료 검사 = 수정 전용 분기 + 프리셋 검사 함수 그대로");
 }
@@ -505,6 +506,86 @@ function completeAll(P) { setCollar(P); const c = CC.complete(P); const d = DR.c
   ok(previewNow() && DLT.doBoundaryApply() === true, "7: Ⓕ 앞 옆선 = 반영 허용 (" + bNote() + ")");
   const c = SC.check(P);
   ok(c.ok && Math.abs(c.capLengths.front - base.cap.lengths.front) < 1e-4 && Math.abs(c.capLengths.back - base.cap.lengths.back) < 1e-4, "7: Ⓕ 턱 접은 소매산 실측 그대로");
+}
+
+// §9 새 소맷부리(2026-11-06 김님 확정 «양쪽 옆선을 잇는 선 = 새 소맷부리 · 아래 잘라냄») — 김님 실제 오류 «뒤 옆선·앞 옆선·소맷부리에 걸침» 재현 → 반영
+{
+  const hemCutCase = (sym, tag, mkLine) => {
+    const P = sleeveOn(sym); SC.complete(P);
+    const base = P.working.sleeveResult, g0 = base.geometry, baseJ = J(base), refJ = J(P.referenceGeometry), bodJ = J(P.working.bodiceResult);
+    const ln = mkLine(P, g0);
+    ok(previewNow() === true, tag + ": 양쪽 옆선을 잇는 선 — 미리보기");
+    const st = DLT.getBoundaryState();
+    ok(st.apply && st.apply.allowed && /새 소맷부리/.test(st.apply.reason), tag + ": 반영 허용 = 새 소맷부리 (" + (st.apply && st.apply.reason) + ")");
+    ok(DLT.doBoundaryApply() === true, tag + ": «외곽 반영» (" + bNote() + ")");
+    const ed = P.working.sleeveEdit, ng = ed.geometry;
+    ok(ed.ops[0].cls === "hem" && ed.base === base && J(base) === baseJ && J(P.referenceGeometry) === refJ && J(P.working.bodiceResult) === bodJ, tag + ": 구간 = 소맷부리 · 원본(완료본·원형·몸판) 불변");
+    return { P, base, g0, ng, ln };
+  };
+  const yMax = g => Math.max.apply(null, [].concat.apply([], g.outline.map(p => poly(p, 60).map(q => q.y))));
+  // 9a Ⓐ 직선 새 소맷부리(y = 40)
+  {
+    const yc = 40;
+    const { P, base, g0, ng } = hemCutCase("A", "9a Ⓐ 직선", (P, g) => bndLine([{ x: g.outline[1].from.x, y: yc }, { x: g.outline[2].from.x, y: yc }]));
+    const sB = g0.outline[1], sF = g0.outline[2], hem = ng.outline.filter(p => p.role === "hem");
+    ok(hem.length === 1 && hem[0].kind === "line" && Math.abs(hem[0].from.y - yc) < 1e-9 && Math.abs(hem[0].to.y - yc) < 1e-9, "9a: 새 소맷부리 = 새 선 하나(role hem)");
+    ok(Math.abs(yMax(ng) - yc) < 1e-9 && !ng.outline.some(p => J(p) === J(g0.outline[3])), "9a: 아래쪽 잘라냄(외곽 최저 = 새 선 · 원래 소맷부리 없음)");
+    const c = SC.check(P), m = c._measure, sbLen = yc - sB.from.y, sfLen = yc - sF.from.y, cuff = Math.abs(sF.from.x - sB.from.x);
+    ok(Math.abs(m.sideBack - sbLen) < 1e-6 && Math.abs(m.sideFront - sfLen) < 1e-6, "9a: 양쪽 옆선 = 잘린 길이(독립 " + sbLen.toFixed(4) + "/" + sfLen.toFixed(4) + ")");
+    ok(Math.abs(m.cuff - cuff) < 1e-6 && Math.abs(m.sleeveLength - (yc - base.cap.splitPoint.y)) < 1e-6, "9a: 소맷부리 = 새 선 길이 " + cuff.toFixed(4) + " · 소매길이 = 40 − SP.y");
+    ok(c.ok && Math.abs(c.capLengths.front - base.cap.lengths.front) < 1e-4 && Math.abs(c.capLengths.back - base.cap.lengths.back) < 1e-4 && D(c._prim.splitPoint, base.cap.splitPoint) < 1e-9, "9a: 소매산·SP 그대로");
+    independentLoopOk("9a", ng, "sleeve");
+    { const ro = renderOk(P); ok(ro === true, "9a: 실제 designRenderer 로 그림 (" + ro + ")"); }
+    const r = SC.complete(P);
+    ok(r.ok && r.result.manualEdit && r.result.hash !== base.hash && SC.isCurrentSleeveChanged(P) === false && SC.complete(P).result.hash === r.result.hash, "9a: 재완료 = 새 hash · 결정론");
+    const dd = completeAll(P).d;
+    ok(dd.ok && J(dd.result.sleeve.geometry) === J(ng), "9a: Design = 같은 짧아진 소매");
+    const cut = drawCut([{ x: g0.outline[1].from.x, y: 30 }, { x: g0.outline[2].from.x, y: 30 }], { alt: true }); DLT.syncCutStatus();
+    const sp = SS.splitSleeve(SS.sleeveRef(P).geometry, cut.segments);
+    ok(sp.ok && sp.parts.every(pt => pt.every(s => Math.max(s.from.y, s.to.y) <= yc + 1e-9)), "9a: 분리 = 새 외곽(파트가 새 소맷부리 아래로 나가지 않음)");
+    ok(DLT.doSleeveEditUndo() === true && J(P.working.geometry.sleeve) === J(base.geometry) && SC.complete(P).result.hash === base.hash, "9a: 되돌리기 → 원래 소매 · 재완료 = 원래 hash");
+  }
+  // 9b Ⓐ 곡선 새 소맷부리(아래로 볼록 — 제어점 보존 · 소매길이 = SP 수직선의 곡선 높이)
+  {
+    const yc = 40, H = 5;
+    const { P, base, ng, ln } = hemCutCase("A", "9b Ⓐ 곡선", (P, g) => {
+      const a = { x: g.outline[1].from.x, y: yc }, b = { x: g.outline[2].from.x, y: yc };
+      const l = drawBnd("sleeve", [a, b], { alt: true, handles: [{ x: 6, y: H }, { x: 6, y: -H }] }); DLT.syncCutStatus(); return l;
+    });
+    const hem = ng.outline.filter(p => p.role === "hem"), s0 = ln.segments[0];
+    ok(hem.length === 1 && hem[0].kind === "path" && ln.segments.length === 1 && s0.kind === "cubic", "9b: 새 소맷부리 = 곡선 하나(path)");
+    const q = cubsOf(hem[0])[0], same = (D(q[1], s0.c1) < 1e-9 && D(q[2], s0.c2) < 1e-9) || (D(q[1], s0.c2) < 1e-9 && D(q[2], s0.c1) < 1e-9);
+    ok(same, "9b: 곡선 제어점 그대로");
+    // 독립: SP.x 에서 곡선 y(이분법)
+    const sx = base.cap.splitPoint.x, inc = q[3].x > q[0].x; let lo = 0, hi = 1;
+    for (let i = 0; i < 80; i++) { const t = (lo + hi) / 2; if ((bez(q, t).x < sx) === inc) lo = t; else hi = t; }
+    const yAt = bez(q, (lo + hi) / 2).y, m = SC.check(P)._measure;
+    ok(Math.abs(m.sleeveLength - (yAt - base.cap.splitPoint.y)) < 1e-3 && Math.abs(m.cuff - plen(poly(hem[0], 2000))) < 1e-3, "9b: 소매길이 = SP 수직 곡선 높이 " + (yAt - base.cap.splitPoint.y).toFixed(4) + " · 소맷부리 = 곡선 길이 " + m.cuff.toFixed(4));
+    independentLoopOk("9b", ng, "sleeve");
+    { const ro = renderOk(P); ok(ro === true, "9b: 실제 designRenderer 로 그림 (" + ro + ")"); }
+    ok(SC.complete(P).ok && SC.isCurrentSleeveChanged(P) === false, "9b: 재완료");
+  }
+  // 9c 기본 소매 직선 새 소맷부리
+  {
+    const yc = 95;
+    const { P, base, g0, ng } = hemCutCase("base", "9c 기본", (P, g) => {
+      const L = loopOf(g.outline, 400), xs = hcrossings(L, yc); return bndLine([{ x: xs[0], y: yc }, { x: xs[1], y: yc }]); });
+    const m = SC.check(P)._measure;
+    ok(Math.abs(yMax(ng) - yc) < 1e-9 && Math.abs(m.sleeveLength - (yc - base.cap.splitPoint.y)) < 1e-6 && SC.complete(P).ok, "9c: 기본 소매 짧아짐 · 소매길이 = 95 − SP.y · 재완료");
+  }
+  // 9d 보호 유지(종전 거부): 옆선↔소맷부리 모서리 · 위쪽(소매산 쪽 호가 대체됨) · Ⓥ 중심 솔기 · Ⓕ 턱 · Ⓒ 열린 V
+  const refused = (sym, mk, tag, re) => {
+    const P = sleeveOn(sym); SC.complete(P);
+    const g = P.working.geometry.sleeve; mk(P, g); const pv = previewNow(), st = DLT.getBoundaryState(), sn = snapW(P);
+    const why = st && st.apply ? st.apply.reason : st ? st.reason : "?";
+    ok((!st.apply || !st.apply.allowed) && re.test(why) && DLT.doBoundaryApply() === false && snapW(P) === sn, tag + " (" + why + ")");
+    return pv;
+  };
+  refused("A", (P, g) => bndLine([{ x: g.outline[1].from.x, y: 46 }, { x: -10, y: g.outline[3].from.y }]), "9d: 옆선↔소맷부리 모서리 = 종전 거부", /뒤 옆선·소맷부리에 걸침/);
+  refused("A", (P, g) => bndLine([{ x: g.outline[1].from.x, y: 16 }, { x: g.outline[2].from.x, y: 16 }]), "9d: 위쪽 가로선(대체 = 소매산 쪽) = 거부(소매산 보존)", /소매산/);
+  refused("V", (P, g) => { const L = loopOf(primsOfPiece(g, "back"), 400), ys = L.map(q => q.y), y = Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.8, xs = hcrossings(L, y); bndLine([{ x: xs[0], y }, { x: xs[1], y }]); }, "9d: Ⓥ 한 조각(중심 솔기 포함) = 거부", /중심 솔기/);
+  refused("F", (P, g) => { const L = loopOf(g.outline, 400), ys = L.map(q => q.y), y = Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.8, xs = hcrossings(L, y); bndLine([{ x: xs[0], y }, { x: xs[1], y }]); }, "9d: Ⓕ 턱 표시 구간 = 거부", /턱/);
+  refused("C", (P, g) => { const sb = g.outline[roleIdx(g, "side-seam-back-lower")], sf = g.outline[roleIdx(g, "side-seam-front-lower")]; bndLine([ptOn(sb, 0.5), ptOn(sf, 0.5)]); }, "9d: Ⓒ 열린 V 를 가르는 선 = 거부", /다트|V|교차|경계/);
 }
 
 // §8 미편집 회귀: 기본 + Ⓐ~Ⓩ 완료 = 수정 분기 안 탐 · manualEdit 없음 · 변경 없는 재완료 같은 hash
