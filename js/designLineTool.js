@@ -832,7 +832,7 @@
   function cutStatusText(v) {
     if (!v.basis) return v.ok ? "분리 가능" : v.reason;   // 원래 몸판 맥락: 종전 문구
     if (v.basis === "sleeve") {   // 소매: 유효 절개선 ≠ 지금 분리 가능 — 둘을 섞어 «분리 가능»이라 하지 않는다
-      if (v.kind === "ok") return "분리 가능 — 소매 " + v.sym + " 완료본 기준";
+      if (v.kind === "ok") return "분리 가능 — 소매 " + v.sym + " 현재 형상 기준";
       if (v.kind === "none") return "소매 조각 없음: " + v.reason;
       if (!v.ok) return v.kind === "pending" ? "판정 보류: " + v.reason : v.reason;
       if (v.kind === "pending") return "유효 절개선 · 파트 분리 보류: " + v.reason;
@@ -883,8 +883,10 @@
     let ref = (v && v._ref) || (bv && bv._ref) || null;
     const needRef = p && SS && ((Array.isArray(p.working.parts) && p.working.parts.some(q => q.sourcePiece === "sleeve")) || (p.working.boundaryPreview && p.working.boundaryPreview.sourcePiece === "sleeve"));
     if (!ref && needRef) ref = SS.sleeveRef(p);           // 같은 동기화에서 한 번만(파트·미리보기 prune 공용)
-    pruneStaleSleeveParts(null, ref);   // 소매·몸판·입력이 바뀐 뒤 낡은 소매 파트를 데이터에서도 지운다(표시는 visibleParts 가 빠른 판정으로 이미 제외)
-    pruneStaleBoundaryPreview(p, ref);  // 낡은 외곽 대체 미리보기도 같은 기준으로(표시는 visibleBoundaryPreview 가 이미 제외)
+    const prunedParts = pruneStaleSleeveParts(null, ref);   // 소매·몸판·입력이 바뀐 뒤 낡은 소매 파트를 데이터에서도 지운다(표시는 visibleParts 가 빠른 판정으로 이미 제외)
+    const prunedPreview = pruneStaleBoundaryPreview(p, ref);  // 낡은 외곽 대체 미리보기도 같은 기준으로(표시는 visibleBoundaryPreview 가 이미 제외)
+    // 판정 문구는 같아도(새 형상에서도 «분리 가능») 파트·미리보기가 지워졌으면 막대를 맞춘다(이전 «분리됨»·«미리보기 표시 중»을 남기지 않음).
+    if ((prunedParts || prunedPreview) && window.designLineQuickBar) window.designLineQuickBar.sync();
     const el = document.getElementById("designCutStatus"); if (!el) return;
     if (!v) { el.textContent = ""; el.removeAttribute("data-ok"); el.removeAttribute("data-basis"); syncSplitButton(v); syncBoundaryStatus(bv); syncComposeButton(); return; }
     el.textContent = cutStatusText(v);
@@ -928,13 +930,13 @@
   const SPLIT_DERIVED_TIP = "파트 분리는 원래 몸판 전용 — 소매 파생 몸판은 여기서 자르지 않습니다(재단 단계 범위)";
   function _firstClause(t) { return String(t || "").split(" — ")[0]; }
   function J_(o) { return o ? JSON.stringify(o) : ""; }
-  //   소매(2026-11-05): 허용 = 유효 + 현재 완료본 기준 + 실제 분할 시험 통과(v.ready). 불가 사유는 판정 문구 그대로(재완료 이유 포함).
+  //   소매(2026-11-05 · 2026-11-06 첫 완료 불필요): 허용 = 유효 + 현재 소매 형상 기준 + 실제 분할 시험 통과(v.ready). 불가 사유 = 판정 문구 그대로(사용자 조치 포함).
   function splitStateOf(v, line) {
     if (!v || !line || line.role !== "cut") return null;
     if (line.piece === "sleeve" && v.basis === "sleeve") {
       const allowed = !!(v.ok && v.ready);
       const reason = allowed ? "분리 가능"
-        : v.kind === "pending" ? "소매 재완료 필요 — " + _firstClause(v.reason)
+        : v.kind === "pending" ? "판정 보류 — " + _firstClause(v.reason)
         : v.kind === "physical" ? "분할 불가 — " + _firstClause(v.reason)
         : v.kind === "none" ? _firstClause(v.reason)
         : v.reason;
@@ -1027,10 +1029,10 @@
   }
   // ── 외곽 대체선(boundary) DOM 연동 ──
   // 선택된 boundary 선을 현재 작업 기준으로 검증 + 파생 outline 계산. 반환 {ok, kind, reason, outline?, basis?} | null(boundary 아님/미선택). geometry 무변경.
-  //   kind: ok | invalid | piece(카라) | derived(소매 파생 몸판 맥락) | pending(소매 재완료 필요) | none(별도 소매 조각 없음)
+  //   kind: ok | invalid | piece(카라) | derived(소매 파생 몸판 맥락) | pending(판정 보류 — 소매 검사 미통과·차단·몸판 미완료) | none(별도 소매 조각 없음)
   //   앞판·뒤판 = 원래 몸판 맥락에서만 종전 판정(현재 작업 outline · 합성 design outline 우선). 소매 Ⓡ~Ⓩ 파생 몸판 맥락에서는 원래 몸판 외곽을
   //     대체해 현재 결과처럼 보이지 않게 거부한다(파생 몸판 외곽 대체 = 범위 밖).
-  //   소매(2026-11-06) = sleeveSplit.boundaryStatus — 현재 소매 완료본 기준(분리와 같은 sleeveRef).
+  //   소매(2026-11-06) = sleeveSplit.boundaryStatus — 현재 소매 형상 기준(분리와 같은 sleeveRef · 첫 완료 불필요).
   function boundaryStatusOf(p, line) {
     if (line.piece === "sleeve") {
       if (!window.sleeveSplit) return { ok: false, kind: "invalid", reason: "소매 외곽 대체 모듈 없음" };
@@ -1062,7 +1064,7 @@
   function boundaryReasonOf(v) {
     if (!v) return "";
     if (v.ok) return v.basis === "sleeve" ? v.reason : "대체 가능";
-    if (v.kind === "pending") return "소매 재완료 필요 — " + _firstClause(v.reason);
+    if (v.kind === "pending") return "판정 보류 — " + _firstClause(v.reason);
     if (v.kind === "none") return "별도 소매 조각 없음 — 대체할 소매 외곽이 없습니다(소매가 몸판과 한 장)";
     if (v.kind === "applied") return "반영됨 — 이 선은 지금 소매 외곽의 일부입니다";
     return v.reason;
@@ -1133,7 +1135,7 @@
       apply: boundaryApplyOf(boundaryState, shown), applied: boundaryState.kind === "applied",
       edit: ed ? { count: ed.ops.length, pending: quickEditPending(p) } : null };
   }
-  // 빠른 판정: 수정 반영 뒤 아직 재완료 전인가(완료본 outline ≠ 화면 outline) — 비싼 isCurrentSleeveChanged 는 부르지 않는다.
+  // 빠른 판정: 수정 반영 뒤 아직 «소매 모양 완료» 전인가(완료본 outline ≠ 화면 outline) — 비싼 isCurrentSleeveChanged 는 부르지 않는다.
   function quickEditPending(p) {
     const s = p.working.sleeveResult, g = p.working.geometry && p.working.geometry.sleeve;
     return !s || !s.manualEdit || !s.geometry || !g || J_(s.geometry.outline) !== J_(g.outline);
@@ -1164,7 +1166,7 @@
     return true;
   }
   // 소매 «외곽 반영»(2026-11-06 김님 승인): 보이는 미리보기를 확인한 뒤 **명시 클릭으로만** 소매에 반영한다(역할 선택·미리보기만으로는 반영 없음).
-  //   직전 재판정·원자적 반영은 sleeveOutlineEdit.apply 가 한다(실패면 아무것도 바뀌지 않음). 반영 뒤 = 소매 변경됨 · 다시 완료 필요.
+  //   직전 재판정·원자적 반영은 sleeveOutlineEdit.apply 가 한다(실패면 아무것도 바뀌지 않음). 반영 뒤 = 수정 중(미완료) — 더 반영하거나 «소매 모양 완료».
   function sleeveUIRefresh() { if (typeof window.refreshSleeveCheckpointUI === "function") window.refreshSleeveCheckpointUI(); }
   function doBoundaryApply() {
     if (mode !== "select" || !selectedId) return false;
@@ -1174,7 +1176,7 @@
     const r = E.apply(p, line);
     if (!r.ok) { setBoundaryNote("반영 안 함: " + r.reason); syncCutStatus(); return false; }
     const bad = r.cuts.invalid.length;
-    setBoundaryNote("외곽 반영됨 · 소매 " + p.working.sleeveEdit.sym + " " + r.label + (r.hemCut ? "" : " 수정") + "(수동 외곽 수정 " + r.count + "회) — 소매 변경됨 · 소매 탭에서 «소매 모양 완료»를 다시 누르세요"
+    setBoundaryNote("외곽 반영됨 · 소매 " + p.working.sleeveEdit.sym + " " + r.label + (r.hemCut ? "" : " 수정") + "(수동 외곽 수정 " + r.count + "회) — 더 고칠 선이 있으면 이어서 반영 · 다 고쳤으면 소매 탭 «소매 모양 완료»"
       + (r.cuts.total ? " · 소매 절개선 " + r.cuts.total + "개 중 " + (bad ? bad + "개는 새 외곽에서 무효(선을 선택하면 이유)" : "모두 새 외곽에서 유효") : ""));
     syncCutStatus(); rerender(); sleeveUIRefresh();
     return true;

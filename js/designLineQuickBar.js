@@ -10,7 +10,7 @@
 //     불가면 비활성 + 보이는 짧은 이유(무효 절개선 · 최종 몸판 미확정 · 파생 몸판 미지원 · 앞/뒤판 아님). 분리되면 «분리됨 · 파트 N개».
 //   · 선택한 선이 외곽이면 별도 «다음 단계» 행에 «외곽 대체 미리보기»(2026-11-06 김님 «외곽 선택하면 외곽 대체 미리보기가 있어야지»)
 //     — 오른쪽 «외곽 대체 미리보기»와 같은 판정(designLineTool.getBoundaryState = syncBoundaryStatus 가 마지막으로 쓴 판정)·같은 명령(doBoundaryPreview).
-//     불가면 비활성 + 이유(무효 · 소매 재완료 필요 · 별도 소매 조각 없음 · 파생 몸판 미지원 · 카라). 보이면 «미리보기 표시 중»(완성 외곽 아님). 보조선 = 다음 단계 없음.
+//     불가면 비활성 + 이유(무효 · 판정 보류 · 별도 소매 조각 없음 · 파생 몸판 미지원 · 카라). 보이면 «미리보기 표시 중»(완성 외곽 아님). 보조선 = 다음 단계 없음.
 //
 // 계약(제품 엔진 불변):
 //   · 상태를 새로 갖지 않는다 — 매 render 직후 designLineTool 의 공개 상태(getMode·getDraft·getSelectedId·findLine·
@@ -49,12 +49,12 @@
       const split = sp ? { allowed: !!sp.allowed, kind: sp.kind, parts: sp.parts || 0,
         text: sp.allowed ? (sp.parts > 0 ? "분리됨 · 파트 " + sp.parts + "개(색으로 미리보기)" : "분리 가능") : "분리 불가 · " + sp.reason } : null;
       const bs = (!lock && role === "boundary" && s.sel.boundary) ? s.sel.boundary : null;   // 외곽만 · 관리선(네크라인 전용선 등)은 잠금 그대로
-      // 단계(2026-11-06 소매 «외곽 반영»): preview(미리보기 전) → confirm(미리보기 확인 · 소매만 «외곽 반영») → applied(반영됨 · 재완료 안내).
+      // 단계(2026-11-06 소매 «외곽 반영»): preview(미리보기 전) → confirm(미리보기 확인 · 소매만 «외곽 반영») → applied(반영됨 · 수정 중 → «소매 모양 완료» 안내).
       //   몸판은 apply 가 없어 종전 그대로(preview·미리보기 표시 중).
       const stage = bs ? (bs.applied ? "applied" : (bs.shown && bs.apply) ? "confirm" : "preview") : null;
       const boundary = bs ? { allowed: !!bs.allowed, kind: bs.kind, shown: !!bs.shown, stage: stage,
         apply: bs.apply ? { allowed: !!bs.apply.allowed, reason: bs.apply.reason } : null, undo: !!bs.edit,
-        text: stage === "applied" ? (bs.edit && bs.edit.pending ? "반영됨 · 소매 변경됨 — 소매 모양을 다시 완료하세요" : "반영됨 · 소매 외곽의 일부")
+        text: stage === "applied" ? (bs.edit && bs.edit.pending ? "반영됨 · 수정 중 — 다 고치면 «소매 모양 완료»" : "반영됨 · 소매 외곽의 일부")
           : stage === "confirm" ? (bs.apply.allowed ? "미리보기 확인 · «외곽 반영»을 눌러야 소매에 반영됩니다" : "반영 불가 · " + bs.apply.reason)
           : bs.allowed ? (bs.shown ? "미리보기 표시 중 · 보라 외곽(완성 외곽 아님)" : bs.reason) : "대체 불가 · " + bs.reason } : null;
       return { kind: "select", key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };

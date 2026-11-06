@@ -7,7 +7,7 @@
 //   §3 기본 + Ⓐ~Ⓩ: 소매 곡선 대체선 → 미리보기(Ⓨ·Ⓩ = 별도 소매 조각 없음 거부) · 결과 **엔진과 독립 검산**(연속·폐합·자기교차·면적·대체선 제어점·
 //      유지 구간 = 원래 조각 외곽 위·곡선 보존) · 원본 불변 · 소매·몸판 «변경됨» 아님
 //   §4 Ⓒ 열린 V 보존(소매산 대체 → V 그대로 · V 다리 끝점·V 를 품는 대체 거부) · Ⓥ 같은 조각만(다른 조각 불변 · 두 조각 잇는 선 거부) · Ⓦ 어깨 다트 출처
-//   §5 현재성: 미완료 · 입력 변경 · 재완료 · 몸판 변경 · 선 수정 · 편집 드래그 · 역할 전환 · 차단
+//   §5 현재성: 완료 전(현재 형상 기준 · 2026-11-06) · 입력 변경 · 완료 전후 같은 hash · 몸판 변경 · 선 수정 · 편집 드래그 · 역할 전환 · 차단
 //   §6 관리형 선(소매산·네크라인 전용선) 잠금 = 행 없음 · 보조선 = 다음 단계 없음
 //   §7 Design 완료/hash 무관 · 소매 파트 분리 회귀 · 표시 판정 비용
 //   §8 순수 엔진: 대조 사각 · 끝점 밖 · 모호(종전 계약) · 유지 외곽 교차 · 끊긴 외곽 · 몸판 기본 = 다트 입구 열림(종전)
@@ -322,7 +322,7 @@ const SWEPT = {};
   const w = hc.b.x - hc.a.x, line = drawBnd("sleeve", [hc.a, hc.b], { handles: [null, { x: w * 0.25, y: -Math.min(0.6, w * 0.05) }] });
   ok(line && line.piece === "sleeve" && line.role === "boundary" && DLT.getSelectedId() === line.id && line.segments[0].kind === "cubic", tag + ": 그리기 → 완료 → «외곽»(소매 곡선 선)");
   const st = DLT.getBoundaryState(), v = barVM();
-  ok(st && st.allowed && st.kind === "ok" && bBtnOn() && new RegExp("^대체 가능 — 소매 " + SYM(sym) + " 완료본 기준").test(bstatus()), tag + ": 오른쪽·막대 같은 허용 (" + (st ? st.reason : bstatus()) + ")");
+  ok(st && st.allowed && st.kind === "ok" && bBtnOn() && new RegExp("^대체 가능 — 소매 " + SYM(sym) + " 현재 형상 기준").test(bstatus()), tag + ": 오른쪽·막대 같은 허용 (" + (st ? st.reason : bstatus()) + ")");
   ok(v && v.boundary && v.boundary.allowed && v.boundary.text === st.reason, tag + ": 막대 이유 = 오른쪽 상태와 같은 문구");
   const acted = DLT.doBoundaryPreview();
   const bp = P.working.boundaryPreview;
@@ -413,22 +413,22 @@ ok(Object.keys(SWEPT).length === 27 && Object.keys(SWEPT).filter(k => SWEPT[k] =
 {
   const P = sleeveOn("C");
   const g = P.working.geometry.sleeve, hc = hcut(g, null, 0.15);
-  // (a) 미완료 → 재완료 이유 · 거부
+  // (a) 소매 완료 전(2026-11-06 김님 «완료는 마지막 한 번») = 현재 형상 기준 미리보기 가능 · 사용자 완료본은 만들지 않음
   const line = drawBnd("sleeve", [hc.a, hc.b]);
   const s0 = DLT.getBoundaryState();
-  ok(s0 && !s0.allowed && s0.kind === "pending" && /^소매 재완료 필요 — 소매 Ⓒ 모양 완료 전/.test(s0.reason) && !bBtnOn(), "5a: 미완료 = «소매 재완료 필요» (" + (s0 && s0.reason) + ")");
-  ok(DLT.doBoundaryPreview() === false && !P.working.boundaryPreview && /모양 완료 전/.test(bNote()), "5a: 이전 형상으로 미리보기 안 함 (" + bNote() + ")");
-  // (b) 완료 → 미리보기
+  ok(s0 && s0.allowed && s0.kind === "ok" && /^대체 가능 — 소매 Ⓒ 현재 형상 기준/.test(s0.reason) && bBtnOn() && !P.working.sleeveResult, "5a: 완료 전 = 현재 형상 기준 대체 가능 · sleeveResult 없음 (" + (s0 && s0.reason) + ")");
+  ok(DLT.doBoundaryPreview() === true && !!DLT.visibleBoundaryPreview(P) && !P.working.sleeveResult, "5a: 완료 없이 미리보기 · sleeveResult 그대로 없음 (" + bNote() + ")");
+  // (b) 완료 → 같은 형상 = 같은 hash → 미리보기 결속 유지
+  const bpH = P.working.boundaryPreview.sourceSleeveHash;
   SC.complete(P); DLT.syncCutStatus();
-  ok(DLT.getBoundaryState().allowed && DLT.doBoundaryPreview() && !!DLT.visibleBoundaryPreview(P), "5b: 완료 뒤 미리보기");
+  ok(P.working.sleeveResult.hash === bpH && !!DLT.visibleBoundaryPreview(P) && DLT.getBoundaryState().allowed, "5b: 완료 뒤에도 같은 형상 hash · 미리보기 유지");
   // (c) 입력 변경 → 숨김 · 동기화 때 제거 · 막대 즉시 동기화
   API("C").apply(P, changedOf("C"));
   ok(DLT.visibleBoundaryPreview(P) === null, "5c: 소매 입력 변경 → 표시 안 함(빠른 판정)");
   const bs0 = BARSYNC; DLT.syncCutStatus();
-  ok(P.working.boundaryPreview === null && BARSYNC > bs0 && DLT.getBoundaryState().allowed === false && /^소매 재완료 필요/.test(DLT.getBoundaryState().reason), "5c: 동기화 때 낡은 미리보기 제거 · 막대 판정 갱신 (" + DLT.getBoundaryState().reason + ")");
-  // (d) 재완료 → 다시 미리보기 · 몸판 변경 → 숨김
-  SC.complete(P); DLT.syncCutStatus();
-  ok(DLT.doBoundaryPreview() && !!DLT.visibleBoundaryPreview(P), "5d: 재완료 뒤 다시 미리보기");
+  ok(P.working.boundaryPreview === null && BARSYNC > bs0 && DLT.getBoundaryState().allowed === true && DLT.getBoundaryState().shown === false && /현재 형상 기준/.test(DLT.getBoundaryState().reason), "5c: 동기화 때 낡은 미리보기 제거 · 새 형상 기준으로 막대 판정 갱신 (" + DLT.getBoundaryState().reason + ")");
+  // (d) 새 형상으로 다시 미리보기(완료 불필요) · 이전 완료본은 «변경됨» · 몸판 변경 → 숨김
+  ok(DLT.doBoundaryPreview() && !!DLT.visibleBoundaryPreview(P) && SC.isCurrentSleeveChanged(P) === true && P.working.boundaryPreview.sourceSleeveHash !== P.working.sleeveResult.hash, "5d: 새 형상으로 다시 미리보기 · 이전 완료본 보존(변경됨)");
   setBodice(P, "B");
   ok(DLT.visibleBoundaryPreview(P) === null, "5d: 몸판 변경 → 숨김");
   DLT.syncCutStatus(); ok(P.working.boundaryPreview === null && !bBtnOn(), "5d: 몸판 변경 = 제거 · 버튼 비활성 (" + bstatus() + ")");
@@ -462,7 +462,7 @@ ok(Object.keys(SWEPT).length === 27 && Object.keys(SWEPT).filter(k => SWEPT[k] =
   P.working.sleeveA.blocked = { reason: "invalid-input", text: "소매길이 범위 밖" };
   ok(DLT.visibleBoundaryPreview(P) === null, "5h: 차단 → 숨김");
   DLT.syncCutStatus();
-  ok(/^소매 재완료 필요 — 소매 Ⓐ 적용이 차단됨\(소매길이 범위 밖\)/.test(DLT.getBoundaryState().reason) && !bBtnOn(), "5h: 차단 이유 (" + DLT.getBoundaryState().reason + ")");
+  ok(/^판정 보류 — 소매 Ⓐ 적용이 차단됨\(소매길이 범위 밖\)/.test(DLT.getBoundaryState().reason) && !bBtnOn(), "5h: 차단 이유 (" + DLT.getBoundaryState().reason + ")");
   P.working.sleeveA.blocked = null;
   DLT.setMode("off");
 }

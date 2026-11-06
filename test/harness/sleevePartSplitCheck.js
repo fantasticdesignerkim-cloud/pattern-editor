@@ -8,7 +8,7 @@
 //   §2 곡선 절개(기본·Ⓒ·Ⓥ·Ⓧ): cubic 절개선이 두 파트에 같은 제어점(한쪽 반대 방향)으로 남는다
 //   §3 Ⓒ 열린 다트 V: V 다리에서 끝나는 선 = 분리(V 꼭짓점·다리 그대로) · V 를 가로지르는 선 = 구체적 거부
 //   §4 물리 거부: Ⓥ 두 조각을 잇는 선 · 소매 바깥을 지나는 선 · 끝점 외곽 밖 — 유효 절개선과 분리 가능을 구분
-//   §5 현재성: 미완료 · 차단 · 다른 소매 · 입력 변경 · 몸판 변경 · 선 수정 · 역할 전환 → 이전 형상으로 자르지 않음 / 낡은 파트 무효화
+//   §5 현재성: 완료 전(현재 형상 기준 · 2026-11-06) · 차단 · 다른 소매 · 입력 변경 · 몸판 변경 · 선 수정 · 역할 전환 → 이전 형상으로 자르지 않음 / 낡은 파트 무효화
 //   §6 관리형 소매산 선: 역할 잠금 그대로
 //   §7 기존 몸판 파트 분리 보존 · 소매 분리는 마지막 한 쌍으로 교체 · 파생 몸판 맥락의 몸판 파트 숨김(종전)
 //   §8 Design 완료/hash: 소매 절개선·파트는 structuralLines·hash 에 들어가지 않는다(새 저장·출력 체계 없음)
@@ -350,26 +350,26 @@ ok(Object.keys(SWEPT).length === 27 && Object.keys(SWEPT).filter(k => SWEPT[k] =
 {
   const P = sleeveOn("C");
   const g = P.working.geometry.sleeve, hc = hcut(g, null, 0.3);
-  // (a) 미완료: 유효 선이지만 분리 보류 + 재완료 이유
+  // (a) 소매 완료 전(2026-11-06 김님 «완료는 마지막 한 번») = 현재 형상 기준 분리 가능 · 사용자 완료본은 만들지 않음
   const line = drawCut([hc.a, hc.b]);
-  ok(/^유효 절개선 · 파트 분리 보류: 소매 Ⓒ 모양 완료 전/.test(status()) && !splitBtnOn(), "5a: 미완료 = 유효 · 분리 보류(완료 전) (" + status() + ")");
-  const st = DLT.getSplitState(); ok(st && !st.allowed && st.kind === "pending" && /^소매 재완료 필요 — /.test(st.reason), "5a: 막대 이유 «소매 재완료 필요» (" + (st && st.reason) + ")");
-  DLT.doSplit(); ok(!(P.working.parts || []).length && /모양 완료 전/.test(splitNote()), "5a: doSplit 거부(이전 형상으로 자르지 않음) (" + splitNote() + ")");
-  // (b) 완료 → 분리
+  ok(/^분리 가능 — 소매 Ⓒ 현재 형상 기준/.test(status()) && splitBtnOn() && !P.working.sleeveResult, "5a: 완료 전 = 현재 형상 기준 분리 가능 · sleeveResult 없음 (" + status() + ")");
+  const st = DLT.getSplitState(); ok(st && st.allowed && st.kind === "ok", "5a: 막대 = 같은 판정(분리 가능) (" + (st && st.reason) + ")");
+  DLT.doSplit(); ok((P.working.parts || []).length === 2 && DLT.visibleParts(P).length === 2 && !P.working.sleeveResult, "5a: 완료 없이 분리 2파트 · sleeveResult 그대로 없음 (" + splitNote() + ")");
+  // (b) 완료 → 같은 형상 = 같은 hash → 파트 결속 유지(완료가 세션 미리보기를 끊지 않음)
+  const pH = P.working.parts[0].sourceSleeveHash;
   SC.complete(P); DLT.syncCutStatus();
-  ok(splitBtnOn(), "5b: 완료 뒤 분리 가능 (" + status() + ")");
+  ok(splitBtnOn() && P.working.sleeveResult.hash === pH && DLT.visibleParts(P).length === 2, "5b: 완료 뒤 같은 hash · 파트 유지 (" + status() + ")");
   DLT.doSplit(); ok((P.working.parts || []).length === 2 && DLT.visibleParts(P).length === 2, "5b: 분리 2파트");
   // (c) 입력 변경(소매길이) → 낡은 파트 숨김·제거 · 재완료 이유
   API("C").apply(P, changedOf("C"));
   ok(DLT.visibleParts(P).length === 0, "5c: 소매 입력 변경 → 파트가 현재 결과로 보이지 않음");
   const bs0 = BARSYNC; DLT.syncCutStatus();
   ok(!(P.working.parts || []).some(q => q.sourcePiece === "sleeve"), "5c: 동기화 때 낡은 소매 파트 제거(prune)");
-  ok(BARSYNC > bs0 && DLT.getSplitState() && DLT.getSplitState().allowed === false, "5c: 판정이 바뀌면 막대도 즉시 동기화(render 없이도 이전 «분리 가능» 안 남김)");
-  ok(!splitBtnOn() && /파트 분리 보류|판정 보류|외곽선/.test(status()), "5c: 분리 비활성 + 이유 (" + status() + ")");
-  // (d) 재완료 → 다시 분리 가능(선이 여전히 유효하면)
-  SC.complete(P); DLT.syncCutStatus();
-  const okAgain = splitBtnOn(); ok(okAgain || /외곽선/.test(status()), "5d: 재완료 뒤 판정 재개 (" + status() + ")");
-  if (okAgain) { DLT.doSplit(); ok(DLT.visibleParts(P).length === 2, "5d: 재분리 2파트"); }
+  ok(BARSYNC > bs0 && DLT.getSplitState() && DLT.getSplitState().parts === 0, "5c: 판정이 바뀌면 막대도 즉시 동기화(이전 파트 «분리됨» 안 남김)");
+  ok(SC.isCurrentSleeveChanged(P) === true && (splitBtnOn() ? /현재 형상 기준/.test(status()) : /외곽선|분리 불가/.test(status())), "5c: 새 형상 기준으로 재판정 · 이전 완료본 = 변경됨 (" + status() + ")");
+  // (d) 새 형상으로 다시 분리(완료 불필요 · 선이 여전히 유효하면) — 파트 출처 = 새 형상(이전 완료본 hash 아님)
+  const okAgain = splitBtnOn(); ok(okAgain || /외곽선/.test(status()), "5d: 새 형상 기준 판정 (" + status() + ")");
+  if (okAgain) { DLT.doSplit(); ok(DLT.visibleParts(P).length === 2 && P.working.parts[0].sourceSleeveHash !== P.working.sleeveResult.hash, "5d: 재분리 2파트 · 출처 = 새 형상"); }
   // (e) 몸판 변경(다른 몸판 프리셋으로 재완료) → 출처 불일치 → 숨김
   setBodice(P, "B");
   ok(DLT.visibleParts(P).length === 0, "5e: 몸판 변경 → 소매 파트 숨김");
@@ -397,7 +397,7 @@ ok(Object.keys(SWEPT).length === 27 && Object.keys(SWEPT).filter(k => SWEPT[k] =
   P.working.sleeveA.blocked = null;
   // (i) 다른 소매로 전환(완료 안 함) → «완료된 소매는 Ⓐ, 현재 소매는 Ⓑ»
   P.working.sleeveA = null; API("B").apply(P, defaultsOf("B")); DLT.syncCutStatus();
-  ok(!splitBtnOn() && /완료된 소매는 Ⓐ, 현재 소매는 Ⓑ|외곽선/.test(status()), "5i: 소매 전환 미완료 = 분리 비활성 + 이유 (" + status() + ")");
+  ok(DLT.visibleParts(P).length === 0 && SC.isCurrentSleeveChanged(P) === true && (splitBtnOn() ? /^분리 가능 — 소매 Ⓑ 현재 형상 기준/.test(status()) : /외곽선|분리 불가/.test(status())), "5i: 소매 전환 = 이전 Ⓐ 파트 숨김 · Ⓑ 현재 형상 기준 판정 (" + status() + ")");
   DLT.setMode("off");
 }
 

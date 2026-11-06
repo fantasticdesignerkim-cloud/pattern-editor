@@ -5,9 +5,11 @@
 //   §1 Ⓐ 뒤 옆선: 역할·미리보기만으로 반영 없음 · 명시 클릭 · 원본(frozen sleeveResult·원형·bodiceResult) 불변 · 출처 · 독립 재계측 ·
 //      «변경됨» · Design/카라 의존 · 재반영 거부 · 절개선 재검증(남김·이유) · 재완료 hash·결정론 · Design 같은 형상 · 새 외곽 분리 · 되돌리기
 //   §2 Ⓐ 소매산(SP 한쪽): 독립 SP 분할 길이 · 이세 실측 · SP 지남/새 꼭대기 = 거부(필요한 선택 보고) · 원자성
-//   §3 의미 모호(소매산→옆선) · 실패 원자성 · 미완료 · 낡은 미리보기 · 재완료 전 두 번째 반영 · 몸판 변경/프리셋 재적용 = 편집 해제(승계 없음)
+//   §3 의미 모호(소매산→옆선) · 실패 원자성 · 완료 전 반영 · 낡은 미리보기 · 중간 완료 없는 두 번째 반영 · 몸판 변경/프리셋 재적용 = 편집 해제(승계 없음)
 //   §4 기본 소매 소맷부리 · §5 Ⓒ 열린 V 보존 · §6 Ⓥ 두 장(같은 조각 · 두 번 연속 · 재적용 검증) · §7 미지원 사유(Ⓕ·Ⓡ·Ⓧ·래글런·Ⓨ·Ⓩ) · §8 미편집 회귀
 //   §9 새 소맷부리(양쪽 옆선을 잇는 선 · 아래 잘라냄 — 김님 확정): Ⓐ 직선·곡선 · 기본 · 독립 옆선/소맷부리/소매길이/소매산 · 재완료·Design·분리·되돌리기 · 보호(모서리·위쪽·Ⓥ·Ⓕ·Ⓒ) 거부 유지
+//   §10 첫 완료 없는 수정(2026-11-06 김님 UX): 라인 적용 → 반영 2회(중간 완료 0) → 실측·되돌리기 → 마지막 완료 1회 → 출처·replay·hash·Design·분리 ·
+//      잘못된 입력(차단)·몸판/프리셋 변경·낡은 미리보기 · Ⓒ V · Ⓥ 두 장 · 미편집 27종 내부 기준 hash = 완료 hash
 //   셋업은 boundaryPreviewCheck.js 와 같은 구성(+ sleeveOutlineEdit.js).
 "use strict";
 const vm = require("vm");
@@ -250,7 +252,7 @@ function completeAll(P) { setCollar(P); const c = CC.complete(P); const d = DR.c
   ok(/id="lineQuickBoundaryApply" hidden disabled/.test(html) && /id="lineQuickBoundaryUndo" hidden/.test(html), "0: 막대 «외곽 반영»·«반영 되돌리기» 정적 마크업(기본 숨김)");
   ok(/id="btnDesignBoundary" onclick="designLineTool\.doBoundaryPreview\(\)" disabled/.test(html), "0: 기존 «외곽 대체 미리보기» 보존");
   const at = f => html.indexOf('src="js/' + f + '?v=');
-  ok(at("sleeveOutlineEdit.js") > at("sleeveSplit.js") && at("sleeveOutlineEdit.js") < at("ui.js") && /sleeveOutlineEdit\.js\?v=2026110602/.test(html), "0: sleeveOutlineEdit 로드 순서·캐시 버전");
+  ok(at("sleeveOutlineEdit.js") > at("sleeveSplit.js") && at("sleeveOutlineEdit.js") < at("ui.js") && /sleeveOutlineEdit\.js\?v=2026110604/.test(html), "0: sleeveOutlineEdit 로드 순서·캐시 버전");
   ok(/sleeveOutlineEdit\.isActive\(dp\)/.test(R), "0: render — 수정 소매에는 프리셋 제도 표시 안 그림");
   ok(/if \(SOE && proj\.working\.sleeveEdit && SOE\.isActive\(proj\)\) return checkEdit\(proj\);/.test(CK) && /function checkA\(proj\)/.test(CK), "0: 완료 검사 = 수정 전용 분기 + 프리셋 검사 함수 그대로");
 }
@@ -307,17 +309,18 @@ function completeAll(P) { setCollar(P); const c = CC.complete(P); const d = DR.c
   ok(c.ok && Math.abs(c.capLengths.front - base.cap.lengths.front) < 1e-4 && Math.abs(c.capLengths.back - base.cap.lengths.back) < 1e-4, "1: 소매산 앞·뒤 = 원본(소매산 안 바뀜)");
   ok(Math.abs(m.cuff - D(g0.outline[3].from, g0.outline[3].to)) < 1e-6 && Math.abs(m.sleeveLength - 52) < 1e-6, "1: 소맷부리·소매길이 실측(SP 수직 → 소맷부리 · 52)");
   ok(c.mode === "manual-edit" && !!c._edit, "1: 완료 검사 = 수정 전용 분기");
-  ok(SC.isCurrentSleeveChanged(P) === true && SS.sleeveRef(P).source === "pending", "1: 적용 즉시 «소매 변경됨 · 다시 완료 필요»");
+  const rf1 = SS.sleeveRef(P);
+  ok(SC.isCurrentSleeveChanged(P) === true && rf1.source === "current" && rf1.edited === true && J(rf1.geometry.outline) === J(ed.geometry.outline) && rf1.sleeveHash !== base.hash, "1: 적용 즉시 이전 완료본 = «변경됨» · 현재 기준 = 수정 형상(완료 불필요)");
   ok(DR.check(P).fails.indexOf("sleeve-changed") >= 0 && CC.sleeveStepChanged(P) === true, "1: Design·카라 = 기존 의존관계대로 낡음");
   // 반영된 선 = 다시 반영 안 함
   DLT.syncCutStatus(); st = DLT.getBoundaryState();
-  ok(st && st.kind === "applied" && !st.allowed && st.applied && barVM().boundary.stage === "applied" && /다시 완료/.test(barVM().boundary.text), "1: 반영된 선 = «반영됨 · 다시 완료» (" + barVM().boundary.text + ")");
+  ok(st && st.kind === "applied" && !st.allowed && st.applied && barVM().boundary.stage === "applied" && /소매 모양 완료/.test(barVM().boundary.text), "1: 반영된 선 = «반영됨 · 다 고치면 소매 모양 완료» (" + barVM().boundary.text + ")");
   ok(DLT.doBoundaryApply() === false && P.working.sleeveEdit === ed, "1: 같은 선 재반영 거부");
   // 절개선 재검증(새 외곽) — 남김·이유
   const v35 = SS.cutStatus(P, c35, [DLT.flattenLine(c48.segments)]), v48 = SS.cutStatus(P, c48, [DLT.flattenLine(c35.segments)]);
   ok(lines().indexOf(c35) >= 0 && lines().indexOf(c48) >= 0 && J(c35.segments[0].from) === J({ x: -17.07, y: 35 }), "1: 절개선 자동 삭제·이동 없음");
   ok(v35.kind === "invalid" && /외곽|경계|벗어/.test(v35.reason), "1: 바뀐 구간에 끝점이 있던 절개선 = 무효 + 이유 (" + v35.reason + ")");
-  ok(v48.ok && v48.kind === "pending", "1: 그대로 유효한 절개선 = 유효 · 재완료 전 분리 보류");
+  ok(v48.ok && v48.kind === "ok" && v48.ready, "1: 그대로 유효한 절개선 = 유효 · 수정 형상 기준 분리 가능(완료 불필요)");
   // 재완료
   const r1 = SC.complete(P);
   ok(r1.ok && r1.result.manualEdit && r1.result.manualEdit.baseSleeveHash === base.hash && r1.result.hash !== base.hash && J(r1.result.geometry) === J(ed.geometry), "1: 재완료 = 수정 형상·출처로 새 hash (" + (r1.reason || r1.result.hash) + ")");
@@ -386,11 +389,10 @@ function completeAll(P) { setCollar(P); const c = CC.complete(P); const d = DR.c
   const st = DLT.getBoundaryState(), sn = snapW(P);
   ok(st.apply && !st.apply.allowed && /소매산·뒤 옆선/.test(st.apply.reason) && /필요한 선택/.test(st.apply.reason), "3: 두 구간에 걸침 = 반영 불가 + 필요한 최소 선택 (" + st.apply.reason + ")");
   ok(DLT.doBoundaryApply() === false && snapW(P) === sn && /반영 안 함/.test(bNote()), "3: 반영 실패 = 아무것도 안 바뀜 (" + bNote() + ")");
-  // 미완료: 소매 적용만(완료 전)
+  // 완료 전(2026-11-06 김님 «완료는 마지막 한 번»): 소매 적용만으로 미리보기·반영 · 사용자 완료본은 만들지 않음
   const Pu = sleeveOn("A");
   bndLine([{ x: -17.07, y: 25 }, { x: -15.8, y: 35 }, { x: -17.07, y: 45 }]);
-  const snu = snapW(Pu);
-  ok(previewNow() === false && DLT.doBoundaryApply() === false && snapW(Pu) === snu, "3: 소매 미완료 = 미리보기·반영 없음");
+  ok(previewNow() === true && DLT.doBoundaryApply() === true && !Pu.working.sleeveResult && Pu.working.sleeveEdit.ops.length === 1 && !Pu.working.sleeveEdit.base.completedAt, "3: 완료 전 = 미리보기·반영 가능 · sleeveResult 없음 · 기준에 확정 시각 없음");
   // 낡은 미리보기: 미리보기 뒤 소매 입력 변경 재적용
   const Ps = sleeveOn("A"); SC.complete(Ps);
   const ls = bndLine([{ x: -17.07, y: 25 }, { x: -15.8, y: 35 }, { x: -17.07, y: 45 }]);
@@ -402,18 +404,17 @@ function completeAll(P) { setCollar(P); const c = CC.complete(P); const d = DR.c
   const sns = snapW(Ps), rs = E.apply(Ps, ls);
   ok(!rs.ok && snapW(Ps) === sns && !Ps.working.sleeveEdit, "3: 낡은 미리보기(입력 변경 뒤) = 반영 거부 · 상태 그대로 (" + rs.reason + ")");
   ok(DLT.doBoundaryApply() === false && !Ps.working.sleeveEdit && !Ps.working.boundaryPreview, "3: 같은 명령도 거부 · 낡은 미리보기는 종전대로 정리");
-  // 반영 뒤 재완료 전 두 번째 반영 = 거부(현재 완료본 기준 미리보기만)
-  const Pk = sleeveOn("A"); SC.complete(Pk);
+  // 반영 뒤 중간 완료 없이 두 번째 반영 = 허용(현재 수정 형상 기준 미리보기) · 이전 완료본 불변
+  const Pk = sleeveOn("A"); SC.complete(Pk); const resK = Pk.working.sleeveResult, resKJ = J(resK);
   bndLine([{ x: -17.07, y: 25 }, { x: -15.8, y: 35 }, { x: -17.07, y: 45 }]); previewNow(); DLT.doBoundaryApply();
   const l2 = bndLine([{ x: 15, y: 25 }, { x: 13.8, y: 35 }, { x: 15, y: 45 }]);
-  const snk = snapW(Pk);
-  ok(previewNow() === false && DLT.doBoundaryApply() === false && snapW(Pk) === snk && Pk.working.sleeveEdit.ops.length === 1, "3: 반영 후 재완료 전 = 다음 미리보기·반영 없음");
+  ok(previewNow() === true && DLT.doBoundaryApply() === true && Pk.working.sleeveEdit.ops.length === 2 && Pk.working.sleeveResult === resK && J(resK) === resKJ, "3: 중간 완료 없이 두 번째 반영 · 이전 완료본 객체·내용 불변");
   // 몸판 변경 → 재제도(refreshSleeve 와 같은 경로) → 낡은 편집 해제(승계 없음)
   const edG = J(Pk.working.sleeveEdit.geometry);
   setBodice(Pk, "B"); API("A").rederive(Pk);
   ok(E.state(Pk).kind === "stale" && SC.check(Pk).mode !== "manual-edit", "3: 몸판 변경 → 편집 낡음 · 검사는 새 소매(프리셋) 기준");
   DLT.syncCutStatus();
-  ok(!Pk.working.sleeveEdit && Pk.working.sleeveEditDropped && Pk.working.sleeveEditDropped.count === 1 && J(Pk.working.geometry.sleeve) !== edG, "3: 낡은 편집 해제 + 안내 · 새 소매에 옮기지 않음");
+  ok(!Pk.working.sleeveEdit && Pk.working.sleeveEditDropped && Pk.working.sleeveEditDropped.count === 2 && J(Pk.working.geometry.sleeve) !== edG, "3: 낡은 편집(2회) 해제 + 안내 · 새 소매에 옮기지 않음");
   // 프리셋 같은 입력으로 다시 적용 → 해제(원본 형상)
   const Pr = sleeveOn("A"); SC.complete(Pr);
   bndLine([{ x: -17.07, y: 25 }, { x: -15.8, y: 35 }, { x: -17.07, y: 45 }]); previewNow(); DLT.doBoundaryApply(); SC.complete(Pr);
@@ -595,6 +596,129 @@ function completeAll(P) { setCollar(P); const c = CC.complete(P); const d = DR.c
     const r = SC.complete(P), r2 = SC.complete(P);
     if (!r.ok || r.result.manualEdit || r.check.mode === "manual-edit" || r2.result.hash !== r.result.hash || P.working.sleeveEdit) { okAll = false; bad.push(sym); } });
   ok(okAll, "8: 미편집 기본+Ⓐ~Ⓩ 완료 경로 그대로 [" + bad.join(",") + "]");
+}
+
+// §10 첫 완료 없는 수정(2026-11-06 김님 UX «라인 적용 → 선 그리기 → 미리보기 → 외곽 반영(필요한 만큼) → 소매 모양 완료 한 번»)
+//   내부 기준(sleeveCheckpoint.editBase) = 지금 완료하면 나올 완료본과 같은 검사·같은 내용(확정 시각 없음) · sleeveResult·카라·Design 은 모름.
+//   sleeveResult 가 null 로 남는 것 = complete 가 한 번도 성공하지 않았다는 증거(complete 는 성공 때만, 언제나 sleeveResult 를 쓴다).
+{
+  const P = sleeveOn("A");          // 신규 프로젝트: 몸판 완료 → Ⓐ 적용(소매 완료 없음)
+  const refJ = J(P.referenceGeometry), bodJ = J(P.working.bodiceResult);
+  ok(P.working.sleeveResult == null, "10: 라인 적용 후 sleeveResult 없음");
+  const eb = SC.editBase(P), g0 = P.working.geometry.sleeve, xB = g0.outline[1].from.x, xF = g0.outline[2].from.x;
+  ok(eb.ok && !("completedAt" in eb.base) && Object.isFrozen(eb.base) && P.working.sleeveResult == null && J(eb.base.geometry) === J(g0), "10: 내부 기준 = 확정 시각 없음 · frozen · 화면 형상 · sleeveResult 자동 생성 없음");
+  const r0 = SS.sleeveRef(P);
+  ok(r0.source === "current" && r0.sleeveHash === eb.base.hash && r0.edited === false, "10: 현재 기준 = 내부 기준(완료 불필요)");
+  ok(DR.check(P).fails.indexOf("no-sleeve") >= 0 && CC.sleeveStepChanged(P) === false, "10: 소매 완료 전 Design = «소매 없음» 거부 · 카라 기존 경계 그대로");
+  // 첫 반영: 직선 새 소맷부리(y = 44)
+  bndLine([{ x: xB, y: 44 }, { x: xF, y: 44 }]);
+  ok(previewNow() === true && DLT.getBoundaryState().apply.allowed && /새 소맷부리/.test(DLT.getBoundaryState().apply.reason), "10: 완료 없이 미리보기 · 반영 허용 (" + DLT.getBoundaryState().apply.reason + ")");
+  ok(DLT.doBoundaryApply() === true && P.working.sleeveResult == null && P.working.sleeveEdit.ops.length === 1 && P.working.sleeveEdit.base.hash === eb.base.hash, "10: 첫 반영 · 중간 완료 없음 · 기준 = 내부 기준 (" + bNote() + ")");
+  ok(/더 고칠 선|소매 모양 완료/.test(bNote()) && !/다시 누르세요/.test(bNote()), "10: 반영 안내 = 이어서 수정 · 마지막에 «소매 모양 완료» (" + bNote() + ")");
+  const r1 = SS.sleeveRef(P), m1 = SC.check(P)._measure, spY = eb.base.cap.splitPoint.y;
+  ok(r1.source === "current" && r1.edited && r1.sleeveHash !== eb.base.hash && Math.abs(m1.sleeveLength - (44 - spY)) < 1e-6, "10: 현재 기준 = 수정 형상 · 소매길이 실측 44 − SP.y");
+  // 두 번째 반영(곡선, y ≈ 40) — 현재 수정 형상 기준 · 중간 완료 없음
+  const l2 = drawBnd("sleeve", [{ x: xB, y: 40 }, { x: xF, y: 40 }], { alt: true, handles: [{ x: 6, y: 3 }, { x: 6, y: -3 }] }); DLT.syncCutStatus();
+  ok(previewNow() === true && DLT.getBoundaryState().apply.allowed, "10: 두 번째 미리보기(수정 형상 기준) (" + (DLT.getBoundaryState().apply || {}).reason + ")");
+  ok(DLT.doBoundaryApply() === true && P.working.sleeveResult == null && P.working.sleeveEdit.ops.length === 2 && P.working.sleeveEdit.ops[1].fromHash === r1.sleeveHash, "10: 두 번째 반영 · 출처 = 첫 반영 형상 · 중간 완료 0회 (" + bNote() + ")");
+  const ed2 = P.working.sleeveEdit, ctx = E.ctxFor(P, ed2.base), rp2 = E.replay(ed2.base.geometry, ed2.ops, ctx);
+  ok(rp2.ok && J(rp2.geometry) === J(ed2.geometry) && J(P.working.geometry.sleeve) === J(ed2.geometry), "10: 원본 + 기록 재적용 = 현재 형상 = 화면(단일 권위)");
+  const hem2 = ed2.geometry.outline.filter(q => q.role === "hem"), q2 = cubsOf(hem2[0])[0], sx = eb.base.cap.splitPoint.x, inc = q2[3].x > q2[0].x; let lo = 0, hi = 1;
+  for (let i = 0; i < 80; i++) { const t = (lo + hi) / 2; if ((bez(q2, t).x < sx) === inc) lo = t; else hi = t; }
+  const m2 = SC.check(P)._measure, yAt = bez(q2, (lo + hi) / 2).y;
+  ok(hem2.length === 1 && Math.abs(m2.sleeveLength - (yAt - spY)) < 1e-3 && Math.abs(m2.cuff - plen(poly(hem2[0], 2000))) < 1e-3, "10: 실측(독립) 소매길이 " + (yAt - spY).toFixed(3) + " · 소맷부리 곡선 길이");
+  independentLoopOk("10", ed2.geometry, "sleeve");
+  { const ro = renderOk(P); ok(ro === true, "10: 실제 designRenderer 로 그림 (" + ro + ")"); }
+  // 되돌리기 → 첫 반영 형상(같은 hash) → 다시 반영
+  ok(DLT.doSleeveEditUndo() === true && P.working.sleeveEdit.ops.length === 1 && SS.sleeveRef(P).sleeveHash === r1.sleeveHash && P.working.sleeveResult == null, "10: 되돌리기 = 첫 반영 형상 · 같은 hash · 완료 없음");
+  DLT.syncCutStatus();
+  ok(previewNow() === true && DLT.doBoundaryApply() === true && P.working.sleeveEdit.ops.length === 2 && J(P.working.sleeveEdit.geometry) === J(ed2.geometry), "10: 같은 선 다시 반영 = 같은 형상");
+  ok(DR.check(P).fails.indexOf("no-sleeve") >= 0, "10: 수정 중(완료 전) Design = 소매 미완료로 거부");
+  // 마지막 한 번 «소매 모양 완료»
+  const pre = SS.sleeveRef(P).sleeveHash, rc = SC.complete(P);
+  ok(rc.ok && rc.result.hash === pre && rc.result.manualEdit.ops.length === 2 && rc.result.manualEdit.baseSleeveHash === eb.base.hash && typeof rc.result.completedAt === "number", "10: 마지막 완료 1회 = 예고 hash · 반영 2회 · 출처 = 내부 기준 hash (" + (rc.reason || "") + ")");
+  ok(J(rc.result.geometry) === J(ed2.geometry) && rc.result.origin.presetId === eb.base.origin.presetId && J(rc.result.inputs) === J(eb.base.inputs) && J(rc.result.meta) === J(eb.base.meta), "10: 완료본 = 현재 형상 · 출처·입력·제도 기록 = 내부 기준");
+  ok(SC.isCurrentSleeveChanged(P) === false && SC.complete(P).result.hash === rc.result.hash && J(P.referenceGeometry) === refJ && J(P.working.bodiceResult) === bodJ, "10: 현재 · 결정론 · 원형·몸판 불변");
+  // Design = 같은 수정 소매 · 새 외곽 분리
+  const dd = completeAll(P).d;
+  ok(dd.ok && J(dd.result.sleeve.geometry) === J(ed2.geometry) && dd.result.sleeve.hash === rc.result.hash, "10: Design = 같은 수정 소매 (" + (dd.reason || "") + ")");
+  const cut = drawCut([{ x: xB, y: 30 }, { x: xF, y: 30 }], { alt: true }); DLT.syncCutStatus();
+  ok(splitBtnOn() && /현재 형상 기준/.test(status()), "10: 완료 뒤 분리 가능 (" + status() + ")");
+  DLT.doSplit();
+  const yMaxNew = Math.max.apply(null, [].concat.apply([], ed2.geometry.outline.map(q => poly(q, 80).map(z => z.y))));
+  ok(P.working.parts.length === 2 && P.working.parts.every(q => q.sourceSleeveHash === rc.result.hash) && P.working.parts.every(q => q.outline.every(z => poly(z, 40).every(w => w.y <= yMaxNew + 1e-6))), "10: 새 외곽 분리 2파트 · 출처 = 완료본 hash");
+  // 완료 뒤 다시 수정 = 같은 계약(이전 완료본 보존 · «변경됨» · Design 낡음)
+  const done = P.working.sleeveResult, doneJ = J(done), sb = ed2.geometry.outline.filter(q => q.role === "side-seam-back")[0];
+  bndLine(bulge(ptOn(sb, 0.3), ptOn(sb, 0.7), centroid(ed2.geometry.outline), 0.4, -1));
+  ok(previewNow() === true && DLT.doBoundaryApply() === true && P.working.sleeveEdit.ops.length === 3, "10: 완료 뒤 세 번째 반영(같은 기준 계속)");
+  ok(P.working.sleeveResult === done && J(done) === doneJ && SC.isCurrentSleeveChanged(P) === true && DR.check(P).fails.indexOf("sleeve-changed") >= 0, "10: 이전 완료본 객체·내용 보존 · «변경됨» · Design 낡음");
+  ok(DLT.doSleeveEditUndo() === true && SC.isCurrentSleeveChanged(P) === false, "10: 되돌리기 → 완료본과 다시 일치");
+  DLT.setMode("off");
+}
+{
+  // 잘못된 입력(Ⓒ EL 범위 밖 → 차단) = 기준 없음 + 이유 · 미리보기·반영 없음 · 완료본 자동 생성 없음
+  const P = sleeveOn("C"), g0 = P.working.geometry.sleeve, sf = g0.outline[roleIdx(g0, "side-seam-front")], cen = centroid(g0.outline);
+  const ln = bndLine(bulge(ptOn(sf, 0.25), ptOn(sf, 0.7), cen, 0.5, -1));
+  ok(previewNow() === true, "10c: Ⓒ 완료 없이 미리보기");
+  const rj = API("C").apply(P, Object.assign(defaultsOf("C"), { elbowLengthCm: 5 })); if (!rj.ok) API("C").reject(P, rj);   // ui.js 와 같은 경로(실패 → 차단 표시)
+  ok(!!P.working.sleeveC.blocked, "10c: EL 5 = 차단");
+  DLT.syncCutStatus();
+  const rf = SS.sleeveRef(P), eb = SC.editBase(P), st = DLT.getBoundaryState(), sn = snapW(P);
+  ok(rf.source === "pending" && rf.blocked && !eb.ok && P.working.boundaryPreview === null, "10c: 차단 = 기준 없음 · 낡은 미리보기 제거 (" + rf.reason + ")");
+  ok(st && !st.allowed && /^판정 보류 — 소매 Ⓒ 적용이 차단됨/.test(st.reason) && /다시 적용/.test(rf.reason), "10c: 이유 = 사용자 조치(입력 고쳐 다시 적용) (" + st.reason + ")");
+  ok(DLT.doBoundaryPreview() === false && E.apply(P, ln).ok === false && snapW(P) === sn && P.working.sleeveResult == null, "10c: 미리보기·반영 거부 · 상태 그대로");
+  API("C").apply(P, defaultsOf("C")); DLT.syncCutStatus();
+  ok(SS.sleeveRef(P).source === "current" && previewNow() === true && DLT.doBoundaryApply() === true, "10c: 입력을 고쳐 다시 적용 → 기준 회복 · 반영");
+  const ng = P.working.sleeveEdit.geometry, legs0 = g0.outline.filter(q => /dart/.test(q.role || "")), legs1 = ng.outline.filter(q => /dart/.test(q.role || ""));
+  ok(legs0.length === 2 && J(legs1) === J(legs0) && SC.complete(P).ok, "10c: Ⓒ 열린 V 바이트 동일 · 마지막 완료");
+  DLT.setMode("off");
+}
+{
+  // 수정 중(완료 전) 몸판·프리셋 변경 = 옛 기준·수정·미리보기·파트를 현재 것처럼 쓰지 않음
+  const P = sleeveOn("A"), g0 = P.working.geometry.sleeve, xB = g0.outline[1].from.x, xF = g0.outline[2].from.x;
+  bndLine([{ x: xB, y: 44 }, { x: xF, y: 44 }]); previewNow(); DLT.doBoundaryApply();
+  const cut = drawCut([{ x: xB, y: 30 }, { x: xF, y: 30 }], { alt: true }); DLT.syncCutStatus(); DLT.doSplit();
+  ok(DLT.visibleParts(P).length === 2 && P.working.sleeveResult == null, "10d: 수정 중 파트 분리(세션 미리보기) · 완료 없음");
+  const ln = bndLine([{ x: xB, y: 40 }, { x: xF, y: 40 }]); previewNow();
+  ok(!!DLT.visibleBoundaryPreview(P), "10d: 수정 형상 기준 미리보기");
+  // 몸판만 바뀜(재제도 전) → 판정 보류 · 숨김
+  setBodice(P, "B");
+  ok(DLT.visibleParts(P).length === 0 && DLT.visibleBoundaryPreview(P) === null, "10d: 몸판 변경 → 파트·미리보기 숨김(빠른 판정)");
+  const rf = SS.sleeveRef(P), sn = snapW(P);
+  ok(rf.source === "pending" && E.apply(P, ln).ok === false && snapW(P) === sn, "10d: 몸판 변경 = 판정 보류 · 반영 거부 · 상태 그대로 (" + rf.reason + ")");
+  API("A").rederive(P); DLT.syncCutStatus();
+  ok(!P.working.sleeveEdit && P.working.sleeveEditDropped && P.working.sleeveEditDropped.count === 1 && !(P.working.parts || []).some(q => q.sourcePiece === "sleeve") && !P.working.boundaryPreview, "10d: 재제도 → 수정 해제(승계 없음) · 파트·미리보기 제거");
+  const r2 = SS.sleeveRef(P);
+  ok(r2.source === "current" && !r2.edited && r2.sleeveHash === SC.editBase(P).base.hash && r2.bodiceHash === P.working.bodiceResult.hash, "10d: 새 몸판의 새 기준(완료 불필요)");
+  // 프리셋 변경(Ⓐ → Ⓑ) 수정 중
+  bndLine([{ x: xB, y: 44 }, { x: xF, y: 44 }]); previewNow(); DLT.doBoundaryApply();
+  ok(P.working.sleeveEdit && P.working.sleeveEdit.ops.length === 1, "10d: 새 기준에서 다시 수정");
+  P.working.sleeveA = null; API("B").apply(P, defaultsOf("B")); DLT.syncCutStatus();
+  const r3 = SS.sleeveRef(P);
+  ok(!P.working.sleeveEdit && r3.source === "current" && r3.sym === "Ⓑ" && !r3.edited && P.working.sleeveResult == null, "10d: 프리셋 변경 → 수정 해제 · Ⓑ 새 기준 · 완료본 없음");
+  DLT.setMode("off");
+}
+{
+  // Ⓥ 두 장 — 완료 없이 두 번 연속(같은 조각) · 다른 조각 불변 · 마지막 완료
+  const P = sleeveOn("V"), g0 = P.working.geometry.sleeve, cenB = centroid(primsOfPiece(g0, "back"));
+  const ua = g0.outline[roleIdx(g0, "underarm", "back")];
+  bndLine(bulge(ptOn(ua, 0.3), ptOn(ua, 0.65), cenB, 0.6, -1));
+  ok(previewNow() === true && DLT.doBoundaryApply() === true && P.working.sleeveResult == null, "10v: Ⓥ 첫 반영(완료 없음) (" + bNote() + ")");
+  const g1 = P.working.geometry.sleeve, hm = g1.outline[roleIdx(g1, "hem", "back")];
+  bndLine(bulge(ptOn(hm, 0.2), ptOn(hm, 0.8), cenB, 0.7, +1));
+  ok(previewNow() === true && DLT.doBoundaryApply() === true && P.working.sleeveEdit.ops.length === 2 && P.working.sleeveResult == null, "10v: Ⓥ 두 번째 반영(중간 완료 없음) (" + bNote() + ")");
+  ok(J(primsOfPiece(P.working.sleeveEdit.geometry, "front")) === J(primsOfPiece(g0, "front")), "10v: 앞 조각 그대로");
+  const rc = SC.complete(P);
+  ok(rc.ok && rc.result.manualEdit.ops.length === 2 && SC.isCurrentSleeveChanged(P) === false, "10v: 마지막 완료 (" + (rc.reason || "") + ")");
+  DLT.setMode("off");
+}
+{
+  // 미편집 기본+Ⓐ~Ⓩ: 내부 기준 hash = 완료 hash · 내부 기준은 sleeveResult 를 만들지 않음
+  let okAll = true, bad = [];
+  ["base"].concat(SYMS).forEach(sym => { const P = sleeveOn(sym); if (!P) { okAll = false; bad.push(sym + ":apply"); return; }
+    const eb = SC.editBase(P), none = P.working.sleeveResult == null, r = SC.complete(P);
+    if (!eb.ok || !none || !r.ok || eb.base.hash !== r.result.hash || "completedAt" in eb.base) { okAll = false; bad.push(sym); } });
+  ok(okAll, "10: 미편집 27종 내부 기준 hash = 완료 hash · 자동 완료 없음 [" + bad.join(",") + "]");
 }
 
 console.log("══════════════════════════════════════════════");
