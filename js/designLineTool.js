@@ -31,7 +31,8 @@
   const GRID_CM = 0.5;        // snap: 격자 0.5cm(최저 우선순위)
   const EPS = 1e-9;
   const PIECE_GEOM_KEYS = { front: ["front", "shared"], back: ["back"], sleeve: ["sleeve"] };
-  const SNAP_LABEL = { anchor: "기존 anchor", endpoint: "형상 끝점", outline: "외곽선", grid: "격자 0.5cm" };
+  const SNAP_LABEL = { anchor: "기존 anchor", endpoint: "형상 끝점", outline: "외곽선", grid: "격자 0.5cm", seam: "옆선 목표 길이" };
+  const BODICE_COMPOSE_OPTS = Object.freeze({ inheritSideSeam: true });   // 몸판 앞·뒤 합성(designOutline) 전용 — 옆선 의미 승계
   const ROLE_LABEL = { cut: "절개선", boundary: "외곽 대체선", guide: "보조선" };
 
   let mode = "off";
@@ -41,6 +42,9 @@
   let splitState = null;                              // 마지막 파트 분리 판정(syncSplitButton 이 씀 · getSplitState 로 막대가 읽음 · 세션 UI)
   let boundaryState = null;                           // 마지막 외곽 대체 판정(syncBoundaryStatus 가 씀 · getBoundaryState 로 막대가 읽음 · 세션 UI · 2026-11-06)
   let lastHandleGeo = null;                           // 핸들 드래그 중 마지막 커서(형상 cm) — Shift 즉시 반영
+  // 옆선 길이 자석(2026-11-06 · 세션 UI 설정 — 형상·완료본 무관): 켜짐/꺼짐 · 기준판(고정되는 판). seamCtx = 드래그 시작 때 한 번 만든 문맥,
+  //   seamLive = 드래그 중 표시값(막대·캔버스 라벨). 드래그가 끝나면 둘 다 비우고 표시는 권위 계측(bodiceCheckpoint)으로 돌아간다.
+  let seamMagnetOn = true, seamBasis = "back", seamCtx = null, seamLive = null, seamStateCache = null;
 
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
   function inDesign() { return typeof window.isDesignStageActive === "function" && window.isDesignStageActive() && !!project(); }
@@ -265,7 +269,9 @@
   //   · boundary         = (P0.3a) 생산자가 선언한 경계 identity { root, ranges:[[from,to]] }.
   //                        세그먼트(line/cubic) 하나는 구간 하나. 자르면 root 는 유지·구간만 좁히고
   //                        뒤집으면 구간 방향을 바꾼다. 매핑할 수 없으면 **버린다**(추측 금지).
-  const SEMANTIC_KEYS = ["edge", "edgeStatus", "edgeSourceLineId", "dart", "boundary"];
+  //   · edgeInherited    = (2026-11-06) 몸판 합성에서 대체된 원래 구간이 **전부 명시 side-seam** 이라 그 의미를 이어받았다는 표식(true).
+  //   · replacedEdges    = (2026-11-06) 승계하지 못한 unresolved 대체선이 덮은 원래 의미 목록(옆선 일부를 덮었으면 측정 불가 판정용).
+  const SEMANTIC_KEYS = ["edge", "edgeStatus", "edgeSourceLineId", "dart", "boundary", "edgeInherited", "replacedEdges"];
   //   ★ 중첩 객체(dart)는 **값 복제**한다 — 참조로 옮기면 잘라낸/뒤집은/합성한 작업 형상과
   //   원본 working.geometry 가 같은 객체를 공유해, 한쪽 변형이 다른 쪽을 오염시킨다.
   //   문자열 값(edge·edgeStatus·edgeSourceLineId)은 불변이라 그대로 옮긴다.
@@ -516,7 +522,23 @@
     const dRev = Math.hypot(bnd[0].from.x - keptStart.x, bnd[0].from.y - keptStart.y) + Math.hypot(bnd[bnd.length - 1].to.x - keptEnd.x, bnd[bnd.length - 1].to.y - keptEnd.y);
     if (dRev < dFwd) bnd = bnd.slice().reverse().map(reverseSeg);
     bnd[0].from = _pt(keptEnd); bnd[bnd.length - 1].to = _pt(keptStart);
+    if (opts.inheritSideSeam) _inheritSideSeam(bnd, replaced);
     return { ok: true, kept: kept, replaced: replaced, bnd: bnd, aPos: aPos, bPos: bPos };
+  }
+  // 몸판 옆선 의미 승계(2026-11-06 김님 확정 «대체 구간 의미 승계» — 소매 «대체 구간 의미 하나»와 같은 원칙).
+  //   대체된 원래 구간이 **전부 명시 edge "side-seam"**(허리 아래 연장 포함)일 때만, 의미 미지정 대체 구간에 side-seam 을 싣는다.
+  //   좌표·형상 유사성은 보지 않는다(대체 구간의 선언 의미만). 다른 의미(진동·밑단·허리·구성선)가 섞이면 승계하지 않고
+  //   unresolved 그대로 두되, 옆선 일부를 덮었다는 기록(replacedEdges)을 남겨 계측이 틀린 수치를 내지 않게 한다.
+  //   명시 의미가 이미 있는 대체 구간(목선 전환 도구 등)은 건드리지 않는다. 몸판 합성 경로만 opts.inheritSideSeam 으로 켠다.
+  function _inheritSideSeam(bnd, replaced) {
+    const edges = [];
+    replaced.forEach(o => { const e = (o.source === "outline" && typeof o.seg.edge === "string") ? o.seg.edge : "(none)"; if (edges.indexOf(e) < 0) edges.push(e); });
+    const pure = edges.length === 1 && edges[0] === "side-seam";
+    bnd.forEach(sg => {
+      if (sg.edgeStatus !== "unresolved") return;
+      if (pure) { sg.edge = "side-seam"; delete sg.edgeStatus; sg.edgeInherited = true; }
+      else if (edges.indexOf("side-seam") >= 0) sg.replacedEdges = edges.slice().sort();
+    });
   }
   // 대체선으로 ring 의 **짧은 arc** 를 교체한 파생 outline 반환(단일). 원본 geometry 불변.
   //   opts.keepDartlegs(2026-11-06 소매 외곽 대체): 유지 arc 의 dartleg 구간도 출력에 남긴다 — 소매의 열린 다트 V(Ⓒ·Ⓦ)는
@@ -1189,6 +1211,103 @@
     syncCutStatus(); rerender(); sleeveUIRefresh();
     return !!r.ok;
   }
+  // ── 옆선 길이 자석 ──
+  //   길이 = bodiceCheckpoint 의 옆선 봉제 길이(같은 segLen · 같은 명시 side-seam 집합). 드래그 중에는 남은 외곽 몫 K(시작 때 권위 계측 −
+  //   이 선 몫)를 고정하고 이 선의 몫만 다시 잰다 — 이 선 밖의 점(진동점·허리점·밑단·기준판)은 움직이지 않으므로 K 는 그대로다.
+  //   손 뗀 뒤 실제 커밋은 종전 재합성(recomposeAfterBoundaryEdit) → 완료 검사가 권위로 다시 잰다.
+  const SEAM_OTHER = { front: "back", back: "front" };
+  function seamMulti(g) { return !!(g && (g.frontPeplum || g.backPeplum || g.frontYoke || g.shoulderYoke || g.frontCenter || g.backCenter)); }
+  function _chainEnds(line, mySegs) {
+    const pts = []; mySegs.forEach(sg => { pts.push(sg.from); pts.push(sg.to); });
+    const near = q => pts.reduce((b, r) => (Math.hypot(r.x - q.x, r.y - q.y) < Math.hypot(b.x - q.x, b.y - q.y) ? r : b), pts[0]);
+    const s0 = line.segments[0].from, s1 = line.segments[line.segments.length - 1].to;
+    return { E0: _pt(near(s0)), E1: _pt(near(s1)) };
+  }
+  // 선(line) 하나의 옆선 문맥(순수 판정 · p 미변경). {touches, ok, reason, piece, K, ref, T, intent, E0, E1, keptFlat, comp}
+  function seamInfoFor(p, line) {
+    const BC = window.bodiceCheckpoint, M = window.sideSeamMagnet;
+    if (!line || line.role !== "boundary" || (line.piece !== "front" && line.piece !== "back")) return { touches: false };
+    if (!BC || !BC.measureSideSeam || !M) return { touches: false };
+    if (!isOriginalBodiceContext(p)) return { touches: true, ok: false, reason: "소매 파생 몸판 맥락 — 옆선 자석은 원래 몸판 전용(파생 몸판 옆선은 소매 완료본 소유)" };
+    if (seamMulti(p.working.geometry)) return { touches: true, ok: false, reason: "다조각 몸판(페플럼·요크·프린세스) — 옆선 자석 범위 밖" };
+    const comp = composeWith(p.working.geometry, p.working.patternLines);
+    if (!comp.ok) return { touches: true, ok: false, reason: "현재 외곽 합성 불가: " + comp.reason };
+    const dO = comp.designOutline || {}, piece = line.piece, other = SEAM_OTHER[piece];
+    const outl = dO[piece] ? dO[piece].outline : null;
+    const mine = outl ? outl.filter(sg => sg.edgeSourceLineId === line.id) : [];
+    if (!mine.length) return { touches: false };
+    const inh = mine.every(sg => sg.edge === "side-seam" && sg.edgeInherited === true);
+    const partial = mine.some(sg => Array.isArray(sg.replacedEdges) && sg.replacedEdges.indexOf("side-seam") >= 0);
+    if (!inh) return partial ? { touches: true, ok: false, reason: "이 대체선이 옆선과 다른 외곽(" + mine[0].replacedEdges.filter(e => e !== "side-seam").join("·") + ")에 걸쳐 옆선 의미를 정할 수 없음 — 옆선 구간 안에서 시작·끝내세요(옆선 측정 불가)" } : { touches: false };
+    const msMe = BC.measureSideSeam(outl);
+    const otherOutl = dO[other] ? dO[other].outline : BC.effectiveOutline({ working: Object.assign({}, p.working, { designOutline: null }) }, other);
+    const msRef = BC.measureSideSeam(otherOutl);
+    if (msMe.status !== "measured") return { touches: true, ok: false, reason: "이 판 옆선 측정 불가" };
+    if (msRef.status !== "measured") return { touches: true, ok: false, reason: (other === "front" ? "앞판" : "뒤판") + " 옆선 측정 불가 — 기준 길이가 없음" };
+    const si = BC.sideSeamIntent(p); if (!si.ok) return { touches: true, ok: false, reason: "저장된 옆선 의도가 올바르지 않음 — 다시 지정하세요" };
+    const myLen = mine.reduce((a, sg) => a + BC.sideSeamSegLen(sg), 0);
+    const ends = _chainEnds(line, mine);
+    const keptFlat = flattenLine(outl.filter(sg => sg.edgeSourceLineId !== line.id));
+    const base = { touches: true, piece: piece, other: other, len: msMe.length, ref: msRef.length, K: msMe.length - myLen, intent: si.intent,
+      T: M.targetFor(piece, msRef.length, si.intent), E0: ends.E0, E1: ends.E1, keptFlat: keptFlat, composed: !!(p.working.designOutline && p.working.designOutline[piece] && (p.working.designOutline[piece].lineIds || []).indexOf(line.id) >= 0) };
+    if (!seamMagnetOn) return Object.assign(base, { ok: false, reason: "옆선 자석 꺼짐" });
+    if (seamBasis === piece) return Object.assign(base, { ok: false, reason: "기준판(" + (piece === "front" ? "앞" : "뒤") + ")은 고정 — " + (piece === "front" ? "뒤판" : "앞판") + " 옆선을 편집하면 붙습니다" });
+    return Object.assign(base, { ok: true });
+  }
+  function _forcedLen(c, segs) {
+    const BC = window.bodiceCheckpoint, cl = segs.map(cloneSeg);
+    cl[0].from = _pt(c.E0); cl[cl.length - 1].to = _pt(c.E1);
+    return cl.reduce((a, sg) => a + BC.sideSeamSegLen(sg), 0);
+  }
+  function _seamValid(c, segs) {
+    const f = flattenLine(segs);
+    for (let i = 0; i < f.length; i++) for (let j = i + 2; j < f.length; j++) if (segCross(f[i][0], f[i][1], f[j][0], f[j][1])) return { ok: false, reason: "self-cross" };
+    for (const kb of c.keptFlat) for (const bs of f) { const q = segCross(bs[0], bs[1], kb[0], kb[1]); if (q && !nearAny(q, [c.E0, c.E1], 0.05)) return { ok: false, reason: "kept-cross" }; }
+    return { ok: true };
+  }
+  // 한 프레임: build(Q) = 점/핸들이 Q 일 때 이 선의 세그먼트. 반환 {snapped, point?} — seamLive 갱신.
+  function seamStep(cursor, build, minPoint) {
+    const c = seamCtx, M = window.sideSeamMagnet;
+    const f = Q => c.K + _forcedLen(c, build(Q));
+    const r = M.decide({ f: f, T: c.T, cursor: cursor, pxToCm: pxToCm(), locked: !!(seamLive && seamLive.locked),
+      valid: Q => _seamValid(c, build(Q)), minLen: minPoint ? f(minPoint) : undefined });
+    return { r: r, f: f };
+  }
+  function setSeamLive(c, len, r) {
+    seamLive = { piece: c.piece, len: len, ref: c.ref, T: c.T, remain: len - c.T, snapped: !!(r && r.snapped), locked: !!(r && r.locked), reason: r && !r.snapped ? r.reason : null, intent: c.intent };
+  }
+  function fmt2(v) { return (Math.round(v * 100) / 100).toFixed(2); }
+  function fmtS(v) { const a = Math.round(v * 100) / 100; return (a > 0 ? "+" : a < 0 ? "−" : "±") + Math.abs(a).toFixed(2); }
+  function seamLiveText(L) {
+    const M = window.sideSeamMagnet, me = L.piece === "front" ? "앞" : "뒤", ot = L.piece === "front" ? "뒤" : "앞";
+    return me + " 옆선 " + fmt2(L.len) + " · " + ot + "(고정) " + fmt2(L.ref) + " · 목표 " + fmt2(L.T) + " · 남은 " + fmtS(L.len - L.T) + "cm" + (L.snapped ? " · 자석 붙음" : (L.reason && L.reason !== "far" ? " · " + M.reasonText(L.reason) : ""));
+  }
+  // 막대(선택 선) 표시: 권위 계측(완료가 보는 유효 외곽) + 의도 + 자석 상태. render 마다 재합성하지 않도록 출처 키 캐시.
+  function getSeamState() {
+    const p = project(); if (!p || mode !== "select" || !selectedId) return null;
+    if (seamLive && editDrag) return { show: true, live: true, text: seamLiveText(seamLive), magnet: { on: seamMagnetOn, basis: seamBasis } };
+    const line = findLine(selectedId); if (!line || line.role !== "boundary" || (line.piece !== "front" && line.piece !== "back")) return null;
+    const key = J_(p.working.patternLines) + "|" + J_(p.working.sideSeamIntent || null) + "|" + seamMagnetOn + seamBasis + "|" + line.id + "|" + J_(p.working.designOutline ? Object.keys(p.working.designOutline).map(k => p.working.designOutline[k].lineIds) : null);
+    if (seamStateCache && seamStateCache.key === key && seamStateCache.geom === p.working.geometry) return seamStateCache.val;
+    const info = seamInfoFor(p, line);
+    let val = null;
+    if (info.touches) {
+      const BC = window.bodiceCheckpoint, M = window.sideSeamMagnet;
+      const c = BC.check(p).sideSeam;   // 권위(완료 게이트와 같은 판정)
+      const st = { match: "정합", check: "확인", mismatch: "불일치", unmeasured: "측정 불가" }[c.status] || c.status;
+      const D = M.targetDiff(info.intent || null);
+      let text = c.status === "unmeasured" ? "옆선 측정 불가(완료 불가)" :
+        "옆선 앞 " + fmt2(c.front) + " · 뒤 " + fmt2(c.back) + " · 뒤−앞 " + fmtS(c.back - c.front) + " · 목표 " + fmtS(D) + " · 잔차 " + fmt2(Math.abs((c.back - c.front) - D)) + "cm(" + st + ")";
+      if (info.T != null && info.composed === false) text += " · 외곽 합성 전(완료 판정은 아직 원래 옆선) — 이 선 길이 반영 시 " + (info.piece === "front" ? "앞 " : "뒤 ") + fmt2(info.len);
+      val = { show: true, live: false, text: text, magnet: { on: seamMagnetOn, basis: seamBasis, active: !!info.ok, reason: info.ok ? null : info.reason } };
+    }
+    seamStateCache = { key: key, geom: p.working.geometry, val: val };
+    return val;
+  }
+  function getSeamLive() { return seamLive && editDrag ? Object.assign({}, seamLive, { text: seamLiveText(seamLive) }) : null; }
+  function setSeamMagnet(on) { seamMagnetOn = !!on; seamStateCache = null; if (window.designLineQuickBar) window.designLineQuickBar.sync(); return seamMagnetOn; }
+  function setSeamBasis(b) { if (b !== "front" && b !== "back") return seamBasis; seamBasis = b; seamStateCache = null; if (window.designLineQuickBar) window.designLineQuickBar.sync(); return seamBasis; }
+  function getSeamSettings() { return { on: seamMagnetOn, basis: seamBasis }; }
   // ── 디자인 외곽 합성 DOM 연동 ──
   function pieceBoundaries(piece) { return lines().filter(l => l.piece === piece && l.role === "boundary"); }
   // 한 piece 의 모든 boundary 를 **원본 ring 기준으로** 합성. {ok, empty?, outline?, lineIds?, reason?}.
@@ -1198,7 +1317,7 @@
     const keys = PIECE_GEOM_KEYS[piece] || [piece];
     const rb = buildPieceRing(outlineSegsOf(p.working.geometry, keys), constrLinesOf(p.working.geometry, keys));   // ★ 원본 ring
     if (!rb.ok) return { ok: false, reason: rb.reason };
-    const res = composeDesignOutline(rb.ring, bl.map(boundarySegsOf));
+    const res = composeDesignOutline(rb.ring, bl.map(boundarySegsOf), BODICE_COMPOSE_OPTS);
     if (!res.ok) return { ok: false, reason: res.reason };
     return { ok: true, outline: res.outline, lineIds: bl.map(l => l.id) };
   }
@@ -1251,6 +1370,18 @@
       : isNeckAutoLine(selectedId) ? "네크라인 전용선 · 역할 변경·삭제 금지(기본형으로 돌아가기로만) · anchor/핸들만 편집"
       : "선택됨 · Delete 삭제 · anchor/핸들 드래그 · Esc 해제") : SELECT_NOTE);
   }
+  // 편집 드래그 시작: 대상(중간 anchor·핸들)이 옆선 승계 대체선이면 자석 문맥을 만든다. 끝점 anchor = 외곽 연결점이라 자석 없음.
+  function seamBegin() {
+    seamCtx = null; seamLive = null;
+    if (!editDrag) return;
+    const p = project(), line = findLine(selectedId); if (!p || !line) return;
+    const info = seamInfoFor(p, line); if (!info.touches) return;
+    const nA = line.segments.length + 1;
+    // 끝점을 옮기면 대체 구간 자체(남은 외곽 몫 K)가 바뀐다 → 드래그 중 길이 표시·자석 없음(손 떼면 권위 계측으로 표시).
+    if (editDrag.kind === "anchor" && (editDrag.k === 0 || editDrag.k === nA - 1)) { seamCtx = { touches: true, ok: false, T: null, reason: "끝점은 외곽 연결점 — 옆선 자석은 중간 점·곡선 핸들에서 작동" }; return; }
+    seamCtx = info;
+    if (info.T != null) setSeamLive(info, info.len, null);
+  }
   // draw 곡선 핸들: 커서 g(형상 cm) → 마지막 anchor.h. Shift=45° 고정(길이 유지).
   function applyDrawHandle(g, shift) {
     const anchor = draft.anchors[draft.anchors.length - 1];
@@ -1263,10 +1394,20 @@
       lastHandleGeo = { x: geo.x, y: geo.y };
       const seg = line.segments[editDrag.seg];
       const anchor = editDrag.which === "c1" ? seg.from : seg.to;             // c1=from쪽 · c2=to쪽 기준
-      let tip = { x: geo.x, y: geo.y };                                       // 핸들 위치 snap 없음(자유)
+      let tip = { x: geo.x, y: geo.y };                                       // 핸들 위치 snap 없음(자유) — 옆선 길이 자석만 예외
       if (shiftKey) { const v = constrainAngle45(geo.x - anchor.x, geo.y - anchor.y); tip = { x: anchor.x + v.x, y: anchor.y + v.y }; }
+      snapHint = null;
+      let mg = null;
+      if (seamCtx && seamCtx.T != null) {
+        const which = editDrag.which, si = editDrag.seg;
+        const build = Q => line.segments.map((sg, ix) => { if (ix !== si) return sg; const o = cloneSeg(sg); o[which] = { x: Q.x, y: Q.y }; return o; });
+        if (seamCtx.ok && !shiftKey && !altKey) { const st = seamStep(tip, build); mg = st.r; if (mg.snapped) tip = mg.point; setSeamLive(seamCtx, mg.snapped ? mg.value : st.f(tip), mg); }
+        if (seamLive) seamLive.at = { x: tip.x, y: tip.y };
+        else setSeamLive(seamCtx, seamCtx.K + _forcedLen(seamCtx, build(tip)), null);
+        if (mg && mg.snapped) snapHint = { piece: line.piece, point: { x: tip.x, y: tip.y }, type: "seam" };
+      }
       seg[editDrag.which] = tip;                                              // 선택한 c1/c2만(반대쪽 강제 대칭 없음)
-      snapHint = null; setNote(shiftKey ? "핸들 45° 각도 고정 (Shift)" : "핸들 이동 · Shift = 45° 고정");
+      setNote(seamLive ? seamLiveText(seamLive) + (seamCtx && !seamCtx.ok ? " · 자석 없음: " + seamCtx.reason : "") : (shiftKey ? "핸들 45° 각도 고정 (Shift)" : "핸들 이동 · Shift = 45° 고정"));
     } else {                                                                  // anchor: 총 delta + snap
       const oa = editDrag.origAnchor;
       const nx = oa.x + (geo.x - editDrag.startGeo.x), ny = oa.y + (geo.y - editDrag.startGeo.y);
@@ -1281,7 +1422,19 @@
         const snap = snapForCursor({ x: nx, y: ny }, line.piece, altKey, oa);   // 자기 자신 anchor 제외
         t = snap ? snap.point : { x: nx, y: ny };
         snapHint = snap ? { piece: line.piece, point: snap.point, type: snap.type } : null;
-        setNote(snapHint ? ("흡착 → " + (SNAP_LABEL[snapHint.type] || snapHint.type)) : "anchor 이동 · Esc 해제");
+        // 옆선 길이 자석: 의도한 점 흡착(anchor·끝점)이 우선, 외곽선·격자보다는 앞선다. Alt = 모든 흡착 해제(종전).
+        if (seamCtx && seamCtx.T != null) {
+          const k = editDrag.k, orig = editDrag.orig;
+          const build = Q => { const tmp = { segments: JSON.parse(JSON.stringify(orig)) }; moveAnchor(tmp, k, Q.x - oa.x, Q.y - oa.y); return tmp.segments; };
+          if (seamCtx.ok && !altKey && (!snap || snap.type === "grid" || snap.type === "outline")) {   // 외곽선 흡착은 편집 중인 옆선 자체에 걸리므로 자석이 앞선다(점 흡착 anchor·끝점은 우선)
+            const a = anchorsFromSegments(orig), nb = (orig[k - 1] && orig[k - 1].kind === "line" && orig[k] && orig[k].kind === "line") ? { x: (a[k - 1].x + a[k + 1].x) / 2, y: (a[k - 1].y + a[k + 1].y) / 2 } : null;
+            const st = seamStep({ x: nx, y: ny }, build, nb), mg = st.r;
+            if (mg.snapped) { t = mg.point; snapHint = { piece: line.piece, point: { x: t.x, y: t.y }, type: "seam" }; }
+            setSeamLive(seamCtx, mg.snapped ? mg.value : st.f(t), mg);
+          } else setSeamLive(seamCtx, seamCtx.K + _forcedLen(seamCtx, build(t)), null);
+          if (seamLive) seamLive.at = { x: t.x, y: t.y };
+        }
+        setNote(seamLive ? seamLiveText(seamLive) + (seamCtx && !seamCtx.ok ? " · 자석 없음: " + seamCtx.reason : "") : snapHint ? ("흡착 → " + (SNAP_LABEL[snapHint.type] || snapHint.type)) : "anchor 이동 · Esc 해제");
       }
       line.segments = JSON.parse(JSON.stringify(editDrag.orig));
       moveAnchor(line, editDrag.k, t.x - oa.x, t.y - oa.y);
@@ -1314,6 +1467,7 @@
       } else { // select
         if (!piece) { selectedId = null; editDrag = null; setNote(SELECT_NOTE); }
         else selectDown(e, piece, geoAt(e, piece));
+        seamBegin();                          // 옆선 자석 문맥(편집 드래그 시작 때 한 번 — 매 프레임 재합성 없음)
         syncRoleButtons(); syncCutStatus();   // 선택 변화 → 역할 버튼·절개 검사 갱신
       }
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
@@ -1349,7 +1503,7 @@
         else if (edited && edited.role === "boundary" && edited.piece === "sleeve") { const p = project(); if (p && p.working.boundaryPreview && p.working.boundaryPreview.sourceLineId === edited.id) p.working.boundaryPreview = null; }   // 소매 대체선 편집 → 그 미리보기만 무효(몸판 합성 외곽은 소매 선과 무관 · 2026-11-06)
         else if (edited && edited.role === "boundary") recomposeAfterBoundaryEdit();   // 대체선 편집 → designOutline 재합성
         else invalidateParts();                                                   // 그 외(cut/guide) → 파생 무효화
-        editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {}
+        editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; seamCtx = null; seamLive = null; seamStateCache = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {}
         if (edited && (edited.role === "cut" || edited.role === "boundary")) syncCutStatus();   // 앵커·핸들을 옮긴 뒤의 실제 상태(이동 전 문구를 남기지 않음 · 대체선 포함 2026-11-06)
         rerender(); notifyDesignResult();
       }
@@ -1375,7 +1529,7 @@
         else if (e.key === "Enter" && draft) { e.preventDefault(); commitDraft(); }
         else if (e.key === "Backspace" && draft) { e.preventDefault(); draftBackspace(); }
       } else { // select
-        if (e.key === "Escape") { selectedId = null; editDrag = null; setNote(SELECT_NOTE); syncRoleButtons(); syncCutStatus(); rerender(); }
+        if (e.key === "Escape") { selectedId = null; editDrag = null; seamCtx = null; seamLive = null; setNote(SELECT_NOTE); syncRoleButtons(); syncCutStatus(); rerender(); }
         else if ((e.key === "Delete" || e.key === "Backspace") && selectedId) { e.preventDefault(); deleteSelected(); }
       }
     });
@@ -1402,7 +1556,7 @@
       const keys = PIECE_GEOM_KEYS[pc] || [pc];
       const rb = buildPieceRing(outlineSegsOf(geometry, keys), constrLinesOf(geometry, keys));
       if (!rb.ok) return { ok: false, reason: rb.reason };
-      const res = composeDesignOutline(rb.ring, bl.map(boundarySegsOf));
+      const res = composeDesignOutline(rb.ring, bl.map(boundarySegsOf), BODICE_COMPOSE_OPTS);
       if (!res.ok) return { ok: false, reason: res.reason };
       result[pc] = { outline: res.outline, lineIds: bl.map(l => l.id) };
     }
@@ -1537,6 +1691,8 @@
     editBodiceRef, cutStatusOf, cutStatusText, snapForCursor, isOriginalBodiceContext, displayedDerivedPiece, syncCutStatus: () => syncCutStatus(),
     doSplit, invalidateParts, visibleParts, pruneStaleSleeveParts, doBoundaryPreview, doBoundaryApply, doSleeveEditUndo, validateSelectedBoundary, doComposeDesignOutline,
     getBoundaryState, visibleBoundaryPreview, boundaryStatusOf, pruneStaleBoundaryPreview,
+    // 옆선 길이 자석(2026-11-06)
+    getSeamState, getSeamLive, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, segmentDegenerate, lineDegenerate, distToLine, distToSegment, handlesOf,

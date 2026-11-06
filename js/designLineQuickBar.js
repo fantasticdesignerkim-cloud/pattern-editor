@@ -57,7 +57,8 @@
         text: stage === "applied" ? (bs.edit && bs.edit.pending ? "반영됨 · 수정 중 — 다 고치면 «소매 모양 완료»" : "반영됨 · 소매 외곽의 일부")
           : stage === "confirm" ? (bs.apply.allowed ? "미리보기 확인 · «외곽 반영»을 눌러야 소매에 반영됩니다" : "반영 불가 · " + bs.apply.reason)
           : bs.allowed ? (bs.shown ? "미리보기 표시 중 · 보라 외곽(완성 외곽 아님)" : bs.reason) : "대체 불가 · " + bs.reason } : null;
-      return { kind: "select", key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };
+      const seam = (!lock && role === "boundary" && s.sel.seam && s.sel.seam.show) ? { text: s.sel.seam.text, on: !!s.sel.seam.magnet.on, reason: s.sel.seam.magnet.reason || null, basis: s.sel.seam.magnet.basis } : null;
+      return { kind: "select", seam: seam, key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };
     }
     return null;
   }
@@ -120,7 +121,7 @@
   // ── DOM ──
   let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
   let splitRow = null, splitBtn = null, splitReason = null;
-  let bndRow = null, bndBtn = null, bndReason = null, bndApply = null, bndUndo = null;
+  let bndRow = null, bndBtn = null, bndReason = null, bndApply = null, bndUndo = null, seamRow = null, seamToggle = null, seamText = null;
   let headRow = null, compactRow = null, compactText_ = null, expandBtn = null;
   let expandedKey = null;             // 소형 상태줄에서 «도구»로 펼친 결과 키(UI 전용 · 선택·결과가 바뀌거나 캔버스를 누르면 풀림)
   let splitNote = null;                // {key, text}: 막대 «파트 분리»를 눌렀는데 파트가 안 생겼을 때 doSplit 이 남긴 안내(#designSplitNote) — 선택이 바뀌면 버림
@@ -143,7 +144,7 @@
       const id = T.getSelectedId(), l = id ? T.findLine(id) : null;
       if (!l) return { design: true, mode: mode, sel: null };
       const lock = T.isNeckAutoLine(id) ? "neck" : T.isSleeveCapLine(l) ? "cap" : T.isCollarBodyLine(l) ? "collar" : null;
-      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, split: T.getSplitState ? T.getSplitState() : null, boundary: T.getBoundaryState ? T.getBoundaryState() : null } };
+      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, split: T.getSplitState ? T.getSplitState() : null, boundary: T.getBoundaryState ? T.getBoundaryState() : null, seam: T.getSeamState ? T.getSeamState() : null } };
     }
     return { design: true, mode: mode };
   }
@@ -211,6 +212,10 @@
     drawRow.hidden = vm.kind !== "draw";
     roleRow.hidden = vm.kind !== "select";
     if (vm.kind !== "select") { splitRow.hidden = true; if (bndRow) bndRow.hidden = true; }
+    if (seamRow) {   // 옆선 길이 자석 행(2026-11-06): 몸판 외곽이 옆선 구간을 대체할 때만 · 같은 권위 계측·자석 상태(getSeamState)
+      const sm = vm.kind === "select" ? vm.seam : null; seamRow.hidden = !sm;
+      if (sm) { seamText.textContent = sm.text + (sm.on && sm.reason ? " · 자석 없음: " + sm.reason : ""); seamToggle.textContent = sm.on ? "옆선 자석 켬" : "옆선 자석 꺼짐"; seamToggle.setAttribute("aria-pressed", sm.on ? "true" : "false"); seamRow.setAttribute("data-state", sm.on && !sm.reason ? "ok" : "no"); }
+    }
     dismissBtn.hidden = vm.kind !== "select";        // 그리기 중엔 접기 없음(완료·취소만 명시적으로)
     if (vm.kind === "draw") {
       finishBtn.disabled = !vm.canFinish; finishBtn.setAttribute("aria-disabled", vm.canFinish ? "false" : "true");
@@ -286,7 +291,7 @@
     if (on) {
       const t = compactText(vm);
       compactText_.textContent = t;
-      headRow.hidden = true; roleRow.hidden = true; splitRow.hidden = true; if (bndRow) bndRow.hidden = true; drawRow.hidden = true; compactRow.hidden = false;
+      headRow.hidden = true; roleRow.hidden = true; splitRow.hidden = true; if (seamRow) seamRow.hidden = true; if (bndRow) bndRow.hidden = true; drawRow.hidden = true; compactRow.hidden = false;
       bar.setAttribute("aria-label", "패턴선 빠른 조작 · " + vm.title + " · " + t);
     } else { compactRow.hidden = true; headRow.hidden = false; }
   }
@@ -347,6 +352,7 @@
     bndReason = document.getElementById("lineQuickBoundaryReason");
     bndApply = document.getElementById("lineQuickBoundaryApply");
     bndUndo = document.getElementById("lineQuickBoundaryUndo");
+    seamRow = bar.querySelector('[data-lqb="seam"]'); seamToggle = document.getElementById("lineQuickSeamToggle"); seamText = document.getElementById("lineQuickSeamText");
     expandBtn = document.getElementById("lineQuickExpand");
 
     // 막대 위 조작은 캔버스(점 추가·피스 드래그·팬)로 가지 않는다.
@@ -358,6 +364,7 @@
     splitBtn.addEventListener("click", () => { actSplit(); });
     if (bndBtn) bndBtn.addEventListener("click", () => { actBoundary(); });   // 외곽 대체 미리보기 = 오른쪽 버튼과 같은 doBoundaryPreview
     if (bndApply) bndApply.addEventListener("click", () => { actBoundaryApply(); });   // 외곽 반영 = 오른쪽 버튼과 같은 doBoundaryApply
+    if (seamToggle) seamToggle.addEventListener("click", () => { const T = tool(); if (!T || !T.getSeamSettings) return; T.setSeamMagnet(!T.getSeamSettings().on); const c = document.getElementById("chkSeamMagnet"); if (c) c.checked = T.getSeamSettings().on; sync(); });   // 설정 패널 체크박스와 같은 상태
     if (bndUndo) bndUndo.addEventListener("click", () => { const T = tool(); if (T && T.doSleeveEditUndo) T.doSleeveEditUndo(); sync(); });   // 되돌리기 = 오른쪽과 같은 doSleeveEditUndo
     // 소형 상태줄 «도구» = 이 결과에 대해 전체 막대(역할·파트 분리)로 복귀.
     if (expandBtn) expandBtn.addEventListener("click", () => { const vm = describe(snapshot()); expandedKey = resultKey(vm); sync();

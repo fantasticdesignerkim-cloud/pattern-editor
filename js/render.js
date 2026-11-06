@@ -726,6 +726,14 @@ function render(){
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
       if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay
       if (_snap && _snap.piece === pc) _appendSnapHint(grp, _snap.point);              // 흡착 표시(cyan)
+      {   // 옆선 길이 자석 드래그 중 표시(2026-11-06): 앞·뒤 실제 길이·목표·남은 차 — 편집 점 바로 옆(막대는 드래그 중 숨김)
+        const _sl = (_dlt && _dlt.getSeamLive) ? _dlt.getSeamLive() : null;
+        if (_sl && _sl.at && _sl.piece === pc) {
+          const [_lx, _ly] = c2p(_sl.at.x, _sl.at.y);
+          const _t = E("text", { x: _lx + 12, y: _ly - 10, class: "design-seam-live" + (_sl.snapped ? " snapped" : ""), "data-seam-live": "1" }, _sl.text);
+          grp.appendChild(_t);
+        }
+      }
       workRoot.appendChild(grp);
     });
     svg.appendChild(workRoot);

@@ -100,6 +100,8 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-working .design-line-anchor{fill:#fff;stroke:var(--cyan);stroke-width:1.6}
 /* snap 흡착 표시(cyan 링). */
 .design-working .design-snap-ring{fill:none;stroke:var(--cyan);stroke-width:1.6;opacity:.9}
+.design-working .design-seam-live{font-size:11px;fill:var(--text,#222);paint-order:stroke;stroke:var(--bg,#fff);stroke-width:3px;pointer-events:none}
+.design-working .design-seam-live.snapped{fill:var(--cyan)}
 .design-working .design-snap-dot{fill:var(--cyan);stroke:none}
 #btnDesignLine[aria-pressed="true"],#btnDesignSelect[aria-pressed="true"],#btnRoleCut[aria-pressed="true"],#btnRoleBoundary[aria-pressed="true"],#btnRoleGuide[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
 /* 절개선 유효성: 통과=녹색 / 실패=빨강. */
@@ -456,3 +458,10 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 소형 상태줄(분리 결과 확인 · 좁은 화면에서 빈자리가 없을 때만): 글 + «도구» 44px. 도구 버튼을 줄이지 않는다. */
 .lqb-compact{display:flex;align-items:center;gap:8px;padding-left:6px}
 .lqb-compact-text{font-size:12px;color:#0E7490;white-space:nowrap}
+
+/* 옆선 길이 맞춤 설정(2026-11-06): 터치(coarse)에서 새 컨트롤은 44px 이상 — 기존 패널 컨트롤 크기는 건드리지 않는다 */
+@media (pointer: coarse) {
+  #selSeamIntent, #inpSeamEase, #btnApplySeamIntent, #selSeamBasis { min-height: 44px; }
+  #chkSeamMagnet { width: 24px; height: 24px; }
+  label:has(> #chkSeamMagnet) { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+}

@@ -312,7 +312,7 @@ const P = projectWithBodice(A_ID); SWA.apply(P, { sleeveLengthCm: SL });
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8");
   const ver = (f) => { const mm = html.match(new RegExp("js/" + f.replace(".", "\\.") + "\\?v=(\\d+)")); return mm ? mm[1] : null; };
-  ok(["designSleeveW.js", "sleeveWApply.js", "designSleeveV.js"].every(f => ver(f) === "2026110301") && ["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === (f === "ui.js" || f === "sleeveCheckpoint.js" ? "2026110604" : f === "sleeveAnnotation.js" ? "2026110404" : "2026110403")), "12: 변경 파일 캐시 버전 2026110301");
+  ok(["designSleeveW.js", "sleeveWApply.js", "designSleeveV.js"].every(f => ver(f) === "2026110301") && ["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === (f === "ui.js" ? "2026110605" : f === "sleeveCheckpoint.js" ? "2026110604" : f === "sleeveAnnotation.js" ? "2026110404" : "2026110403")), "12: 변경 파일 캐시 버전 2026110301");
   ok(html.indexOf("js/designSleeveV.js") < html.indexOf("js/designSleeveW.js") && html.indexOf("js/designSleeveW.js") < html.indexOf("js/sleeveWApply.js") && html.indexOf("js/sleeveWApply.js") < html.indexOf("js/ui.js"), "12: 스크립트 순서(Ⓥ 엔진 → Ⓦ 엔진 → 상태 → ui)");
   const rec = SP.get("bunka-sleeve-W");
   ok(/id="rowSleeveW" hidden/.test(html) && rec.inputs.slice(1).every(i => new RegExp('id="inpSleeveW_' + i.key + '" type="number" step="[0-9.]+" value="' + String(i.defaultValue).replace(".", "\\.") + '"').test(html)) && !/inpSleeveW_spFairCm/.test(html), "12: Ⓦ 입력 칸 20개 = 레코드 기본값 · SP 다듬기 칸 없음");
