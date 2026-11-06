@@ -75,6 +75,10 @@
   //   그때 연장을 포함한 모든 명시 side-seam 구간을 합산한다. root 이름만 보며 좌표로 복원하지 않는다.
   function isSideSeamExtension(s) { var r = s.boundary && s.boundary.root; return typeof r === "string" && /\/side-seam-extension$/.test(r); }
   function measureSideSeam(outline) {
+    // ★ 2026-11-06: 옆선 일부를 의미 미지정 대체선(진동·밑단 등에 걸쳐 옆선 의미를 승계하지 못한 선)이 덮었으면, 남은
+    //   원래 옆선 조각만 더하면 새 곡선 길이가 빠진 **틀린 수치**가 된다 → 측정 불가(이유 보존). 승계 기록(replacedEdges)만 본다.
+    if (Array.isArray(outline) && outline.some(function (s) { return s && s.edgeStatus === "unresolved" && Array.isArray(s.replacedEdges) && s.replacedEdges.indexOf("side-seam") >= 0; }))
+      return { status: "unavailable", length: null, reason: "side-seam-partially-unresolved" };
     var segs = Array.isArray(outline) ? outline.filter(function (s) { return s && s.edge === "side-seam"; }) : [];
     if (!segs.some(function (s) { return !isSideSeamExtension(s); })) return { status: "unavailable", length: null };
     return { status: "measured", length: segs.reduce(function (t, s) { return t + segLen(s); }, 0) };
@@ -1777,6 +1781,36 @@
   function neckGatherState(proj) { return neckGatherCore(proj, false); }
   function neckGatherBandState(proj) { return neckGatherCore(proj, true); }
 
+  // ── 옆선 의도(의도적인 여유량) ── working.sideSeamIntent = {mode, easeCm} | 없음(= 같은 길이).
+  //   검증은 sideSeamMagnet(순수)의 규칙 하나. 모듈이 없는데 값이 있으면 판정할 수 없으므로 무효(완료 차단).
+  function sideSeamIntentOf(proj) {
+    var v = proj && proj.working ? proj.working.sideSeamIntent : undefined;
+    if (v === undefined || v === null) return { ok: true, intent: null };
+    var M = (typeof window !== "undefined") && window.sideSeamMagnet;
+    return M ? M.validStored(v) : { ok: false };
+  }
+  function targetDiffOf(intent) { return intent.mode === "back-ease" ? intent.easeCm : -intent.easeCm; }
+  function intentCanon(proj) { var si = sideSeamIntentOf(proj); return (si.ok && si.intent) ? { m: si.intent.mode, e: si.intent.easeCm } : (si.ok ? null : { m: "invalid" }); }
+  // 출력 sideSeam: 미지정이면 종전 4키 그대로(바이트 동일). 지정 시에만 의도·목표·잔차, 측정 불가 사유는 있을 때만.
+  function sideSeamOut(f, b, diff, status, si, D, resid, msF, msB) {
+    var o = { front: f, back: b, diff: diff, status: status };
+    if (si.ok && si.intent) { o.intent = { mode: si.intent.mode, easeCm: si.intent.easeCm }; o.targetDiff = D; o.signedDiff = (f != null && b != null) ? b - f : null; o.residual = resid; }
+    if (!si.ok) o.intentInvalid = true;
+    var ur = (msF.reason ? ["front:" + msF.reason] : []).concat(msB.reason ? ["back:" + msB.reason] : []);
+    if (ur.length) o.unmeasuredReasons = ur;
+    return o;
+  }
+  // 의도 설정(UI 의 명시 «적용»만). 무효 입력 = 변경 없음 + 이유. 같은 길이 = 키 삭제(미설정과 같은 hash).
+  function setSideSeamIntent(proj, input) {
+    proj = proj || project(); if (!proj) return { ok: false, reason: "no-project" };
+    var M = (typeof window !== "undefined") && window.sideSeamMagnet; if (!M) return { ok: false, reason: "no-module" };
+    var n = M.normalizeIntent(input); if (!n.ok) return n;
+    if (n.intent) proj.working.sideSeamIntent = { mode: n.intent.mode, easeCm: n.intent.easeCm };
+    else delete proj.working.sideSeamIntent;
+    return { ok: true, intent: n.intent };
+  }
+  function sideSeamIntent(proj) { var si = sideSeamIntentOf(proj || project()); return si.ok ? { ok: true, intent: si.intent ? { mode: si.intent.mode, easeCm: si.intent.easeCm } : null } : { ok: false }; }
+
   function check(proj) {
     proj = proj || project();
     if (!proj) return { ok: false, fails: ["no-project"] };
@@ -1786,7 +1820,10 @@
     var msF = measureSideSeam(effectiveOutline(proj, "front")), msB = measureSideSeam(effectiveOutline(proj, "back"));
     var ssMeasured = msF.status === "measured" && msB.status === "measured";
     var ssF = msF.length, ssB = msB.length, ssDiff = ssMeasured ? Math.abs(ssF - ssB) : null;
-    var ssStatus = !ssMeasured ? "unmeasured" : ssDiff <= MATCH ? "match" : (ssDiff <= CHECK ? "check" : "mismatch");
+    // 의도적인 여유량(2026-11-06): 지정되면 판정 = 실제 차(뒤 − 앞)와 **지정 목표 차**의 잔차. 미지정이면 잔차 = |앞 − 뒤| 그대로(기존과 비트 동일).
+    var si = sideSeamIntentOf(proj), siD = si.ok && si.intent ? targetDiffOf(si.intent) : 0;
+    var ssResid = ssMeasured ? (si.ok && si.intent ? Math.abs((ssB - ssF) - siD) : ssDiff) : null;
+    var ssStatus = !ssMeasured ? "unmeasured" : ssResid <= MATCH ? "match" : (ssResid <= CHECK ? "check" : "mismatch");
     var ahF = armholeLen(g, "front"), ahB = armholeLen(g, "back");
     var nkF = necklineHalf(proj, "front"), nkB = necklineHalf(proj, "back"), nkHalf = nkF + nkB;
     // preview 유효성: manual 인데 designOutline 없음 / placket 파라미터 있는데 frontPlacket 없음 = 무효.
@@ -1799,6 +1836,7 @@
     var fails = [];
     if (!conF) fails.push("front-outline-not-connected");
     if (!conB) fails.push("back-outline-not-connected");
+    if (!si.ok) fails.push("side-seam-intent-invalid");
     if (ssStatus === "unmeasured") fails.push("side-seam-unmeasured");
     if (ssStatus === "mismatch") fails.push("side-seam-mismatch");
     if (!ahF.ok) fails.push("front-armhole-unmeasured");
@@ -1835,7 +1873,7 @@
       ok: fails.length === 0,
       fails: fails,
       connectivity: { front: conF, back: conB, ok: conF && conB },
-      sideSeam: { front: ssF, back: ssB, diff: ssDiff, status: ssStatus },
+      sideSeam: sideSeamOut(ssF, ssB, ssDiff, ssStatus, si, siD, ssResid, msF, msB),
       armhole: { front: ahF.len, back: ahB.len, ok: ahF.ok && ahB.ok },
       neckline: { front: nkF, back: nkB, half: nkHalf, finished: 2 * nkHalf, ok: nkHalf > 0 },
       previews: { neckline: !manualBad, placket: !placketBad, ok: previewOk },
@@ -1872,7 +1910,7 @@
     var ahF = armholeLen(g, "front"), ahB = armholeLen(g, "back");
     // 소매가 참조할 형상 hash(형상 전용: 유효 외곽·진동·목둘레·여밈. 배치·선택·guide 제외).
     var placketParams = proj.working.frontPlacket ? proj.working.frontPlacket.parameters : null;
-    var sig = signature(canonOutline(effF), canonOutline(effB), c.armhole, c.neckline, placketParams, peplumCanon(proj), yokeCanon(proj));
+    var sig = signature(canonOutline(effF), canonOutline(effB), c.armhole, c.neckline, placketParams, peplumCanon(proj), yokeCanon(proj), intentCanon(proj));
     var result = {
       sourceVersion: proj.sourceBlock ? proj.sourceBlock.version : null,
       hash: hashStr(sig),                                     // 소매 결과의 sourceBodiceHash 앵커
@@ -1917,13 +1955,16 @@
     if ((g.front.flareCm && g.front.flareCm.slash) || (g.back.flareCm && g.back.flareCm.slash)) {
       result.flareSlash = { front: g.front.flareCm ? clone(g.front.flareCm) : null, back: g.back.flareCm ? clone(g.back.flareCm) : null };
     }
+    // 옆선 의도(지정 시에만 키 — 미지정 완료본은 바이트 동일). hash signature 에 포함(의도 변경 = 재완료).
+    var siC = sideSeamIntentOf(proj);
+    if (siC.ok && siC.intent) result.sideSeamIntent = { mode: siC.intent.mode, easeCm: siC.intent.easeCm };
     deepFreeze(result);
     proj.working.bodiceResult = result;   // 세션 전용(reload 시 소멸). reference·원본 불변.
     return { ok: true, result: result, check: c };
   }
 
   // 현재 몸판 상태 signature(스테일 판정용): 유효 외곽 + 진동/목둘레 + 여밈 파라미터.
-  function signature(front, back, armhole, neckline, placketParams, pep, yk) {
+  function signature(front, back, armhole, neckline, placketParams, pep, yk, si) {
     var o = {
       f: front, b: back,
       ah: { f: round4(armhole.front), b: round4(armhole.back) },
@@ -1932,12 +1973,13 @@
     };
     if (pep) o.pp = pep;   // 페플럼이 있을 때만 — 없으면 기존 hash 와 바이트 단위로 같다
     if (yk) o.yk = yk;     // 요크 이음선 조각이 있을 때만 — 없으면 기존 hash 와 바이트 단위로 같다
+    if (si) o.si = si;     // 옆선 의도(여유량)가 지정됐을 때만 — 없으면 기존 hash 와 바이트 단위로 같다
     return JSON.stringify(o);
   }
   function currentSignature(proj) {
     var c = check(proj);
     var placketParams = proj.working.frontPlacket ? proj.working.frontPlacket.parameters : null;
-    return signature(canonOutline(effectiveOutline(proj, "front")), canonOutline(effectiveOutline(proj, "back")), c.armhole, c.neckline, placketParams, peplumCanon(proj), yokeCanon(proj));
+    return signature(canonOutline(effectiveOutline(proj, "front")), canonOutline(effectiveOutline(proj, "back")), c.armhole, c.neckline, placketParams, peplumCanon(proj), yokeCanon(proj), intentCanon(proj));
   }
   function snapshotSignature(res) {
     return signature(canonOutline(res.front.outline), canonOutline(res.back.outline),
@@ -1953,7 +1995,8 @@
         var o = { fy: canonOutline(res.frontYoke.outline), fb: canonOutline(res.frontBody.outline), by: canonOutline(res.backYoke.outline), bb: canonOutline(res.backBody.outline) };
         if (res.backYoke.construction && res.backYoke.construction.length) o.byc = canonOutline(res.backYoke.construction);
         return o;
-      })() : null);
+      })() : null,
+      res.sideSeamIntent ? { m: res.sideSeamIntent.mode, e: res.sideSeamIntent.easeCm } : null);
   }
   function canonOutline(outline) {
     if (!outline) return null;
@@ -1967,5 +2010,5 @@
     return currentSignature(proj) !== snapshotSignature(res);
   }
 
-  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, princessState: princessState, flareSlashState: flareSlashState, neckTuckState: neckTuckState, neckGatherState: neckGatherState, neckGatherBandState: neckGatherBandState, measureSideSeam: measureSideSeam, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
+  window.bodiceCheckpoint = Object.freeze({ girthMeasure: girthMeasure, waistSeamState: waistSeamState, yokeSeamState: yokeSeamState, princessState: princessState, flareSlashState: flareSlashState, neckTuckState: neckTuckState, neckGatherState: neckGatherState, neckGatherBandState: neckGatherBandState, measureSideSeam: measureSideSeam, sideSeamSegLen: segLen, effectiveOutline: effectiveOutline, setSideSeamIntent: setSideSeamIntent, sideSeamIntent: sideSeamIntent, closedOutlineWithDeclaredDartJunctions: closedOutlineWithDeclaredDartJunctions, evaluateSemantics: evaluateSemantics, makeBoundaryChain: makeBoundaryChain, check: check, complete: complete, latest: latest, isCurrentBodiceChanged: isCurrentBodiceChanged });
 })();
