@@ -25,6 +25,10 @@ ok(Q && typeof Q.describe === "function" && typeof Q.place === "function" && typ
 
 // §1 describe
 const D = Q.describe;
+const _rf = (r, lock) => D({ design: true, mode: "select", sel: { id: "x", piece: "front", role: "guide", lock: lock || null, reflect: r } });
+ok(_rf({ allowed: true, reason: "ok" }).reflect && _rf({ allowed: true, reason: "ok" }).reflect.allowed === true, "1r: 일반 앞·뒤판 선 → 몸판 외곽으로 반영 행");
+ok(_rf({ allowed: false, done: true, reason: "x" }).reflect === null && _rf(null).reflect === null && _rf({ allowed: true, reason: "ok" }, "neck").reflect === null, "1r: 반영됨·대상 아님·관리선 = 반영 행 없음");
+ok(_rf({ allowed: false, reason: "다조각" }).reflect.allowed === false && /다조각/.test(_rf({ allowed: false, reason: "다조각" }).reflect.text), "1r: 지원 밖 = 비활성 + 이유");
 ok(D(null) === null && D({ design: false, mode: "draw", draft: { piece: "front", n: 2 } }) === null, "1a: design 밖 = 막대 없음");
 ok(D({ design: true, mode: "off" }) === null, "1b: 도구 꺼짐 = 막대 없음");
 ok(D({ design: true, mode: "draw", draft: null }) === null && D({ design: true, mode: "draw", draft: { piece: "front", n: 0 } }) === null, "1c: 그리기 모드라도 점이 없으면 막대 없음");
@@ -76,7 +80,7 @@ ok(cvAt > 0 && barAt > cvAt && barAt < mainEnd, "3a: 막대는 #cv 뒤 형제(ca
 ok(["lineQuickTitle", "lineQuickDismiss", "lineQuickCancel", "lineQuickFinish", "lineQuickRoleCut", "lineQuickRoleBoundary", "lineQuickRoleGuide"].every(id => html.indexOf('id="' + id + '"') > 0), "3b: 막대 요소 정적 마크업(재생성 없음)");
 ok(/id="btnDesignLine"[^>]*onclick="designLineTool\.toggle\(\)"/.test(html) && /id="btnDesignFinish"[^>]*onclick="designLineTool\.finishDraw\(\)"/.test(html) && /id="btnRoleCut"[^>]*onclick="designLineTool\.setRole\('cut'\)"/.test(html) && /id="btnDesignSelect"[^>]*onclick="designLineTool\.toggleSelect\(\)"/.test(html), "3c: 기존 오른쪽 버튼 id·onclick 보존");
 const calls = (CODE.match(/T\.(\w+)\(/g) || []).map(s => s.slice(2, -1)).filter((v, i, arr) => arr.indexOf(v) === i).sort();
-const READ = ["getSeamState", "getSeamSettings", "setSeamMagnet", "canFinishDraw", "findLine", "getBoundaryState", "getDraft", "getMode", "getSelectedId", "getSplitState", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine"], CMD = ["cancel", "doBoundaryApply", "doBoundaryPreview", "doSleeveEditUndo", "doSplit", "finishDraw", "setRole"];   // 2026-11-06 소매 «외곽 반영»·«반영 되돌리기»(오른쪽 버튼과 같은 명령)
+const READ = ["getReflectState", "getSeamState", "getSeamSettings", "setSeamMagnet", "canFinishDraw", "findLine", "getBoundaryState", "getDraft", "getMode", "getSelectedId", "getSplitState", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine"], CMD = ["cancel", "doReflectToBodice", "doBoundaryApply", "doBoundaryPreview", "doSleeveEditUndo", "doSplit", "finishDraw", "setRole"];   // 2026-11-06 소매 «외곽 반영»·«반영 되돌리기»(오른쪽 버튼과 같은 명령)
 ok(calls.every(f => READ.concat(CMD).indexOf(f) >= 0) && CMD.every(f => calls.indexOf(f) >= 0), "3d: 도구 호출 = 읽기 + 기존 명령(finishDraw·cancel·setRole·doSplit·doBoundaryPreview·doBoundaryApply·doSleeveEditUndo)뿐 [" + calls.join(",") + "]");
 ok(!/patternLines|\.role\s*=[^=]|localStorage|innerHTML|makePatternLine|setMode\(/.test(CODE), "3e: 선 생성·역할 대입·저장·innerHTML·모드 직접 전환 없음");
 const R = fs.readFileSync(path.join(ROOT, "js/render.js"), "utf8");
@@ -84,7 +88,7 @@ const ret = R.indexOf("return; // 라이브 원형 draw"), syncAt = R.lastIndexO
 ok(syncAt > hitAt && hitAt > 0, "3f: design render 는 선·overlay·hit 을 그린 뒤 막대 sync(그려진 SVG 기준)");
 ok(/afterDraftRender\(\);\s*\n\s*if\(window\.designLineQuickBar\) window\.designLineQuickBar\.sync\(\);/.test(R), "3g: design 밖 render 도 sync(→ 숨김)");
 const ver = f => { const m = new RegExp(f.replace(/\./g, "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
-ok(ver("designLineQuickBar.js") === "2026110605" && ver("designLineTool.js") === "2026110605" && ver("render.js") === "2026110603" && /css\/style\.css\?v=2026110509/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
+ok(ver("designLineQuickBar.js") === "2026110608" && ver("designLineTool.js") === "2026110606" && ver("render.js") === "2026110603" && /css\/style\.css\?v=2026110606/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
 ok(html.indexOf('<script src="js/designLineQuickBar.js') > html.indexOf('<script src="js/designLineTool.js'), "3i: 막대 스크립트는 designLineTool 뒤");
 
 // §4 절개선 → «파트 분리» 다음 단계 행(2026-11-05 김님 요청) — 표시 모델은 getSplitState(오른쪽 버튼 판정) 그대로

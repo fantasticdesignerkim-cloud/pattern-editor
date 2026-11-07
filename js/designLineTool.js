@@ -44,7 +44,7 @@
   let lastHandleGeo = null;                           // 핸들 드래그 중 마지막 커서(형상 cm) — Shift 즉시 반영
   // 옆선 길이 자석(2026-11-06 · 세션 UI 설정 — 형상·완료본 무관): 켜짐/꺼짐 · 기준판(고정되는 판). seamCtx = 드래그 시작 때 한 번 만든 문맥,
   //   seamLive = 드래그 중 표시값(막대·캔버스 라벨). 드래그가 끝나면 둘 다 비우고 표시는 권위 계측(bodiceCheckpoint)으로 돌아간다.
-  let seamMagnetOn = true, seamBasis = "back", seamCtx = null, seamLive = null, seamStateCache = null;
+  let seamMagnetOn = true, seamBasis = "auto", seamCtx = null, seamLive = null, seamStateCache = null;
 
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
   function inDesign() { return typeof window.isDesignStageActive === "function" && window.isDesignStageActive() && !!project(); }
@@ -1306,7 +1306,7 @@
   }
   function getSeamLive() { return seamLive && editDrag ? Object.assign({}, seamLive, { text: seamLiveText(seamLive) }) : null; }
   function setSeamMagnet(on) { seamMagnetOn = !!on; seamStateCache = null; if (window.designLineQuickBar) window.designLineQuickBar.sync(); return seamMagnetOn; }
-  function setSeamBasis(b) { if (b !== "front" && b !== "back") return seamBasis; seamBasis = b; seamStateCache = null; if (window.designLineQuickBar) window.designLineQuickBar.sync(); return seamBasis; }
+  function setSeamBasis(b) { if (b !== "front" && b !== "back" && b !== "auto") return seamBasis; seamBasis = b; seamStateCache = null; if (window.designLineQuickBar) window.designLineQuickBar.sync(); return seamBasis; }
   function getSeamSettings() { return { on: seamMagnetOn, basis: seamBasis }; }
   // ── 디자인 외곽 합성 DOM 연동 ──
   function pieceBoundaries(piece) { return lines().filter(l => l.piece === piece && l.role === "boundary"); }
@@ -1341,6 +1341,51 @@
     p.working.designOutline = result;                         // 원자적 저장
     setComposeNote("디자인 외곽 합성 완료 · cut 은 이 외곽 기준으로 검증");
     rerender();
+  }
+  // ── «몸판 외곽으로 반영»(2026-11-06 김님 승인 UX) ──
+  //   일반 앞·뒤판 사용자 선 하나를 [외곽 역할 지정 → 대체 검증(boundaryStatusOf) → 디자인 외곽 합성(composeForPiece)] 한 번의 명시 클릭으로 묶는다.
+  //   기존 원리·검증(짧은 arc 선택 · 옆선 의미 승계)을 그대로 재사용한다. 실패하면 역할·parts·미리보기·designOutline 모두 이전 그대로(원자적).
+  //   클릭 전에는 몸판 불변 · 자동 역할 반영 없음 · 사용자 최종 완료(bodiceResult)를 만들지 않는다.
+  function reflectInfoFor(p, line) {
+    if (!line || (line.piece !== "front" && line.piece !== "back") || line.managedBy) return null;
+    if (isNeckAutoLine(line.id)) return null;
+    if (!isOriginalBodiceContext(p)) return { allowed: false, reason: "소매 파생 몸판은 외곽 반영 미지원 — 파생 몸판 외곽은 소매 완료본 소유" };
+    if (seamMulti(p.working.geometry)) return { allowed: false, reason: "다조각 몸판(페플럼·요크·프린세스)은 이 반영 미지원 — 오른쪽 «디자인 외곽 합성» 사용" };
+    const dO = p.working.designOutline && p.working.designOutline[line.piece];
+    if (line.role === "boundary" && dO && (dO.lineIds || []).indexOf(line.id) >= 0) return { allowed: false, done: true, reason: "몸판 외곽에 반영됨 · 선을 고치면 자동으로 다시 합성" };
+    return { allowed: true, reason: "이 선을 몸판 외곽으로 반영합니다 · 누르기 전에는 몸판이 바뀌지 않습니다" };
+  }
+  function getReflectState() {
+    const p = project(); if (!p || mode !== "select" || !selectedId) return null;
+    return reflectInfoFor(p, findLine(selectedId));
+  }
+  function doReflectToBodice() {
+    if (mode !== "select" || !selectedId) return false;
+    const p = project(), line = findLine(selectedId); if (!p || !line) return false;
+    const info = reflectInfoFor(p, line);
+    if (!info) { setComposeNote("반영 불가: 앞·뒤판 일반 선이 아닙니다"); return false; }
+    if (!info.allowed) { setComposeNote(info.done ? info.reason : "반영 불가: " + info.reason); return info.done === true; }
+    const w = p.working, prev = { role: line.role, parts: w.parts, bp: w.boundaryPreview, dO: w.designOutline };
+    const fail = reason => {   // 원자적: 아무것도 바뀌지 않은 상태로 복귀
+      line.role = prev.role; w.parts = prev.parts; w.boundaryPreview = prev.bp; w.designOutline = prev.dO;
+      setComposeNote("반영 안 됨: " + reason); syncRoleButtons(); syncCutStatus(); rerender(); return false;
+    };
+    line.role = "boundary";
+    const v = boundaryStatusOf(p, line);
+    if (!v || !v.ok) return fail(v ? v.reason : "대체선 아님");
+    const result = {};
+    for (const pc of ["front", "back"]) {
+      const r = composeForPiece(p, pc);
+      if (!r.ok) return fail("합성 불가(" + (pc === "front" ? "앞" : "뒤") + "판): " + r.reason);
+      if (!r.empty) result[pc] = { outline: r.outline, lineIds: r.lineIds };
+    }
+    if (!result[line.piece] || (result[line.piece].lineIds || []).indexOf(line.id) < 0) return fail("합성 결과에 이 선이 들어가지 않음");
+    w.parts = []; w.boundaryPreview = null; w.designOutline = result;
+    setComposeNote("몸판 외곽으로 반영됨 · 선을 고치면 자동으로 다시 합성 · 마지막에 «몸판 모양 완료»");
+    seamStateCache = null; syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult();
+    if (window.refreshFrontPlacket) window.refreshFrontPlacket();
+    if (window.refreshDesignBodyPanel) window.refreshDesignBodyPanel();
+    return true;
   }
   // geometry 재계산(엉덩이 길이 등) 후 외부(ui.js)에서 호출: 절개선 재검사 + 파생 무효화.
   function revalidate() { invalidateParts(); syncRoleButtons(); syncCutStatus(); syncSplitButton(); rerender(); }
@@ -1692,7 +1737,7 @@
     doSplit, invalidateParts, visibleParts, pruneStaleSleeveParts, doBoundaryPreview, doBoundaryApply, doSleeveEditUndo, validateSelectedBoundary, doComposeDesignOutline,
     getBoundaryState, visibleBoundaryPreview, boundaryStatusOf, pruneStaleBoundaryPreview,
     // 옆선 길이 자석(2026-11-06)
-    getSeamState, getSeamLive, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
+    getSeamState, getSeamLive, getReflectState, doReflectToBodice, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, segmentDegenerate, lineDegenerate, distToLine, distToSegment, handlesOf,

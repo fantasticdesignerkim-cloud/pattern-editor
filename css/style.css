@@ -452,6 +452,9 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 다음 단계 행(절개선 → 파트 분리): 역할 행과 분리된 별도 행. 이유 글은 막대 폭을 늘리지 않고 줄바꿈(width:0 + min-width:100%). */
 .lqb-next{display:flex;flex-direction:column;gap:3px;margin-top:3px;padding-top:5px;border-top:1px solid var(--border)}
 .lqb-wide{width:100%}
+.lqb-ease{display:flex;flex-direction:column;gap:3px}
+.lqb-cm{display:flex;align-items:center;gap:4px;font-size:12px}
+.lqb-cm input{width:64px;min-height:44px;padding:4px 6px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:inherit;font-size:14px}
 .lqb-reason{width:0;min-width:100%;padding:0 4px 1px;font-size:11px;line-height:1.35;color:var(--muted);white-space:normal;overflow-wrap:anywhere}
 .lqb-reason:empty{display:none}
 .lqb-next[data-state="ok"] .lqb-reason,.lqb-next[data-state="done"] .lqb-reason{color:#0E7490}

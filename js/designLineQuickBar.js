@@ -48,7 +48,7 @@
       const sp = (!lock && role === "cut" && s.sel.split) ? s.sel.split : null;   // 절개선만 · 관리선·다른 역할은 분리 행 없음
       const split = sp ? { allowed: !!sp.allowed, kind: sp.kind, parts: sp.parts || 0,
         text: sp.allowed ? (sp.parts > 0 ? "분리됨 · 파트 " + sp.parts + "개(색으로 미리보기)" : "분리 가능") : "분리 불가 · " + sp.reason } : null;
-      const bs = (!lock && role === "boundary" && s.sel.boundary) ? s.sel.boundary : null;   // 외곽만 · 관리선(네크라인 전용선 등)은 잠금 그대로
+      const bs = (!lock && role === "boundary" && s.sel.boundary && !(s.sel.reflect && s.sel.reflect.done)) ? s.sel.boundary : null;   // 몸판 외곽에 이미 반영된 선은 «대체 미리보기» 단계가 필요 없다(반영 = 합성까지 한 번에)   // 외곽만 · 관리선(네크라인 전용선 등)은 잠금 그대로
       // 단계(2026-11-06 소매 «외곽 반영»): preview(미리보기 전) → confirm(미리보기 확인 · 소매만 «외곽 반영») → applied(반영됨 · 수정 중 → «소매 모양 완료» 안내).
       //   몸판은 apply 가 없어 종전 그대로(preview·미리보기 표시 중).
       const stage = bs ? (bs.applied ? "applied" : (bs.shown && bs.apply) ? "confirm" : "preview") : null;
@@ -58,7 +58,8 @@
           : stage === "confirm" ? (bs.apply.allowed ? "미리보기 확인 · «외곽 반영»을 눌러야 소매에 반영됩니다" : "반영 불가 · " + bs.apply.reason)
           : bs.allowed ? (bs.shown ? "미리보기 표시 중 · 보라 외곽(완성 외곽 아님)" : bs.reason) : "대체 불가 · " + bs.reason } : null;
       const seam = (!lock && role === "boundary" && s.sel.seam && s.sel.seam.show) ? { text: s.sel.seam.text, on: !!s.sel.seam.magnet.on, reason: s.sel.seam.magnet.reason || null, basis: s.sel.seam.magnet.basis } : null;
-      return { kind: "select", seam: seam, key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };
+      const rf = (!lock && s.sel.reflect && !s.sel.reflect.done) ? { allowed: !!s.sel.reflect.allowed, text: s.sel.reflect.reason } : null;   // 몸판 외곽으로 반영(앞·뒤판 일반 선 · 아직 미반영일 때)
+      return { kind: "select", reflect: rf, seam: seam, key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };
     }
     return null;
   }
@@ -122,6 +123,8 @@
   let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
   let splitRow = null, splitBtn = null, splitReason = null;
   let bndRow = null, bndBtn = null, bndReason = null, bndApply = null, bndUndo = null, seamRow = null, seamToggle = null, seamText = null;
+  let rflRow = null, rflBtn = null, rflReason = null, easeToggle = null, easeBox = null, easeApply = null, easeCm = null, easeNote = null, easeBtns = [];
+  let easeOpen = false, easeDraft = { mode: "equal" }, rflNote = null;   // 여유 열림·초안(UI 전용 — 선 편집·선택 전환으로 초기화하지 않는다) · 반영 실패 안내
   let headRow = null, compactRow = null, compactText_ = null, expandBtn = null;
   let expandedKey = null;             // 소형 상태줄에서 «도구»로 펼친 결과 키(UI 전용 · 선택·결과가 바뀌거나 캔버스를 누르면 풀림)
   let splitNote = null;                // {key, text}: 막대 «파트 분리»를 눌렀는데 파트가 안 생겼을 때 doSplit 이 남긴 안내(#designSplitNote) — 선택이 바뀌면 버림
@@ -144,7 +147,7 @@
       const id = T.getSelectedId(), l = id ? T.findLine(id) : null;
       if (!l) return { design: true, mode: mode, sel: null };
       const lock = T.isNeckAutoLine(id) ? "neck" : T.isSleeveCapLine(l) ? "cap" : T.isCollarBodyLine(l) ? "collar" : null;
-      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, split: T.getSplitState ? T.getSplitState() : null, boundary: T.getBoundaryState ? T.getBoundaryState() : null, seam: T.getSeamState ? T.getSeamState() : null } };
+      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, split: T.getSplitState ? T.getSplitState() : null, boundary: T.getBoundaryState ? T.getBoundaryState() : null, seam: T.getSeamState ? T.getSeamState() : null, reflect: T.getReflectState ? T.getReflectState() : null } };
     }
     return { design: true, mode: mode };
   }
@@ -211,11 +214,22 @@
     bar.setAttribute("data-kind", vm.kind);
     drawRow.hidden = vm.kind !== "draw";
     roleRow.hidden = vm.kind !== "select";
-    if (vm.kind !== "select") { splitRow.hidden = true; if (bndRow) bndRow.hidden = true; }
+    if (vm.kind !== "select") { splitRow.hidden = true; if (bndRow) bndRow.hidden = true; if (rflRow) rflRow.hidden = true; }
+    if (rflRow && vm.kind === "select") {
+      const rf = vm.reflect; rflRow.hidden = !rf;
+      if (rf) {
+        if (rflNote && rflNote.key !== vm.key) rflNote = null;
+        rflBtn.disabled = !rf.allowed; rflBtn.setAttribute("aria-disabled", rf.allowed ? "false" : "true");
+        rflReason.textContent = (rflNote && rf.allowed) ? rflNote.text : rf.text;
+        rflRow.setAttribute("data-state", (rflNote && rf.allowed) ? "no" : rf.allowed ? "ok" : "no");
+      }
+    }
     if (seamRow) {   // 옆선 길이 자석 행(2026-11-06): 몸판 외곽이 옆선 구간을 대체할 때만 · 같은 권위 계측·자석 상태(getSeamState)
       const sm = vm.kind === "select" ? vm.seam : null; seamRow.hidden = !sm;
       if (sm) { seamText.textContent = sm.text + (sm.on && sm.reason ? " · 자석 없음: " + sm.reason : ""); seamToggle.textContent = sm.on ? "옆선 자석 켬" : "옆선 자석 꺼짐"; seamToggle.setAttribute("aria-pressed", sm.on ? "true" : "false"); seamRow.setAttribute("data-state", sm.on && !sm.reason ? "ok" : "no"); }
     }
+    if (easeBox) { easeToggle.setAttribute("aria-expanded", easeOpen ? "true" : "false"); easeBox.hidden = !(easeOpen && seamRow && !seamRow.hidden);
+      easeBtns.forEach(b => b.setAttribute("aria-pressed", b.getAttribute("data-ease") === easeDraft.mode ? "true" : "false")); }
     dismissBtn.hidden = vm.kind !== "select";        // 그리기 중엔 접기 없음(완료·취소만 명시적으로)
     if (vm.kind === "draw") {
       finishBtn.disabled = !vm.canFinish; finishBtn.setAttribute("aria-disabled", vm.canFinish ? "false" : "true");
@@ -291,7 +305,7 @@
     if (on) {
       const t = compactText(vm);
       compactText_.textContent = t;
-      headRow.hidden = true; roleRow.hidden = true; splitRow.hidden = true; if (seamRow) seamRow.hidden = true; if (bndRow) bndRow.hidden = true; drawRow.hidden = true; compactRow.hidden = false;
+      headRow.hidden = true; roleRow.hidden = true; splitRow.hidden = true; if (seamRow) seamRow.hidden = true; if (bndRow) bndRow.hidden = true; if (rflRow) rflRow.hidden = true; drawRow.hidden = true; compactRow.hidden = false;
       bar.setAttribute("aria-label", "패턴선 빠른 조작 · " + vm.title + " · " + t);
     } else { compactRow.hidden = true; headRow.hidden = false; }
   }
@@ -331,6 +345,32 @@
     bndNote = done ? null : { key: vm.key, text: (el && el.textContent) || "반영되지 않았습니다" };
     sync(); return done;
   }
+  // 막대 «몸판 외곽으로 반영»(버튼 click 이 부르는 그대로 · 검사도 이 함수를 부른다). 실패면 이유를 막대에도(원자적 — 몸판 불변).
+  function actReflect() {
+    const T = tool(), vm = describe(snapshot()); if (!T || !vm || !vm.reflect || !vm.reflect.allowed || !T.doReflectToBodice) return false;
+    const done = !!T.doReflectToBodice();
+    const el = typeof document !== "undefined" ? document.getElementById("designComposeNote") : null;
+    rflNote = done ? null : { key: vm.key, text: (el && el.textContent) || "반영되지 않았습니다" };
+    sync(); return done;
+  }
+  // 여유 열기/닫기 · 적용: 오른쪽 설정과 같은 컨트롤·같은 명령(btnApplySeamIntent)을 거친다 → 값·hash·소매 무효화·동기화가 한 경로.
+  function openEase(on) {
+    easeOpen = on;
+    if (on) {   // 현재 의도로 초안 채움(없으면 같은 길이)
+      const BC = window.bodiceCheckpoint, si = BC && BC.sideSeamIntent ? BC.sideSeamIntent() : null;
+      if (si && si.ok && si.intent) { easeDraft.mode = si.intent.mode; if (easeCm) easeCm.value = String(si.intent.easeCm); } else if (si && si.ok) { easeDraft.mode = "equal"; }
+    }
+    sync();
+  }
+  function actEase() {
+    const sel = document.getElementById("selSeamIntent"), inp = document.getElementById("inpSeamEase"), btn = document.getElementById("btnApplySeamIntent");
+    if (!sel || !btn) return false;
+    sel.value = easeDraft.mode; if (inp && easeCm) inp.value = easeCm.value;
+    sel.dispatchEvent(new Event("change")); btn.click();
+    const n = document.getElementById("designSeamIntentNote"); if (easeNote) easeNote.textContent = (n && n.textContent) || "";
+    if (n && /^적용 안 됨/.test(n.textContent || "") === false) easeOpen = false;   // 적용되면 접어 선·캔버스를 가리지 않게(좁은 화면) — 거부되면 열어 둔 채 이유를 보인다
+    sync(); return true;
+  }
   function init() {
     bar = document.getElementById("lineQuickBar");
     if (!bar) return;
@@ -354,6 +394,14 @@
     bndUndo = document.getElementById("lineQuickBoundaryUndo");
     seamRow = bar.querySelector('[data-lqb="seam"]'); seamToggle = document.getElementById("lineQuickSeamToggle"); seamText = document.getElementById("lineQuickSeamText");
     expandBtn = document.getElementById("lineQuickExpand");
+    rflRow = bar.querySelector('[data-lqb="reflect"]'); rflBtn = document.getElementById("lineQuickReflect"); rflReason = document.getElementById("lineQuickReflectReason");
+    easeToggle = document.getElementById("lineQuickEaseToggle"); easeBox = document.getElementById("lineQuickEase"); easeApply = document.getElementById("lineQuickEaseApply");
+    easeCm = document.getElementById("lineQuickEaseCm"); easeNote = document.getElementById("lineQuickEaseNote");
+    easeBtns = easeBox ? Array.prototype.slice.call(easeBox.querySelectorAll("[data-ease]")) : [];
+    if (rflBtn) rflBtn.addEventListener("click", () => { actReflect(); });
+    if (easeToggle) easeToggle.addEventListener("click", () => { openEase(!easeOpen); });
+    easeBtns.forEach(b => b.addEventListener("click", () => { easeDraft.mode = b.getAttribute("data-ease"); sync(); }));
+    if (easeApply) easeApply.addEventListener("click", () => { actEase(); });
 
     // 막대 위 조작은 캔버스(점 추가·피스 드래그·팬)로 가지 않는다.
     ["pointerdown", "mousedown", "touchstart", "wheel", "dblclick"].forEach(t => bar.addEventListener(t, e => e.stopPropagation(), { passive: true }));
@@ -388,7 +436,7 @@
   }
 
   window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, chooseMode: chooseMode, resultKey: resultKey,
-    viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary, actBoundaryApply: actBoundaryApply });
+    viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary, actBoundaryApply: actBoundaryApply, actReflect: actReflect, openEase: openEase, actEase: actEase });
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
   }

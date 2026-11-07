@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026110509">
+<link rel="stylesheet" href="css/style.css?v=2026110606">
 </head>
 <body>
 
@@ -146,6 +146,11 @@
         <button type="button" class="lqb-btn" id="lineQuickRoleBoundary" data-role="boundary" aria-pressed="false">외곽</button>
         <button type="button" class="lqb-btn" id="lineQuickRoleGuide" data-role="guide" aria-pressed="false">보조선</button>
       </div>
+      <!-- 몸판 외곽으로 반영(2026-11-06): 일반 앞·뒤판 선을 한 번에 외곽 역할 지정 → 대체 검증 → 디자인 외곽 합성. 실패하면 아무것도 바뀌지 않는다. -->
+      <div class="lqb-next" data-lqb="reflect" hidden>
+        <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickReflect" aria-describedby="lineQuickReflectReason">몸판 외곽으로 반영</button>
+        <span class="lqb-reason" id="lineQuickReflectReason"></span>
+      </div>
       <!-- 다음 단계: 선택한 선이 절개선일 때만. 오른쪽 «파트 분리»(btnDesignSplit)와 같은 판정(getSplitState)·같은 명령(doSplit). 이유는 보이는 글로. -->
       <div class="lqb-next" data-lqb="split" hidden>
         <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickSplit" disabled aria-disabled="true" aria-describedby="lineQuickSplitReason">파트 분리</button>
@@ -162,6 +167,17 @@
       <div class="lqb-next" data-lqb="seam" hidden>
         <button type="button" class="lqb-btn lqb-wide" id="lineQuickSeamToggle" aria-pressed="true" aria-describedby="lineQuickSeamText">옆선 자석 켬</button>
         <span class="lqb-reason" id="lineQuickSeamText"></span>
+        <button type="button" class="lqb-btn lqb-wide" id="lineQuickEaseToggle" aria-expanded="false" aria-controls="lineQuickEase">여유(셔링 등 의도적인 길이 차)</button>
+        <div class="lqb-ease" id="lineQuickEase" role="group" aria-label="옆선 여유 의도" hidden>
+          <div class="lqb-row">
+            <button type="button" class="lqb-btn" data-ease="equal" aria-pressed="true">같은 길이</button>
+            <button type="button" class="lqb-btn" data-ease="back-ease" aria-pressed="false">뒤판 +</button>
+            <button type="button" class="lqb-btn" data-ease="front-ease" aria-pressed="false">앞판 +</button>
+          </div>
+          <div class="lqb-row"><label class="lqb-cm">cm <input type="number" id="lineQuickEaseCm" min="0" max="10" step="0.1" inputmode="decimal" value="1"></label>
+            <button type="button" class="lqb-btn lqb-main" id="lineQuickEaseApply">여유 적용</button></div>
+          <span class="lqb-reason" id="lineQuickEaseNote" aria-live="polite"></span>
+        </div>
       </div>
       <!-- 소형 상태줄(좁은 화면에서 분리 성공·외곽 대체 미리보기 뒤 전체 막대를 놓을 빈자리가 없을 때만): 결과 확인 «분리됨 · 파트 N개»/«외곽 대체 미리보기 표시 중» + «도구»(전체 막대로 복귀) -->
       <div class="lqb-compact" data-lqb="compact" hidden>
@@ -284,7 +300,7 @@
         <div class="row" style="gap:4px"><button type="button" class="btn" id="btnApplySeamIntent">의도 적용</button></div>
         <div class="row note" id="designSeamIntentNote" aria-live="polite"></div>
         <div class="row row-stack"><label for="selSeamBasis">기준판(고정)</label>
-          <select id="selSeamBasis"><option value="back">뒤판 기준 — 앞판 옆선을 맞춤</option><option value="front">앞판 기준 — 뒤판 옆선을 맞춤</option></select></div>
+          <select id="selSeamBasis"><option value="auto">편집한 판의 반대판 고정(기본)</option><option value="back">뒤판 기준 — 앞판 옆선을 맞춤</option><option value="front">앞판 기준 — 뒤판 옆선을 맞춤</option></select></div>
         <div class="row"><label><input type="checkbox" id="chkSeamMagnet" checked> 옆선 길이 자석</label></div>
         <div class="row" style="margin-top:8px"><label>몸판 완료</label></div>
         <div class="row note" id="designBodiceCheckNote" aria-live="polite"></div>
@@ -648,10 +664,10 @@
 <script src="js/sleeveAnnotation.js?v=2026110404"></script>
 <script src="js/designLayout.js?v=2026102904"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026110605"></script>
+<script src="js/designLineTool.js?v=2026110606"></script>
 <script src="js/sleeveSplit.js?v=2026110604"></script>
 <script src="js/sleeveOutlineEdit.js?v=2026110604"></script>
-<script src="js/designLineQuickBar.js?v=2026110605"></script>
+<script src="js/designLineQuickBar.js?v=2026110608"></script>
 <!-- 처리 방법 157 맞댄다(순수): window.designJoin. designLineTool 다음. -->
 <script src="js/designJoin.js?v=2026092910"></script>
 <!-- 허리 이음선 Ⓜ 조합(순수): window.designWaistSeam. designLineTool·designJoin 다음, designBodice 앞. -->
