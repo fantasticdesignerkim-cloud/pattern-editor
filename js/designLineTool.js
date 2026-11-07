@@ -1390,11 +1390,35 @@
   // geometry 재계산(엉덩이 길이 등) 후 외부(ui.js)에서 호출: 절개선 재검사 + 파생 무효화.
   function revalidate() { invalidateParts(); syncRoleButtons(); syncCutStatus(); syncSplitButton(); rerender(); }
   // 선택 모드 pointerdown: 선택 선의 핸들·anchor 히트 → 편집 시작. 아니면 선 선택/해제.
-  function selectDown(e, piece, geo) {
+  // 선택 모드의 클릭 피스 해석. 기본 = hit rect 피스(종전). 단 화면에 그려진 선·핸들이 rect 밖/다른 조각 rect 위로 나와 있으면
+  //   그 실제 표시 위치(피스 offset·줌·팬이 반영된 geoAt, 화면 px 허용폭)로 선택 피스를 바꾼다. 우선순위:
+  //   ① 현재 선택선의 핸들·anchor(rect 피스 쪽에서 이미 잡히면 그대로) ② rect 피스 안의 선 ③ 다른 피스의 선(가장 가까운 것).
+  //   rect 피스에서 잡히는 것이 있으면 절대 가로채지 않는다. 임계 밖 = 종전 그대로(빈 공간·다른 조각 클릭 전파 없음).
+  function pickableLine(l) { const p = project(); return typeof window.designLinePickable === "function" && !!p && window.designLinePickable(p, l) && !isNeckAutoLine(l.id); }
+  function resolveSelectPiece(e, piece) {
+    if (!inDesign()) return piece;
+    const p = project(), L = window.designLayout ? window.designLayout.ensureLayout(p) : null;
+    if (!L) return piece;
+    const rCm = NODE_HIT_PX * pxToCm(), lCm = LINE_HIT_PX * pxToCm();
+    // 보정 대상 = 화면에 실제 그려진 비관리 사용자 선만(render.js designLinePickable 공유 — 요크/프린세스 숨김·사라진 소매·관리선·카라 제외).
+    //   네크라인 전용선도 관리선이라 제외. 판정 함수가 없으면(render 미적재) 보정 없음 = 종전 rect 규칙.
+    const pickable = l => !!L[l.piece] && pickableLine(l);
+    const near = (pc, only) => { const g = geoAt(e, pc); let d = Infinity; lines().forEach(l => { if (l.piece === pc && (!only || only(l))) d = Math.min(d, distToLine(g, l)); }); return { g, d }; };
+    const sel = selectedId ? findLine(selectedId) : null;
+    const handleHit = (line, g) => handlesOf(line).some(h => Math.hypot(g.x - h.c.x, g.y - h.c.y) < rCm) || anchorsFromSegments(line.segments).some(a => Math.hypot(g.x - a.x, g.y - a.y) < rCm);
+    if (piece && sel && sel.piece === piece && handleHit(sel, geoAt(e, piece))) return piece;          // rect 피스 = 종전 selectDown 그대로
+    if (sel && sel.piece !== piece && pickable(sel) && handleHit(sel, geoAt(e, sel.piece))) return sel.piece;
+    if (piece && near(piece).d < lCm) return piece;
+    let best = null, bd = lCm;
+    const seen = {};
+    lines().forEach(l => { if (!l.piece || seen[l.piece] || l.piece === piece || !pickable(l)) return; seen[l.piece] = 1; const d = near(l.piece, pickable).d; if (d < bd) { bd = d; best = l.piece; } });
+    return best || piece;
+  }
+  function selectDown(e, piece, geo, only) {
     const rCm = NODE_HIT_PX * pxToCm(), lCm = LINE_HIT_PX * pxToCm();
     if (selectedId) {
       const line = findLine(selectedId);
-      if (line && line.piece === piece) {
+      if (line && line.piece === piece && (!only || only(line))) {
         // 핸들 먼저(위에 그려짐)
         const hs = handlesOf(line);
         for (const h of hs) if (Math.hypot(geo.x - h.c.x, geo.y - h.c.y) < rCm) { editDrag = { kind: "handle", seg: h.seg, which: h.which }; return; }
@@ -1408,7 +1432,7 @@
     }
     // 선 선택(같은 피스에서 가장 가까운 선, 임계 내). 없으면 해제.
     let best = null, bestD = lCm;
-    lines().forEach(l => { if (l.piece !== piece) return; const d = distToLine(geo, l); if (d < bestD) { bestD = d; best = l; } });
+    lines().forEach(l => { if (l.piece !== piece || (only && !only(l))) return; const d = distToLine(geo, l); if (d < bestD) { bestD = d; best = l; } });
     selectedId = best ? best.id : null;
     setNote(best ? (isSleeveCapLine(selectedId) ? "소매산 관리선 · 진동밑 고정 · SP·중간 anchor·핸들 편집(재합성)"
       : isCollarBodyLine(selectedId) ? "칼라 본체 관리선 · endpoint 고정 · 외곽·포인트 anchor·핸들 편집(재합성) · 기본형으로 돌아가기로만 제거"
@@ -1510,8 +1534,9 @@
         lastDown = { t: now, x: e.clientX, y: e.clientY };
         drawDrag = { startX: e.clientX, startY: e.clientY };
       } else { // select
-        if (!piece) { selectedId = null; editDrag = null; setNote(SELECT_NOTE); }
-        else selectDown(e, piece, geoAt(e, piece));
+        const selPiece = resolveSelectPiece(e, piece);   // 조각 hit rect 밖으로 휜 선·핸들도 화면 위치 그대로 선택(전역 rect 없음)
+        if (!selPiece) { selectedId = null; editDrag = null; setNote(SELECT_NOTE); }
+        else selectDown(e, selPiece, geoAt(e, selPiece), selPiece !== piece ? pickableLine : null);   // 보정 피스에서는 보정 대상 선만
         seamBegin();                          // 옆선 자석 문맥(편집 드래그 시작 때 한 번 — 매 프레임 재합성 없음)
         syncRoleButtons(); syncCutStatus();   // 선택 변화 → 역할 버튼·절개 검사 갱신
       }
@@ -1730,7 +1755,7 @@
   window.designLineTool = Object.freeze({
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive, finishDraw, canFinishDraw: () => draftFinishable(),
     convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen, isNeckAutoLine, isSleeveCapLine, isCollarBodyLine, findLine: (id) => findLine(id),
-    getDraft, getSelectedId, getSelectionOverlay, getSnapHint, deleteSelected, setRole,
+    getDraft, getSelectedId, getSelectionOverlay, resolveSelectPiece, getSnapHint, deleteSelected, setRole,
     validateSelectedCut, getSplitState, revalidate, validateCut, gatherValidCuts, flattenLine, segCross, distPtToSegs,
     // 편집 기준 몸판(최종 몸판 정합) — 판정·snap·파트 분리 경계
     editBodiceRef, cutStatusOf, cutStatusText, snapForCursor, isOriginalBodiceContext, displayedDerivedPiece, syncCutStatus: () => syncCutStatus(),

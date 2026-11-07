@@ -156,6 +156,7 @@ const suites = [
   { file: "sleeveZCheck.js",            golden: false },
   { file: "sleeveIntegrationCheck.js",  golden: false },   // 소매 Ⓐ~Ⓩ 26종 통합(같은 조건 · designResult 연결 · 무효화 · 전환 · 몸판 경계)
   { file: "cutEditFinalBodiceCheck.js", golden: false },  // 몸판 탭 절개선 편집(snap·상태·분리) ↔ Design 완료의 같은 최종 몸판(Ⓡ~Ⓩ 파생 · 보류 · 원래 맥락 보존)
+  { file: "lineOutsideHitCheck.js",    golden: false },  // 조각 hit rect 밖으로 휜 사용자 선·핸들 재선택/드래그(화면 px 허용폭 · rect 피스 우선 · off/stage 무동작)
   { file: "lineAutoSelectCheck.js",     golden: false },  // 패턴선 완료(Enter·더블클릭) 직후 방금 그린 선 자동 선택·역할 버튼 활성(실제 핸들러 · 한 점·Esc 제외 · 관리선 잠금·최종 몸판 정책 불변)
   { file: "lineQuickBarCheck.js",       golden: false },  // 패턴선 «선 가까이» 빠른 도구막대(UI 전용): 단계별 표시·완료 가능 = canFinishDraw·관리선 잠금·배치(위 우선·반전·클램프·가림 회피·결정적)·기존 명령만 호출
   { file: "sleevePartSplitCheck.js",   golden: false },  // 소매 파트 분리: 기본+Ⓐ~Ⓩ 그리기→절개선→분리(Ⓨ·Ⓩ 구체적 거부)·독립 검산(면적·공유 절개·연속·곡선)·Ⓒ 열린 V·물리 거부·현재성/무효화·몸판 분리 보존·Design hash 무관

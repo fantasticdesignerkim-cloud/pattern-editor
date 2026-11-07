@@ -301,7 +301,7 @@ const chk = (p) => { PROJECT = p; return BC.check(p); };
   ok(err2 === "edge-placement", "7: princess-seam 은 construction 에 둘 수 없다");
   const rsrc = fs.readFileSync(path.join(__dirname, "..", "..", "js", "render.js"), "utf8"), usrc = fs.readFileSync(path.join(__dirname, "..", "..", "js", "ui.js"), "utf8");
   ok(/function _princessModeOf[^\n]*frontCenter[^\n]*backSide/.test(rsrc) && /_princessModeOf\(g\) \? princessSub\(g, "front"\)/.test(rsrc) && /_princessModeOf\(g\) \? princessSub\(g, "back"\)/.test(rsrc), "7: render.js 가 Ⓔ 앞·뒤 서브셋을 중심·옆 조각으로 그린다");
-  ok(/_appendPrincessAnnotation\(grp/.test(rsrc) && /!_princessModeOf\(dp\.working\.geometry\)\) _appendPatternLines/.test(rsrc), "7: render.js 가 제작 정보를 그리고 패턴선은 Ⓔ 에서 그리지 않는다");
+  ok(/_appendPrincessAnnotation\(grp/.test(rsrc) && /if \(_designPatternLinesShown\(dp\.working\.geometry\)\) _appendPatternLines/.test(rsrc) && /function _designPatternLinesShown\(g\)\{ return !_yokeModeOf\(g\) && !_princessModeOf\(g\); \}/.test(rsrc), "7: render.js 가 제작 정보를 그리고 패턴선은 Ⓔ 에서 그리지 않는다");
   ok(/body\.princess === "E"/.test(usrc) && /pendingPrincess/.test(usrc) && /g\.frontCenter && g\.frontSide && g\.backCenter && g\.backSide/.test(usrc.match(/const princess = [^\n]*/)[0]), "7: ui.js 가 princess 를 라인 적용에 싣고 패턴선 도구 잠금이 Ⓔ 를 안다");
   const htm = fs.readFileSync(path.join(__dirname, "..", "..", "index.html"), "utf8");
   ok(/designYokeSeam\.js[^\n]*\n[^\n]*\n<script src="js\/designPrincess\.js\?v=\d+"><\/script>\n<!--[^\n]*\n<script src="js\/designBodice\.js/.test(htm) || (htm.indexOf("designPrincess.js") > htm.indexOf("designYokeSeam.js") && htm.indexOf("designPrincess.js") < htm.indexOf("designBodice.js")), "7: index.html 은 designPrincess.js 를 designBodice.js 앞에 싣는다");

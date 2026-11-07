@@ -519,6 +519,18 @@ function _appendSleeveAnnotation(grp, model){
 function _yokeModeOf(g){ return !!(g && g.frontBody && g.backBody && ((g.frontYoke && g.backYoke) || g.shoulderYoke)); }   // Ⓠ~Ⓣ = 요크 둘 · Ⓤ = 어깨 요크 한 장
 // 프린세스 라인 Ⓔ: 중심·옆 조각 네 장(전체 앞/뒤판은 그리지 않는다). 패턴선 도구는 요크 모드와 같은 이유로 잠긴다.
 function _princessModeOf(g){ return !!(g && g.frontCenter && g.frontSide && g.backCenter && g.backSide); }
+// 사용자 패턴선(front·back·sleeve) 표시 여부 — 요크·프린세스 모드에서는 그리지 않는다(데이터는 유지). 아래 render 와 선택 보정이 공유.
+function _designPatternLinesShown(g){ return !_yokeModeOf(g) && !_princessModeOf(g); }
+// rect 밖 선택 보정(designLineTool.resolveSelectPiece)이 고를 수 있는 선 = 화면에 실제로 그려진 **비관리** 사용자 선만.
+//   관리선(소매산·칼라 본체)·카라·다른 피스명·조각 geometry 가 없는 피스(사라진 소매)·요크/프린세스 모드·빈 세그먼트 = false(종전 rect 규칙만).
+function _designLinePickable(dp, pl){
+  if(!dp || !dp.working || !pl || pl.managedBy || !Array.isArray(pl.segments) || !pl.segments.length) return false;
+  if(pl.piece !== "front" && pl.piece !== "back" && pl.piece !== "sleeve") return false;
+  const g=dp.working.geometry;
+  if(!g || !_designPatternLinesShown(g)) return false;
+  return !!(window.designLayout && window.designLayout.bboxOf(g, pl.piece));
+}
+window.designLinePickable = _designLinePickable;
 function _appendPrincessAnnotation(grp, model, pc){
   if(!model) return;
   const g=E("g",{ "data-design-princess":"annotation", "data-anno-piece":pc, class:"yoke-anno" });
@@ -697,7 +709,7 @@ function render(){
       const grp = piece(mkWork, sub(dp.working.geometry), L[pc], pc);
       // 요크 모드에서는 패턴선 도구가 꺼져 있고, 기존 패턴선은 **전체 몸판 좌표**라 요크·몸판 표시와 어긋나므로 그리지 않는다
       //   (데이터는 그대로 — 다른 프리셋으로 돌아가면 다시 보인다).
-      if (!_yokeModeOf(dp.working.geometry) && !_princessModeOf(dp.working.geometry)) _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
+      if (_designPatternLinesShown(dp.working.geometry)) _appendPatternLines(grp, dp.working.patternLines, pc);   // 사용자 패턴선(working 전용, 피스 transform 동승)
       if (_princessModeOf(dp.working.geometry)) _appendPrincessAnnotation(grp, window.designLayout && window.designLayout.princessLabels(dp.working.geometry), pc);
       if (_yokeModeOf(dp.working.geometry)) _appendYokeAnnotation(grp, window.designLayout && window.designLayout.yokeLabels(dp.working.geometry), pc);
       // 수동 외곽 수정(2026-11-06)이 반영된 소매에는 프리셋 제도 공정·치수 표시를 그리지 않는다(수정 전 계산값을 현재 형상의 실측처럼 보이지 않게 · 현재 실측은 소매 탭).
