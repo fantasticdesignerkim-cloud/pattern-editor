@@ -112,6 +112,15 @@ function _appendSelectionOverlay(grp, overlay){
   (overlay.anchors||[]).forEach(a=>{ const [x,y]=c2p(a.x, a.y); grp.appendChild(E("circle",{ cx:x, cy:y, r:4, class:"design-line-anchor" })); });
 }
 
+// 옆선 «길이 맞춤» 후보(미반영): 후보 선(점선) + 움직일 점의 원래→후보 위치. 형상·선 데이터는 그대로(반영 전).
+function _appendSeamFitPreview(grp, fit){
+  const d=_patternPathD(fit.segments);
+  if(d) grp.appendChild(E("path",{ d, fill:"none", class:"design-seamfit-preview", "data-seam-fit":"1", style:"stroke:#0E7490;stroke-width:2;stroke-dasharray:6 4;pointer-events:none" }));
+  const [fx,fy]=c2p(fit.from.x, fit.from.y), [tx,ty]=c2p(fit.to.x, fit.to.y);
+  grp.appendChild(E("line",{ x1:fx, y1:fy, x2:tx, y2:ty, style:"stroke:#0E7490;stroke-width:1;pointer-events:none" }));
+  grp.appendChild(E("circle",{ cx:tx, cy:ty, r:5, style:"fill:#0E7490;pointer-events:none", "data-seam-fit-point":"1" }));
+}
+
 // snap 흡착 표시: cyan 링 + 중심점(형상 cm → c2p, 피스 transform 동승).
 function _appendSnapHint(grp, point){
   if(!point) return;
@@ -699,6 +708,7 @@ function render(){
     const _draft = (_dlt && _dlt.getDraft) ? _dlt.getDraft() : null;
     const _overlay = (_dlt && _dlt.getSelectionOverlay) ? _dlt.getSelectionOverlay() : null;
     const _snap = (_dlt && _dlt.getSnapHint) ? _dlt.getSnapHint() : null;
+    const _fit = (_dlt && _dlt.getSeamFitPreview) ? _dlt.getSeamFitPreview() : null;
     // 페플럼 제작 정보(Ⓝ 에만 모델 존재, 토글 OFF 면 없음). 토글 행은 모델이 있을 때만 보인다.
     const _pepChk = document.getElementById("chkPeplumInfo"), _pepRow = document.getElementById("rowPeplumInfo");
     const _pepAll = (window.peplumAnnotation && dp.working.geometry) ? window.peplumAnnotation.buildModel(dp.working.geometry, dp.working.parameters && dp.working.parameters.body) : null;
@@ -738,6 +748,7 @@ function render(){
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
       if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay
       if (_snap && _snap.piece === pc) _appendSnapHint(grp, _snap.point);              // 흡착 표시(cyan)
+      if (_fit && _fit.piece === pc) _appendSeamFitPreview(grp, _fit);                 // 옆선 «길이 맞춤» 후보(미반영 · 2026-11-07)
       {   // 옆선 길이 자석 드래그 중 표시(2026-11-06): 앞·뒤 실제 길이·목표·남은 차 — 편집 점 바로 옆(막대는 드래그 중 숨김)
         const _sl = (_dlt && _dlt.getSeamLive) ? _dlt.getSeamLive() : null;
         if (_sl && _sl.at && _sl.piece === pc) {

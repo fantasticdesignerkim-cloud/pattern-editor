@@ -72,6 +72,41 @@ ok(tiny.x === 8 && tiny.y === 8, "2g: 캔버스보다 큰 막대 = 왼쪽 위 �
   ok(h.hits === 0 && h.around === true && h.y >= 288, "2h: 선 주변 후보가 모두 파트를 덮으면 파트 묶음 아래(가림 0) (" + h.x + "," + h.y + " hits " + h.hits + ")");
   ok(a.around === false && b.around === false && e.around === false, "2i: 선 주변에 빈자리가 있으면 종전 후보 그대로(묶음 바깥 후보는 동점에 밀림)");
 }
+// §2j dock(그리기 전용 고정 자리 · 2026-11-07 «다음 점 찍을 곳을 팝업이 가림»): 마지막 점·진행 방향 비움 · 작성 선 안 가림 · 붙박이 · 경계 안
+{
+  const K = Q.dock, DB = { l: 8, t: 8, r: 792, b: 592 }, DS = { w: 210, h: 84 };
+  const inB = r => r.x >= DB.l && r.y >= DB.t && r.x + DS.w <= DB.r && r.y + DS.h <= DB.b;
+  const dist = (r, p) => Math.hypot(Math.max(r.x - p.x, 0, p.x - (r.x + DS.w)), Math.max(r.y - p.y, 0, p.y - (r.y + DS.h)));
+  const line = (p0, p1) => { const o = []; for (let i = 0; i <= 20; i++) o.push({ x: p0.x + (p1.x - p0.x) * i / 20, y: p0.y + (p1.y - p0.y) * i / 20 }); return o; };
+  // dockClear(DB) = min(160, 584*0.28=163.5) = 160 → 아래 검사는 160 기준
+  const dirs = [["오른쪽", { x: 300, y: 300 }, { x: 600, y: 300 }], ["왼쪽", { x: 500, y: 300 }, { x: 200, y: 300 }], ["아래", { x: 400, y: 150 }, { x: 400, y: 520 }], ["위", { x: 400, y: 450 }, { x: 400, y: 80 }],
+    ["오른쪽 아래 모서리로", { x: 400, y: 300 }, { x: 760, y: 560 }], ["왼쪽 위 모서리로", { x: 400, y: 300 }, { x: 40, y: 40 }]];
+  dirs.forEach(([nm, p0, p1]) => {
+    const r = K({ bounds: DB, size: DS, last: p1, prev: p0, draft: line(p0, p1), pieces: [], keep: null });
+    ok(r && inB(r) && r.hits === 0 && r.near === 0 && dist(r, p1) >= 160 - 0.5, "2j-" + nm + ": 경계 안 · 작성 선 안 가림 · 마지막 점 둘레 비움 (" + r.name + " " + Math.round(dist(r, p1)) + "px)");
+  });
+  // 붙박이: 지금 자리가 여전히 조건을 지키면 그대로(점이 늘어도 · 다른 자리가 조각을 덜 덮어도)
+  const p0 = { x: 300, y: 300 }, p1 = { x: 420, y: 280 };
+  const r1 = K({ bounds: DB, size: DS, last: p1, prev: p0, draft: line(p0, p1), pieces: [], keep: null });
+  const r2 = K({ bounds: DB, size: DS, last: { x: 430, y: 330 }, prev: p1, draft: line(p0, p1).concat(line(p1, { x: 430, y: 330 })), pieces: [{ l: r1.x, t: r1.y, r: r1.x + DS.w, b: r1.y + DS.h }], keep: r1.index });
+  ok(r2.index === r1.index && r2.x === r1.x && r2.y === r1.y, "2j-붙박이: 조건을 지키는 동안 자리 고정(깜빡임·도망 없음)");
+  // 새 점이 고정 자리에 다가오면 그때만 옮긴다
+  const corner = { x: r1.x + DS.w / 2, y: r1.y + DS.h / 2 };
+  const r3 = K({ bounds: DB, size: DS, last: corner, prev: p1, draft: line(p0, p1).concat(line(p1, corner)), pieces: [], keep: r1.index });
+  ok(r3.index !== r1.index && r3.hits === 0 && r3.near === 0, "2j-이동: 새 점이 고정 자리에 찍히면 다른 자리로(" + r1.name + "→" + r3.name + ")");
+  // 조각 영역: 필수 조건이 같으면 덜 덮는 자리
+  const pc = [{ l: 8, t: 300, r: 792, b: 592 }];   // 아래 절반 = 조각
+  const r4 = K({ bounds: DB, size: DS, last: { x: 400, y: 300 }, prev: null, draft: [{ x: 400, y: 300 }], pieces: pc, keep: null });
+  ok(r4.overlap === 0 && r4.near === 0 && r4.y < 300, "2j-조각: 조각을 덜 덮는 위쪽 자리(" + r4.name + ")");
+  const r5 = K({ bounds: DB, size: DS, last: { x: 400, y: 300 }, prev: null, draft: [{ x: 400, y: 300 }], pieces: pc, keep: null });
+  ok(r5.index === r4.index && r5.x === r4.x, "2j-결정적: 같은 입력 = 같은 자리(커서 무관)");
+  // 좁은 화면(320 실측 캔버스 근사): 경계 안
+  const NB = { l: 8, t: 8, r: 312, b: 440 }, NS = { w: 220, h: 84 };
+  const r6 = K({ bounds: NB, size: NS, last: { x: 160, y: 380 }, prev: { x: 100, y: 300 }, draft: line({ x: 100, y: 300 }, { x: 160, y: 380 }), pieces: [], keep: null });
+  ok(r6.x >= NB.l && r6.x + NS.w <= NB.r && r6.y >= NB.t && r6.y + NS.h <= NB.b && r6.hits === 0 && r6.y + NS.h < 300, "2j-좁은 화면: 경계 안 · 아래로 진행 중이면 위쪽 자리(" + r6.name + ")");
+}
+ok(/kind === "draw"\) \{[^\n]*고정 자리/.test(CODE) || /vm\.kind === "draw"\) \{/.test(CODE), "2k: sync 의 그리기 분기 = dock(커서 좌표 미사용)");
+ok(!/clientX|clientY/.test(CODE.slice(CODE.indexOf("function dock("), CODE.indexOf("let dockIdx"))), "2l: dock 은 커서 좌표를 읽지 않음");
 
 // §3 연결 계약(소스)
 const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
@@ -80,7 +115,7 @@ ok(cvAt > 0 && barAt > cvAt && barAt < mainEnd, "3a: 막대는 #cv 뒤 형제(ca
 ok(["lineQuickTitle", "lineQuickDismiss", "lineQuickCancel", "lineQuickFinish", "lineQuickRoleCut", "lineQuickRoleBoundary", "lineQuickRoleGuide"].every(id => html.indexOf('id="' + id + '"') > 0), "3b: 막대 요소 정적 마크업(재생성 없음)");
 ok(/id="btnDesignLine"[^>]*onclick="designLineTool\.toggle\(\)"/.test(html) && /id="btnDesignFinish"[^>]*onclick="designLineTool\.finishDraw\(\)"/.test(html) && /id="btnRoleCut"[^>]*onclick="designLineTool\.setRole\('cut'\)"/.test(html) && /id="btnDesignSelect"[^>]*onclick="designLineTool\.toggleSelect\(\)"/.test(html), "3c: 기존 오른쪽 버튼 id·onclick 보존");
 const calls = (CODE.match(/T\.(\w+)\(/g) || []).map(s => s.slice(2, -1)).filter((v, i, arr) => arr.indexOf(v) === i).sort();
-const READ = ["getReflectState", "getSeamState", "getSeamSettings", "setSeamMagnet", "canFinishDraw", "findLine", "getBoundaryState", "getDraft", "getMode", "getSelectedId", "getSplitState", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine"], CMD = ["cancel", "doReflectToBodice", "doBoundaryApply", "doBoundaryPreview", "doSleeveEditUndo", "doSplit", "finishDraw", "setRole"];   // 2026-11-06 소매 «외곽 반영»·«반영 되돌리기»(오른쪽 버튼과 같은 명령)
+const READ = ["getReflectState", "getSeamState", "getSeamSettings", "setSeamMagnet", "canFinishDraw", "findLine", "getBoundaryState", "getDraft", "getMode", "getSelectedId", "getSplitState", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine", "getDrawHint", "getSeamFit"], CMD = ["cancel", "previewSeamFit", "applySeamFit", "cancelSeamFit", "doReflectToBodice", "doBoundaryApply", "doBoundaryPreview", "doSleeveEditUndo", "doSplit", "finishDraw", "setRole"];   // 2026-11-06 소매 «외곽 반영»·«반영 되돌리기»(오른쪽 버튼과 같은 명령)
 ok(calls.every(f => READ.concat(CMD).indexOf(f) >= 0) && CMD.every(f => calls.indexOf(f) >= 0), "3d: 도구 호출 = 읽기 + 기존 명령(finishDraw·cancel·setRole·doSplit·doBoundaryPreview·doBoundaryApply·doSleeveEditUndo)뿐 [" + calls.join(",") + "]");
 ok(!/patternLines|\.role\s*=[^=]|localStorage|innerHTML|makePatternLine|setMode\(/.test(CODE), "3e: 선 생성·역할 대입·저장·innerHTML·모드 직접 전환 없음");
 const R = fs.readFileSync(path.join(ROOT, "js/render.js"), "utf8");
@@ -88,7 +123,7 @@ const ret = R.indexOf("return; // 라이브 원형 draw"), syncAt = R.lastIndexO
 ok(syncAt > hitAt && hitAt > 0, "3f: design render 는 선·overlay·hit 을 그린 뒤 막대 sync(그려진 SVG 기준)");
 ok(/afterDraftRender\(\);\s*\n\s*if\(window\.designLineQuickBar\) window\.designLineQuickBar\.sync\(\);/.test(R), "3g: design 밖 render 도 sync(→ 숨김)");
 const ver = f => { const m = new RegExp(f.replace(/\./g, "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
-ok(ver("designLineQuickBar.js") === "2026110608" && ver("designLineTool.js") === "2026110702" && ver("render.js") === "2026110701" && /css\/style\.css\?v=2026110606/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
+ok(ver("designLineQuickBar.js") === "2026110805" && ver("designLineTool.js") === "2026110804" && ver("render.js") === "2026110801" && /css\/style\.css\?v=2026110606/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
 ok(html.indexOf('<script src="js/designLineQuickBar.js') > html.indexOf('<script src="js/designLineTool.js'), "3i: 막대 스크립트는 designLineTool 뒤");
 
 // §4 절개선 → «파트 분리» 다음 단계 행(2026-11-05 김님 요청) — 표시 모델은 getSplitState(오른쪽 버튼 판정) 그대로

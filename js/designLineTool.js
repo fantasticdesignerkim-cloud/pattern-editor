@@ -1319,6 +1319,136 @@
   function setSeamMagnet(on) { seamMagnetOn = !!on; seamStateCache = null; if (window.designLineQuickBar) window.designLineQuickBar.sync(); return seamMagnetOn; }
   function setSeamBasis(b) { if (b !== "front" && b !== "back" && b !== "auto") return seamBasis; seamBasis = b; seamStateCache = null; if (window.designLineQuickBar) window.designLineQuickBar.sync(); return seamBasis; }
   function getSeamSettings() { return { on: seamMagnetOn, basis: seamBasis }; }
+
+  // ── 옆선 «길이 맞춤»(2026-11-07 김님 «자석 순간을 눈대중으로 찾아야만 완료» 해소) ──
+  // 선택한 옆선 대체선에서 명시 클릭 한 번 → 이 선의 **중간 점·곡선 핸들 하나**를 움직여 목표 길이에 정확히 닿는 후보를 계산.
+  //   · 계측 = 자석과 같은 길이 함수(seamInfoFor 의 K + _forcedLen = bodiceCheckpoint 옆선 봉제 길이) · 해법 = 자석과 같은 sideSeamMagnet.projectToLevel
+  //     (현재 위치에서 등위선으로 사영 = 그 자유도에서 원래 위치에 가장 가까운 해) · 유효성 = 자석과 같은 _seamValid(자기 교차·남은 외곽 교차 금지).
+  //   · 후보 여럿 = 움직임(cm)이 가장 작은 유효 후보(원래 형상에 가장 가까운 것).
+  //   · 끝점(진동점·허리점·밑단 연결점)은 움직이지 않는다 · 점·곡선을 새로 만들지 않는다 · 이세·셔링 자동 추가 없음.
+  //   · 미리보기 = 형상 불변(seamFit 은 UI 상태) · «반영» = 원자적(재합성·권위 옆선 판정 실패 시 선·외곽·파트·미리보기 전부 이전 그대로) · «취소» = 버림.
+  let drawHint = null;   // 그리기 중 마지막 클릭이 거부된 이유(UI 전용 · 다음 점이 찍히면 지움)
+  let seamFit = null;   // { key, lineId, piece, segments, from, to, label, before, T }
+  function seamFitKey(p, line) { return J_(line.segments) + "|" + J_(p.working.sideSeamIntent || null) + "|" + seamBasis + "|" + line.id + "|" + J_(p.working.designOutline ? Object.keys(p.working.designOutline).map(k => p.working.designOutline[k].lineIds) : null); }
+  function seamFitPlan(p, line) {
+    const info = seamInfoFor(p, line); if (!info.touches) return null;
+    const me = line.piece === "front" ? "앞판" : "뒤판", ot = line.piece === "front" ? "뒤판" : "앞판";
+    const dofCount = (line.segments.length - 1) + line.segments.filter(sg => sg.kind === "cubic").length * 2;
+    const no = (reason, next, extra) => Object.assign({ ok: false, reason: reason, next: next || "", dof: dofCount }, extra || {});
+    if (info.T == null) return no(info.reason || "옆선 길이를 잴 수 없음", "옆선 구간 안에서 시작·끝나는 선인지 확인하세요");
+    if (seamBasis === line.piece) return no("기준판(" + me + ")은 고정으로 설정됨", ot + " 옆선 선을 선택해 맞추거나, 설정에서 기준판을 «자동»으로 바꾸세요");
+    if (!info.composed) return no("아직 몸판 외곽에 반영 전", "먼저 «몸판 외곽으로 반영»을 누르세요");
+    const f = segs => info.K + _forcedLen(info, segs);
+    const cur = f(line.segments), base = { len: cur, T: info.T, ref: info.ref, dof: dofCount };
+    if (Math.abs(cur - info.T) < 0.005) return Object.assign({ ok: false, done: true, reason: "이미 목표 길이와 같음", next: "" }, base);
+    const chordMin = info.K + Math.hypot(info.E1.x - info.E0.x, info.E1.y - info.E0.y);
+    if (info.T < chordMin - 1e-6) return no("불가능: 목표 " + fmt2(info.T) + "cm 가 두 끝점을 곧게 이은 길이 " + fmt2(chordMin) + "cm 보다 짧음",
+      "끝점(진동점·허리점·밑단)은 자동으로 옮기지 않습니다 — «여유»로 목표를 바꾸거나, " + ot + " 옆선을 맞추세요", base);
+    if (dofCount === 0) return no("이 선은 두 점 직선이라 움직일 중간 점·곡선 핸들이 없음",
+      "중간 점이 있는 선(3점 이상)이나 곡선(드래그)으로 다시 그리면 «길이 맞춤»을 쓸 수 있습니다", base);
+    const M = window.sideSeamMagnet, cands = [];
+    // 사영 시작점: 현재 위치(그 자유도에서 가장 가까운 해). 점이 양옆 점을 잇는 직선 위에 있으면 길이 기울기가 0(어느 쪽으로 밀어도 길어짐)
+    //   → 그 직선의 양쪽(수직 ±0.5cm)에서도 시작해 두 쪽 해를 모두 후보로 둔다(어느 쪽으로 휠지는 사용자가 «다른 후보»로 고른다 — 임의 판단 없음).
+    const tryDof = (label, start, build, chordA, chordB) => {
+      const starts = [start];
+      if (chordA && chordB) { const dx = chordB.x - chordA.x, dy = chordB.y - chordA.y, L = Math.hypot(dx, dy); if (L > 1e-9) { const n = { x: -dy / L * 0.5, y: dx / L * 0.5 }; starts.push({ x: start.x + n.x, y: start.y + n.y }, { x: start.x - n.x, y: start.y - n.y }); } }
+      starts.forEach(st => {
+        const pr = M.projectToLevel(Q => f(build(Q)), info.T, st);
+        if (!pr.ok) return;
+        if (cands.some(c => c.label === label && Math.hypot(c.to.x - pr.point.x, c.to.y - pr.point.y) < 1e-6)) return;
+        const segs = build(pr.point); if (!_seamValid(info, segs).ok) return;
+        const v = f(segs); if (!(Math.abs(v - info.T) < 1e-5)) return;
+        cands.push({ label: label, segments: segs, from: { x: start.x, y: start.y }, to: pr.point, move: Math.hypot(pr.point.x - start.x, pr.point.y - start.y) });
+      });
+    };
+    const a = anchorsFromSegments(line.segments);
+    for (let k = 1; k < a.length - 1; k++) {
+      const oa = a[k], orig = line.segments;
+      tryDof("중간 점 " + k, oa, Q => { const tmp = { segments: JSON.parse(JSON.stringify(orig)) }; moveAnchor(tmp, k, Q.x - oa.x, Q.y - oa.y); return tmp.segments; }, a[k - 1], a[k + 1]);
+    }
+    line.segments.forEach((sg, si) => {
+      if (sg.kind !== "cubic") return;
+      ["c1", "c2"].forEach(which => tryDof("곡선 핸들", sg[which], Q => line.segments.map((s, ix) => { if (ix !== si) return s; const o = cloneSeg(s); o[which] = { x: Q.x, y: Q.y }; return o; }), sg.from, sg.to));
+    });
+    if (!cands.length) return no("이 선의 중간 점·핸들 하나로는 목표 길이에 닿는 모양을 찾지 못함(선이 꼬이거나 외곽과 교차)", "점을 직접 끌어 모양을 바꾼 뒤 다시 «길이 맞춤»을 누르세요", base);
+    cands.sort((x, y) => (x.move - y.move) || (x.to.x - y.to.x) || (x.to.y - y.to.y));   // 가장 조금 움직이는 후보 먼저 · 동률은 결정적 순서
+    return Object.assign({ ok: true, reason: "", next: "", best: cands[0], cands: cands, count: cands.length }, base);
+  }
+  function getSeamFit() {
+    const p = project(); if (!p || mode !== "select" || !selectedId) return null;
+    const line = findLine(selectedId); if (!line || line.role !== "boundary" || (line.piece !== "front" && line.piece !== "back")) return null;
+    const plan = seamFitPlan(p, line); if (!plan) return null;
+    const pv = getSeamFitPreview();
+    return { ok: !!plan.ok, done: !!plan.done, reason: plan.reason, next: plan.next, dof: plan.dof, len: plan.len, T: plan.T, ref: plan.ref, count: plan.count || 0,
+      preview: pv ? { label: pv.label, move: pv.move, before: pv.before, T: pv.T, index: pv.index, count: pv.count, dropped: pv.dropped } : null,
+      note: (!pv && seamFitNote && seamFitNote.key === seamFitKey(p, line)) ? seamFitNote.text : null };
+  }
+  function getSeamFitPreview() {
+    if (!seamFit || mode !== "select" || selectedId !== seamFit.lineId) return null;
+    const p = project(), line = p && findLine(seamFit.lineId);
+    if (!line || seamFitKey(p, line) !== seamFit.key || seamFit.geom !== p.working.geometry) { seamFit = null; return null; }
+    return seamFit;
+  }
+  // 후보를 완료 게이트 전체(권위 check)로 시험: 반영했다고 가정한 사본 프로젝트에서 합성 → check. 형상 불변(사본만).
+  //   허용 = 새 차단 사유를 만들지 않음(지금 있던 옆선 불일치·측정 불가는 풀리는 것이 목적이라 제외) + 옆선 정합.
+  //   (예: 옆선 대체선 끝점이 외곽 모서리와 미세하게 어긋난 채 바깥으로 휘면 «앞판 외곽이 연결되지 않음» — 그런 후보는 내놓지 않는다.)
+  function seamFitGate(p, line, segs) {
+    const BC = window.bodiceCheckpoint, before = BC.check(p).fails || [];
+    const pls = p.working.patternLines.map(l => l.id === line.id ? Object.assign({}, l, { segments: segs }) : l);
+    const comp = composeWith(p.working.geometry, pls);
+    if (!comp.ok) return { ok: false, why: "외곽 합성 불가" };
+    const c = BC.check(Object.assign({}, p, { working: Object.assign({}, p.working, { patternLines: pls, designOutline: comp.designOutline, parts: [], boundaryPreview: null }) }));
+    const SEAM = ["side-seam-mismatch", "side-seam-unmeasured"];
+    const added = (c.fails || []).filter(f => before.indexOf(f) < 0 && SEAM.indexOf(f) < 0);
+    if (c.sideSeam.status === "mismatch" || c.sideSeam.status === "unmeasured") return { ok: false, why: "옆선 판정 불일치" };
+    if (added.length) return { ok: false, why: added.map(f => window.bodiceFailText ? window.bodiceFailText(f) : f).join(" · ") };
+    return { ok: true };
+  }
+  // next = true → 지금 미리보기의 다음 후보(같은 출처일 때만 · 끝이면 처음으로). 완료 게이트를 깨는 후보는 건너뛰고 이유를 남긴다.
+  let seamFitNote = null;
+  function previewSeamFit(next) {
+    const p = project(), line = selectedId && findLine(selectedId); if (!p || !line || mode !== "select") return false;
+    seamFitNote = null;
+    const plan = seamFitPlan(p, line); if (!plan || !plan.ok) { seamFit = null; rerender(); return false; }
+    const usable = [], dropped = [];
+    plan.cands.forEach(cd => { const g = seamFitGate(p, line, cd.segments); if (g.ok) usable.push(cd); else dropped.push(g.why); });
+    if (!usable.length) {
+      seamFit = null;
+      seamFitNote = { key: seamFitKey(p, line), text: "후보 " + plan.count + "개 모두 반영하면 완료 검사가 새로 막힘(" + Array.from(new Set(dropped)).join(" · ") + ") — 내놓지 않음 · 선 끝점이 외곽 모서리에 정확히 붙었는지 확인하거나 점을 직접 조정하세요" };
+      rerender(); return false;
+    }
+    const cur = next ? getSeamFitPreview() : null, idx = cur ? (cur.index + 1) % usable.length : 0, b = usable[idx];
+    seamFit = { key: seamFitKey(p, line), geom: p.working.geometry, lineId: line.id, piece: line.piece, segments: b.segments, from: b.from, to: b.to, label: b.label, move: b.move, before: plan.len, T: plan.T, index: idx, count: usable.length,
+      dropped: dropped.length ? dropped.length + "개 후보 제외(" + Array.from(new Set(dropped)).join(" · ") + ")" : null };
+    rerender(); return true;
+  }
+  function cancelSeamFit() { const had = !!seamFit; seamFit = null; if (had) rerender(); return had; }
+  function applySeamFit() {
+    const pv = getSeamFitPreview(); if (!pv) return { ok: false, reason: "미리보기가 없거나 낡음 — 다시 «길이 맞춤»을 누르세요" };
+    const p = project(), w = p.working, line = findLine(pv.lineId);
+    const prev = { segs: line.segments, parts: w.parts, bp: w.boundaryPreview, dO: w.designOutline };
+    pv.failsBefore = window.bodiceCheckpoint.check(p).fails || [];
+    const restore = reason => {
+      line.segments = prev.segs; w.parts = prev.parts; w.boundaryPreview = prev.bp; w.designOutline = prev.dO;
+      seamStateCache = null; rerender(); notifyDesignResult();
+      if (window.refreshFrontPlacket) window.refreshFrontPlacket();
+      if (window.refreshDesignBodyPanel) window.refreshDesignBodyPanel();
+      return { ok: false, reason: reason };
+    };
+    line.segments = JSON.parse(JSON.stringify(pv.segments));
+    const r = recomposeDesignOutline();
+    if (!r.ok) return restore("외곽 합성 불가: " + r.reason);
+    const c1 = window.bodiceCheckpoint.check(p), ss = c1.sideSeam;
+    if (ss.status === "mismatch" || ss.status === "unmeasured") return restore("반영해도 옆선 판정이 맞지 않음(" + ss.status + ")");
+    const added = (c1.fails || []).filter(f => (pv.failsBefore || []).indexOf(f) < 0 && f !== "side-seam-mismatch" && f !== "side-seam-unmeasured");
+    if (added.length) return restore("반영하면 완료 검사가 새로 막힘(" + added.map(f => window.bodiceFailText ? window.bodiceFailText(f) : f).join(" · ") + ")");
+    seamFit = null; seamStateCache = null;
+    setBoundaryNote("옆선 길이 맞춤 반영 · 외곽 재합성");
+    if (window.refreshFrontPlacket) window.refreshFrontPlacket();
+    if (window.refreshDesignBodyPanel) window.refreshDesignBodyPanel();
+    syncCutStatus(); rerender(); notifyDesignResult();
+    return { ok: true };
+  }
   // ── 디자인 외곽 합성 DOM 연동 ──
   function pieceBoundaries(piece) { return lines().filter(l => l.piece === piece && l.role === "boundary"); }
   // 한 piece 의 모든 boundary 를 **원본 ring 기준으로** 합성. {ok, empty?, outline?, lineIds?, reason?}.
@@ -1540,8 +1670,13 @@
         if (!draft) {
           if (!piece) { setNote("피스 위를 클릭하세요"); return; }
           draft = { piece: piece, anchors: [{ p: placeGeo(piece), h: null }] }; setNote(DRAW_NOTE);
-        } else if (piece !== draft.piece) { setNote("같은 피스 안에서 이어 그리세요"); return; }
+        } else if (piece !== draft.piece) {   // 거부: 점 안 찍힘 — 이유를 막대에도(좁은 화면은 오른쪽 안내가 안 보임)
+          setNote("같은 피스 안에서 이어 그리세요");
+          drawHint = "점이 찍히지 않음 — " + ({ front: "앞판", back: "뒤판", sleeve: "소매", collar: "카라" }[draft.piece] || "같은 조각") + " 안을 누르세요(다른 조각·바깥은 이어 그릴 수 없음)";
+          if (window.designLineQuickBar) window.designLineQuickBar.sync(); return;
+        }
         else { draft.anchors.push({ p: placeGeo(draft.piece), h: null }); setNote(DRAW_NOTE); }
+        drawHint = null;
         lastDown = { t: now, x: e.clientX, y: e.clientY };
         drawDrag = { startX: e.clientX, startY: e.clientY };
       } else { // select
@@ -1774,6 +1909,8 @@
     getBoundaryState, visibleBoundaryPreview, boundaryStatusOf, pruneStaleBoundaryPreview,
     // 옆선 길이 자석(2026-11-06)
     getSeamState, getSeamLive, getReflectState, doReflectToBodice, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
+    // 옆선 «길이 맞춤»(2026-11-07) · 그리기 중 거부 안내
+    getSeamFit, getSeamFitPreview, previewSeamFit, applySeamFit, cancelSeamFit, getDrawHint: () => (mode === "draw" && draft ? drawHint : null),
     // 순수
     pointToGeometryCm, geometryToDrawCm, segmentsFromAnchors, makePatternLine, nextId,
     anchorsFromSegments, moveAnchor, segmentDegenerate, lineDegenerate, distToLine, distToSegment, handlesOf,

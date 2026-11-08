@@ -140,6 +140,7 @@
       <div class="lqb-row" data-lqb="draw" hidden>
         <button type="button" class="lqb-btn" id="lineQuickCancel" title="작성 중 선을 버리고 그리기를 끝냅니다">그리기 취소</button>
         <button type="button" class="lqb-btn lqb-main" id="lineQuickFinish" disabled aria-disabled="true">그리기 완료</button>
+        <span class="lqb-reason" id="lineQuickDrawHint" role="status"></span>
       </div>
       <div class="lqb-row" data-lqb="role" role="group" aria-label="선 역할" hidden>
         <button type="button" class="lqb-btn" id="lineQuickRoleCut" data-role="cut" aria-pressed="false">절개선</button>
@@ -165,8 +166,18 @@
         <span class="lqb-reason" id="lineQuickBoundaryReason"></span>
       </div>
       <div class="lqb-next" data-lqb="seam" hidden>
-        <button type="button" class="lqb-btn lqb-wide" id="lineQuickSeamToggle" aria-pressed="true" aria-describedby="lineQuickSeamText">옆선 자석 켬</button>
         <span class="lqb-reason" id="lineQuickSeamText"></span>
+        <!-- 옆선 «길이 맞춤»(2026-11-07): 명시 클릭 → 후보 미리보기(형상 불변) → «맞춤 반영»(원자적) 또는 «취소». 불가면 이유·다음 할 일. -->
+        <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickSeamFit" aria-describedby="lineQuickSeamFitText">길이 맞춤</button>
+        <div class="lqb-row" id="lineQuickSeamFitConfirm" hidden>
+          <button type="button" class="lqb-btn" id="lineQuickSeamFitCancel">취소</button>
+          <button type="button" class="lqb-btn" id="lineQuickSeamFitNext" hidden>다른 후보</button>
+          <button type="button" class="lqb-btn lqb-main" id="lineQuickSeamFitApply">맞춤 반영</button>
+        </div>
+        <span class="lqb-reason" id="lineQuickSeamFitText"></span>
+        <span class="lqb-reason" id="lineQuickBodiceFails"></span>
+        <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickCompleteBodice" hidden>몸판 모양 완료</button>
+        <button type="button" class="lqb-btn lqb-wide" id="lineQuickSeamToggle" aria-pressed="true" aria-describedby="lineQuickSeamText">옆선 자석 켬</button>
         <button type="button" class="lqb-btn lqb-wide" id="lineQuickEaseToggle" aria-expanded="false" aria-controls="lineQuickEase">여유(셔링 등 의도적인 길이 차)</button>
         <div class="lqb-ease" id="lineQuickEase" role="group" aria-label="옆선 여유 의도" hidden>
           <div class="lqb-row">
@@ -634,7 +645,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026110701"></script>
+<script src="js/render.js?v=2026110801"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -664,10 +675,10 @@
 <script src="js/sleeveAnnotation.js?v=2026110404"></script>
 <script src="js/designLayout.js?v=2026102904"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026110702"></script>
+<script src="js/designLineTool.js?v=2026110804"></script>
 <script src="js/sleeveSplit.js?v=2026110604"></script>
 <script src="js/sleeveOutlineEdit.js?v=2026110604"></script>
-<script src="js/designLineQuickBar.js?v=2026110608"></script>
+<script src="js/designLineQuickBar.js?v=2026110805"></script>
 <!-- 처리 방법 157 맞댄다(순수): window.designJoin. designLineTool 다음. -->
 <script src="js/designJoin.js?v=2026092910"></script>
 <!-- 허리 이음선 Ⓜ 조합(순수): window.designWaistSeam. designLineTool·designJoin 다음, designBodice 앞. -->
@@ -762,7 +773,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026110605"></script>
+<script src="js/ui.js?v=2026110801"></script>
 
 </body>
 </html>

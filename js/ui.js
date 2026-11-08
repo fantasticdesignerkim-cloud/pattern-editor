@@ -898,6 +898,7 @@
     };
     return m[reason] || reason;
   }
+  window.bodiceFailText = bodiceFailStr;   // 패턴선 막대(옆선 행)도 같은 문구로 완료 차단 사유를 보인다(2026-11-07)
   // refresh 에서 읽기 전용 — check() 실행해 검사 요약·완료 버튼·상태(미완료/완료/변경됨) 갱신.
   function updateBodiceCheckpointUI(project) {
     const checkNote = document.getElementById("designBodiceCheckNote");
@@ -914,7 +915,7 @@
     if (btn) btn.disabled = !c.ok;
     const latest = window.bodiceCheckpoint.latest(project);
     if (statusNote) {
-      if (!latest) statusNote.textContent = c.ok ? "완료 가능 · 세션 전용" : "완료 전 검사: " + bodiceFailStr(c.fails[0]);
+      if (!latest) statusNote.textContent = c.ok ? "완료 가능 · 세션 전용" : "완료 전 검사(" + c.fails.length + "건): " + c.fails.map(bodiceFailStr).join(" · ");   // 첫 건만 보이면 «옆선만 맞추면 완료»로 오해 — 전부 보인다(2026-11-07)
       else if (window.bodiceCheckpoint.isCurrentBodiceChanged(project)) statusNote.textContent = "몸판 변경됨 · 다시 완료 필요 · 세션 전용";
       else statusNote.textContent = "몸판 완료됨(원형 v" + latest.sourceVersion + ") · 세션 전용";
     }
