@@ -496,11 +496,22 @@
   // 대체선 하나의 계획(공용): 끝점 투영·짧은 arc 선택·다트/모호/교차 검증 → {ok, reason,
   // kept, replaced, bnd(방향·끝점 강제), aPos, bPos(대체 arc 의 ring position 구간, forward)}.
   // replaceArcOnRing(단일)·composeDesignOutline(다중) 이 공유해 동작 일치를 강제한다.
+  // 경계 분할점 → ring 접점 결속(2026-11-07 · 실측: 진동 path 끝 (23.053, 20.617)[원본 3자리 반올림] ↔ 옆선 시작·옆허리 다트 c apex (23.053125, 20.616667),
+  //   차 0.000356cm = RING_EPS 주석의 «부동소수 drift 0.0004» — ring 은 둘을 한 접점으로 잇는다). 투영점과 그 세그먼트 끝(접점) 사이 남는 조각이
+  //   ring 자신의 접점 판정 거리(RING_EPS)보다 짧으면, 그 조각은 ring 기준으로 접점과 구별되지 않는 가짜 변(0.00033cm 조각 → ring 걸음이 모호 → 연결 실패)이므로
+  //   분할을 그 접점(t=0/1)에 정확히 둔다. 허용오차를 넓히지 않고(RING_EPS·CONNECT_EPS 그대로), 선 데이터·원본 형상은 바꾸지 않는다(합성 결과의 분할 위치만).
+  function _bindJunction(pj, ring) {
+    if (!pj || pj.i < 0) return pj;
+    const seg = ring[pj.i].seg;
+    if (pj.t > 0 && _segLen(subSegment(seg, 0, pj.t)) < RING_EPS) return Object.assign({}, pj, { t: 0, point: _pt(seg.from) });
+    if (pj.t < 1 && _segLen(subSegment(seg, pj.t, 1)) < RING_EPS) return Object.assign({}, pj, { t: 1, point: _pt(seg.to) });
+    return pj;
+  }
   function _boundaryPlan(ring, boundarySegs, opts) {
     opts = opts || {}; const onTol = opts.onTol != null ? opts.onTol : 0.05, ambRatio = opts.ambRatio != null ? opts.ambRatio : 0.9;
     if (!boundarySegs || !boundarySegs.length) return { ok: false, reason: "대체선 없음" };
     const B0 = boundarySegs[0].from, B1 = boundarySegs[boundarySegs.length - 1].to;
-    const pj0 = projectOntoRing(B0, ring), pj1 = projectOntoRing(B1, ring);
+    const pj0 = _bindJunction(projectOntoRing(B0, ring), ring), pj1 = _bindJunction(projectOntoRing(B1, ring), ring);
     if (pj0.dist > onTol) return { ok: false, reason: "대체선 시작점이 경계에서 벗어남" };
     if (pj1.dist > onTol) return { ok: false, reason: "대체선 끝점이 경계에서 벗어남" };
     if (ring[pj0.i].source !== "outline" || ring[pj1.i].source !== "outline") return { ok: false, reason: "대체선 끝점이 다트 다리 위 — 후속 지원" };
