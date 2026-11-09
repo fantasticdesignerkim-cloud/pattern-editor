@@ -426,6 +426,7 @@
   //   프리셋은 **입력칸 묶음**이다. 적용하면 아래 입력들을 채우고 그대로 적용한다 — 그 뒤 사용자가
   //   값을 고치면 더 이상 그 라인이 아니므로, 선택 상태를 형상에 저장하지 않는다(칼라와 같은 원칙).
   //   예외는 **다트 배분**(waistDartScales) — 입력칸이 없어 parameters 에만 산다.
+  let bodyPanelProject = null;   // 프로젝트 저장: 몸판 입력칸을 마지막으로 채운 project(미반영 입력 판정 기준)
   let pendingDartScales;   // undefined = 이번 적용에서 건드리지 않음 / null = 제거 / 객체 = 설정
   let pendingFlare;        // 〃 (true = 다트를 닫아 밑단 벌리기)
   let pendingNeckTuck;     // 〃 (true = 다트를 닫아 목둘레 절개 2곳 벌리기, 프리셋 Ⓘ · "J" = Ⓘ + 중심 평행 띠, 프리셋 Ⓙ — 플레어·이음선과 함께 쓰지 않는다)
@@ -3645,6 +3646,7 @@
     syncBodiceLineUI(); dartScaleNote(project); girthNote(project); sideLenNote(project); neckLenNote(project); syncYokeToolLock(project);
     syncBodyButtons();
     syncNecklineModeUI(project);
+    bodyPanelProject = project;   // 프로젝트 저장: 이 project 의 committed 값으로 입력칸을 채웠다(미반영 입력 판정 기준)
     // 앞중심 여밈 입력·상태 복원(포커스 중 안 덮음)
     const cp = committedPlacket(project);
     setIf("inpPlacketOverlap", cp.overlap); setIf("inpPlacketFacing", cp.facing);
@@ -4066,6 +4068,93 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
+
+  // ── 프로젝트 저장·열기(js/projectFile.js) 가 쓰는 세션 UI 훅(2026-11-09) ──
+  // 저장 = committed project 만 담는다 → 반영 전 상태는 조용히 버리지 않고 «먼저 마무리» 안내로 막는다.
+  function pendingPresetSet() {
+    return [pendingDartScales, pendingFlare, pendingNeckTuck, pendingNeckGatherBand, pendingNeckGather, pendingFlareSlash, pendingWaistSeam,
+      pendingPeplumCut, pendingPeplumFlare, pendingYokeSeam, pendingYokeGather, pendingPrincess, pendingDartExtra].some(v => v !== undefined);
+  }
+  function bodyInputsUnapplied(project) {
+    if (!project || bodyPanelProject !== project) return false;   // 이 project 로 채운 적 없는 입력칸은 판정하지 않는다
+    const cb = committedBody(project), cn = committedNeckline(project), cp = committedPlacket(project);
+    const val = id => { const el = document.getElementById(id); return el ? String(el.value) : null; };
+    const differs = (id, v) => { const x = val(id); return x !== null && x !== (v == null ? "" : fmtL(v)); };
+    return differs("inpBodyBustEase", cb.E) || differs("inpBodyHemExtension", cb.L) || differs("inpBodyWaistOffset", cb.W)
+      || differs("inpBodyHemOffset", cb.H) || differs("inpBodySideCurve", cb.Cv) || differs("inpBodyWaistDartTotal", cb.Dt) || differs("inpBodyWaistTarget", cb.Wt)
+      || currentNeckType() !== cn.type
+      || differs("inpNeckWidth", cn.W) || differs("inpNeckFrontDepth", cn.F) || differs("inpNeckBackDepth", cn.B) || differs("inpNeckCurveAmount", cn.CA)
+      || differs("inpNeckVDepth", cn.VD) || differs("inpNeckSquareWidth", cn.SW) || differs("inpNeckCornerRadius", cn.CR)
+      || differs("inpPlacketOverlap", cp.overlap) || differs("inpPlacketFacing", cp.facing);
+  }
+  function projectUnfinished() {
+    const out = [];
+    if (busyTool()) out.push("원형 다트 이동·곡선 편집을 마치세요");
+    const DLT = window.designLineTool;
+    if (DLT && DLT.getDraft && DLT.getDraft()) out.push("그리는 중인 선이 있습니다 · «그리기 완료» 또는 «그리기 취소»");
+    if (DLT && DLT.getSeamFitPreview && DLT.getSeamFitPreview()) out.push("옆선 길이 맞춤 미리보기를 적용하거나 취소하세요");
+    if (pendingPresetSet()) out.push("선택한 라인이 아직 몸판 «적용» 전입니다");
+    const dw = window.designWorkflow, p = dw && dw.current();
+    if (bodyInputsUnapplied(p)) out.push("몸판 수치·네크라인·여밈 입력칸에 «적용»하지 않은 값이 있습니다");
+    return out;
+  }
+
+  // 교체 트랜잭션용 화면 상태 캡처/복원(projectFile.commitCandidate). 값 복사만 — project 는 건드리지 않는다.
+  const DESIGN_INPUTS = '[data-panel="design-body"] input, [data-panel="design-body"] select, [data-panel="design-body"] textarea';
+  function captureSessionUI() {
+    const DLT = window.designLineTool;
+    return {
+      stage: uiState.stage, tool: uiState.tool, subtab: currentDesignSubtab(),
+      pending: [pendingDartScales, pendingFlare, pendingNeckTuck, pendingNeckGatherBand, pendingNeckGather, pendingFlareSlash, pendingWaistSeam,
+        pendingPeplumCut, pendingPeplumFlare, pendingYokeSeam, pendingYokeGather, pendingPrincess, pendingDartExtra],
+      sleeveLenAuto, sleeveRiseAuto, bodyPanelProject,
+      lineMode: DLT && DLT.getMode ? DLT.getMode() : null,
+      inputs: [...document.querySelectorAll(DESIGN_INPUTS)].map(el => ({ el, value: el.value, checked: el.checked })),
+      neckCards: [...document.querySelectorAll("#necklineCards .neck-card")].map(el => ({ el, pressed: el.getAttribute("aria-pressed") })),
+      cam: (typeof viewZ !== "undefined") ? { SC, MX, MY, viewX, viewY, viewZ } : null
+    };
+  }
+  function rollbackSessionUI(c) {
+    let ok = true;
+    uiState.stage = c.stage; uiState.tool = c.tool;
+    [pendingDartScales, pendingFlare, pendingNeckTuck, pendingNeckGatherBand, pendingNeckGather, pendingFlareSlash, pendingWaistSeam,
+      pendingPeplumCut, pendingPeplumFlare, pendingYokeSeam, pendingYokeGather, pendingPrincess, pendingDartExtra] = c.pending;
+    sleeveLenAuto = c.sleeveLenAuto; sleeveRiseAuto = c.sleeveRiseAuto; bodyPanelProject = c.bodyPanelProject;
+    if (c.cam) { SC = c.cam.SC; MX = c.cam.MX; MY = c.cam.MY; viewX = c.cam.viewX; viewY = c.cam.viewY; viewZ = c.cam.viewZ; }
+    const DLT = window.designLineTool;   // 선 도구는 afterRestore 마지막에만 끈다 → 거기까지 못 갔으면 선택까지 그대로
+    if (DLT && DLT.getMode && c.lineMode && DLT.getMode() !== c.lineMode) { try { DLT.setMode(c.lineMode); } catch (e) { ok = false; } }
+    try { refresh(); } catch (e) { ok = false; }
+    setDesignSubtab(c.subtab);
+    c.inputs.forEach(x => { x.el.value = x.value; x.el.checked = x.checked; });   // refresh 가 덮은 입력칸(미적용 값 포함) 원래대로
+    c.neckCards.forEach(x => { if (x.pressed == null) x.el.removeAttribute("aria-pressed"); else x.el.setAttribute("aria-pressed", x.pressed); });
+    try { syncBodyButtons(); if (typeof render === "function") render(); } catch (e) { ok = false; }
+    if (!ok) throw new Error("ui-rollback-partial");
+  }
+  window.projectSessionUI = Object.freeze({
+    snapshot: () => ({ stage: uiState.stage, subtab: currentDesignSubtab() }),
+    unfinished: projectUnfinished,
+    capture: captureSessionUI,
+    rollback: rollbackSessionUI,
+    afterRestore(u) {
+      // 순서: 값 초기화(던지지 않음) → 단계·탭·갱신·render → 선 도구 끄기(마지막 — 실패 시 이전 선택 보존)
+      pendingDartScales = pendingFlare = pendingNeckTuck = pendingNeckGatherBand = pendingNeckGather = pendingFlareSlash = pendingWaistSeam = undefined;
+      pendingPeplumCut = pendingPeplumFlare = pendingYokeSeam = pendingYokeGather = pendingPrincess = pendingDartExtra = undefined;
+      sleeveLenAuto = null; sleeveRiseAuto = null; bodyPanelProject = null;
+      if (u.stage === "design") {
+        if (uiState.stage !== "design") setWorkspaceStage("design");
+        else { refresh(); if (window.designLayout) window.designLayout.enterDesign(); }
+        setDesignSubtab(u.subtab);
+        refresh();   // 서브탭 게이트(소매·카라)는 기존 규칙 그대로 — 게이트가 닫혀 있으면 몸판으로 되돌아간다
+        if (typeof render === "function") render();
+      } else {
+        if (uiState.stage !== "draft") setWorkspaceStage("draft");
+        else refresh();
+        setDesignSubtab(u.subtab);
+      }
+      const DLT = window.designLineTool;
+      if (DLT && DLT.setMode && DLT.getMode() !== "off") { DLT.setMode("off"); if (typeof render === "function") render(); }
+    }
+  });
 
   // 브라우저에서 검증 가능하도록 전역 노출
   window.setWorkspaceStage      = setWorkspaceStage;

@@ -304,8 +304,13 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
    화면 초기화(resetView)는 유지(줌·팬 복구에 유효). inspector 는 기존 hidden 로직 담당. */
 [data-workspace-stage="design"] .canvas-toolbar,
 [data-workspace-stage="design"] [data-menu="view"],
-[data-workspace-stage="design"] [data-menu="file"],
 [data-workspace-stage="design"] .edit-history{display:none}
+/* 프로젝트 저장·열기(2026-11-09): design 에서도 파일 메뉴는 열리되 **프로젝트 행만** 보인다
+   (원형 곡선 저장·가져오기·DXF 는 원형 stage 전용 그대로). */
+[data-workspace-stage="design"] [data-menu="file"] .pop-body > .row:not(.project-row){display:none}
+#projectOpenConfirm{flex-wrap:wrap}
+#projectOpenConfirm[hidden]{display:none}   /* .row{display:flex} 가 UA [hidden] 을 이기므로 명시 */
+#projectFileNote{white-space:normal;max-width:320px}
 .row select{width:96px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--navy)}
 
 .statusbar{display:flex;align-items:center;gap:12px;height:22px;padding:0 10px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}

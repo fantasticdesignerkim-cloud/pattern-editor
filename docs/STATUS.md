@@ -29,7 +29,19 @@
 
 ¹ **git 대조(2026-11-04, HEAD `0672ee5`)**: 아래 소매 항목의 «미커밋» 은 기록 당시 상태다 — **소매 Ⓐ~Ⓩ 26종의 엔진·적용·UI 는 전부 커밋돼 있다**(소매별 커밋 = [감사 기록 §2](sleeve-integration-audit.md)). 지금 미커밋은 통합 점검 파일(`test/harness/sleeveIntegrationCheck.js` · `runAll` 등록 · 이 문서·감사 기록), 승인 후 보완(`js/designResult.js` · `js/ui.js` · `js/sleeveAnnotation.js` · `index.html` 캐시 버전 · 캐시 버전 단언 27개 검사), 기존 `docs/TESTING.md` 로컬 수정이다.
 
-**세션 전용**: 완료본은 전부 메모리에만 있다 — **reload 하면 사라진다**(저장·복원 미구현).
+**세션 전용 + 프로젝트 파일(2026-11-09)**: 완료본은 메모리에만 있고 reload 하면 사라진다 — 단, **디자인 프로젝트는 파일 메뉴 «프로젝트 저장/열기»로 JSON 한 파일에 담아 이어갈 수 있다**(아래 절). 자동 저장·클라우드·계정 없음.
+
+## 프로젝트 저장·열기 (2026-11-09 김님 승인 · 미커밋 · Codex 검토 대기)
+
+- **범위(v1)**: 원형 완료 → «디자인 시작» 뒤의 **디자인 프로젝트 전체** = 출발 원형 완료본(blockWorkflow 레코드: snapshot·canonicalHash·version) + `designProject` 전부(sourceBlock·baseSource·referenceGeometry·`working` 의 모든 키 — geometry·parameters·patternLines(곡선 포함)·designOutline·layout(배치·placement)·parts·boundaryPreview·sleeveEdit·각 프리셋 상태·bodice/sleeve/collar/designResult 완료본) + 화면 단계(원형/디자인 · 몸판/소매/카라 탭). **미지원(정직 표시)**: 원형 편집 화면(치수 입력·진동선 곡선·다트 이동 — 기존 «데이터 내보내기» 곡선 JSON 의 몫) · 디자인 없이 원형만 저장(버튼 비활성 + 이유) · «적용» 안 한 입력칸 값.
+- **파일**: `pattern-project_B83-W64-BL38_YYYYMMDD-HHMM.json` = `{format:"bunka-pattern-editor.project", schemaVersion:1, savedAt, integrity:{algorithm:"sha256", payload}, payload:{graph, ui, status, summary}}` · 곡선 JSON(`armhole_data_*.json`, 배열)과 이름·형식 모두 구분(곡선 파일을 열면 «데이터 가져오기로 여세요»).
+- **graph = 충실 인코딩**(`js/projectFile.js`): NaN/±Infinity/함수/Map 등 = **저장 거부(경로 표시)** · undefined 속성·-0 = 경로 목록으로 그대로 · 공유 참조(예: designResult.bodice === bodiceResult)·순환 = alias · Object.freeze = deep/shallow 경로 목록 → 열 때 같은 동결.
+- **열기 순서**: 파일 읽기 → JSON → format/schemaVersion → 금지 키(`__proto__`·constructor·prototype)·유한수 → sha256 → graph 복원 → 원형 완료본 canonical 재계산(`blockWorkflow.verifyCompleted`) → project 키·출처 정합(sourceBlock·baseSource·referenceGeometry = 완료본) → 동결 불변식 → **완료/변경됨 재계산**(기존 `isCurrent*Changed`, `designWorkflow.evaluateIsolated` — 후보를 동기적으로만 잠깐 current 로) = 저장 시점과 같아야 함 → 재인코딩 = 파일(판정 무부작용) → (현재 작업이 있으면) «교체하고 열기/취소» → **교체 트랜잭션**(`projectFile.commitCandidate`): ① 화면 상태 캡처(`projectSessionUI.capture` — 단계·도구·서브탭·미적용 라인 선택·자동 입력 기록·선 도구 모드·디자인 패널 입력칸 값·네크라인 카드·카메라) ② `blockWorkflow.adoptRestored` ③ `designWorkflow.adoptRestored`(둘 다 되돌리기 함수 반환 — 이전 project 가 null 이어도 같은 객체로) ④ `afterRestore`(값 초기화 → 단계·탭·갱신·render → 선 도구 off 는 마지막). ③·④ 에서 throw = 역순 되돌림(project·원형 레코드·화면 상태) 후 `ui-restore-failed`(화면 복원까지 실패하면 `uiRolledBack:false` + «먼저 프로젝트 저장» 안내). 화면 갱신이 후보에 쓴 값은 버려지는 후보에만 남는다. **실패·취소 = 현재 project·원형 완료본·화면·localStorage 0 변경.** 회귀 `projectFileCheck` §7(교체 성공 뒤 afterRestore throw — 기존 project 있음/빈 세션/rollback 자체 실패) + 실제 브라우저 `render` 실패 주입(같은 객체·그래프 바이트 동일·소매 탭·선택 모드·미적용 입력 61·카메라 그대로).
+- **저장 전 마무리(조용한 유실 금지)**: 그리는 중 선 · 옆선 길이 맞춤 미리보기 · 몸판 «적용» 전 라인 선택 · 몸판 수치/네크라인/여밈 입력칸 미적용 · 원형 다트/곡선 편집 중 = 저장·열기 거부 + 이유. **한계**: 소매·카라 입력칸의 미적용 값은 감지하지 않는다(파일 메뉴 문구에 «적용하지 않은 입력칸 값 미포함» 명시).
+- **design stage 파일 메뉴**: 종전엔 design 에서 파일 메뉴 전체가 숨겨졌다 → 이제 design 에서는 **프로젝트 행만** 보인다(곡선 저장·가져오기·DXF 는 원형 stage 전용 그대로 · `css/style.css`).
+- 새 API: `blockWorkflow.verifyCompleted/adoptRestored` · `designWorkflow.evaluateIsolated/adoptRestored` · `window.projectSessionUI`(ui.js: snapshot·unfinished·capture·rollback·afterRestore) · `window.projectFile`. 회귀 `projectFileCheck`(98).
+- **관찰(기존 동작 · 이번 변경 아님 · 저장 범위 밖 — 별도 후보, 이번에 고치지 않음)**: ① 아무 조각에든 새 선을 «완료»하면 `invalidateParts` 가 합성 외곽(designOutline)을 지워 곡선 밑단을 반영한 몸판이 «변경됨»이 된다(소매에 선을 그려도) — «디자인 외곽 합성»을 다시 눌러야 복구. ② 그 뒤 소매 선의 «판정 보류 — 몸판이 완료 후 바뀜»이 선을 다시 클릭할 때까지 남는다(캐시된 판정). 수정 소매 흐름에서 실제로 걸린다.
+- **검증 구분**: ⓐ 실측함 = 실제 «파일로 저장» 버튼 클릭이 만든 Blob(82,516 B) → BroadcastChannel → 같은 격리 origin 의 **새 탭(새 세션)** 의 실제 `#inpOpenProject` change 핸들러(File.text 경로) · 거부 7종·취소·확인 교체 · 320/390 폭. ⓑ **실측 못 함** = 디스크 다운로드 → OS 파일 선택 창 왕복(내장 브라우저는 Blob 을 디스크에 쓰지 않음 — 저장 패널이 떠 Codex 가 Escape 로 취소, 파일 미기록) · 실제 다른 컴퓨터·다른 브라우저(Safari 등).
 
 ## ★ TEMP 몸판+짝 소매 곡선 세트 기본값 (2026-10-06, 제거 대상 — `js/tempDefaultCurve.js`)
 
@@ -176,6 +188,8 @@ body = Ⓜ + `peplumFlare:true`(waistSeam 전제). 몸판(upper)은 Ⓜ 과 **�
 - 남은 것: 몸판 `waist` 계측(체크포인트 허리 줄)은 이제 이음선 둘레를 잰다(●와 같은 뜻). WL 참고선 자체의 계측 표시는 없다.
 
 ## 다음 후보 (아무것도 자동 착수하지 않는다 — 승인 후)
+
+- **새 선 완료가 몸판 합성 외곽을 지움(2026-11-09 발견 · 기존 동작 · blockedBy: 김님 판단 — 소매/카라 등 다른 조각 선까지 무효화하는 것이 의도인지)**: `designLineTool.commitDraft`/`setRole`/`deleteSelected` → `invalidateParts` 가 `designOutline` 을 null 로 → 곡선 밑단을 반영해 완료한 몸판이 «변경됨» · «디자인 외곽 합성»을 다시 눌러야 복구 · 그 뒤 선택 선의 «판정 보류» 캐시가 재클릭 전까지 남음. 재현 = `projectFileCheck` §1 «(기존 동작)» 단언. 프로젝트 저장 범위 밖.
 
 - **소매 Ⓓ·Ⓔ 플레어(P.42) — 구현·연결 완료, 커밋 `316ce4b`(Ⓓ)·`0abfeb4`(Ⓔ, push 완료 · Codex 재검증 관련 828 통과).** Ⓔ 앞/뒤 분할 = 소매산 × 소매 중심선(최고점 대비 B83 ≈0.26cm 차는 이 사례에 한해 허용). [book/P042.md](book/P042.md).
 - **소매 Ⓕ 턱 소매(P.43) — 완료, 커밋 `ff90e24`**(소맷부리 자연 곡선 포함). 미확정: 박기 끝(책에 없음 — 만들지 않음). [book/P043.md](book/P043.md)
