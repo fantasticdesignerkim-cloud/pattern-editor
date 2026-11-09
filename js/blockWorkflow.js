@@ -140,11 +140,45 @@
     return canonicalize(snapshot) !== prev.canonicalString;
   }
 
+  // ── 프로젝트 파일 복원(2026-11-09 김님 승인 · projectFile.js 전용) ──
+  // 파일에서 읽은 완료본이 이 모듈이 만든 완료본과 같은 규칙을 지키는지 **재계산**으로 확인한다:
+  // id·version 형태 · deepFrozen · snapshot canonical 재계산 hash = canonicalHash(변조·손상 거부).
+  // 순수 — _records 를 건드리지 않는다. 반환 {ok, reason} (실패 사유는 문자열 그대로).
+  function isDeepFrozen(o) {
+    if (!o || typeof o !== "object") return true;
+    if (!Object.isFrozen(o)) return false;
+    return Object.keys(o).every(k => isDeepFrozen(o[k]));
+  }
+  function verifyCompleted(block) {
+    if (!block || typeof block !== "object") return { ok: false, reason: "block-missing" };
+    if (block.id !== BLOCK_ID) return { ok: false, reason: "block-id" };
+    if (!Number.isInteger(block.version) || block.version < 1) return { ok: false, reason: "block-version" };
+    if (typeof block.canonicalHash !== "string" || typeof block.completedAt !== "string") return { ok: false, reason: "block-shape" };
+    if (!block.snapshot || typeof block.snapshot !== "object") return { ok: false, reason: "block-snapshot" };
+    if (!isDeepFrozen(block)) return { ok: false, reason: "block-not-frozen" };
+    let cs;
+    try { cs = canonicalize(block.snapshot); } catch (e) { return { ok: false, reason: (e && e.reason) || "block-canonical" }; }
+    if (hash32(cs) !== block.canonicalHash) return { ok: false, reason: "block-hash-mismatch" };
+    return { ok: true, canonicalString: cs };
+  }
+  // 검증된 완료본 하나로 완료 이력을 원자 교체한다(프로젝트 열기 = 세션 교체). 실패 시 무변경 throw.
+  // 반환 = 되돌리기 함수(뒤이은 디자인 프로젝트 교체가 실패하면 projectFile 이 호출).
+  function adoptRestored(block) {
+    const v = verifyCompleted(block);
+    if (!v.ok) fail("restore-" + v.reason);
+    const prev = _records.slice();
+    _records.length = 0;
+    _records.push({ block: block, canonicalString: v.canonicalString });
+    return function undo() { _records.length = 0; prev.forEach(r => _records.push(r)); };
+  }
+
   window.blockWorkflow = Object.freeze({
     complete: complete,
     latest: latest,
     versions: versions,
     hasCompleted: hasCompleted,
-    isCurrentDraftChanged: isCurrentDraftChanged
+    isCurrentDraftChanged: isCurrentDraftChanged,
+    verifyCompleted: verifyCompleted,
+    adoptRestored: adoptRestored
   });
 })();

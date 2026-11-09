@@ -133,9 +133,38 @@
   function current() { return _project; }
   function hasProject() { return _project !== null; }
 
+  // ── 프로젝트 파일 복원(2026-11-09 김님 승인 · projectFile.js 전용) ──
+  // 복원 후보의 최소 형태: startFromBlock 이 만든 것과 같은 top-level(동결) + 동결 출처.
+  function restoredShapeOk(p) {
+    return !!(p && typeof p === "object" && Object.isFrozen(p) && p.id === DESIGN_ID
+      && p.sourceBlock && Object.isFrozen(p.sourceBlock) && typeof p.sourceBlock.id === "string"
+      && typeof p.sourceBlock.version === "number" && typeof p.sourceBlock.canonicalHash === "string"
+      && Object.isFrozen(p.baseSource) && Object.isFrozen(p.referenceGeometry)
+      && p.working && typeof p.working === "object" && !Object.isFrozen(p.working)
+      && p.working.geometry && typeof p.working.geometry === "object");
+  }
+  // 격리 판정: 기존 완료/변경 판정 함수 중 일부가 인자 대신 current() 를 읽으므로, 후보를 **동기적으로만**
+  // 잠시 current 로 두고 fn 을 실행한 뒤 반드시 원래 project 로 되돌린다(이벤트·render 가 끼어들 수 없음).
+  function evaluateIsolated(candidate, fn) {
+    if (!restoredShapeOk(candidate)) fail("restore-invalid-project");
+    const prev = _project;
+    _project = candidate;
+    try { return fn(candidate); } finally { _project = prev; }
+  }
+  // 검증을 통과한 후보로 세션 project 를 원자 교체(design 은 하나 — 기존 project 는 버린다).
+  // 반환 = 되돌리기 함수(이전 project — null 포함 — 를 **같은 객체**로 되돌린다. 뒤이은 화면 갱신이 실패하면 projectFile 이 호출).
+  function adoptRestored(candidate) {
+    if (!restoredShapeOk(candidate)) fail("restore-invalid-project");
+    const prev = _project;
+    _project = candidate;
+    return function undo() { _project = prev; };
+  }
+
   window.designWorkflow = Object.freeze({
     startFromBlock: startFromBlock,
     current: current,
-    hasProject: hasProject
+    hasProject: hasProject,
+    evaluateIsolated: evaluateIsolated,
+    adoptRestored: adoptRestored
   });
 })();
