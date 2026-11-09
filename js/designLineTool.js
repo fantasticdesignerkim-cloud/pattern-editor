@@ -1448,9 +1448,12 @@
     p = p || project(); const BC = window.bodiceCheckpoint;
     if (!p || !p.working || !p.working.geometry || !BC || !BC.measureSideSeam || !BC.effectiveOutline) return null;
     const g = p.working.geometry;
-    const scope = !isOriginalBodiceContext(p) ? "소매 파생 몸판 — 옆선은 소매 완료본에서 확인" : seamMulti(g) ? "여러 조각 몸판 — 조각별 옆선 길이는 아직 표시 안 함" : null;
+    // 2026-11-09: 파생 여부 = **실제 화면에 그려진** 파생 몸판(displayedDerivedPiece — hit·snap 과 같은 권위). 차단·미완성으로 그려지지 않은
+    //   소매 상태 키만 남았다고 원래 몸판 값을 숨기지 않는다(그려진 것 = 원래 몸판 → 그 값). 편집 지원 게이트(isOriginalBodiceContext)는 그대로.
+    const multi = seamMulti(g) ? "여러 조각 몸판 — 조각별 옆선 길이는 아직 표시 안 함" : null;
     const out = {};
     ["front", "back"].forEach(pc => {
+      const scope = displayedDerivedPiece(p, pc) ? "소매 파생 몸판 — 옆선은 소매 완료본에서 확인" : multi;
       const name = pc === "front" ? "앞" : "뒤";
       const outl = BC.effectiveOutline(p, pc) || [];
       let pos = outl.filter(sg => sg && sg.edge === "side-seam");
@@ -1658,6 +1661,14 @@
     const p = project(); if (!p || mode !== "select" || !selectedId) return null;
     return reflectInfoFor(p, findLine(selectedId));
   }
+  // 반영 성공 안내(2026-11-09): 반영 직후 몸판 완료 판정(권위 check)이 막히면 성공 문구만 남기지 않고 실제 미완료 이유를 함께 보인다(자동 수정 없음).
+  function reflectDoneNote(p) {
+    const BC = window.bodiceCheckpoint, c = BC && BC.check ? BC.check(p) : null;
+    if (!c || !c.fails || !c.fails.length) return "몸판 외곽으로 반영됨 · 선을 고치면 자동으로 다시 합성 · 마지막에 «몸판 모양 완료»";
+    const F = window.bodiceFailText || (x => x), ss = c.sideSeam || {};
+    const nums = (ss.front != null && ss.back != null) ? " (앞 옆선 " + fmt2(ss.front) + " · 뒤 옆선 " + fmt2(ss.back) + "cm)" : "";
+    return "몸판 외곽으로 반영됨 · 아직 몸판 완료 안 됨: " + c.fails.map(f => F(f)).join(" · ") + nums;
+  }
   function doReflectToBodice() {
     if (mode !== "select" || !selectedId) return false;
     const p = project(), line = findLine(selectedId); if (!p || !line) return false;
@@ -1680,7 +1691,7 @@
     }
     if (!result[line.piece] || (result[line.piece].lineIds || []).indexOf(line.id) < 0) return fail("합성 결과에 이 선이 들어가지 않음");
     w.parts = []; w.boundaryPreview = null; w.designOutline = result;
-    setComposeNote("몸판 외곽으로 반영됨 · 선을 고치면 자동으로 다시 합성 · 마지막에 «몸판 모양 완료»");
+    setComposeNote(reflectDoneNote(p));
     seamStateCache = null; syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult();
     if (window.refreshFrontPlacket) window.refreshFrontPlacket();
     if (window.refreshDesignBodyPanel) window.refreshDesignBodyPanel();
