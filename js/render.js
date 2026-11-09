@@ -112,13 +112,47 @@ function _appendSelectionOverlay(grp, overlay){
   (overlay.anchors||[]).forEach(a=>{ const [x,y]=c2p(a.x, a.y); grp.appendChild(E("circle",{ cx:x, cy:y, r:4, class:"design-line-anchor" })); });
 }
 
-// 옆선 «길이 맞춤» 후보(미반영): 후보 선(점선) + 움직일 점의 원래→후보 위치. 형상·선 데이터는 그대로(반영 전).
-function _appendSeamFitPreview(grp, fit){
-  const d=_patternPathD(fit.segments);
-  if(d) grp.appendChild(E("path",{ d, fill:"none", class:"design-seamfit-preview", "data-seam-fit":"1", style:"stroke:#0E7490;stroke-width:2;stroke-dasharray:6 4;pointer-events:none" }));
-  const [fx,fy]=c2p(fit.from.x, fit.from.y), [tx,ty]=c2p(fit.to.x, fit.to.y);
-  grp.appendChild(E("line",{ x1:fx, y1:fy, x2:tx, y2:ty, style:"stroke:#0E7490;stroke-width:1;pointer-events:none" }));
-  grp.appendChild(E("circle",{ cx:tx, cy:ty, r:5, style:"fill:#0E7490;pointer-events:none", "data-seam-fit-point":"1" }));
+// 옆선 길이 상시 표시(2026-11-08): 값·문구 = designLineTool.sideSeamLabels(권위 계측). 색 = 그 판에 실제로 그려진 외곽선의 계산된 stroke
+//   (합성 외곽이 있으면 그 선, 없으면 작업 외곽의 옆선) — 별도 경고색·임의색 없음. 글자 = 화면 px(viewBox 없음 → 줌과 무관한 크기).
+//   pointer-events:none · 얇은 리더선 · 앞/뒤 라벨은 위아래로 엇갈려 서로 겹치지 않게. 형상·선 데이터 무변경.
+function _seamLabelColor(pc, dp){
+  let el=null;
+  if(dp.working.designOutline && dp.working.designOutline[pc]) el=svg.querySelector('[data-design-outline="'+pc+'"] path');
+  if(!el) el=svg.querySelector('[data-design-root="working"] [data-layout-piece="'+pc+'"] [data-edge="side-seam"]');
+  let c=null;
+  try{ if(el && typeof getComputedStyle==="function") c=getComputedStyle(el).stroke; }catch(_){ c=null; }
+  return (c && c!=="none") ? c : null;
+}
+function _appendSeamLengthLabels(root, labels, L, scale, dp){
+  if(!labels) return;
+  ["back","front"].forEach(pc=>{
+    const lb=labels[pc]; if(!lb || !lb.at) return;
+    const off=(L && L[pc]) ? L[pc] : {dx:0,dy:0};
+    const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-seam-len":pc, "data-seam-len-status": lb.length!=null ? "measured" : "unavailable", style:"pointer-events:none" });
+    const [ax,ay]=c2p(lb.at.x, lb.at.y);
+    const col=_seamLabelColor(pc, dp);
+    const st=col ? "stroke:"+col : "";
+    const ty=ay+(pc==="back" ? -9 : 15);
+    const leader=E("line",{ class:"seam-len-leader", style:st }), text=E("text",{ y:ty, class:"seam-len-text", style: col ? "fill:"+col : "", "data-seam-len-text":pc }, lb.text);
+    const place=d=>{ const tx=ax+d*16; text.setAttribute("x", tx); text.setAttribute("text-anchor", d>0 ? "start" : "end");
+      leader.setAttribute("x1", ax); leader.setAttribute("y1", ay); leader.setAttribute("x2", tx-d*2); leader.setAttribute("y2", ty-4); g.setAttribute("data-seam-len-side", d===lb.out ? "outside" : "inside"); };
+    g.appendChild(leader); g.appendChild(text); root.appendChild(g);
+    // 바깥(피스 밖)이 기본. 좁은 화면에서 바깥 글자가 다른 조각이나 캔버스 가장자리를 넘으면 자기 조각 안쪽으로 뒤집는다(어느 판 치수인지 헷갈리지 않게).
+    let dir=lb.out>0 ? 1 : -1; place(dir);
+    let w=0; try{ w=text.getComputedTextLength ? text.getComputedTextLength() : 0; }catch(_){ w=0; }
+    if(!(w>0)) w=lb.text.length*11;
+    const ox=off.dx*scale, x0=ax+ox+dir*16, xl=Math.min(x0, x0+dir*w), xr=Math.max(x0, x0+dir*w), W_=svg.clientWidth||900;
+    const other=pc==="front" ? "back" : "front", ob=window.designLayout && window.designLayout.bboxOf ? window.designLayout.bboxOf(dp.working.geometry, other) : null;
+    let crosses=xl<0 || xr>W_;
+    if(ob && L && L[other]){ const oo=L[other], [p1x,p1y]=c2p(ob.minX,ob.minY), [p2x,p2y]=c2p(ob.maxX,ob.maxY);
+      const bl=Math.min(p1x,p2x)+oo.dx*scale, br=Math.max(p1x,p2x)+oo.dx*scale, bt=Math.min(p1y,p2y)+oo.dy*scale, bb=Math.max(p1y,p2y)+oo.dy*scale, yy=ty+off.dy*scale;
+      if(xl<br && xr>bl && yy>bt-14 && yy-12<bb) crosses=true; }
+    if(crosses){ dir=-dir; place(dir); }
+    // 그래도 캔버스 밖으로 나가면 글자만 화면 안으로 민다(리더선 끝도 따라감) — 좁은 화면(320)에서 잘리지 않게
+    const x1=ax+ox+dir*16, l1=Math.min(x1, x1+dir*w), r1=Math.max(x1, x1+dir*w);
+    const sh = l1<4 ? 4-l1 : (r1>W_-4 ? (W_-4)-r1 : 0);
+    if(sh){ const nx=+text.getAttribute("x")+sh; text.setAttribute("x", nx); leader.setAttribute("x2", nx-dir*2); }
+  });
 }
 
 // snap 흡착 표시: cyan 링 + 중심점(형상 cm → c2p, 피스 transform 동승).
@@ -161,6 +195,29 @@ function _appendPatternLinePreview(grp, draft){
     const [cx,cy]=c2p(a.p.x, a.p.y);
     grp.appendChild(E("circle",{ cx, cy, r:3, class:"design-line-vertex" }));
   });
+}
+
+// 그리기 거리 안내(2026-11-08): designLineTool.getMeasureGuide 표시 전용. 기준점→커서 직선(점선) + 가로·세로 차 보조선(ㄱ자) + 글자(화면 px).
+//   글자 = 커서 오른쪽 아래(화면 가장자리면 반대쪽) · pointer-events:none(다음 점 클릭·snap 을 가로채지 않음).
+function _appendMeasureGuide(grp, guide, off, scale, W_, H_){
+  if(!guide || !guide.cur || !Array.isArray(guide.lines)) return;
+  const g=E("g",{ "data-measure-guide":guide.kind, style:"pointer-events:none" });
+  const [bx,by]=guide.base ? c2p(guide.base.x, guide.base.y) : [null,null], [cx,cy]=c2p(guide.cur.x, guide.cur.y);
+  if(guide.base && guide.kind!=="start"){
+    g.appendChild(E("line",{ x1:bx, y1:by, x2:cx, y2:by, class:"measure-leg", "data-measure":"dx" }));
+    g.appendChild(E("line",{ x1:cx, y1:by, x2:cx, y2:cy, class:"measure-leg", "data-measure":"dy" }));
+    if(guide.kind==="hover") g.appendChild(E("line",{ x1:bx, y1:by, x2:cx, y2:cy, class:"measure-straight", "data-measure":"straight" }));
+  }
+  const ox=(off ? off.dx*scale : 0), oy=(off ? off.dy*scale : 0), lh=15, n=guide.lines.length;
+  // 글자 폭 추정(그룹이 아직 DOM 밖이라 실측 불가): 한글 12px · 그 밖 6.8px(12px 글꼴). 오른쪽에 들어가면 오른쪽, 아니면 왼쪽, 둘 다 안 되면 화면 안으로 민다.
+  const estW=guide.lines.reduce((m,t)=>Math.max(m, Array.from(t).reduce((a,ch)=>a+(/[\u3131-\uD79D]/.test(ch)?12:6.8),0)),0);
+  let tx, anchor="start";
+  if(cx+ox+14+estW <= W_-4) tx=cx+14;
+  else if(cx+ox-14-estW >= 4){ tx=cx-14; anchor="end"; }
+  else tx=Math.max(4, Math.min(W_-4-estW, cx+ox+14))-ox;
+  const flipY = cy+oy+20+(n-1)*lh > H_-4, ty0 = flipY ? cy-12-(n-1)*lh : cy+22;
+  guide.lines.forEach((t,i)=>{ g.appendChild(E("text",{ x:tx, y:ty0+i*lh, class:"measure-text"+(i===0?" measure-main":""), "text-anchor": anchor, "data-measure-text":String(i) }, t)); });
+  grp.appendChild(g);
 }
 
 // 파트 분리 결과(working.parts) 미리보기: 각 파트를 닫힌 path 로, 서로 다른 색으로.
@@ -708,7 +765,7 @@ function render(){
     const _draft = (_dlt && _dlt.getDraft) ? _dlt.getDraft() : null;
     const _overlay = (_dlt && _dlt.getSelectionOverlay) ? _dlt.getSelectionOverlay() : null;
     const _snap = (_dlt && _dlt.getSnapHint) ? _dlt.getSnapHint() : null;
-    const _fit = (_dlt && _dlt.getSeamFitPreview) ? _dlt.getSeamFitPreview() : null;
+    const _mg = (_dlt && _dlt.getMeasureGuide) ? _dlt.getMeasureGuide() : null;
     // 페플럼 제작 정보(Ⓝ 에만 모델 존재, 토글 OFF 면 없음). 토글 행은 모델이 있을 때만 보인다.
     const _pepChk = document.getElementById("chkPeplumInfo"), _pepRow = document.getElementById("rowPeplumInfo");
     const _pepAll = (window.peplumAnnotation && dp.working.geometry) ? window.peplumAnnotation.buildModel(dp.working.geometry, dp.working.parameters && dp.working.parameters.body) : null;
@@ -746,17 +803,9 @@ function render(){
         const _db = window.sleeveAnnotation.dolmanBodice(dp); if (_db && _db[pc]) _appendDolmanBodice(grp, _db[pc], pc, !_slvInfoChk || _slvInfoChk.checked);
       }
       if (_draft && _draft.piece === pc) _appendPatternLinePreview(grp, _draft);       // 작성 중 preview(미커밋)
+      if (_mg && _mg.piece === pc) _appendMeasureGuide(grp, _mg, L[pc], scale, W_, H_);   // 그리기 거리 안내(직선·가로/세로·선 따라 · 2026-11-08)
       if (_overlay && _overlay.piece === pc) _appendSelectionOverlay(grp, _overlay);   // 선택 선 편집 overlay
       if (_snap && _snap.piece === pc) _appendSnapHint(grp, _snap.point);              // 흡착 표시(cyan)
-      if (_fit && _fit.piece === pc) _appendSeamFitPreview(grp, _fit);                 // 옆선 «길이 맞춤» 후보(미반영 · 2026-11-07)
-      {   // 옆선 길이 자석 드래그 중 표시(2026-11-06): 앞·뒤 실제 길이·목표·남은 차 — 편집 점 바로 옆(막대는 드래그 중 숨김)
-        const _sl = (_dlt && _dlt.getSeamLive) ? _dlt.getSeamLive() : null;
-        if (_sl && _sl.at && _sl.piece === pc) {
-          const [_lx, _ly] = c2p(_sl.at.x, _sl.at.y);
-          const _t = E("text", { x: _lx + 12, y: _ly - 10, class: "design-seam-live" + (_sl.snapped ? " snapped" : ""), "data-seam-live": "1" }, _sl.text);
-          grp.appendChild(_t);
-        }
-      }
       workRoot.appendChild(grp);
     });
     svg.appendChild(workRoot);
@@ -783,6 +832,17 @@ function render(){
       const dRoot = E("g"); dRoot.setAttribute("data-design-root", "design-outline");
       _appendDesignOutline(dRoot, dp.working.designOutline, L, scale);
       svg.appendChild(dRoot);
+    }
+    // 옆선 길이 상시 표시(2026-11-08): 외곽선(합성 포함)이 그려진 뒤 — 실제 그려진 선 색을 읽는다.
+    if (_dlt && _dlt.sideSeamLabels) {
+      const sRoot = E("g"); sRoot.setAttribute("data-design-root", "seam-length"); svg.appendChild(sRoot);
+      _appendSeamLengthLabels(sRoot, _dlt.sideSeamLabels(dp), L, scale, dp);
+      // 그리기 거리 안내 글자가 옆선 라벨과 겹치면 안내 글자만 아래로 비켜 둘 다 읽히게(표시 전용 · 최대 4번)
+      const _gt = Array.prototype.slice.call(svg.querySelectorAll("text[data-measure-text]")), _st = Array.prototype.slice.call(sRoot.querySelectorAll("text"));
+      if (_gt.length && _st.length && _gt[0].getBoundingClientRect) {
+        const _hit = () => _gt.some(t => { const a = t.getBoundingClientRect(); return _st.some(u => { const b = u.getBoundingClientRect(); return a.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top; }); });
+        for (let k = 0; k < 4 && _hit(); k++) _gt.forEach(t => t.setAttribute("y", String(+t.getAttribute("y") + 18)));
+      }
     }
     // 앞중심 여밈 파생(있을 때만): 현재 유효 앞판 외곽에서 파생한 여밈 스트립.
     if (dp.working.frontPlacket) {

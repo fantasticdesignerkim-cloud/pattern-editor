@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026110606">
+<link rel="stylesheet" href="css/style.css?v=2026110801">
 </head>
 <body>
 
@@ -167,28 +167,8 @@
       </div>
       <div class="lqb-next" data-lqb="seam" hidden>
         <span class="lqb-reason" id="lineQuickSeamText"></span>
-        <!-- 옆선 «길이 맞춤»(2026-11-07): 명시 클릭 → 후보 미리보기(형상 불변) → «맞춤 반영»(원자적) 또는 «취소». 불가면 이유·다음 할 일. -->
-        <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickSeamFit" aria-describedby="lineQuickSeamFitText">길이 맞춤</button>
-        <div class="lqb-row" id="lineQuickSeamFitConfirm" hidden>
-          <button type="button" class="lqb-btn" id="lineQuickSeamFitCancel">취소</button>
-          <button type="button" class="lqb-btn" id="lineQuickSeamFitNext" hidden>다른 후보</button>
-          <button type="button" class="lqb-btn lqb-main" id="lineQuickSeamFitApply">맞춤 반영</button>
-        </div>
-        <span class="lqb-reason" id="lineQuickSeamFitText"></span>
         <span class="lqb-reason" id="lineQuickBodiceFails"></span>
         <button type="button" class="lqb-btn lqb-main lqb-wide" id="lineQuickCompleteBodice" hidden>몸판 모양 완료</button>
-        <button type="button" class="lqb-btn lqb-wide" id="lineQuickSeamToggle" aria-pressed="true" aria-describedby="lineQuickSeamText">옆선 자석 켬</button>
-        <button type="button" class="lqb-btn lqb-wide" id="lineQuickEaseToggle" aria-expanded="false" aria-controls="lineQuickEase">여유(셔링 등 의도적인 길이 차)</button>
-        <div class="lqb-ease" id="lineQuickEase" role="group" aria-label="옆선 여유 의도" hidden>
-          <div class="lqb-row">
-            <button type="button" class="lqb-btn" data-ease="equal" aria-pressed="true">같은 길이</button>
-            <button type="button" class="lqb-btn" data-ease="back-ease" aria-pressed="false">뒤판 +</button>
-            <button type="button" class="lqb-btn" data-ease="front-ease" aria-pressed="false">앞판 +</button>
-          </div>
-          <div class="lqb-row"><label class="lqb-cm">cm <input type="number" id="lineQuickEaseCm" min="0" max="10" step="0.1" inputmode="decimal" value="1"></label>
-            <button type="button" class="lqb-btn lqb-main" id="lineQuickEaseApply">여유 적용</button></div>
-          <span class="lqb-reason" id="lineQuickEaseNote" aria-live="polite"></span>
-        </div>
       </div>
       <!-- 소형 상태줄(좁은 화면에서 분리 성공·외곽 대체 미리보기 뒤 전체 막대를 놓을 빈자리가 없을 때만): 결과 확인 «분리됨 · 파트 N개»/«외곽 대체 미리보기 표시 중» + «도구»(전체 막대로 복귀) -->
       <div class="lqb-compact" data-lqb="compact" hidden>
@@ -303,16 +283,7 @@
         <div class="row note" id="designPlacketNote" aria-live="polite"></div>
         <!-- 몸판 모양 완료(bodiceCheckpoint): 검사 통과 시 working.bodiceResult 세션 스냅샷.
              소매 단계가 확정 진동선을 참조. 아직 시접·너치·재단선 아님. -->
-        <!-- 옆선 길이 자석 · 의도적인 여유량(2026-11-06): 편집 중 옆선 봉제 길이를 실제 곡선 길이로 맞춘다. 여유 의도는 봉제 의도 선언일 뿐 실루엣을 바꾸지 않는다. -->
-        <div class="row" style="margin-top:8px"><label>옆선 길이 맞춤</label></div>
-        <div class="row row-stack"><label for="selSeamIntent">앞·뒤 옆선 길이 의도</label>
-          <select id="selSeamIntent"><option value="equal">같은 길이(기본 0)</option><option value="back-ease">뒤판 여유(뒤가 더 김)</option><option value="front-ease">앞판 여유(앞이 더 김)</option></select></div>
-        <div class="row row-stack" id="rowSeamEase" hidden><label for="inpSeamEase">여유(cm)</label><input type="number" id="inpSeamEase" min="0" max="10" step="0.1" inputmode="decimal" value="2"></div>
-        <div class="row" style="gap:4px"><button type="button" class="btn" id="btnApplySeamIntent">의도 적용</button></div>
-        <div class="row note" id="designSeamIntentNote" aria-live="polite"></div>
-        <div class="row row-stack"><label for="selSeamBasis">기준판(고정)</label>
-          <select id="selSeamBasis"><option value="auto">편집한 판의 반대판 고정(기본)</option><option value="back">뒤판 기준 — 앞판 옆선을 맞춤</option><option value="front">앞판 기준 — 뒤판 옆선을 맞춤</option></select></div>
-        <div class="row"><label><input type="checkbox" id="chkSeamMagnet" checked> 옆선 길이 자석</label></div>
+        <!-- 옆선 길이(2026-11-08 김님 방향 전환): 자동 길이 맞춤·자석·여유 설정 UI 제거 — 앞·뒤 옆선 실측은 캔버스 옆선 옆에 외곽선과 같은 색으로 상시 표시. 저장된 옛 여유 의도는 완료 판정에 그대로 쓰이고 아래 완료 안내에 보인다. -->
         <div class="row" style="margin-top:8px"><label>몸판 완료</label></div>
         <div class="row note" id="designBodiceCheckNote" aria-live="polite"></div>
         <div class="row" style="gap:4px">
@@ -645,7 +616,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026110801"></script>
+<script src="js/render.js?v=2026110806"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -675,10 +646,10 @@
 <script src="js/sleeveAnnotation.js?v=2026110404"></script>
 <script src="js/designLayout.js?v=2026102904"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026110804"></script>
+<script src="js/designLineTool.js?v=2026110806"></script>
 <script src="js/sleeveSplit.js?v=2026110604"></script>
 <script src="js/sleeveOutlineEdit.js?v=2026110604"></script>
-<script src="js/designLineQuickBar.js?v=2026110805"></script>
+<script src="js/designLineQuickBar.js?v=2026110807"></script>
 <!-- 처리 방법 157 맞댄다(순수): window.designJoin. designLineTool 다음. -->
 <script src="js/designJoin.js?v=2026092910"></script>
 <!-- 허리 이음선 Ⓜ 조합(순수): window.designWaistSeam. designLineTool·designJoin 다음, designBodice 앞. -->
@@ -773,7 +744,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/ui.js?v=2026110801"></script>
+<script src="js/ui.js?v=2026110802"></script>
 
 </body>
 </html>

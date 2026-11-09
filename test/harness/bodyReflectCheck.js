@@ -93,7 +93,7 @@ ok(fo.outline.filter(s => s.edgeSourceLineId === fl.id).every(s => s.edge === "s
 ok(!PROJECT.working.bodiceResult, "2: 반영이 최종 완료본을 만들지 않음");
 ok(DLT.getReflectState().done === true && DLT.getReflectState().allowed === false, "2: 반영 후 상태 = done");
 const s1 = DLT.getSeamState();
-ok(s1 && s1.show && /잔차/.test(s1.text), "2: 팝업 옆선 행에 앞·뒤·목표·잔차 표시");
+ok(s1 && s1.show && /옆선 앞 \d+\.\d\d · 뒤 \d+\.\d\d · 뒤−앞 [+−±]\d+\.\d\dcm/.test(s1.text) && !/목표|잔차|자석/.test(s1.text), "2: 팝업 옆선 행 = 앞·뒤·차 숫자 그대로(목표·자석 문구 없음 · 2026-11-08)");
 
 // §3 반영한 선 편집 = 자동 재합성(다시 합성 불필요)
 const gBefore = J(PROJECT.working.designOutline.front.outline);

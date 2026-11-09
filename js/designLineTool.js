@@ -39,12 +39,14 @@
   let draft = null, drawDrag = null, lastDown = null;   // draw 상태(lastDown = 직전 pointerdown 시각·위치)
   let selectedId = null, editDrag = null;            // select 상태
   let snapHint = null;                               // {piece, point, type} — 흡착 표시(세션 UI)
+  let hoverPt = null;                                // 그리기 거리 안내(2026-11-08): {piece, point} — 다음 점이 놓일 자리(기존 snap·Alt 반영 · 마우스 hover 만)
   let splitState = null;                              // 마지막 파트 분리 판정(syncSplitButton 이 씀 · getSplitState 로 막대가 읽음 · 세션 UI)
   let boundaryState = null;                           // 마지막 외곽 대체 판정(syncBoundaryStatus 가 씀 · getBoundaryState 로 막대가 읽음 · 세션 UI · 2026-11-06)
   let lastHandleGeo = null;                           // 핸들 드래그 중 마지막 커서(형상 cm) — Shift 즉시 반영
   // 옆선 길이 자석(2026-11-06 · 세션 UI 설정 — 형상·완료본 무관): 켜짐/꺼짐 · 기준판(고정되는 판). seamCtx = 드래그 시작 때 한 번 만든 문맥,
   //   seamLive = 드래그 중 표시값(막대·캔버스 라벨). 드래그가 끝나면 둘 다 비우고 표시는 권위 계측(bodiceCheckpoint)으로 돌아간다.
-  let seamMagnetOn = true, seamBasis = "auto", seamCtx = null, seamLive = null, seamStateCache = null;
+  // 2026-11-08 김님 방향 전환: 자동 길이 보정 끔(기본 false · 사용자 UI 없음). 내부 API(setSeamMagnet)는 헤드리스 회귀 호환용으로만 남긴다 — 편집 드래그는 손 그대로 움직이고 일반 점·외곽 흡착만 남는다.
+  let seamMagnetOn = false, seamBasis = "auto", seamCtx = null, seamLive = null, seamStateCache = null;
 
   function project() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
   function inDesign() { return typeof window.isDesignStageActive === "function" && window.isDesignStageActive() && !!project(); }
@@ -750,7 +752,7 @@
 
   // ── 모드 전환(그리기/선택 상호배타) ──
   function setMode(m) {
-    mode = m; draft = null; drawDrag = null; lastDown = null; editDrag = null; selectedId = null; snapHint = null;
+    mode = m; draft = null; drawDrag = null; lastDown = null; editDrag = null; selectedId = null; snapHint = null; hoverPt = null;
     if (window.designLayout && window.designLayout.cancelLayoutDrag) window.designLayout.cancelLayoutDrag();   // 진행 중 배치 드래그 취소
     setNote(m === "draw" ? "첫 점을 클릭(또는 드래그)하세요" : m === "select" ? SELECT_NOTE : "");
     syncButtons(); syncRoleButtons(); syncCutStatus(); rerender();
@@ -766,6 +768,113 @@
   function toggle() { setMode(mode === "draw" ? "off" : "draw"); }          // 그리기 버튼
   function toggleSelect() { setMode(mode === "select" ? "off" : "select"); } // 선택·편집 버튼
 
+  // ── 그리기 거리 안내(2026-11-08 김님 «점 찍기 전에 여기 점이 저기 점에서 몇 cm 떨어졌는지» · «선이나 곡선을 따라 잰 거리도 필요») ──
+  //   읽기 전용 표시 모델 — 점을 자동으로 놓거나 좌표를 잠그거나 새 점을 만들지 않는다(다음 점 자리 = 기존 snap 결과 그대로).
+  //   ① 직선 = 기준점(직전 확정점)→커서 두 점 거리 · 가로/세로 차(부호는 화살표 →←↓↑, 화면 방향)
+  //   ② 선 따라 = 지금 그리는 선의 이 구간(곡선이면 그 곡선)·시작점부터 누적 — 길이 함수 = bodiceCheckpoint 의 봉제 길이(cubic 계측) 재사용
+  //   ③ 기존 선 따라 = 기준점과 커서가 같은 기존 열린 선(패턴선 하나 / 이름이 같은 외곽 구간 하나) 위에 있을 때만 그 사이 호 길이.
+  //      다른 구간·닫힌 선·여러 선이 겹친 점은 임의로 짧은 쪽을 고르지 않고 사유만 보인다.
+  const EDGE_KO = { "side-seam": "옆선", armhole: "진동", hem: "밑단", waist: "허리", center: "중심선", neckline: "네크라인", shoulder: "어깨", "yoke-seam": "요크 이음선", "princess-seam": "프린세스 이음선" };
+  const ROLE_KO = { cut: "절개선", boundary: "외곽 대체선", guide: "보조선" };
+  const MEASURE_ON_TOL = 2e-3;   // cm — snap 은 adaptive flatten(FLAT_TOL 1e-4) 위로 놓이므로 실제 곡선과의 거리는 이보다 훨씬 작다
+  function arcLenOf(seg) {
+    const BC = window.bodiceCheckpoint;
+    if (BC && BC.sideSeamSegLen) return BC.sideSeamSegLen(seg);
+    let L = 0; flattenSegment(seg).forEach(ab => { L += Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y); }); return L;
+  }
+  function _bez(seg, t) { const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+    return { x: a * seg.from.x + b * seg.c1.x + c * seg.c2.x + d * seg.to.x, y: a * seg.from.y + b * seg.c1.y + c * seg.c2.y + d * seg.to.y }; }
+  // 점 → 세그먼트 위 매개변수 t(실제 기하 위 최근접 · 근사 꺾은선 아님) + 거리
+  function paramOnSeg(seg, q) {
+    if (seg.kind === "line") { const vx = seg.to.x - seg.from.x, vy = seg.to.y - seg.from.y, L2 = vx * vx + vy * vy;
+      let t = L2 > 0 ? ((q.x - seg.from.x) * vx + (q.y - seg.from.y) * vy) / L2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      return { t: t, d: Math.hypot(seg.from.x + t * vx - q.x, seg.from.y + t * vy - q.y) }; }
+    const dAt = t => { const b = _bez(seg, t); return Math.hypot(b.x - q.x, b.y - q.y); };
+    let bt = 0, bd = Infinity; const N = 128;
+    for (let i = 0; i <= N; i++) { const d = dAt(i / N); if (d < bd) { bd = d; bt = i / N; } }
+    let lo = Math.max(0, bt - 1 / N), hi = Math.min(1, bt + 1 / N);
+    for (let k = 0; k < 60; k++) { const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3; if (dAt(m1) <= dAt(m2)) hi = m2; else lo = m1; }
+    const t = (lo + hi) / 2, d = dAt(t); return d < bd ? { t: t, d: d } : { t: bt, d: bd };
+  }
+  // 같은 이름 외곽 세그먼트 → 끝점이 이어진 열린 사슬들(방향 정렬). 끊긴 같은 이름 구간(다트 등)은 다른 사슬.
+  function _linkChains(segs) {
+    const near = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-3, used = segs.map(() => false), out = [];
+    for (let s0 = 0; s0 < segs.length; s0++) {
+      if (used[s0]) continue; used[s0] = true; let ch = [cloneSeg(segs[s0])], grew = true;
+      while (grew) { grew = false;
+        for (let k = 0; k < segs.length; k++) { if (used[k]) continue; const g = segs[k], tail = ch[ch.length - 1].to, head = ch[0].from;
+          if (near(g.from, tail)) { ch.push(cloneSeg(g)); used[k] = grew = true; }
+          else if (near(g.to, tail)) { ch.push(reverseSeg(g)); used[k] = grew = true; }
+          else if (near(g.to, head)) { ch.unshift(cloneSeg(g)); used[k] = grew = true; }
+          else if (near(g.from, head)) { ch.unshift(reverseSeg(g)); used[k] = grew = true; } } }
+      out.push(ch);
+    }
+    return out;
+  }
+  // 이 피스에서 «따라 잴» 수 있는 기존 선: 패턴선(같은 피스) + 화면에 그려진 외곽(합성 외곽 우선)의 이름 있는 구간
+  function measureChains(piece) {
+    const p = project(), chains = []; if (!p) return { chains: chains, note: null };
+    lines().forEach(l => { if (l.piece === piece && Array.isArray(l.segments) && l.segments.length) chains.push({ name: ROLE_KO[l.role || "guide"] || "선", segs: l.segments.map(cloneSeg) }); });
+    let note = null;
+    const dpc = (piece === "front" || piece === "back") ? displayedDerivedPiece(p, piece) : null;
+    if (dpc) note = "소매 파생 몸판 외곽은 따라 재기 미지원";
+    else {
+      const dO = p.working.designOutline && p.working.designOutline[piece];
+      const prims = (dO && Array.isArray(dO.outline) && dO.outline.length) ? dO.outline : (PIECE_GEOM_KEYS[piece] || [piece]).reduce((a, k) => a.concat((p.working.geometry[k] && p.working.geometry[k].outline) || []), []);
+      const segs = outlinePrimsToSegs(prims), by = {};
+      segs.forEach(sg => { if (typeof sg.edge === "string" && EDGE_KO[sg.edge]) (by[sg.edge] = by[sg.edge] || []).push(sg); });
+      Object.keys(by).forEach(e => _linkChains(by[e]).forEach(ch => chains.push({ name: EDGE_KO[e], segs: ch })));
+    }
+    chains.forEach(c => { const a = c.segs[0].from, b = c.segs[c.segs.length - 1].to; c.closed = c.segs.length > 1 && Math.hypot(a.x - b.x, a.y - b.y) < 1e-3; });
+    return { chains: chains, note: note };
+  }
+  // 사슬 위 위치(시작부터 호 길이). 같은 점이 이음매(t=1 / 다음 t=0)에 걸려도 값은 같다.
+  function chainPos(ch, q) {
+    let best = null;
+    ch.segs.forEach((sg, i) => { const r = paramOnSeg(sg, q); if (r.d <= MEASURE_ON_TOL && (!best || r.d < best.d)) best = { i: i, t: r.t, d: r.d }; });
+    if (!best) return null;
+    let L = 0; for (let k = 0; k < best.i; k++) L += arcLenOf(ch.segs[k]);
+    if (best.t > 0) L += arcLenOf(subSegment(ch.segs[best.i], 0, best.t));
+    return L;
+  }
+  function alongExisting(piece, A, B) {
+    const mc = measureChains(piece), onA = [], onB = [];
+    mc.chains.forEach(ch => { const a = chainPos(ch, A), b = chainPos(ch, B); if (a != null) onA.push({ ch: ch, pos: a }); if (b != null) onB.push({ ch: ch, pos: b }); });
+    if (!onA.length || !onB.length) return null;   // 둘 중 하나라도 기존 선 위가 아니면 표시 없음(소음 금지)
+    const both = onA.filter(x => onB.some(y => y.ch === x.ch)).map(x => ({ ch: x.ch, len: Math.abs(onB.filter(y => y.ch === x.ch)[0].pos - x.pos) }));
+    if (!both.length) return { reason: "다른 구간(" + onA[0].ch.name + " → " + onB[0].ch.name + ") — 한 구간 안의 두 점만 잽니다" };
+    const open = both.filter(x => !x.ch.closed);
+    if (!open.length) return { reason: "닫힌 선 — 어느 쪽으로 돌지 정할 수 없어 생략" };
+    const L0 = open[0].len;
+    if (open.some(x => Math.abs(x.len - L0) > 1e-6)) return { reason: "여러 선이 만나는 점 — 어느 선을 따라 잴지 정할 수 없어 생략" };
+    if (L0 < 1e-9) return null;
+    return { len: L0, name: open[0].ch.name };
+  }
+  const f1 = v => (Math.round(v * 10) / 10).toFixed(1);
+  const dxText = v => (Math.abs(v) < 0.05 ? "가로 0.0" : "가로 " + (v > 0 ? "→ " : "← ") + f1(Math.abs(v)));
+  const dyText = v => (Math.abs(v) < 0.05 ? "세로 0.0" : "세로 " + (v > 0 ? "↓ " : "↑ ") + f1(Math.abs(v)));
+  function getMeasureGuide() {
+    if (mode !== "draw") return null;
+    if (!draft) return hoverPt ? { piece: hoverPt.piece, kind: "start", cur: _pt(hoverPt.point), lines: ["먼저 기준점(첫 점)을 찍으세요 — 그다음 커서까지 거리가 보입니다"] } : null;
+    const an = draft.anchors, n = an.length, segs = segmentsFromAnchors(an);
+    let kind, A, B, seg = null;
+    const curving = !!(drawDrag && n >= 2 && an[n - 1].h);
+    if (!curving && hoverPt && hoverPt.piece === draft.piece) { kind = "hover"; A = an[n - 1].p; B = hoverPt.point; seg = { kind: "line", from: _pt(A), to: _pt(B) }; }
+    else if (n >= 2) { kind = curving ? "curve" : "last"; A = an[n - 2].p; B = an[n - 1].p; seg = segs[segs.length - 1]; }
+    else return { piece: draft.piece, kind: "base", cur: _pt(an[0].p), lines: ["기준점 — 커서를 올리면(터치는 다음 점을 찍으면) 이 점부터 거리"] };   // 터치엔 hover 가 없다
+    const straight = Math.hypot(B.x - A.x, B.y - A.y), dx = B.x - A.x, dy = B.y - A.y;
+    const segArc = arcLenOf(seg), prior = kind === "hover" ? segs.reduce((a, sg) => a + arcLenOf(sg), 0) : segs.slice(0, -1).reduce((a, sg) => a + arcLenOf(sg), 0);
+    const total = prior + segArc, isCurve = seg.kind === "cubic";
+    const head = kind === "last" ? "마지막 구간 " : "";
+    const out = [head + "직선 " + f1(straight) + " · " + dxText(dx) + " · " + dyText(dy) + "cm"];
+    const second = [];
+    if (isCurve) second.push("이 곡선 따라 " + f1(segArc));
+    if (prior > 1e-9) second.push("시작점부터 그리는 선 따라 " + f1(total));
+    if (second.length) out.push(second.join(" · ") + "cm");
+    const ax = alongExisting(draft.piece, A, B);
+    if (ax) out.push(ax.reason ? "기존 선 따라: " + ax.reason : "기존 " + ax.name + " 따라 " + f1(ax.len) + "cm");
+    return { piece: draft.piece, kind: kind, base: _pt(A), cur: _pt(B), straight: straight, dx: dx, dy: dy, segArc: segArc, isCurve: isCurve, total: total, along: ax, lines: out };
+  }
   // render.js preview 용(draw): anchors + 도출 segments.
   function getDraft() {
     if (mode !== "draw" || !draft) return null;
@@ -1285,13 +1394,14 @@
     return { r: r, f: f };
   }
   function setSeamLive(c, len, r) {
-    seamLive = { piece: c.piece, len: len, ref: c.ref, T: c.T, remain: len - c.T, snapped: !!(r && r.snapped), locked: !!(r && r.locked), reason: r && !r.snapped ? r.reason : null, intent: c.intent };
+    seamLive = { piece: c.piece, composed: c.composed, len: len, ref: c.ref, T: c.T, remain: len - c.T, snapped: !!(r && r.snapped), locked: !!(r && r.locked), reason: r && !r.snapped ? r.reason : null, intent: c.intent };
   }
   function fmt2(v) { return (Math.round(v * 100) / 100).toFixed(2); }
   function fmtS(v) { const a = Math.round(v * 100) / 100; return (a > 0 ? "+" : a < 0 ? "−" : "±") + Math.abs(a).toFixed(2); }
+  // 드래그 중 실측 문구(2026-11-08): 목표·남은 차·자석 문구 없이 이 판 옆선 봉제 길이만(권위 계측과 같은 길이 함수). 아직 외곽 반영 전인 선이면 «반영하면» 값임을 밝힌다.
   function seamLiveText(L) {
-    const M = window.sideSeamMagnet, me = L.piece === "front" ? "앞" : "뒤", ot = L.piece === "front" ? "뒤" : "앞";
-    return me + " 옆선 " + fmt2(L.len) + " · " + ot + "(고정) " + fmt2(L.ref) + " · 목표 " + fmt2(L.T) + " · 남은 " + fmtS(L.len - L.T) + "cm" + (L.snapped ? " · 자석 붙음" : (L.reason && L.reason !== "far" ? " · " + M.reasonText(L.reason) : ""));
+    const me = L.piece === "front" ? "앞" : "뒤";
+    return me + " 옆선 " + fmt2(L.len) + "cm" + (L.composed === false ? "(이 선을 몸판 외곽에 반영하면)" : "") + (L.snapped ? " · 자석 붙음" : "");
   }
   // 막대(선택 선) 표시: 권위 계측(완료가 보는 유효 외곽) + 의도 + 자석 상태. render 마다 재합성하지 않도록 출처 키 캐시.
   function getSeamState() {
@@ -1305,11 +1415,10 @@
     if (info.touches) {
       const BC = window.bodiceCheckpoint, M = window.sideSeamMagnet;
       const c = BC.check(p).sideSeam;   // 권위(완료 게이트와 같은 판정)
-      const st = { match: "정합", check: "확인", mismatch: "불일치", unmeasured: "측정 불가" }[c.status] || c.status;
-      const D = M.targetDiff(info.intent || null);
+      // 2026-11-08: 숫자 그대로(앞·뒤·차) — 목표·자석 문구 없음. 옛 프로젝트에 저장된 여유 의도가 있으면 그 사실만 밝힌다(판정에 쓰임).
       let text = c.status === "unmeasured" ? "옆선 측정 불가(완료 불가)" :
-        "옆선 앞 " + fmt2(c.front) + " · 뒤 " + fmt2(c.back) + " · 뒤−앞 " + fmtS(c.back - c.front) + " · 목표 " + fmtS(D) + " · 잔차 " + fmt2(Math.abs((c.back - c.front) - D)) + "cm(" + st + ")";
-      if (info.T != null && info.composed === false) text += " · 외곽 합성 전(완료 판정은 아직 원래 옆선) — 이 선 길이 반영 시 " + (info.piece === "front" ? "앞 " : "뒤 ") + fmt2(info.len);
+        "옆선 앞 " + fmt2(c.front) + " · 뒤 " + fmt2(c.back) + " · 뒤−앞 " + fmtS(c.back - c.front) + "cm" + (info.intent ? " · 저장된 여유 의도 " + M.intentText(info.intent) : "");
+      if (info.T != null && info.composed === false) text += " · 몸판 외곽 반영 전(완료 판정은 아직 원래 옆선) — 이 선을 반영하면 " + (info.piece === "front" ? "앞 " : "뒤 ") + fmt2(info.len);
       val = { show: true, live: false, text: text, magnet: { on: seamMagnetOn, basis: seamBasis, active: !!info.ok, reason: info.ok ? null : info.reason } };
     }
     seamStateCache = { key: key, geom: p.working.geometry, val: val };
@@ -1319,6 +1428,44 @@
   function setSeamMagnet(on) { seamMagnetOn = !!on; seamStateCache = null; if (window.designLineQuickBar) window.designLineQuickBar.sync(); return seamMagnetOn; }
   function setSeamBasis(b) { if (b !== "front" && b !== "back" && b !== "auto") return seamBasis; seamBasis = b; seamStateCache = null; if (window.designLineQuickBar) window.designLineQuickBar.sync(); return seamBasis; }
   function getSeamSettings() { return { on: seamMagnetOn, basis: seamBasis }; }
+  // ── 옆선 길이 상시 표시(2026-11-08 김님 «옆선 길이를 외곽선과 같은 색으로 알려 달라 · 다르면 내가 고친다») ──
+  //   값 = 완료 판정과 같은 권위 계측(bodiceCheckpoint.measureSideSeam(effectiveOutline) — 명시 side-seam 봉제 길이 · 연장 포함).
+  //   직선 높이·끝점 거리로 대신하지 않는다. 측정 불가 = 0 이 아니라 «확인 필요 + 사유». 소매 파생 몸판·다조각 몸판은 원래 몸판 값을
+  //   다른 조각에 붙이지 않도록 값 없이 사유만. 편집 드래그 중(이미 외곽에 반영된 선)은 같은 길이 함수의 실시간 값. 형상·완료 hash 무관(읽기 전용).
+  //   at = 라벨을 붙일 옆선 위 점(표시 위치 전용 — 길이 계산에 쓰지 않음) · out = 피스 바깥 방향(+1 오른쪽 / −1 왼쪽).
+  function sideSeamLabels(p) {
+    p = p || project(); const BC = window.bodiceCheckpoint;
+    if (!p || !p.working || !p.working.geometry || !BC || !BC.measureSideSeam || !BC.effectiveOutline) return null;
+    const g = p.working.geometry;
+    const scope = !isOriginalBodiceContext(p) ? "소매 파생 몸판 — 옆선은 소매 완료본에서 확인" : seamMulti(g) ? "여러 조각 몸판 — 조각별 옆선 길이는 아직 표시 안 함" : null;
+    const out = {};
+    ["front", "back"].forEach(pc => {
+      const name = pc === "front" ? "앞" : "뒤";
+      const outl = BC.effectiveOutline(p, pc) || [];
+      let pos = outl.filter(sg => sg && sg.edge === "side-seam");
+      if (!pos.length) pos = ((g[pc] && g[pc].outline) || []).filter(sg => sg && sg.edge === "side-seam");
+      let len = null, reason = scope, live = false;
+      if (!scope) {
+        const ms = BC.measureSideSeam(outl);
+        if (ms.status === "measured") len = ms.length;
+        else reason = ms.reason === "side-seam-partially-unresolved" ? "옆선 일부가 진동·밑단과 함께 대체됨" : "명시된 옆선 구간 없음";
+        if (len != null && seamLive && editDrag && seamLive.piece === pc && seamLive.composed) { len = seamLive.len; live = true; }
+      }
+      // 표시 위치: 옆선 꺾은선 길이의 가운데 점(위치 전용 근사) · 바깥 방향 = 피스 bbox 중심의 반대쪽
+      const fl = flattenLine(pos); let at = null;
+      if (fl.length) {
+        const tot = fl.reduce((a, ab) => a + Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y), 0); let acc = 0;
+        for (const ab of fl) { const d = Math.hypot(ab[1].x - ab[0].x, ab[1].y - ab[0].y); if (acc + d >= tot / 2 && d > 0) { const t = (tot / 2 - acc) / d; at = { x: ab[0].x + (ab[1].x - ab[0].x) * t, y: ab[0].y + (ab[1].y - ab[0].y) * t }; break; } acc += d; }
+        if (!at) at = { x: fl[0][0].x, y: fl[0][0].y };
+      }
+      const bb = window.designLayout && window.designLayout.bboxOf ? window.designLayout.bboxOf(g, pc) : null;
+      const outDir = (at && bb) ? (at.x >= (bb.minX + bb.maxX) / 2 ? 1 : -1) : 1;
+      if (!at && bb) at = { x: outDir > 0 ? bb.maxX : bb.minX, y: (bb.minY + bb.maxY) / 2 };
+      out[pc] = { piece: pc, length: len, live: live, reason: len == null ? reason : null, at: at, out: outDir,
+        text: len != null ? name + " 옆선 " + fmt2(len) + "cm" : name + " 옆선 길이 확인 필요 · " + reason };
+    });
+    return out;
+  }
 
   // ── 옆선 «길이 맞춤»(2026-11-07 김님 «자석 순간을 눈대중으로 찾아야만 완료» 해소) ──
   // 선택한 옆선 대체선에서 명시 클릭 한 번 → 이 선의 **중간 점·곡선 핸들 하나**를 움직여 목표 길이에 정확히 닿는 후보를 계산.
@@ -1617,7 +1764,7 @@
         if (mg && mg.snapped) snapHint = { piece: line.piece, point: { x: tip.x, y: tip.y }, type: "seam" };
       }
       seg[editDrag.which] = tip;                                              // 선택한 c1/c2만(반대쪽 강제 대칭 없음)
-      setNote(seamLive ? seamLiveText(seamLive) + (seamCtx && !seamCtx.ok ? " · 자석 없음: " + seamCtx.reason : "") : (shiftKey ? "핸들 45° 각도 고정 (Shift)" : "핸들 이동 · Shift = 45° 고정"));
+      setNote(seamLive ? seamLiveText(seamLive) : (shiftKey ? "핸들 45° 각도 고정 (Shift)" : "핸들 이동 · Shift = 45° 고정"));
     } else {                                                                  // anchor: 총 delta + snap
       const oa = editDrag.origAnchor;
       const nx = oa.x + (geo.x - editDrag.startGeo.x), ny = oa.y + (geo.y - editDrag.startGeo.y);
@@ -1644,7 +1791,7 @@
           } else setSeamLive(seamCtx, seamCtx.K + _forcedLen(seamCtx, build(t)), null);
           if (seamLive) seamLive.at = { x: t.x, y: t.y };
         }
-        setNote(seamLive ? seamLiveText(seamLive) + (seamCtx && !seamCtx.ok ? " · 자석 없음: " + seamCtx.reason : "") : snapHint ? ("흡착 → " + (SNAP_LABEL[snapHint.type] || snapHint.type)) : "anchor 이동 · Esc 해제");
+        setNote(seamLive ? seamLiveText(seamLive) : snapHint ? ("흡착 → " + (SNAP_LABEL[snapHint.type] || snapHint.type)) : "anchor 이동 · Esc 해제");
       }
       line.segments = JSON.parse(JSON.stringify(editDrag.orig));
       moveAnchor(line, editDrag.k, t.x - oa.x, t.y - oa.y);
@@ -1676,7 +1823,7 @@
           if (window.designLineQuickBar) window.designLineQuickBar.sync(); return;
         }
         else { draft.anchors.push({ p: placeGeo(draft.piece), h: null }); setNote(DRAW_NOTE); }
-        drawHint = null;
+        drawHint = null; hoverPt = null;   // 새 점 확정 → 커서가 다시 움직이기 전까지는 «마지막 구간» 표시(터치에도 보임)
         lastDown = { t: now, x: e.clientX, y: e.clientY };
         drawDrag = { startX: e.clientX, startY: e.clientY };
       } else { // select
@@ -1700,13 +1847,16 @@
         } else {                                                   // hover: 다음 anchor 의 snap 미리보기
           const piece = draft ? draft.piece : pieceAt(e.target);
           let h = null;
-          if (piece) { const s = snapForCursor(geoAt(e, piece), piece, e.altKey, null); if (s) h = { piece: piece, point: s.point, type: s.type }; }
-          if (setSnapHint(h, DRAW_NOTE)) rerender();
+          let hp = null;
+          if (piece) { const g = geoAt(e, piece), s = snapForCursor(g, piece, e.altKey, null); if (s) h = { piece: piece, point: s.point, type: s.type }; hp = { piece: piece, point: s ? _pt(s.point) : { x: g.x, y: g.y } }; }
+          const hpChanged = JSON.stringify(hp) !== JSON.stringify(hoverPt); hoverPt = hp;   // 거리 안내 = 다음 점이 실제로 놓일 자리(snap·Alt 반영)
+          if (setSnapHint(h, DRAW_NOTE) || hpChanged) rerender();
         }
       } else if (mode === "select" && editDrag) {
         editMove(geoAt(e, findLine(selectedId).piece), e.altKey, e.shiftKey);
       }
     });
+    svg.addEventListener("pointerleave", () => { if (mode === "draw" && hoverPt && !drawDrag) { hoverPt = null; rerender(); } });   // 캔버스 밖 = 거리 안내 숨김(마지막 구간 표시로 돌아감)
     const endDrag = e => {
       if (mode === "draw" && drawDrag) {
         const anchor = draft && draft.anchors[draft.anchors.length - 1];
@@ -1908,7 +2058,7 @@
     doSplit, invalidateParts, visibleParts, pruneStaleSleeveParts, doBoundaryPreview, doBoundaryApply, doSleeveEditUndo, validateSelectedBoundary, doComposeDesignOutline,
     getBoundaryState, visibleBoundaryPreview, boundaryStatusOf, pruneStaleBoundaryPreview,
     // 옆선 길이 자석(2026-11-06)
-    getSeamState, getSeamLive, getReflectState, doReflectToBodice, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
+    getSeamState, getSeamLive, getReflectState, doReflectToBodice, sideSeamLabels, getMeasureGuide, measureAlong: alongExisting, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
     // 옆선 «길이 맞춤»(2026-11-07) · 그리기 중 거부 안내
     getSeamFit, getSeamFitPreview, previewSeamFit, applySeamFit, cancelSeamFit, getDrawHint: () => (mode === "draw" && draft ? drawHint : null),
     // 순수

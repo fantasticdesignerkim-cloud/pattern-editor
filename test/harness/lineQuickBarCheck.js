@@ -115,7 +115,7 @@ ok(cvAt > 0 && barAt > cvAt && barAt < mainEnd, "3a: 막대는 #cv 뒤 형제(ca
 ok(["lineQuickTitle", "lineQuickDismiss", "lineQuickCancel", "lineQuickFinish", "lineQuickRoleCut", "lineQuickRoleBoundary", "lineQuickRoleGuide"].every(id => html.indexOf('id="' + id + '"') > 0), "3b: 막대 요소 정적 마크업(재생성 없음)");
 ok(/id="btnDesignLine"[^>]*onclick="designLineTool\.toggle\(\)"/.test(html) && /id="btnDesignFinish"[^>]*onclick="designLineTool\.finishDraw\(\)"/.test(html) && /id="btnRoleCut"[^>]*onclick="designLineTool\.setRole\('cut'\)"/.test(html) && /id="btnDesignSelect"[^>]*onclick="designLineTool\.toggleSelect\(\)"/.test(html), "3c: 기존 오른쪽 버튼 id·onclick 보존");
 const calls = (CODE.match(/T\.(\w+)\(/g) || []).map(s => s.slice(2, -1)).filter((v, i, arr) => arr.indexOf(v) === i).sort();
-const READ = ["getReflectState", "getSeamState", "getSeamSettings", "setSeamMagnet", "canFinishDraw", "findLine", "getBoundaryState", "getDraft", "getMode", "getSelectedId", "getSplitState", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine", "getDrawHint", "getSeamFit"], CMD = ["cancel", "previewSeamFit", "applySeamFit", "cancelSeamFit", "doReflectToBodice", "doBoundaryApply", "doBoundaryPreview", "doSleeveEditUndo", "doSplit", "finishDraw", "setRole"];   // 2026-11-06 소매 «외곽 반영»·«반영 되돌리기»(오른쪽 버튼과 같은 명령)
+const READ = ["getReflectState", "getSeamState", "canFinishDraw", "findLine", "getBoundaryState", "getDraft", "getMode", "getSelectedId", "getSplitState", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine", "getDrawHint"], CMD = ["cancel", "doReflectToBodice", "doBoundaryApply", "doBoundaryPreview", "doSleeveEditUndo", "doSplit", "finishDraw", "setRole"];   // 2026-11-06 소매 «외곽 반영»·«반영 되돌리기»(오른쪽 버튼과 같은 명령)
 ok(calls.every(f => READ.concat(CMD).indexOf(f) >= 0) && CMD.every(f => calls.indexOf(f) >= 0), "3d: 도구 호출 = 읽기 + 기존 명령(finishDraw·cancel·setRole·doSplit·doBoundaryPreview·doBoundaryApply·doSleeveEditUndo)뿐 [" + calls.join(",") + "]");
 ok(!/patternLines|\.role\s*=[^=]|localStorage|innerHTML|makePatternLine|setMode\(/.test(CODE), "3e: 선 생성·역할 대입·저장·innerHTML·모드 직접 전환 없음");
 const R = fs.readFileSync(path.join(ROOT, "js/render.js"), "utf8");
@@ -123,8 +123,12 @@ const ret = R.indexOf("return; // 라이브 원형 draw"), syncAt = R.lastIndexO
 ok(syncAt > hitAt && hitAt > 0, "3f: design render 는 선·overlay·hit 을 그린 뒤 막대 sync(그려진 SVG 기준)");
 ok(/afterDraftRender\(\);\s*\n\s*if\(window\.designLineQuickBar\) window\.designLineQuickBar\.sync\(\);/.test(R), "3g: design 밖 render 도 sync(→ 숨김)");
 const ver = f => { const m = new RegExp(f.replace(/\./g, "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
-ok(ver("designLineQuickBar.js") === "2026110805" && ver("designLineTool.js") === "2026110804" && ver("render.js") === "2026110801" && /css\/style\.css\?v=2026110606/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
+ok(ver("designLineQuickBar.js") === "2026110807" && ver("designLineTool.js") === "2026110806" && ver("render.js") === "2026110806" && /css\/style\.css\?v=2026110801/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
 ok(html.indexOf('<script src="js/designLineQuickBar.js') > html.indexOf('<script src="js/designLineTool.js'), "3i: 막대 스크립트는 designLineTool 뒤");
+// 2026-11-08 김님 방향 전환: 자동 길이 보정 UI(길이 맞춤·후보·맞춤 반영·옆선 자석·여유/셔링·기준판) 사용자 노출 없음 — 마크업·막대 호출·설정 패널 모두
+ok(!/lineQuickSeamFit|lineQuickSeamToggle|lineQuickEase|selSeamIntent|inpSeamEase|btnApplySeamIntent|selSeamBasis|chkSeamMagnet|길이 맞춤|맞춤 반영|옆선 자석|셔링/.test(html.replace(/<!--[\s\S]*?-->/g, "")), "3j: 자동 길이 보정 UI 마크업 없음(주석 제외)");
+ok(!/setSeamMagnet|setSeamBasis|SeamFit|openEase|actEase|길이 맞춤|여유 적용/.test(CODE), "3k: 막대 코드에 자석·길이 맞춤·여유 호출/문구 없음");
+ok(["lineQuickSeamText", "lineQuickBodiceFails", "lineQuickCompleteBodice"].every(id => html.indexOf('id="' + id + '"') > 0), "3l: 옆선 행 = 권위 숫자·완료 차단 사유·완료 버튼은 유지");
 
 // §4 절개선 → «파트 분리» 다음 단계 행(2026-11-05 김님 요청) — 표시 모델은 getSplitState(오른쪽 버튼 판정) 그대로
 const sel = (role, split, lock) => D({ design: true, mode: "select", sel: { id: "line-7", piece: "front", role: role, lock: lock || null, split: split } });

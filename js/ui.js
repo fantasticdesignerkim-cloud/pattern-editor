@@ -889,7 +889,7 @@
   function bodiceFailStr(reason) {
     const m = {
       "front-outline-not-connected": "앞판 외곽이 연결되지 않음", "back-outline-not-connected": "뒤판 외곽이 연결되지 않음",
-      "side-seam-mismatch": "옆선 봉제 길이 불일치(>0.3cm · 지정한 여유 목표와의 잔차)", "side-seam-intent-invalid": "옆선 의도(여유량) 값이 올바르지 않음", "side-seam-unmeasured": "옆선 측정 불가(유효 외곽에 명시 옆선 없음)",
+      "side-seam-mismatch": "앞·뒤 옆선 봉제 길이 차 > 0.3cm(이전에 저장된 여유 의도가 있으면 그 목표와의 잔차) — 캔버스 옆선 치수를 보고 선을 직접 고치세요", "side-seam-intent-invalid": "옆선 의도(여유량) 값이 올바르지 않음", "side-seam-unmeasured": "옆선 측정 불가(유효 외곽에 명시 옆선 없음)",
       "side-waist-dart-missing": "옆허리 다트 c 반쪽 누락", "side-waist-dart-duplicate": "옆허리 다트 c 반쪽 중복", "side-waist-dart-shared": "옆허리 다트 c 가 공용으로 놓임",
       "side-waist-dart-unlocked": "옆허리 다트 c 고정 해제됨", "side-waist-dart-legs": "옆허리 다트 c 다리 수 오류", "side-waist-dart-attachment": "옆허리 다트 c 허리 부착 불일치",
       "side-waist-dart-intake": "옆허리 다트 c 분량 측정 불가", "side-waist-dart-total": "옆허리 다트 c 총량 불일치", "front-armhole-unmeasured": "앞 진동둘레 측정 불가",
@@ -911,7 +911,7 @@
       return;
     }
     const c = window.bodiceCheckpoint.check(project);
-    if (checkNote) checkNote.textContent = (c.sideSeam.status === "unmeasured" ? "옆선 측정 불가" + (c.sideSeam.unmeasuredReasons ? "(옆선 일부가 의미 미정 외곽선으로 대체됨)" : "") : c.sideSeam.intent ? "옆선 차(뒤−앞) " + (Math.round(c.sideSeam.signedDiff * 100) / 100) + " · 목표 " + (Math.round(c.sideSeam.targetDiff * 100) / 100) + " · 잔차 " + (Math.round(c.sideSeam.residual * 100) / 100) + "cm(" + bodiceStatusStr(c.sideSeam.status) + ")" : "옆선 차 " + fmtL(c.sideSeam.diff) + "cm(" + bodiceStatusStr(c.sideSeam.status) + ")") + " · 진동 앞 " + fmtL(c.armhole.front) + "·뒤 " + fmtL(c.armhole.back) + "cm · 반패턴 목둘레 " + fmtL(c.neckline.half) + "cm";
+    if (checkNote) checkNote.textContent = (c.sideSeam.status === "unmeasured" ? "옆선 측정 불가" + (c.sideSeam.unmeasuredReasons ? "(옆선 일부가 의미 미정 외곽선으로 대체됨)" : "") : c.sideSeam.intent ? "옆선 차(뒤−앞) " + (Math.round(c.sideSeam.signedDiff * 100) / 100) + " · 저장된 여유 의도 목표 " + (Math.round(c.sideSeam.targetDiff * 100) / 100) + " · 잔차 " + (Math.round(c.sideSeam.residual * 100) / 100) + "cm(" + bodiceStatusStr(c.sideSeam.status) + ")" : "옆선 차 " + fmtL(c.sideSeam.diff) + "cm(" + bodiceStatusStr(c.sideSeam.status) + ")") + " · 진동 앞 " + fmtL(c.armhole.front) + "·뒤 " + fmtL(c.armhole.back) + "cm · 반패턴 목둘레 " + fmtL(c.neckline.half) + "cm";
     if (btn) btn.disabled = !c.ok;
     const latest = window.bodiceCheckpoint.latest(project);
     if (statusNote) {
@@ -3915,22 +3915,7 @@
     // 몸판 모양 완료(bodiceCheckpoint): 검사 통과 시에만 활성(updateBodiceCheckpointUI 가 disabled 관리).
     const completeBodice = document.getElementById("btnCompleteBodice");
     if (completeBodice) completeBodice.addEventListener("click", () => { if (!completeBodice.disabled) onCompleteBodice(); });
-    // 옆선 길이 맞춤(2026-11-06): 의도(같은 길이/뒤판 여유/앞판 여유 + 여유 cm) 명시 적용 · 기준판 · 자석 켬/끔. 의도 = 봉제 의도 선언(실루엣 불변) · 변경 = 몸판 변경됨(재완료).
-    const selSeamIntent = document.getElementById("selSeamIntent"), inpSeamEase = document.getElementById("inpSeamEase"), rowSeamEase = document.getElementById("rowSeamEase");
-    const syncSeamIntentRow = () => { if (rowSeamEase && selSeamIntent) rowSeamEase.hidden = selSeamIntent.value === "equal"; };
-    if (selSeamIntent) selSeamIntent.addEventListener("change", syncSeamIntentRow);
-    const btnSeamIntent = document.getElementById("btnApplySeamIntent");
-    if (btnSeamIntent) btnSeamIntent.addEventListener("click", () => {
-      const pr = designProjectNow(), note = document.getElementById("designSeamIntentNote"); if (!pr || !window.bodiceCheckpoint) return;
-      const r = window.bodiceCheckpoint.setSideSeamIntent(pr, { mode: selSeamIntent.value, easeCm: inpSeamEase ? inpSeamEase.value : 0 });
-      if (note) note.textContent = r.ok ? (r.intent ? "옆선 의도 적용: " + window.sideSeamMagnet.intentText(r.intent) : "옆선 의도: 같은 길이") + " · 몸판을 다시 완료해야 합니다(실루엣은 바뀌지 않음)" : "적용 안 됨: " + r.text;
-      if (r.ok) { updateBodiceCheckpointUI(pr); if (window.designLineTool) window.designLineTool.setSeamBasis(window.designLineTool.getSeamSettings().basis); if (typeof render === "function") render(); }
-    });
-    const selSeamBasis = document.getElementById("selSeamBasis");
-    if (selSeamBasis) selSeamBasis.addEventListener("change", () => { if (window.designLineTool) window.designLineTool.setSeamBasis(selSeamBasis.value); });
-    const chkSeamMagnet = document.getElementById("chkSeamMagnet");
-    if (chkSeamMagnet) chkSeamMagnet.addEventListener("change", () => { if (window.designLineTool) window.designLineTool.setSeamMagnet(chkSeamMagnet.checked); });
-    syncSeamIntentRow();
+    // 옆선 길이 맞춤 설정(의도·기준판·자석) UI 는 2026-11-08 김님 방향 전환으로 제거 — 옆선 실측은 캔버스 상시 표시(render.js). 저장된 옛 의도는 완료 판정에 그대로 쓰인다(몰래 0 으로 바꾸지 않음).
     // 몸판/소매 서브탭: 클릭 = 전환(disabled 소매 탭은 무시). 게이트는 updateBodiceCheckpointUI 가 관리.
     const subtabs = document.getElementById("designSubtabs");
     if (subtabs) subtabs.querySelectorAll(".subtab").forEach(b =>

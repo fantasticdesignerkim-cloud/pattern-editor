@@ -57,8 +57,8 @@
         text: stage === "applied" ? (bs.edit && bs.edit.pending ? "반영됨 · 수정 중 — 다 고치면 «소매 모양 완료»" : "반영됨 · 소매 외곽의 일부")
           : stage === "confirm" ? (bs.apply.allowed ? "미리보기 확인 · «외곽 반영»을 눌러야 소매에 반영됩니다" : "반영 불가 · " + bs.apply.reason)
           : bs.allowed ? (bs.shown ? "미리보기 표시 중 · 보라 외곽(완성 외곽 아님)" : bs.reason) : "대체 불가 · " + bs.reason } : null;
-      const seam = (!lock && role === "boundary" && s.sel.seam && s.sel.seam.show) ? { text: s.sel.seam.text, on: !!s.sel.seam.magnet.on, reason: s.sel.seam.magnet.reason || null, basis: s.sel.seam.magnet.basis,
-        fit: s.sel.fit || null, bodice: s.sel.bodice || null } : null;
+      // 옆선 행(2026-11-08): 권위 계측 숫자 + 몸판 완료 차단 사유·완료 버튼만(자동 길이 맞춤·자석·여유 설정 없음).
+      const seam = (!lock && role === "boundary" && s.sel.seam && s.sel.seam.show) ? { text: s.sel.seam.text, bodice: s.sel.bodice || null } : null;
       const rf = (!lock && s.sel.reflect && !s.sel.reflect.done) ? { allowed: !!s.sel.reflect.allowed, text: s.sel.reflect.reason } : null;   // 몸판 외곽으로 반영(앞·뒤판 일반 선 · 아직 미반영일 때)
       return { kind: "select", reflect: rf, seam: seam, key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };
     }
@@ -164,15 +164,15 @@
   }
 
   // ── DOM ──
-  let fitNext = null;
-  let drawHintEl = null, fitBtn = null, fitConfirm = null, fitApply = null, fitCancel = null, fitText = null, failsEl = null, completeBtn = null;
-  let fitNote = null;                  // {key, text}: «맞춤 반영» 실패 사유(원자적 — 형상 그대로)
+
+  let drawHintEl = null, failsEl = null, completeBtn = null;
+
   let dockIdx = null;                  // 그리기 막대의 지금 고정 자리(붙박이 · 그리기가 끝나면 버림)
   let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
   let splitRow = null, splitBtn = null, splitReason = null;
-  let bndRow = null, bndBtn = null, bndReason = null, bndApply = null, bndUndo = null, seamRow = null, seamToggle = null, seamText = null;
-  let rflRow = null, rflBtn = null, rflReason = null, easeToggle = null, easeBox = null, easeApply = null, easeCm = null, easeNote = null, easeBtns = [];
-  let easeOpen = false, easeDraft = { mode: "equal" }, rflNote = null;   // 여유 열림·초안(UI 전용 — 선 편집·선택 전환으로 초기화하지 않는다) · 반영 실패 안내
+  let bndRow = null, bndBtn = null, bndReason = null, bndApply = null, bndUndo = null, seamRow = null, seamText = null;
+  let rflRow = null, rflBtn = null, rflReason = null;
+  let rflNote = null;
   let headRow = null, compactRow = null, compactText_ = null, expandBtn = null;
   let expandedKey = null;             // 소형 상태줄에서 «도구»로 펼친 결과 키(UI 전용 · 선택·결과가 바뀌거나 캔버스를 누르면 풀림)
   let splitNote = null;                // {key, text}: 막대 «파트 분리»를 눌렀는데 파트가 안 생겼을 때 doSplit 이 남긴 안내(#designSplitNote) — 선택이 바뀌면 버림
@@ -203,9 +203,9 @@
       const id = T.getSelectedId(), l = id ? T.findLine(id) : null;
       if (!l) return { design: true, mode: mode, sel: null };
       const lock = T.isNeckAutoLine(id) ? "neck" : T.isSleeveCapLine(l) ? "cap" : T.isCollarBodyLine(l) ? "collar" : null;
-      const seamSt = T.getSeamState ? T.getSeamState() : null;   // 옆선 행이 있을 때만 길이 맞춤·완료 게이트를 계산(매 render 비용 최소)
+      const seamSt = T.getSeamState ? T.getSeamState() : null;   // 옆선 행이 있을 때만 완료 게이트를 계산(매 render 비용 최소)
       return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, split: T.getSplitState ? T.getSplitState() : null, boundary: T.getBoundaryState ? T.getBoundaryState() : null, seam: seamSt, reflect: T.getReflectState ? T.getReflectState() : null,
-        fit: (!dragging && seamSt && T.getSeamFit) ? T.getSeamFit() : null, bodice: (!dragging && seamSt) ? bodiceGate() : null } };
+        bodice: (!dragging && seamSt) ? bodiceGate() : null } };
     }
     return { design: true, mode: mode };
   }
@@ -228,6 +228,9 @@
       for (let i = 0; i <= 4; i++) { const r = local(ln, x1 + (x2 - x1) * i / 4, y1 + (y2 - y1) * i / 4); if (r) obstacles.push(r); }
     });
     cv.querySelectorAll(".design-line-handledot").forEach(c => { const r = circlePt(c); if (r) obstacles.push(r); });
+    // 옆선 길이 상시 표시(2026-11-08)·그리기 거리 안내 글자도 가리지 않을 대상(글자 상자의 모서리·가운데)
+    cv.querySelectorAll("text[data-seam-len-text], text[data-measure-text]").forEach(t => { let b = null; try { b = t.getBBox(); } catch (_) { b = null; } if (!b) return;
+      [[0, 0], [0.5, 0], [1, 0], [0, 1], [0.5, 1], [1, 1], [0.5, 0.5]].forEach(f => { const r = local(t, b.x + b.width * f[0], b.y + b.height * f[1]); if (r) obstacles.push(r); }); });
     if (kind === "draw") {
       const pv = cv.querySelector(".design-line-preview");
       if (pv) pathPts(pv).forEach(r => obstacles.push(r));
@@ -242,7 +245,6 @@
       // 파트 분리 결과(색 미리보기) 외곽도 가리지 않을 대상 — 분리 직후 막대가 작은 파트를 덮지 않게.
       cv.querySelectorAll('[data-design-root="parts"] path').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));
       cv.querySelectorAll('[data-design-root="boundary"] path').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));
-      cv.querySelectorAll('path[data-seam-fit]').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));   // 길이 맞춤 후보선도 가리지 않을 대상   // 외곽 대체 미리보기도 가리지 않을 대상
       const sp = cv.querySelector("path.design-line.selected");
       const anchors = []; cv.querySelectorAll(".design-line-anchor").forEach(c => { const r = circlePt(c); if (r) anchors.push(r); });
       anchors.forEach(r => obstacles.push(r));
@@ -288,20 +290,10 @@
         rflRow.setAttribute("data-state", (rflNote && rf.allowed) ? "no" : rf.allowed ? "ok" : "no");
       }
     }
-    if (seamRow) {   // 옆선 길이 자석 행(2026-11-06): 몸판 외곽이 옆선 구간을 대체할 때만 · 같은 권위 계측·자석 상태(getSeamState)
+    if (seamRow) {   // 옆선 행(2026-11-08): 몸판 외곽이 옆선 구간을 대체할 때만 · 권위 계측 숫자 + 완료 차단 사유
       const sm = vm.kind === "select" ? vm.seam : null; seamRow.hidden = !sm;
-      if (sm) {
-        const ft = sm.fit, noDof = !!(ft && ft.dof === 0);
-        seamText.textContent = sm.text;
-        // 자석 = 드래그 보조(중간 점·핸들에서만). 끌 점이 없는 선에서 «켬»을 활성처럼 보이지 않게.
-        seamToggle.textContent = noDof ? "옆선 자석(이 선에는 끌 점·핸들 없음)" : sm.on ? "옆선 자석 켬 · 점·핸들 드래그 때" : "옆선 자석 꺼짐";
-        seamToggle.setAttribute("aria-pressed", sm.on ? "true" : "false");
-        seamRow.setAttribute("data-state", ft && (ft.ok || ft.done || ft.preview) ? "ok" : "no");
-        renderFit(ft, sm.bodice);
-      }
+      if (sm) { seamText.textContent = sm.text; seamRow.setAttribute("data-state", sm.bodice && sm.bodice.ok ? "ok" : "no"); renderGate(sm.bodice); }
     }
-    if (easeBox) { easeToggle.setAttribute("aria-expanded", easeOpen ? "true" : "false"); easeBox.hidden = !(easeOpen && seamRow && !seamRow.hidden);
-      easeBtns.forEach(b => b.setAttribute("aria-pressed", b.getAttribute("data-ease") === easeDraft.mode ? "true" : "false")); }
     dismissBtn.hidden = vm.kind !== "select";        // 그리기 중엔 접기 없음(완료·취소만 명시적으로)
     if (vm.kind === "draw") {
       finishBtn.disabled = !vm.canFinish; finishBtn.setAttribute("aria-disabled", vm.canFinish ? "false" : "true");
@@ -437,65 +429,20 @@
     rflNote = done ? null : { key: vm.key, text: (el && el.textContent) || "반영되지 않았습니다" };
     sync(); return done;
   }
-  // 여유 열기/닫기 · 적용: 오른쪽 설정과 같은 컨트롤·같은 명령(btnApplySeamIntent)을 거친다 → 값·hash·소매 무효화·동기화가 한 경로.
-  function openEase(on) {
-    easeOpen = on;
-    if (on) {   // 현재 의도로 초안 채움(없으면 같은 길이)
-      const BC = window.bodiceCheckpoint, si = BC && BC.sideSeamIntent ? BC.sideSeamIntent() : null;
-      if (si && si.ok && si.intent) { easeDraft.mode = si.intent.mode; if (easeCm) easeCm.value = String(si.intent.easeCm); } else if (si && si.ok) { easeDraft.mode = "equal"; }
-    }
-    sync();
-  }
-  function actEase() {
-    const sel = document.getElementById("selSeamIntent"), inp = document.getElementById("inpSeamEase"), btn = document.getElementById("btnApplySeamIntent");
-    if (!sel || !btn) return false;
-    sel.value = easeDraft.mode; if (inp && easeCm) inp.value = easeCm.value;
-    sel.dispatchEvent(new Event("change")); btn.click();
-    const n = document.getElementById("designSeamIntentNote"); if (easeNote) easeNote.textContent = (n && n.textContent) || "";
-    if (n && /^적용 안 됨/.test(n.textContent || "") === false) easeOpen = false;   // 적용되면 접어 선·캔버스를 가리지 않게(좁은 화면) — 거부되면 열어 둔 채 이유를 보인다
-    sync(); return true;
-  }
-  // 옆선 «길이 맞춤» 행: 현재 길이·목표·남은 차는 seamText(권위 계측) · 여기서는 가능/불가 이유와 다음 할 일 · 미리보기 확인 · 완료 차단 전부.
-  function renderFit(ft, gate) {
-    if (!fitBtn) return;
-    const pv = ft && ft.preview;
-    fitBtn.hidden = !!pv; fitConfirm.hidden = !pv;
-    // 미리보기 확인 중에는 확인에 필요한 것(설명 한 줄 · 취소/다른 후보/맞춤 반영)만 — 좁은 화면(320)에서 막대가 청록 후보선을 덮지 않게 작게.
-    [seamText, failsEl, seamToggle, easeToggle, roleRow].forEach(el => { if (el && pv) el.hidden = true; });
-    if (pv && easeBox) easeBox.hidden = true;
-    if (!pv) { seamText.hidden = false; failsEl.hidden = false; seamToggle.hidden = false; if (easeToggle) easeToggle.hidden = false; }
-    if (fitNext) fitNext.hidden = !(pv && pv.count > 1);
-    const can = !!(ft && ft.ok);
-    fitBtn.disabled = !can; fitBtn.setAttribute("aria-disabled", can ? "false" : "true");
-    let t = "";
-    if (!ft) t = "";
-    else if (pv) t = "미리보기" + (pv.count > 1 ? "(후보 " + (pv.index + 1) + "/" + pv.count + ")" : "") + ": " + pv.label + "을(를) " + fmt(pv.move) + "cm 옮기면 " + fmt(pv.before) + " → " + fmt(pv.T) + "cm(목표) · 청록 점선 · 아직 바뀌지 않음 — «맞춤 반영» 또는 «취소»" + (pv.dropped ? " · " + pv.dropped : "");
-    else if (ft.note) t = "길이 맞춤 안 됨: " + ft.note;
-    else if (ft.done) t = "길이 맞음(목표 " + fmt(ft.T) + "cm)";
-    else if (ft.ok) t = "«길이 맞춤»: 이 선의 중간 점·핸들 하나를 가장 조금 옮겨 목표 " + fmt(ft.T) + "cm 에 정확히 맞춘 후보를 먼저 보여 줍니다(지금 " + fmt(ft.len) + "cm)";
-    else t = (/^불가능/.test(ft.reason) ? "길이 맞춤 " : "길이 맞춤 불가: ") + ft.reason + (ft.next ? " → " + ft.next : "");
-    if (fitNote && ft && fitNote.key === fitKeyNow()) t = fitNote.text + (t ? " · " + t : "");
-    fitText.textContent = t;
+  // 몸판 완료 차단 사유 전부 + 완료 가능하면 «몸판 모양 완료»(오른쪽과 같은 명령). 자동 보정 설정으로 돌려보내지 않는다.
+  function renderGate(gate) {
+    if (!failsEl || !completeBtn) return;
     const ok = !!(gate && gate.ok), pend = !!(gate && gate.pending);
-    completeBtn.hidden = !(ok && pend && !pv);
+    completeBtn.hidden = !(ok && pend);
     const F = window.bodiceFailText || (x => x);
     failsEl.textContent = !gate ? "" : gate.ok ? (pend ? "몸판 완료 가능" : "몸판 완료됨") : "몸판 완료 막힘(" + gate.fails.length + "건): " + gate.fails.map(f => F(f) + (FAIL_ACT[f] ? " → " + FAIL_ACT[f] : "")).join(" · ");
   }
   // 막대에서 바로 할 수 있는 조치(문구만 · 자동 수정 없음). 없는 사유는 이름만 보인다(오른쪽 몸판 패널에서 처리).
   const FAIL_ACT = {
-    "side-seam-mismatch": "«길이 맞춤» 또는 «여유»",
     "front-outline-not-connected": "외곽으로 반영한 선의 끝점이 외곽선 위에 있지 않음 — 끝점을 외곽선(모서리 포함)에 다시 맞추거나 선을 지우세요",
     "back-outline-not-connected": "외곽으로 반영한 선의 끝점이 외곽선 위에 있지 않음 — 끝점을 외곽선(모서리 포함)에 다시 맞추거나 선을 지우세요"
   };
   function fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
-  function fitKeyNow() { const T = tool(); return T ? String(T.getSelectedId()) : ""; }
-  function actSeamFit() { const T = tool(); if (!T || !T.previewSeamFit) return false; fitNote = null; const r = T.previewSeamFit(); sync(); return r; }
-  function actSeamFitApply() {
-    const T = tool(); if (!T || !T.applySeamFit) return false;
-    const r = T.applySeamFit(); fitNote = r.ok ? null : { key: fitKeyNow(), text: "반영 안 됨(형상 그대로): " + r.reason };
-    sync(); return r.ok;
-  }
-  function actSeamFitCancel() { const T = tool(); if (T && T.cancelSeamFit) T.cancelSeamFit(); fitNote = null; sync(); }
   function actCompleteBodice() { const b = document.getElementById("btnCompleteBodice"); if (!b || b.disabled) return false; b.click(); sync(); return true; }   // 오른쪽 «몸판 모양 완료»와 같은 명령
   function init() {
     bar = document.getElementById("lineQuickBar");
@@ -518,26 +465,13 @@
     bndReason = document.getElementById("lineQuickBoundaryReason");
     bndApply = document.getElementById("lineQuickBoundaryApply");
     bndUndo = document.getElementById("lineQuickBoundaryUndo");
-    seamRow = bar.querySelector('[data-lqb="seam"]'); seamToggle = document.getElementById("lineQuickSeamToggle"); seamText = document.getElementById("lineQuickSeamText");
+    seamRow = bar.querySelector('[data-lqb="seam"]'); seamText = document.getElementById("lineQuickSeamText");
     expandBtn = document.getElementById("lineQuickExpand");
     rflRow = bar.querySelector('[data-lqb="reflect"]'); rflBtn = document.getElementById("lineQuickReflect"); rflReason = document.getElementById("lineQuickReflectReason");
-    easeToggle = document.getElementById("lineQuickEaseToggle"); easeBox = document.getElementById("lineQuickEase"); easeApply = document.getElementById("lineQuickEaseApply");
-    easeCm = document.getElementById("lineQuickEaseCm"); easeNote = document.getElementById("lineQuickEaseNote");
-    easeBtns = easeBox ? Array.prototype.slice.call(easeBox.querySelectorAll("[data-ease]")) : [];
     drawHintEl = document.getElementById("lineQuickDrawHint");
-    fitBtn = document.getElementById("lineQuickSeamFit"); fitConfirm = document.getElementById("lineQuickSeamFitConfirm");
-    fitApply = document.getElementById("lineQuickSeamFitApply"); fitCancel = document.getElementById("lineQuickSeamFitCancel");
-    fitText = document.getElementById("lineQuickSeamFitText"); failsEl = document.getElementById("lineQuickBodiceFails"); completeBtn = document.getElementById("lineQuickCompleteBodice");
-    if (fitBtn) fitBtn.addEventListener("click", () => { actSeamFit(); });
-    if (fitApply) fitApply.addEventListener("click", () => { actSeamFitApply(); });
-    if (fitCancel) fitCancel.addEventListener("click", () => { actSeamFitCancel(); });
-    fitNext = document.getElementById("lineQuickSeamFitNext");
-    if (fitNext) fitNext.addEventListener("click", () => { const T = tool(); if (T && T.previewSeamFit) T.previewSeamFit(true); sync(); });
+    failsEl = document.getElementById("lineQuickBodiceFails"); completeBtn = document.getElementById("lineQuickCompleteBodice");
     if (completeBtn) completeBtn.addEventListener("click", () => { actCompleteBodice(); });
     if (rflBtn) rflBtn.addEventListener("click", () => { actReflect(); });
-    if (easeToggle) easeToggle.addEventListener("click", () => { openEase(!easeOpen); });
-    easeBtns.forEach(b => b.addEventListener("click", () => { easeDraft.mode = b.getAttribute("data-ease"); sync(); }));
-    if (easeApply) easeApply.addEventListener("click", () => { actEase(); });
 
     // 막대 위 조작은 캔버스(점 추가·피스 드래그·팬)로 가지 않는다.
     ["pointerdown", "mousedown", "touchstart", "wheel", "dblclick"].forEach(t => bar.addEventListener(t, e => e.stopPropagation(), { passive: true }));
@@ -548,7 +482,6 @@
     splitBtn.addEventListener("click", () => { actSplit(); });
     if (bndBtn) bndBtn.addEventListener("click", () => { actBoundary(); });   // 외곽 대체 미리보기 = 오른쪽 버튼과 같은 doBoundaryPreview
     if (bndApply) bndApply.addEventListener("click", () => { actBoundaryApply(); });   // 외곽 반영 = 오른쪽 버튼과 같은 doBoundaryApply
-    if (seamToggle) seamToggle.addEventListener("click", () => { const T = tool(); if (!T || !T.getSeamSettings) return; T.setSeamMagnet(!T.getSeamSettings().on); const c = document.getElementById("chkSeamMagnet"); if (c) c.checked = T.getSeamSettings().on; sync(); });   // 설정 패널 체크박스와 같은 상태
     if (bndUndo) bndUndo.addEventListener("click", () => { const T = tool(); if (T && T.doSleeveEditUndo) T.doSleeveEditUndo(); sync(); });   // 되돌리기 = 오른쪽과 같은 doSleeveEditUndo
     // 소형 상태줄 «도구» = 이 결과에 대해 전체 막대(역할·파트 분리)로 복귀.
     if (expandBtn) expandBtn.addEventListener("click", () => { const vm = describe(snapshot()); expandedKey = resultKey(vm); sync();
@@ -572,8 +505,8 @@
   }
 
   window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, dock: dock, chooseMode: chooseMode, resultKey: resultKey,
-    viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary, actBoundaryApply: actBoundaryApply, actReflect: actReflect, openEase: openEase, actEase: actEase,
-    actSeamFit: actSeamFit, actSeamFitApply: actSeamFitApply, actSeamFitCancel: actSeamFitCancel, actCompleteBodice: actCompleteBodice });
+    viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary, actBoundaryApply: actBoundaryApply, actReflect: actReflect,
+    actCompleteBodice: actCompleteBodice });
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
   }

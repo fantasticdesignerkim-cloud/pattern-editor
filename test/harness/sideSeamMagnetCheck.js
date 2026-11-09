@@ -182,10 +182,28 @@ function setupEqual() {   // 뒤: 곡선 대체(기준판 · 고정) → 앞: �
 // 같은 x 위의 목표 점(독립 이분법): 앞 길이 = 남은 + 2·hypot(SX−x, 5)
 function solveX(T, K) { let lo = SX - 4, hi = SX; for (let i = 0; i < 200; i++) { const m = (lo + hi) / 2; if (K + 2 * Math.hypot(SX - m, 5) > T) lo = m; else hi = m; } return (lo + hi) / 2; }
 {
+  // 2026-11-08 김님 방향 전환: 자동 길이 보정 기본 꺼짐 — 드래그는 손 그대로(같은 자리에서도 붙지 않음) · 실측 길이만 표시.
+  ok(DLT.getSeamSettings().on === false, "3: 기본 = 자동 길이 보정(자석) 꺼짐");
+  {
+    const fl = setupEqual();
+    const T0 = BC.check(PROJECT).sideSeam.back, x0 = solveX(T0, 37.38333333333334 - 10);
+    const e0 = evAt("front", { x: 22.6, y: 29 }); down(e0);
+    move(evAt("front", { x: x0 - 0.6, y: 29.03 }, { clientX: e0.clientX + 30 }));
+    const lv = DLT.getSeamLive(), a1 = DLT.findLine(fl.id).segments[0].to;
+    ok(lv && !lv.snapped && Math.abs(lv.len - T0) > 1e-3 && !(DLT.getSnapHint() && DLT.getSnapHint().type === "seam"), "3: 기본 드래그 = 목표에 붙지 않음(손 그대로) · 실측 " + (lv && lv.len.toFixed(3)));
+    ok(lv && /^앞 옆선 \d+\.\d\dcm/.test(lv.text) && !/목표|남은|자석/.test(lv.text), "3: 드래그 중 문구 = 실측 길이만 (" + (lv && lv.text) + ")");
+    const lb = DLT.sideSeamLabels(PROJECT);
+    ok(lb && lb.front.live === true && lb.front.text === "앞 옆선 " + lv.len.toFixed(2) + "cm", "3: 반영된 선 드래그 중 상시 라벨 = 같은 실시간 실측 (" + (lb && lb.front.text) + ")");
+    ok(Math.abs(a1.x - (x0 - 0.6)) < 1e-9 || Math.abs(a1.x * 2 - Math.round(a1.x * 2)) < 1e-9, "3: 중간 점 = 커서 또는 일반 격자 흡착 위치(옆선 목표 아님 · " + a1.x.toFixed(4) + ")");
+    up(e0);
+    const c0 = BC.check(PROJECT).sideSeam;
+    ok(Math.abs(c0.front - lv.len) < 1e-9, "3: 손 뗀 뒤 권위 계측 = 드래그 중 표시 값");
+  }
   const fl = setupEqual();
   ok(DLT.getSelectedId() === fl.id, "3: 앞 대체선 선택");
+  DLT.setSeamMagnet(true);   // 이하 = 내부 엔진 호환 회귀(사용자 UI 없음 · 헤드리스에서만 켠다)
   const st = DLT.getSeamState();
-  ok(st && st.magnet.active === true && /옆선 앞 .* 뒤 .* 목표 ±0\.00/.test(st.text), "3: 막대 표시 = 실제 앞·뒤 길이·목표·잔차 (" + (st && st.text) + ")");
+  ok(st && st.magnet.active === true && /옆선 앞 .* 뒤 .* 뒤−앞 /.test(st.text) && !/목표/.test(st.text), "3: 막대 표시 = 실제 앞·뒤 길이·차 (" + (st && st.text) + ")");
   const backBefore = J(effO("back")), geomBefore = J(PROJECT.working.geometry);
   const T = BC.check(PROJECT).sideSeam.back, K = 37.38333333333334 - 10;
   const xT = solveX(T, K);
@@ -327,7 +345,7 @@ function solveX(T, K) { let lo = SX - 4, hi = SX; for (let i = 0; i < 200; i++) 
   DLT.setMode("off"); DLT.toggleSelect(); click("front", { x: 22.9, y: 29 });
   const Bk = BC.check(PROJECT).sideSeam.back, T = Bk - 2, xT = solveX(T, 37.38333333333334 - 10);
   const st = DLT.getSeamState();
-  ok(st && /목표 \+2\.00/.test(st.text), "4b: 막대 = 목표 뒤−앞 +2.00 (" + (st && st.text) + ")");
+  ok(st && /저장된 여유 의도 뒤판 여유 2\.00cm/.test(st.text), "4b: 막대 = 저장된 옛 여유 의도를 숨기지 않고 밝힘 (" + (st && st.text) + ")");
   const e0 = evAt("front", { x: 22.9, y: 29 }); down(e0); move(evAt("front", { x: xT - 0.5, y: 29 }, { clientX: e0.clientX + 30 }));
   ok(DLT.getSeamLive().snapped && Math.abs(DLT.getSeamLive().T - T) < 1e-9, "4b: 앞 목표 = 뒤 − 2 에 붙음");
   up(evAt("front", { x: xT - 0.5, y: 29 }, { clientX: e0.clientX + 40 }));
