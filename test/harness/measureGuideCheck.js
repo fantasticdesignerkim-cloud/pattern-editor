@@ -119,7 +119,7 @@ function indArc(q, t0, t1) { let L = 0, pv = bez(q, t0); for (let i = 1; i <= 40
   ok(Math.abs(lb2.back.length - lb2.front.length) > 0.05 && !/불일치|오류|경고/.test(lb2.front.text + lb2.back.text), "1: 앞뒤 다른 길이 = 숫자 그대로(판정 문구 없음)");
   // 옆선 + 밑단에 걸친 대체선 → 측정 불가 = 0 이 아니라 «확인 필요 + 사유»
   projectOn("A");
-  drawBoundary("front", [{ x: SX, y: 50 }, { x: 40, y: 55 }, { x: 47.5, y: 56 }]);   // 승인 밖 혼합(옆선 + 밑단 전체 + 중심선) — 옆선 → 밑단 안쪽 테이퍼는 2026-11-09 부터 새 옆선
+  drawBoundary("front", [(() => { const ap = PROJECT.working.geometry.front.outline.filter(s => s.edge === "armhole").slice(-1)[0]; const cs = ap.commands.filter(c => c.type === "C"), cc = cs[cs.length - 1]; let st = null; ap.commands.forEach(c => { if (c.type === "M") st = c.points[0]; }); return bez([cs.length > 1 ? cs[cs.length - 2].points[2] : st, cc.points[0], cc.points[1], cc.points[2]], 0.6); })(), { x: SX + 0.5, y: 40 }, { x: 35, y: 58 }]);   // 승인 밖 혼합(진동 + 옆선 + 밑단) — 옆선→밑단 테이퍼·둥근 밑단은 2026-11-09 부터 측정됨
   const lb3 = DLT.sideSeamLabels(PROJECT), c3 = BC.check(PROJECT).sideSeam;
   ok(c3.status === "unmeasured" && lb3.front.length === null && /^앞 옆선 길이 확인 필요 · /.test(lb3.front.text) && !/0\.00/.test(lb3.front.text), "1: 측정 불가 = «확인 필요 · 사유»(0 으로 속이지 않음) (" + lb3.front.text + ")");
   // 다조각 몸판 = 원래 몸판 값을 붙이지 않음

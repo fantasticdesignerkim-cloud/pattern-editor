@@ -120,6 +120,18 @@
     return best;
   }
 
+  // ── 순수: 선택 막대 붙박이(2026-11-09 김님 «팝업창이 계속 움직인다») ──
+  // 같은 선을 선택한 동안에는 처음 고른 자리를 지킨다 — hover·rerender·설명줄 증감·값 갱신·핸들 드래그 뒤에도 그대로.
+  // 다시 고르는 경우는 최소: (1) 다른 선 선택·닫기 후 재열기 (2) 보기(팬·줌)·캔버스 크기 변화 (3) 지금 자리가 선택 선·anchor·핸들을 가리게 됨.
+  // 크기만 바뀌면 화면 안으로만 밀어 넣는다(clamp). o = {keep:{x,y}, bounds, size, essential:[{x,y}]} → {x,y} | null(다시 골라야 함)
+  function keepPlace(o) {
+    if (!o || !o.keep) return null;
+    const b = o.bounds, w = o.size.w, h = o.size.h;
+    const x = Math.max(b.l, Math.min(o.keep.x, b.r - w)), y = Math.max(b.t, Math.min(o.keep.y, b.b - h));
+    const covers = (o.essential || []).some(q => q.x >= x - PAD && q.x <= x + w + PAD && q.y >= y - PAD && q.y <= y + h + PAD);
+    return covers ? null : { x: x, y: y };
+  }
+
   // ── 순수: 그리기 전용 고정 자리(dock · 2026-11-07 김님 «다음 점 찍을 곳을 팝업이 가림») ──
   // 그리기 중에는 다음 점이 어디로 갈지 알 수 없어서, 마지막 점 옆은 어느 방향이든 다음 점 자리를 가릴 수 있다.
   // 그래서 그리기 막대는 캔버스 가장자리 고정 자리(네 모서리 · 위/아래 가운데)에 둔다.
@@ -167,6 +179,7 @@
 
   let drawHintEl = null, failsEl = null, completeBtn = null;
 
+  let selKeep = null;                  // 선택 막대 붙박이 {key, view, mode, x, y}(UI 전용 · 2026-11-09)
   let dockIdx = null;                  // 그리기 막대의 지금 고정 자리(붙박이 · 그리기가 끝나면 버림)
   let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
   let splitRow = null, splitBtn = null, splitReason = null;
@@ -222,12 +235,12 @@
       return out;
     };
     const circlePt = c => local(c, c.cx.baseVal.value, c.cy.baseVal.value);
-    const obstacles = [], refs = [], pieces = []; let prevPt = null;
+    const obstacles = [], refs = [], pieces = [], essential = []; let prevPt = null;
     cv.querySelectorAll(".design-line-handle").forEach(ln => {   // 곡선 핸들선(작성 중·선택 overlay 공통)
       const x1 = ln.x1.baseVal.value, y1 = ln.y1.baseVal.value, x2 = ln.x2.baseVal.value, y2 = ln.y2.baseVal.value;
-      for (let i = 0; i <= 4; i++) { const r = local(ln, x1 + (x2 - x1) * i / 4, y1 + (y2 - y1) * i / 4); if (r) obstacles.push(r); }
+      for (let i = 0; i <= 4; i++) { const r = local(ln, x1 + (x2 - x1) * i / 4, y1 + (y2 - y1) * i / 4); if (r) { obstacles.push(r); essential.push(r); } }
     });
-    cv.querySelectorAll(".design-line-handledot").forEach(c => { const r = circlePt(c); if (r) obstacles.push(r); });
+    cv.querySelectorAll(".design-line-handledot").forEach(c => { const r = circlePt(c); if (r) { obstacles.push(r); essential.push(r); } });
     // 옆선 길이 상시 표시(2026-11-08)·그리기 거리 안내 글자도 가리지 않을 대상(글자 상자의 모서리·가운데)
     cv.querySelectorAll("text[data-seam-len-text], text[data-measure-text]").forEach(t => { let b = null; try { b = t.getBBox(); } catch (_) { b = null; } if (!b) return;
       [[0, 0], [0.5, 0], [1, 0], [0, 1], [0.5, 1], [1, 1], [0.5, 0.5]].forEach(f => { const r = local(t, b.x + b.width * f[0], b.y + b.height * f[1]); if (r) obstacles.push(r); }); });
@@ -247,16 +260,16 @@
       cv.querySelectorAll('[data-design-root="boundary"] path').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));
       const sp = cv.querySelector("path.design-line.selected");
       const anchors = []; cv.querySelectorAll(".design-line-anchor").forEach(c => { const r = circlePt(c); if (r) anchors.push(r); });
-      anchors.forEach(r => obstacles.push(r));
+      anchors.forEach(r => { obstacles.push(r); essential.push(r); });
       if (sp) {
-        const pts = pathPts(sp); pts.forEach(r => obstacles.push(r));
+        const pts = pathPts(sp); pts.forEach(r => { obstacles.push(r); essential.push(r); });
         if (pts.length) { refs.push(pts[Math.floor(pts.length / 2)]); refs.push(pts[0]); refs.push(pts[pts.length - 1]); }
       } else if (anchors.length) {   // 관리형 선(유효 상태는 path 를 따로 그리지 않음) → overlay 앵커 기준
         refs.push(anchors[Math.floor(anchors.length / 2)]); refs.push(anchors[0]); refs.push(anchors[anchors.length - 1]);
       }
     }
     if (!refs.length) return null;
-    return { cv: cv, refs: refs, obstacles: obstacles, prev: prevPt, pieces: pieces };
+    return { cv: cv, refs: refs, obstacles: obstacles, prev: prevPt, pieces: pieces, essential: essential };
   }
 
   function hide() { if (bar && !bar.hidden) bar.hidden = true; lastPos = null; }
@@ -264,7 +277,8 @@
   function sync() {
     if (!bar) return;
     const vm = describe(snapshot());
-    if (!vm || vm.kind !== "draw") dockIdx = null;   // 그리기가 끝나면(완료·취소·선택) 고정 자리를 버린다 — 다음 그리기는 새로 고른다
+    if (!vm || vm.kind !== "draw") dockIdx = null;
+    if (!vm || vm.kind !== "select") selKeep = null;   // 선택이 끝나면(해제·그리기) 붙박이 자리를 버린다   // 그리기가 끝나면(완료·취소·선택) 고정 자리를 버린다 — 다음 그리기는 새로 고른다
     if (!vm || dragging || (vm.kind === "select" && dismissedKey === vm.key)) { hide(); return; }
     const wrap = bar.parentElement; if (!wrap) { hide(); return; }
     const wr = wrap.getBoundingClientRect();
@@ -366,6 +380,13 @@
         extra: [{ x: bounds.l, y: bounds.t }, { x: bounds.r - cs.w, y: bounds.t }, { x: bounds.l, y: bounds.b - cs.h }, { x: bounds.r - cs.w, y: bounds.b - cs.h }] });
     }
     bar.setAttribute("data-mode", mode);
+    // 붙박이: 같은 선·같은 보기·같은 형태면 지난 자리 유지(선·핸들을 가리게 될 때만 다시 고름). 값·사유 갱신은 그대로 진행된다.
+    const viewSig = [typeof viewX !== "undefined" ? viewX : 0, typeof viewY !== "undefined" ? viewY : 0, typeof viewZ !== "undefined" ? viewZ : 1, Math.round(sr.width), Math.round(sr.height), Math.round(sr.left - wr.left), Math.round(sr.top - wr.top)].join(",");
+    let kept = null;
+    if (selKeep && selKeep.key === vm.key && selKeep.view === viewSig && selKeep.mode === mode) kept = keepPlace({ keep: selKeep, bounds: bounds, size: { w: bar.offsetWidth, h: bar.offsetHeight }, essential: tg.essential });
+    if (kept) pos = Object.assign({}, pos, { x: kept.x, y: kept.y });
+    selKeep = { key: vm.key, view: viewSig, mode: mode, x: kept ? selKeep.x : pos.x, y: kept ? selKeep.y : pos.y };   // 붙박이 기준은 처음 고른 자리(clamp 로 밀린 값으로 덮지 않음 → 크기가 줄면 제자리로)
+    bar.setAttribute("data-keep", kept ? "kept" : "placed");
     const x = Math.round(pos.x), y = Math.round(pos.y);
     if (!lastPos || lastPos.x !== x || lastPos.y !== y) { bar.style.left = x + "px"; bar.style.top = y + "px"; lastPos = { x: x, y: y }; }
     bar.setAttribute("data-place", pos.around ? "around" : String(pos.index % 4));
@@ -486,7 +507,7 @@
     // 소형 상태줄 «도구» = 이 결과에 대해 전체 막대(역할·파트 분리)로 복귀.
     if (expandBtn) expandBtn.addEventListener("click", () => { const vm = describe(snapshot()); expandedKey = resultKey(vm); sync();
       const t = roleBtns.filter(b => b.getAttribute("aria-pressed") === "true" && !b.disabled)[0]; if (t) { try { t.focus({ preventScroll: true }); } catch (_) { t.focus(); } } });
-    dismissBtn.addEventListener("click", () => { const vm = describe(snapshot()); if (vm && vm.kind === "select") { dismissedKey = vm.key; hide(); } });
+    dismissBtn.addEventListener("click", () => { const vm = describe(snapshot()); if (vm && vm.kind === "select") { dismissedKey = vm.key; selKeep = null; hide(); } });   // 닫기 → 다시 열면 새로 고름
 
     // 캔버스 드래그 중 숨김 · 손 떼면 재계산. 캔버스를 누르면 «접기» 해제(같은 선 재선택에도 다시 보임).
     const cv = (typeof svg !== "undefined" && svg) ? svg : document.getElementById("cv");
@@ -504,7 +525,7 @@
     sync();
   }
 
-  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, dock: dock, chooseMode: chooseMode, resultKey: resultKey,
+  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, keepPlace: keepPlace, dock: dock, chooseMode: chooseMode, resultKey: resultKey,
     viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary, actBoundaryApply: actBoundaryApply, actReflect: actReflect,
     actCompleteBodice: actCompleteBodice });
   if (typeof document !== "undefined") {

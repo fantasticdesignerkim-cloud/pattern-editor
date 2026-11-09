@@ -2,8 +2,9 @@
 //   node test/harness/sideHemTaperCheck.js
 //   §1 앞·뒤 직선 테이퍼 · 남은 밑단 보존 · 라벨 = 완료 판정 · 차 > 0.3 차단 + 반영 안내에 실제 이유 · 맞추면 완료 · 재편집·삭제 재합성 · 원본/완료본 불변
 //   §2 곡선(독립 호 길이) · 역방향 · 허리 아래 연장 · 정확한 위 모서리
-//   §3 승인 밖(밑단 통째·중심선 침범·밑단-밑단·진동 섞임·진동에서 끝) = 종전대로 승계 안 함
+//   §3 승인 밖(밑단-밑단·진동 섞임·진동에서 끝) = 종전대로 승계 안 함 · 밑단 통째 대체는 2026-11-09 부터 새 밑단(§5)
 //   §4 그려지지 않은 소매 파생 상태 키 = 원래 몸판 라벨 값(편집 게이트 불변)
+//   §5 셔츠형 둥근 밑단(2026-11-09 김님 확정): 중심/중심-밑단 모서리 → 옆선 위 = 새 밑단(hem) · 옆선은 접점까지 · 중심선 보존 · 역방향·뒤판 · 곡선 호 미가산 · 사유 문구 = 실제 의미만
 "use strict";
 const vm = require("vm");
 const fs = require("fs");
@@ -179,12 +180,11 @@ const independentSide = pc => effSide(pc).reduce((a, s) => a + indLen(s), 0);
     const t = taper(pc, pts), c = BC.check(PROJECT), mm = t.ok ? mine(pc, t.line.id) : [];
     return { t: t, c: c, mm: mm, tag: tag };
   };
-  // 밑단 전체를 덮음(중심 모서리까지)
+  // (2026-11-09 김님 셔츠형 둥근 밑단 확정) 옆선 → 밑단 통째(→ 중심선) = 새 밑단 — §5 에서 본다. 여기선 이전 «거부» 사례가 이제 hem 임을 확인.
   let r = rej("밑단 전체", "front", [{ x: SX, y: 30 }, { x: 35, y: 50 }, { x: 47.5, y: HEM_Y }]);
-  ok(r.t.ok && r.mm.every(s => s.edge !== "side-seam") && r.c.sideSeam.status === "unmeasured", "3: 밑단을 통째로 덮음(남은 밑단 없음) = 승계 안 함 · 측정 불가 (" + (r.t.ok ? r.c.fails.join(",") : note()) + ")");
-  // 중심선 침범(옆선 → 중심선)
+  ok(r.t.ok && r.mm.length > 0 && r.mm.every(s => s.edge === "hem") && Math.abs(r.c.sideSeam.front - (30 - 20.616666666666667)) < 1e-9, "3: 밑단을 통째로 덮음(옆선 → 중심-밑단 모서리) = 새 밑단 · 옆선은 접점까지 (" + (r.t.ok ? r.c.sideSeam.front.toFixed(4) : note()) + ")");
   r = rej("중심선", "front", [{ x: SX, y: 30 }, { x: 40, y: 50 }, { x: 47.5, y: 52 }]);
-  ok(r.t.ok && r.mm.every(s => s.edge !== "side-seam") && r.c.sideSeam.status === "unmeasured", "3: 중심선까지 침범 = 승계 안 함 (" + (r.t.ok ? r.c.fails.join(",") : note()) + ")");
+  ok(r.t.ok && r.mm.length > 0 && r.mm.every(s => s.edge === "hem") && effO("front").some(s => s.edge === "center"), "3: 옆선 → 중심선(밑단 통째) = 새 밑단 · 남은 중심선 = center");
   // 밑단 → 밑단(옆선 무관) = 옆선 그대로
   r = rej("밑단-밑단", "front", [{ x: 30, y: HEM_Y }, { x: 33, y: 55 }, { x: 36, y: HEM_Y }]);
   ok(r.t.ok && r.mm.every(s => s.edge !== "side-seam") && Math.abs(r.c.sideSeam.front - 37.38333333333334) < 1e-9, "3: 밑단-밑단 절단 = 옆선 의미 없음 · 옆선 길이 그대로");
@@ -198,6 +198,7 @@ const independentSide = pc => effSide(pc).reduce((a, s) => a + indLen(s), 0);
     const t = taper("front", [onAh, { x: SX + 0.5, y: 40 }, { x: SX + 2, y: HEM_Y }]), c = BC.check(PROJECT), mm = t.ok ? mine("front", t.line.id) : [];
     ok(t.ok && mm.every(s => s.edge !== "side-seam") && c.sideSeam.status === "unmeasured" && c.fails.indexOf("side-seam-unmeasured") >= 0, "3: 진동→옆선→밑단(세 의미) = 승계 안 함 · 측정 불가 · 완료 차단 (" + (t.ok ? lab().front.text : note()) + ")");
     if (t.ok) ok(/아직 몸판 완료 안 됨: /.test(note()), "3: 측정 불가로 막히면 반영 안내에 실제 이유");
+    if (t.ok) { const rp = mm[0].replacedEdges || []; ok(J(rp) === J(["armhole", "hem", "side-seam"]) && lab().front.text === "앞 옆선 길이 확인 필요 · 옆선 일부가 진동·밑단과 함께 한 선으로 대체됨 — 새 선의 의미를 정할 수 없음", "3: 사유 = 실제 replacedEdges(" + rp.join("+") + ") 그대로 (" + lab().front.text + ")"); }
   } else ok(false, "3: 진동 곡선 점을 못 찾음");
   // 옆선 안 → 진동에서 끝(이번 확정 밖)
   projectOn("A");
@@ -212,6 +213,55 @@ const independentSide = pc => effSide(pc).reduce((a, s) => a + indLen(s), 0);
   const lb = lab(), c = BC.check(PROJECT);
   ok(DLT.displayedDerivedPiece(PROJECT, "front") === null && lb.front.length === c.sideSeam.front && lb.back.length === c.sideSeam.back, "4: 파생 몸판이 그려지지 않으면 원래 몸판 값 (" + lb.front.text + ")");
   ok(DLT.isOriginalBodiceContext(PROJECT) === false, "4: 편집 지원 게이트(원래 몸판 맥락 판정)는 그대로");
+}
+
+
+// ══ §5 셔츠형 둥근 밑단 = 새 밑단(hem) · 옆선은 새 접점까지 · 남은 중심선 = center ══
+{
+  const SIDE0 = 20.616666666666667;
+  const hemCase = (tag, pc, pts, handles, yJ) => {
+    projectOn("A");
+    const geom0 = J(PROJECT.working.geometry), t = taper(pc, pts, handles), c = BC.check(PROJECT), mm = t.ok ? mine(pc, t.line.id) : [];
+    ok(t.ok && mm.length > 0 && mm.every(s => s.edge === "hem" && s.edgeInherited === true && !s.edgeStatus), "5: " + tag + " = 새 선 전 구간 hem");
+    ok(Math.abs(c.sideSeam[pc] - (yJ - SIDE0)) < 1e-9 && lab()[pc].length === c.sideSeam[pc], "5: " + tag + " 옆선 = 접점까지만(곡선 호 미가산) " + c.sideSeam[pc].toFixed(4));
+    ok(effO(pc).some(s => s.edge === "center") && !effO(pc).some(s => s.edge === "hem" && !s.edgeSourceLineId), "5: " + tag + " 남은 중심선 = center · 원래 밑단 없음");
+    ok(J(PROJECT.working.geometry) === geom0, "5: " + tag + " 원본 geometry 불변");
+    const ss = DLT.getSeamState();   // 반영된 밑단 선도 팝업 행(옆선 숫자·완료 막힘 사유·완료 버튼)을 보인다
+    ok(ss && ss.show && ss.text === "옆선 앞 " + c.sideSeam.front.toFixed(2) + " · 뒤 " + c.sideSeam.back.toFixed(2) + " · 뒤−앞 " + (c.sideSeam.back - c.sideSeam.front >= 0.005 ? "+" : c.sideSeam.back - c.sideSeam.front <= -0.005 ? "−" : "±") + Math.abs(c.sideSeam.back - c.sideSeam.front).toFixed(2) + "cm", "5: " + tag + " 선택한 밑단 선 팝업 = 앞·뒤 옆선 숫자 (" + (ss && ss.text) + ")");
+    return t;
+  };
+  hemCase("앞 중심-밑단 모서리 → 옆선 50(곡선)", "front", [{ x: 47.5, y: HEM_Y }, { x: 35, y: 57.2 }, { x: SX, y: 50 }], [null, { x: -4, y: -0.6 }, null], 50);
+  hemCase("앞 중심선 위 → 옆선 50", "front", [{ x: 47.5, y: 57 }, { x: 35, y: 56.5 }, { x: SX, y: 50 }], [null, { x: -4, y: -0.6 }, null], 50);
+  hemCase("앞 역방향(옆선 50 → 중심-밑단)", "front", [{ x: SX, y: 50 }, { x: 35, y: 57.2 }, { x: 47.5, y: HEM_Y }], [null, { x: 4, y: 0.6 }, null], 50);
+  hemCase("뒤 중심-밑단 → 옆선 50", "back", [{ x: 0, y: HEM_Y }, { x: 12, y: 57.2 }, { x: SX, y: 50 }], [null, { x: 4, y: -0.6 }, null], 50);
+  // 김님 실제 경로(2026-11-09): 박시 A 뒤판 **뒤중심 중간 → 옆선 중간** 곡선 밑단 — 대체 = 중심선 아래 + 밑단 전부 + 옆선 아래
+  hemCase("뒤 뒤중심 48 → 옆선 48(곡선 · 김님 경로)", "back", [{ x: 0, y: 48 }, { x: 12, y: 49 }, { x: SX, y: 48 }], [null, { x: 4, y: 0 }, null], 48);
+  hemCase("뒤 뒤중심 52 → 옆선 45(곡선)", "back", [{ x: 0, y: 52 }, { x: 12, y: 51.5 }, { x: SX, y: 45 }], [null, { x: 4, y: -0.5 }, null], 45);
+  hemCase("뒤 역방향 옆선 48 → 뒤중심 48", "back", [{ x: SX, y: 48 }, { x: 12, y: 49 }, { x: 0, y: 48 }], [null, { x: -4, y: 0 }, null], 48);
+  hemCase("뒤 허리선 위 뒤중심 36 → 옆선 36", "back", [{ x: 0, y: 36 }, { x: 12, y: 37 }, { x: SX, y: 36 }], [null, { x: 4, y: 0 }, null], 36);
+  {   // 의미 미정(같은 중심선+밑단+옆선에 진동까지 섞임) = 새 밑단으로 보지 않음 · 사유 = 실제 의미만
+    projectOn("A");
+    const ah = PROJECT.working.geometry.back.outline.filter(s => s.edge === "armhole")[0], cs = ah.commands.filter(c => c.type === "C");
+    let st = null; ah.commands.forEach(c => { if (c.type === "M") st = c.points[0]; });
+    const cc = cs[cs.length - 1], onAh = bez([cs.length > 1 ? cs[cs.length - 2].points[2] : st, cc.points[0], cc.points[1], cc.points[2]], 0.6);
+    const t = taper("back", [{ x: 0, y: 48 }, { x: 12, y: 40 }, onAh]), c = BC.check(PROJECT), mm = t.ok ? mine("back", t.line.id) : [];
+    ok(t.ok && mm.length > 0 && mm.every(s => s.edgeStatus === "unresolved" && J(s.replacedEdges) === J(["armhole", "center", "hem", "side-seam"])) && c.fails.indexOf("side-seam-unmeasured") >= 0, "5: 뒤중심 → 진동(옆선 전부·진동 섞임) = 의미 미정 · 측정 불가 유지");
+    ok(lab().back.text === "뒤 옆선 길이 확인 필요 · 옆선 일부가 진동·중심선·밑단과 함께 한 선으로 대체됨 — 새 선의 의미를 정할 수 없음", "5: 의미 미정 사유 = 실제 의미 (" + lab().back.text + ")");
+  }
+  // 앞만 → 차 > 0.3 차단(실제 이유·치수) → 뒤도 같은 높이 → 정합 → 완료 · 완료본 뒤 재편집·삭제
+  projectOn("A");
+  taper("front", [{ x: 47.5, y: HEM_Y }, { x: 35, y: 57.2 }, { x: SX, y: 50 }], [null, { x: -4, y: -0.6 }, null]);
+  const c1 = BC.check(PROJECT);
+  ok(c1.fails.indexOf("side-seam-mismatch") >= 0 && c1.fails.indexOf("side-seam-unmeasured") < 0 && /아직 몸판 완료 안 됨: /.test(note()) && note().indexOf("앞 옆선 " + c1.sideSeam.front.toFixed(2)) > 0, "5: 앞만 둥근 밑단 = 차 " + (c1.sideSeam.back - c1.sideSeam.front).toFixed(2) + " 차단 · 반영 안내에 이유·치수");
+  const tb = taper("back", [{ x: 0, y: HEM_Y }, { x: 12, y: 57.2 }, { x: SX, y: 50 }], [null, { x: 4, y: -0.6 }, null]);
+  const c2 = BC.check(PROJECT);
+  ok(c2.ok && c2.sideSeam.status === "match" && BC.complete(PROJECT).ok, "5: 뒤도 같은 둥근 밑단 → 정합 → «몸판 모양 완료»");
+  const done0 = J(PROJECT.working.bodiceResult);
+  DLT.setMode("off"); DLT.toggleSelect(); click("back", { x: 12, y: 57.2 });
+  key("Delete");
+  const c3 = BC.check(PROJECT);
+  ok(!lines().some(l => l.id === tb.line.id) && Math.abs(c3.sideSeam.back - 37.38333333333334) < 1e-9 && J(PROJECT.working.bodiceResult) === done0 && BC.isCurrentBodiceChanged(PROJECT), "5: 뒤 선 삭제 → 뒤 옆선·밑단 원래대로 · 기존 완료본 불변(다시 완료 필요)");
+  DLT.setMode("off");
 }
 
 console.log("══════════════════════════════════════════════");

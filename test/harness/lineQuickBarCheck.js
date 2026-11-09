@@ -123,7 +123,7 @@ const ret = R.indexOf("return; // 라이브 원형 draw"), syncAt = R.lastIndexO
 ok(syncAt > hitAt && hitAt > 0, "3f: design render 는 선·overlay·hit 을 그린 뒤 막대 sync(그려진 SVG 기준)");
 ok(/afterDraftRender\(\);\s*\n\s*if\(window\.designLineQuickBar\) window\.designLineQuickBar\.sync\(\);/.test(R), "3g: design 밖 render 도 sync(→ 숨김)");
 const ver = f => { const m = new RegExp(f.replace(/\./g, "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
-ok(ver("designLineQuickBar.js") === "2026110807" && ver("designLineTool.js") === "2026110901" && ver("render.js") === "2026110806" && /css\/style\.css\?v=2026110801/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
+ok(ver("designLineQuickBar.js") === "2026110901" && ver("designLineTool.js") === "2026110903" && ver("render.js") === "2026110806" && /css\/style\.css\?v=2026110801/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
 ok(html.indexOf('<script src="js/designLineQuickBar.js') > html.indexOf('<script src="js/designLineTool.js'), "3i: 막대 스크립트는 designLineTool 뒤");
 // 2026-11-08 김님 방향 전환: 자동 길이 보정 UI(길이 맞춤·후보·맞춤 반영·옆선 자석·여유/셔링·기준판) 사용자 노출 없음 — 마크업·막대 호출·설정 패널 모두
 ok(!/lineQuickSeamFit|lineQuickSeamToggle|lineQuickEase|selSeamIntent|inpSeamEase|btnApplySeamIntent|selSeamBasis|chkSeamMagnet|길이 맞춤|맞춤 반영|옆선 자석|셔링/.test(html.replace(/<!--[\s\S]*?-->/g, "")), "3j: 자동 길이 보정 UI 마크업 없음(주석 제외)");
@@ -163,6 +163,24 @@ ok(/splitBtn\.addEventListener\("click", \(\) => \{ actSplit\(\); \}\)/.test(COD
   const css = fs.readFileSync(path.join(__dirname, "..", "..", "css", "style.css"), "utf8");
   ok(/@media \(pointer:coarse\)\{\.lqb-dismiss\{min-width:44px;min-height:44px\}\}/.test(css) && /\.lqb-btn\{min-height:44px;min-width:44px/.test(css), "5i: 손가락 환경 접기 «×» 44×44 · 막대 버튼 44");
   ok(/expandedKey = null; \}, true\)/.test(CODE) && /if \(expandedKey && expandedKey !== rk\) expandedKey = null;/.test(CODE), "5j: 펼침은 캔버스 누름·선택/결과 변화에 풀림(소형이 기본)");
+}
+
+
+// §9 선택 막대 붙박이(2026-11-09 김님 «팝업창이 계속 움직인다») — 같은 선 동안 처음 자리 유지 · 선·anchor·핸들을 가리게 될 때만 다시 고름
+{
+  const K = Q.keepPlace, kp = { x: 300, y: 200 };
+  ok(typeof K === "function", "9a: keepPlace 공개(순수)");
+  let r = K({ keep: kp, bounds: B, size: S, essential: [{ x: 100, y: 100 }, { x: 600, y: 500 }] });
+  ok(r && r.x === 300 && r.y === 200, "9b: 가리는 점 없음 = 그 자리 그대로");
+  r = K({ keep: kp, bounds: B, size: { w: 180, h: 120 }, essential: [] });
+  ok(r && r.x === 300 && r.y === 200, "9c: 설명줄이 늘어도(높이 80→120) 자리 유지");
+  r = K({ keep: { x: 700, y: 560 }, bounds: B, size: S, essential: [] });
+  ok(r && r.x === B.r - S.w && r.y === B.b - S.h, "9d: 화면 밖으로 나가면 안으로만 민다(clamp)");
+  ok(K({ keep: kp, bounds: B, size: S, essential: [{ x: 350, y: 240 }] }) === null, "9e: 선택 선·anchor·핸들을 가리게 되면 다시 고름(null)");
+  ok(K({ keep: kp, bounds: B, size: S, essential: [{ x: 300 + 180 + 11, y: 210 }] }) === null && K({ keep: kp, bounds: B, size: S, essential: [{ x: 300 + 180 + 13, y: 210 }] }) !== null, "9f: 가림 판정 여유 = 배치와 같은 PAD(12px)");
+  ok(K(null) === null && K({ bounds: B, size: S }) === null, "9g: 지난 자리 없음 = 새로 고름");
+  ok(/selKeep\.key === vm\.key && selKeep\.view === viewSig && selKeep\.mode === mode/.test(SRC) && /dismissedKey = vm\.key; selKeep = null/.test(SRC) && /vm\.kind !== "select"\) selKeep = null/.test(SRC), "9h: 다시 고르는 조건 = 다른 선·보기(팬·줌·캔버스) 변화·형태 변화·닫기·선택 해제뿐");
+  ok(/if \(vm\.kind === "draw"\) \{[\s\S]{0,400}dock\(/.test(SRC), "9i: 그리기 막대는 종전 캔버스 가장자리 고정 자리(dock) 그대로");
 }
 
 console.log("══════════════════════════════════════════════");

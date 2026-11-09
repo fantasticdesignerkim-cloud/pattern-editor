@@ -1435,13 +1435,16 @@
     const key = J_(p.working.patternLines) + "|" + J_(p.working.sideSeamIntent || null) + "|" + seamMagnetOn + seamBasis + "|" + line.id + "|" + J_(p.working.designOutline ? Object.keys(p.working.designOutline).map(k => p.working.designOutline[k].lineIds) : null);
     if (seamStateCache && seamStateCache.key === key && seamStateCache.geom === p.working.geometry) return seamStateCache.val;
     const info = seamInfoFor(p, line);
+    // 2026-11-09: 몸판 외곽에 반영된 선이면 옆선이 아니어도(예: 둥근 밑단 = hem) 같은 행(옆선 숫자·몸판 완료 막힘 사유·완료 버튼)을 보인다 — 좁은 화면에서 오른쪽 안내가 안 보여도 마무리 방법이 팝업에 있게.
+    const dOl = p.working.designOutline && p.working.designOutline[line.piece], reflected = !!(dOl && (dOl.lineIds || []).indexOf(line.id) >= 0);
     let val = null;
-    if (info.touches) {
+    if (info.touches || reflected) {
       const BC = window.bodiceCheckpoint, M = window.sideSeamMagnet;
       const c = BC.check(p).sideSeam;   // 권위(완료 게이트와 같은 판정)
+      const sI = BC.sideSeamIntent ? BC.sideSeamIntent(p) : null, sIntent = info.intent || (sI && sI.ok ? sI.intent : null);
       // 2026-11-08: 숫자 그대로(앞·뒤·차) — 목표·자석 문구 없음. 옛 프로젝트에 저장된 여유 의도가 있으면 그 사실만 밝힌다(판정에 쓰임).
       let text = c.status === "unmeasured" ? "옆선 측정 불가(완료 불가)" :
-        "옆선 앞 " + fmt2(c.front) + " · 뒤 " + fmt2(c.back) + " · 뒤−앞 " + fmtS(c.back - c.front) + "cm" + (info.intent ? " · 저장된 여유 의도 " + M.intentText(info.intent) : "");
+        "옆선 앞 " + fmt2(c.front) + " · 뒤 " + fmt2(c.back) + " · 뒤−앞 " + fmtS(c.back - c.front) + "cm" + (sIntent ? " · 저장된 여유 의도 " + M.intentText(sIntent) : "");
       if (info.T != null && info.composed === false) text += " · 몸판 외곽 반영 전(완료 판정은 아직 원래 옆선) — 이 선을 반영하면 " + (info.piece === "front" ? "앞 " : "뒤 ") + fmt2(info.len);
       val = { show: true, live: false, text: text, magnet: { on: seamMagnetOn, basis: seamBasis, active: !!info.ok, reason: info.ok ? null : info.reason } };
     }
@@ -1475,7 +1478,11 @@
       if (!scope) {
         const ms = BC.measureSideSeam(outl);
         if (ms.status === "measured") len = ms.length;
-        else reason = ms.reason === "side-seam-partially-unresolved" ? "옆선 일부가 진동·밑단과 함께 대체됨" : "명시된 옆선 구간 없음";
+        else if (ms.reason === "side-seam-partially-unresolved") {   // 2026-11-09: 실제 replacedEdges 에 있는 의미만 나열(진동·밑단을 무조건 같이 쓰지 않음)
+          const other = []; outl.forEach(sg => { if (sg && sg.edgeStatus === "unresolved" && Array.isArray(sg.replacedEdges) && sg.replacedEdges.indexOf("side-seam") >= 0) sg.replacedEdges.forEach(e => { if (e !== "side-seam") { const k = EDGE_KO[e] || e; if (other.indexOf(k) < 0) other.push(k); } }); });
+          const lst = other.join("·"), lc = lst ? lst.charCodeAt(lst.length - 1) - 0xAC00 : -1, josa = (lc >= 0 && lc < 11172 && lc % 28 !== 0) ? "과" : "와";
+          reason = "옆선 일부가 " + (lst ? lst + josa + " 함께 한 선으로" : "다른 외곽과 함께") + " 대체됨 — 새 선의 의미를 정할 수 없음";
+        } else reason = "명시된 옆선 구간 없음";
         if (len != null && seamLive && editDrag && seamLive.piece === pc && seamLive.composed) { len = seamLive.len; live = true; }
       }
       // 표시 위치: 옆선 꺾은선 길이의 가운데 점(위치 전용 근사) · 바깥 방향 = 피스 bbox 중심의 반대쪽
