@@ -554,9 +554,22 @@
     if (runs.length !== 2) return false;                                           // 옆선 덩어리 하나 + 밑단 덩어리 하나(끼어든 의미 없음)
     return (kept || []).some(o => o.source === "outline" && o.seg.edge === "hem");   // 남은 밑단 보존(밑단 전체를 덮지 않음)
   }
+  //   ★ 2026-11-09 김님 확정 «셔츠형 둥근 밑단: 그린 곡선 = 새 밑단 · 남은 옆선 = 새 밑단 접점까지 옆선 · 남은 중심선 = 중심선»:
+  //     대체된 원래 구간이 [(중심선 일부) → 밑단 전부 → 옆선 일부](또는 역순)이고 **원래 밑단이 하나도 남지 않을 때만** 대체선 = hem.
+  //     밑단이 남는 경우(밑단 중간에서 시작)는 위 테이퍼와 출처가 같아 자동 구분 불가 — 여기서 판정하지 않는다(종전 테이퍼 규칙 그대로 · 보고).
+  function _hemCurve(replaced, kept) {
+    const seq = replaced.map(o => (o.source === "outline" && typeof o.seg.edge === "string") ? o.seg.edge : "(none)");
+    if (!seq.length) return false;
+    const runs = seq.filter((e, i) => i === 0 || e !== seq[i - 1]), r = runs[0] === "side-seam" ? runs.slice().reverse() : runs;
+    const okSeq = (r.length === 2 && r[0] === "hem" && r[1] === "side-seam") || (r.length === 3 && r[0] === "center" && r[1] === "hem" && r[2] === "side-seam");
+    if (!okSeq) return false;
+    const keptEdge = e => (kept || []).some(o => o.source === "outline" && o.seg.edge === e);
+    return !keptEdge("hem") && keptEdge("side-seam") && keptEdge("center");   // 밑단 전부 교체 · 옆선·중심선은 남음
+  }
   function _inheritSideSeam(bnd, replaced, kept) {
     const edges = [];
     replaced.forEach(o => { const e = (o.source === "outline" && typeof o.seg.edge === "string") ? o.seg.edge : "(none)"; if (edges.indexOf(e) < 0) edges.push(e); });
+    if (_hemCurve(replaced, kept)) { bnd.forEach(sg => { if (sg.edgeStatus === "unresolved") { sg.edge = "hem"; delete sg.edgeStatus; sg.edgeInherited = true; } }); return; }
     const pure = (edges.length === 1 && edges[0] === "side-seam") || _sideHemTaper(replaced, kept);
     bnd.forEach(sg => {
       if (sg.edgeStatus !== "unresolved") return;
