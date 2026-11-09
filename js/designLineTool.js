@@ -535,7 +535,7 @@
     const dRev = Math.hypot(bnd[0].from.x - keptStart.x, bnd[0].from.y - keptStart.y) + Math.hypot(bnd[bnd.length - 1].to.x - keptEnd.x, bnd[bnd.length - 1].to.y - keptEnd.y);
     if (dRev < dFwd) bnd = bnd.slice().reverse().map(reverseSeg);
     bnd[0].from = _pt(keptEnd); bnd[bnd.length - 1].to = _pt(keptStart);
-    if (opts.inheritSideSeam) _inheritSideSeam(bnd, replaced);
+    if (opts.inheritSideSeam) _inheritSideSeam(bnd, replaced, kept);
     return { ok: true, kept: kept, replaced: replaced, bnd: bnd, aPos: aPos, bPos: bPos };
   }
   // 몸판 옆선 의미 승계(2026-11-06 김님 확정 «대체 구간 의미 승계» — 소매 «대체 구간 의미 하나»와 같은 원칙).
@@ -543,10 +543,21 @@
   //   좌표·형상 유사성은 보지 않는다(대체 구간의 선언 의미만). 다른 의미(진동·밑단·허리·구성선)가 섞이면 승계하지 않고
   //   unresolved 그대로 두되, 옆선 일부를 덮었다는 기록(replacedEdges)을 남겨 계측이 틀린 수치를 내지 않게 한다.
   //   명시 의미가 이미 있는 대체 구간(목선 전환 도구 등)은 건드리지 않는다. 몸판 합성 경로만 opts.inheritSideSeam 으로 켠다.
-  function _inheritSideSeam(bnd, replaced) {
+  //   ★ 2026-11-09 김님 확정 «옆선에서 밑단 안쪽으로 그린 선 전체 = 새 옆선 · 그 끝 = 새 밑단 모서리»(옆선→밑단 테이퍼만):
+  //     대체된 원래 구간이 [명시 옆선 연속 → 명시 밑단 연속](또는 역순) 딱 두 덩어리이고, 밑단이 유지 쪽에도 남아 있을 때만
+  //     대체선 전 구간을 side-seam 으로 승계한다(남은 밑단 = 밑단 그대로). 판정 = 대체 구간의 선언 의미 순서만(좌표 추측 없음).
+  //     진동에서 끝남·밑단만 자름·중심선 침범·다른 의미가 섞임·밑단을 통째로 덮음 = 종전대로 unresolved(측정 불가).
+  function _sideHemTaper(replaced, kept) {
+    const seq = replaced.map(o => (o.source === "outline" && typeof o.seg.edge === "string") ? o.seg.edge : "(none)");
+    if (!seq.length || seq.some(e => e !== "side-seam" && e !== "hem")) return false;
+    const runs = seq.filter((e, i) => i === 0 || e !== seq[i - 1]);
+    if (runs.length !== 2) return false;                                           // 옆선 덩어리 하나 + 밑단 덩어리 하나(끼어든 의미 없음)
+    return (kept || []).some(o => o.source === "outline" && o.seg.edge === "hem");   // 남은 밑단 보존(밑단 전체를 덮지 않음)
+  }
+  function _inheritSideSeam(bnd, replaced, kept) {
     const edges = [];
     replaced.forEach(o => { const e = (o.source === "outline" && typeof o.seg.edge === "string") ? o.seg.edge : "(none)"; if (edges.indexOf(e) < 0) edges.push(e); });
-    const pure = edges.length === 1 && edges[0] === "side-seam";
+    const pure = (edges.length === 1 && edges[0] === "side-seam") || _sideHemTaper(replaced, kept);
     bnd.forEach(sg => {
       if (sg.edgeStatus !== "unresolved") return;
       if (pure) { sg.edge = "side-seam"; delete sg.edgeStatus; sg.edgeInherited = true; }

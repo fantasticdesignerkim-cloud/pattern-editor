@@ -154,14 +154,15 @@ const SX = 23.053125;   // 몸판 Ⓐ 앞·뒤 옆선 x(형상 cm) · y 20.617 �
   ok(Math.abs(c2.back - indSide(bo)) < 2e-3 && Math.abs(c2.front - indSide(effO("front"))) < 1e-9, "2: 곡선 호 길이 독립 검산(24분할 권위 vs 4000분할 · 차 " + Math.abs(c2.back - indSide(bo)).toExponential(1) + ")");
   // 걸침(옆선 + 밑단): 승계 없음 → 측정 불가 사유(남은 조각만 더한 틀린 수치 금지)
   projectOn("A");
-  drawBoundary("front", [{ x: SX, y: 50 }, { x: 26, y: 58 }]);
+  // 2026-11-09: 옆선 → 밑단 안쪽 테이퍼(밑단 남음)는 김님 확정으로 새 옆선이 됐다(sideHemTaperCheck) — 여기선 승인 밖 혼합(옆선 + 밑단 전체 + 중심선)을 본다
+  drawBoundary("front", [{ x: SX, y: 50 }, { x: 40, y: 55 }, { x: 47.5, y: 56 }]);
   const fo2 = effO("front"), mx = fo2.filter(s => s.edgeStatus === "unresolved");
-  ok(mx.length === 1 && J(mx[0].replacedEdges) === J(["hem", "side-seam"]) && !("edge" in mx[0]), "2: 옆선+밑단 걸침 = unresolved + replacedEdges");
+  ok(mx.length >= 1 && mx.every(m => J(m.replacedEdges) === J(mx[0].replacedEdges)) && J(mx[0].replacedEdges) === J(["center", "hem", "side-seam"]) && !("edge" in mx[0]), "2: 옆선+밑단 걸침 = unresolved + replacedEdges");
   const c3 = BC.check(PROJECT);
   ok(c3.sideSeam.status === "unmeasured" && J(c3.sideSeam.unmeasuredReasons) === J(["front:side-seam-partially-unresolved"]) && c3.fails.indexOf("side-seam-unmeasured") >= 0, "2: 걸침 = 측정 불가·완료 차단(사유)");
   DLT.setMode("select"); DLT.setMode("off");
-  const st = (() => { DLT.toggleSelect(); click("front", { x: 24.5, y: 54 }); const s = DLT.getSeamState(); DLT.setMode("off"); return s; })();
-  ok(st && st.magnet.active === false && /다른 외곽\(hem\)/.test(st.magnet.reason), "2: 걸침 선 = 자석 없음 + 이유 (" + (st && st.magnet.reason) + ")");
+  const st = (() => { DLT.toggleSelect(); click("front", { x: 31.5, y: 52.5 }); const s = DLT.getSeamState(); DLT.setMode("off"); return s; })();
+  ok(st && st.magnet.active === false && /다른 외곽\(center·hem\)/.test(st.magnet.reason), "2: 걸침 선 = 자석 없음 + 이유 (" + (st && st.magnet.reason) + ")");
   // 진동선을 대체(옆선 무관) = 승계·표시 없음
   projectOn("A");
   const ah = PROJECT.working.geometry.front.outline.filter(s => s.edge === "armhole")[0];
