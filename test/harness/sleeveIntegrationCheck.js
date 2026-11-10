@@ -35,7 +35,7 @@ const sb = { window: {}, console: { log() {}, warn() {} }, Math, JSON, Object, A
 sb.globalThis = sb; vm.createContext(sb);
 sb.window.designWorkflow = { current: () => PROJECT };
 const files = ["designLineTool.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designYokeSeam.js", "designPrincess.js", "designBodice.js", "bodicePresets.js",
-  "designLayout.js", "designRenderer.js", "bodiceCheckpoint.js", "peplumAnnotation.js", "designSleeve.js", "sleeveMeasure.js", "sleeveCheckpoint.js", "sleevePresets.js"];
+  "designLayout.js", "designRenderer.js", "bodiceCheckpoint.js", "peplumAnnotation.js", "designSleeve.js", "designCuff.js", "sleeveMeasure.js", "sleeveCheckpoint.js", "sleevePresets.js"];
 SYMS.forEach(k => { if (fs.existsSync(path.join(ROOT, "js", "designSleeve" + k + ".js"))) files.push("designSleeve" + k + ".js"); files.push("sleeve" + k + "Apply.js"); });
 files.push("sleeveAnnotation.js", "designCollar.js", "collarCheckpoint.js", "designResult.js");
 files.forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, "js", f), "utf8"), sb, { filename: f }));
@@ -412,7 +412,16 @@ lap("s7");
   const a = UI_SRC.indexOf("  function onApplySleevePreset() {"), b = UI_SRC.indexOf("  // Ⓐ 해제 뒤 기존 경로의 소매 형상으로 복원"), body = a > 0 && b > a ? UI_SRC.slice(a, b) : "";
   const branches = body.match(/if \(applySleeve[A-Z]\(project\)\) \{[^\n]*\n/g) || [];
   ok(branches.length === 25 && branches.every(l => /\} else noteSleeveKept\(project, selSym\);\n$/.test(l)), "6a: Ⓑ~Ⓩ 25 분기 전부 실패 시 안내(" + branches.length + ")");
-  ok((body.match(/setSleeveNote\([^\n]*\); noteSleeveKept\(project, selSym\); return; \}/g) || []).length === 2, "6a: Ⓐ 경로(소매길이 범위·엔진 차단) 실패 안내 2");
+  // Ⓐ 경로 실패 분기 3 — 소매길이 범위 · 커프스 입력(2026-11-10 추가) · 엔진 차단. 분기마다 원문을 정확히 지정하고, 각 분기가 사유 표시 → 기존 소매 보존 안내 → 즉시 return 인지 확인.
+  const aFails = [
+    ["소매길이 범위", /if \(!len\.valid \|\| !\(len\.v > 0\)\) \{ setSleeveNote\("소매길이 10–90 범위를 확인하세요"\); noteSleeveKept\(project, selSym\); return; \}/],
+    ["커프스 입력", /if \(!cf\.valid\) \{ setSleeveNote\("커프스 입력 확인: " \+ cf\.why \+ " · 이전 소매 유지"\); noteSleeveKept\(project, selSym\); return; \}/],
+    ["엔진 차단", /if \(!a\.ok\) \{ setSleeveNote\("소매 Ⓐ 차단: " \+ a\.text \+ " · 이전 소매 유지"\); noteSleeveKept\(project, selSym\); return; \}/]
+  ];
+  aFails.forEach(([nm, re]) => ok(re.test(body), "6a: Ⓐ 경로 실패 안내 — " + nm));
+  ok((body.match(/setSleeveNote\([^\n]*\); noteSleeveKept\(project, selSym\); return; \}/g) || []).length === aFails.length, "6a: Ⓐ 경로 실패 안내 분기 수 = 지정 분기 수(" + aFails.length + ")");
+  const iLen = body.indexOf("if (!len.valid"), iCf = body.indexOf("if (!cf.valid)"), iApply = body.indexOf("window.sleeveAApply.apply(project"), iEng = body.indexOf("if (!a.ok)"), iClr = body.indexOf('clearOtherSleeveLines(project, "A")');
+  ok(iLen > 0 && iLen < iCf && iCf < iApply && iApply < iEng && iEng < iClr, "6a: 순서 — 길이·커프스 검사는 적용 호출 전, 차단 검사는 상대 라인 해제 전");
   ok(/const selSym = presetSymbolOfResult\(\{ origin: \{ presetId: r\.presetId \} \}\);/.test(body) && !/clearOtherSleeveLines[^\n]*noteSleeveKept|noteSleeveKept[^\n]*(clear|complete|reject)\(/.test(body), "6a: 안내는 표시만(해제·완료·차단 호출 없음)");
   // 실제 상태: Ⓩ(13) 활성 → Ⓐ(13) 적용 실패 → 활성은 그대로 Ⓩ, «소매 모양 완료» = Ⓩ 완료본(안내의 «완료 대상» 과 일치)
   const P = projectOn("A"), zIn = Object.assign(defaultsOf("Z"), { sleeveLengthCm: 13 });
@@ -420,6 +429,12 @@ lap("s7");
   const act = SYMS.filter(s => API(s).isActive(P));
   const cz = SC.complete(P);
   ok(rz.ok && !ra.ok && act.length === 1 && act[0] === "Z" && cz.ok && cz.result.origin.presetId === "bunka-sleeve-Z", "6a: Ⓩ13 활성에서 Ⓐ13 실패 → 활성 Ⓩ 유지 · 완료본 Ⓩ (" + (ra.reason || "ok") + " · " + act.join("") + ")");
+  // 커프스 입력 실패(행위): Ⓩ 활성에서 잘못된 커프스로 Ⓐ 적용 → 차단 · 활성 Ⓩ · Ⓩ 상태 무변경 · Ⓐ 상태 없음 · 완료본 Ⓩ
+  { const P2 = projectOn("A"), rz2 = API("Z").apply(P2, Object.assign(defaultsOf("Z"), { sleeveLengthCm: 13 })), zBefore = J(P2.working.sleeveZ);
+    const badCuff = Object.assign(W.designCuff.defaults(), { wristCm: NaN }), vBad = W.designCuff.validate(badCuff);
+    const rc = API("A").apply(P2, { sleeveLengthCm: 52, cuff: badCuff }), act2 = SYMS.filter(s => API(s).isActive(P2)), zAfter = J(P2.working.sleeveZ), cz2 = SC.complete(P2);
+    ok(rz2.ok && !vBad.ok && !rc.ok && rc.stage === "cuff" && /^cuff-/.test(rc.reason) && act2.length === 1 && act2[0] === "Z" && zAfter === zBefore && !P2.working.sleeveA && cz2.ok && cz2.result.origin.presetId === "bunka-sleeve-Z",
+      "6a: Ⓩ 활성에서 커프스 입력 실패 Ⓐ → 차단(" + (rc.reason || "ok") + ") · 활성 Ⓩ 유지 · 완료본 Ⓩ (" + act2.join("") + ")"); }
 
   const SA = W.sleeveAnnotation, DLy = W.designLayout, FSZ = { title: 12, side: 13, note: 8.5 };
   const tbox = (x, y, an, t, f) => { let w = 0; for (const ch of t) w += (ch.charCodeAt(0) > 255 ? 1.0 : 0.58) * f; const x0 = an === "end" ? x - w : an === "middle" ? x - w / 2 : x; return { x0, x1: x0 + w, y0: y - f * 0.85, y1: y + f * 0.2 }; };

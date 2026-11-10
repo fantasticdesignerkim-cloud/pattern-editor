@@ -72,20 +72,48 @@
     return r;
   }
 
-  function stateOf(r, sleeveLengthCm) {
-    return { presetId: PRESET_ID, sourceBodiceHash: r.sourceBodiceHash, parameters: { sleeveLengthCm: sleeveLengthCm },
+  // 커프스·트임(P.91 ④ — designCuff, 김님 확정 2026-11-10) 포함 제도. params = { sleeveLengthCm, cuff? }.
+  //   cuff 없음 → draft(len) 그대로(기존 경로와 비트 동일). cuff 있음 → 입력 소매길이 = 커프스 포함 → 본체 = 입력 − 완성 폭으로 Ⓐ 제도 →
+  //   그 geometry 를 읽기 전용으로 designCuff.draft. 어느 쪽이든 실패하면 사유만(자동 보정 없음).
+  //   → { ok, sleeve: draftSleeveA 결과, cuff: designCuff 결과 | null } | { ok:false, reason, text, stage }
+  function draftWith(project, params) {
+    var len = params && params.sleeveLengthCm, cuff = params && params.cuff;
+    if (!cuff) { var r0 = draft(project, len); return r0.ok ? { ok: true, sleeve: r0, cuff: null } : r0; }
+    var DCF = (typeof window !== "undefined") && window.designCuff;
+    if (!DCF) { var m = { ok: false, reason: "no-module", stage: "cuff" }; m.text = "커프스 모듈을 불러오지 못함"; return m; }
+    var v = DCF.validate(cuff); if (!v.ok) return { ok: false, reason: "cuff-" + v.reason, stage: "cuff", detail: v.detail, text: "커프스: " + v.text };
+    var body = DCF.bodyLengthOf(len, cuff);
+    if (body == null) return { ok: false, reason: "cuff-body-length-nonpositive", stage: "cuff", text: "커프스: " + DCF.TEXT["body-length-nonpositive"] };
+    var r = draft(project, body); if (!r.ok) return r;
+    var c = DCF.draft(r.geometry, cuff);
+    if (!c.ok) return { ok: false, reason: "cuff-" + c.reason, stage: "cuff", detail: c.detail, text: "커프스: " + c.text + cuffDetail(c) };
+    return { ok: true, sleeve: r, cuff: c };
+  }
+  function cuffDetail(c) {
+    var d = c && c.detail; if (!d || typeof d !== "object") return "";
+    if (fin(d.hemCm) && fin(d.attachCm)) return " · 소맷부리 " + f2(d.hemCm) + " / 달림 " + f2(d.attachCm);
+    if (fin(d.lengthCm) && fin(d.availableCm)) return " · 트임 " + f2(d.lengthCm) + " / 가능 " + f2(d.availableCm);
+    if (fin(d.placketWidthCm) && fin(d.toCenterCm)) return " · 덧단 " + f2(d.placketWidthCm) + " / 중심까지 " + f2(d.toCenterCm);
+    return "";
+  }
+
+  // cuff 가 없으면 parameters·state 키는 종전 그대로({ sleeveLengthCm } · cuff 키 없음).
+  function stateOf(r, sleeveLengthCm, cuffInput, cuffRes) {
+    var st = { presetId: PRESET_ID, sourceBodiceHash: r.sourceBodiceHash, parameters: { sleeveLengthCm: sleeveLengthCm },
       meta: clone(r.meta), warnings: r.warnings.slice(), blocked: null };
+    if (cuffInput) { st.parameters.cuff = clone(cuffInput); st.cuff = clone(cuffRes); }
+    return st;
   }
 
   // 적용: 성공 시 working.sleeveA + working.geometry.sleeve 갱신. 실패 시 아무것도 바꾸지 않는다.
   function apply(project, params) {
     var w = work(project);
     if (!w || !w.geometry) { var e = { ok: false, reason: "no-project" }; e.text = failText(e); return e; }
-    var len = params && params.sleeveLengthCm;
-    var r = draft(project, len);
-    if (!r.ok) return r;
-    w.sleeveA = stateOf(r, len);
-    w.geometry.sleeve = clone(r.geometry);
+    var len = params && params.sleeveLengthCm, cuff = (params && params.cuff) || null;
+    var d = draftWith(project, { sleeveLengthCm: len, cuff: cuff });
+    if (!d.ok) return d;
+    w.sleeveA = stateOf(d.sleeve, len, cuff, d.cuff);
+    w.geometry.sleeve = clone(d.sleeve.geometry);
     return { ok: true, state: w.sleeveA };
   }
 
@@ -94,14 +122,14 @@
   //   (body apply 가 덮어 둔 원형 소매가 그대로 보이지만 «차단»으로 표시된다 — 조용히 다른 소매로 바꾸지 않음).
   function rederive(project) {
     var w = work(project); if (!w || !w.sleeveA) return { ok: true, active: false };
-    var len = w.sleeveA.parameters.sleeveLengthCm;
-    var r = draft(project, len);
+    var len = w.sleeveA.parameters.sleeveLengthCm, cuff = w.sleeveA.parameters.cuff || null;
+    var r = draftWith(project, { sleeveLengthCm: len, cuff: cuff });
     if (!r.ok) {
       w.sleeveA.blocked = { reason: r.reason, piece: r.piece || null, text: r.text };
       return r;
     }
-    w.sleeveA = stateOf(r, len);
-    w.geometry.sleeve = clone(r.geometry);
+    w.sleeveA = stateOf(r.sleeve, len, cuff, r.cuff);
+    w.geometry.sleeve = clone(r.sleeve.geometry);
     return { ok: true, active: true, state: w.sleeveA };
   }
 
@@ -115,7 +143,8 @@
     var lines = [(v ? "스트레이트 소매 Ⓐ" : "소매 Ⓐ") + " · 완성 몸판 진동둘레 기준 (P.137)"];
     if (s.blocked) { lines.push("⚠ 차단: " + s.blocked.text); return lines; }
     var m = s.meta, a = m.armholeCm, et = m.easeTarget, ea = m.easeAfter;
-    lines.push("소매산 높이 " + f2(m.capHeightCm) + " · 소매폭 " + f2(m.bicepCm) + " · 소매길이 " + f2(m.sleeveLengthCm) + " cm");
+    if (s.cuff) lines.push("소매산 높이 " + f2(m.capHeightCm) + " · 소매폭 " + f2(m.bicepCm) + " · 소매길이 " + f2(s.parameters.sleeveLengthCm) + "(커프스 포함) = 본체 " + f2(m.sleeveLengthCm) + " + 커프스 " + f2(s.parameters.cuff.widthCm) + " cm");
+    else lines.push("소매산 높이 " + f2(m.capHeightCm) + " · 소매폭 " + f2(m.bicepCm) + " · 소매길이 " + f2(m.sleeveLengthCm) + " cm");
     lines.push("AH 앞 " + f2(a.front) + " · 뒤 " + f2(a.back) + " · 총 " + f2(a.front + a.back) + " cm");
     lines.push("목표 이세 앞 " + f2(et.front) + " · 뒤 " + f2(et.back) + " · 총 " + f2(et.total) + " cm");
     lines.push("실제 이세 앞 " + sgn(ea.front) + " · 뒤 " + sgn(ea.back) + " · 총 " + sgn(ea.total) + " cm");
@@ -130,9 +159,17 @@
       lines.push("원형 기준 측정: " + kind + " · 저장 AH 앞 " + f2(m.source.front.armholeStoredCm) + " / 뒤 " + f2(m.source.back.armholeStoredCm) + " → 봉제 AH 앞 " + f2(a.front) + " / 뒤 " + f2(a.back));
     }
     if (s.warnings.indexOf("ease-adjust-ge-1cm") >= 0) lines.push("⚠ 이세 조정이 1cm 이상 — 책: 치수 오측정 가능, 확인 필요");
+    if (s.cuff) {
+      var c = s.cuff, ln = c.lengths, ci = c.inputs, vt = c.vent;
+      lines.push("커프스(P.91 · 한 장 접기): 가로 " + f2(ln.cuffLengthCm) + " = 손목 " + f2(ci.wristCm) + (ci.wristCm === 16 ? "(책 참고값 P.8 · 실측 아님)" : "") + " + 여밈 " + f2(ci.overlapCm) + " + 여유 " + f2(ci.easeCm) + " · 완성 폭 " + f2(ln.finishedWidthCm) + " · 펼친 폭 " + f2(ln.openWidthCm) + " · 시접 없음");
+      lines.push("잠근 둘레 " + f2(ln.closedCircumferenceCm) + "(손목+여유) · 소매 달림 " + f2(ln.attachLengthCm) + "(여밈 포함 · 방법 A)");
+      lines.push("셔링 " + f2(ln.shirringCm) + " = 소맷부리 " + f2(ln.sleeveHemCm) + " − 달림 " + f2(ln.attachLengthCm) + " (실측)");
+      lines.push("트임 ④ 덧단: 길이 " + f2(vt.lengthCm) + " · 덧단 폭 " + f2(vt.placketWidthCm) + " · 뾰족 끝 " + f2(vt.tipCm) + " · 위치 = 중심→뒤 옆선 " + f2(vt.position.backHalfCm) + " 의 1/2(중심에서 " + f2(vt.position.fromCenterCm) + ")");
+      lines.push("덧단·바이어스 재단 조각: 책에 재단 치수 없음 — 만들지 않음(완성선만 표시) · 가위집 끝: 책 표기 없음");
+    }
     return lines;
   }
 
-  window.sleeveAApply = Object.freeze({ PRESET_ID: PRESET_ID, isActive: isActive, isBlocked: isBlocked, draft: draft, apply: apply,
+  window.sleeveAApply = Object.freeze({ PRESET_ID: PRESET_ID, isActive: isActive, isBlocked: isBlocked, draft: draft, draftWith: draftWith, apply: apply,
     rederive: rederive, clear: clear, infoLines: infoLines, failText: failText });
 })();

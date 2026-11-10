@@ -117,6 +117,8 @@ const suites = [
   // 소매 Ⓐ UI/프리셋 연결: 카탈로그(sleevePresets)·적용 상태(sleeveAApply)·차단 사유·재제도 훅·표시 줄·완료 연결 차단·index/ui 배선.
   { file: "sleeveAUICheck.js",          golden: false },
   { file: "sleeveAResultCheck.js",      golden: false },
+  // 소매 Ⓐ 커프스(한 장 접기) + 트임 ④ 덧단(P.91 · 김님 확정 2026-11-10): 길이 분리(가로/잠근 둘레/달림)·셔링 실측·sweep·거부·OFF=HEAD 바이트 동일·완료본 결속·왕복.
+  { file: "designCuffCheck.js",         golden: false },
   // 소매 Ⓑ(P.41) UI/프리셋 연결 + 완료본·Design 통합: 카탈로그·sleeveBApply(손바닥 경고만)·차단·재제도·표시(지배 ease=geometry 실측)·배선 / origin·inputs·Ⓐ↔Ⓑ↔기본 전환·몸판 변경·게이트.
   { file: "sleeveBUICheck.js",          golden: false },
   { file: "sleeveBResultCheck.js",      golden: false },

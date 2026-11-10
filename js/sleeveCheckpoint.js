@@ -145,9 +145,12 @@
     if (!fails.length) {
       if (!SAA || !window.designSleeveA) fails.push("no-module");
       else {
-        var r = SAA.draft(proj, len);
-        if (!r.ok) fails.push("sleeve-a-redraft-failed");
+        // 커프스(P.91 ④) 입력이 있으면 같은 입력으로 소매 본체(입력 − 완성 폭) + 커프스를 다시 제도해 상태와 일치해야 한다.
+        var dw = SAA.draftWith ? SAA.draftWith(proj, a.parameters) : null, r = dw ? (dw.ok ? dw.sleeve : dw) : SAA.draft(proj, len);
+        if (dw && !dw.ok && dw.stage === "cuff") fails.push(dw.reason);
+        else if (!r.ok) fails.push("sleeve-a-redraft-failed");
         else if (JSON.stringify(canonGeom(r.geometry)) !== JSON.stringify(canonGeom(geom)) || JSON.stringify(r.meta) !== JSON.stringify(a.meta)) fails.push("sleeve-a-geometry-mismatch");
+        else if (!!a.parameters.cuff !== !!a.cuff || (a.cuff && JSON.stringify(dw.cuff) !== JSON.stringify(a.cuff))) fails.push("cuff-mismatch");
       }
     }
     var ease = null;
@@ -1186,7 +1189,8 @@
       var sig = { g: canonGeom(sleeveResult.geometry), o: sleeveResult.origin.presetId, i: sleeveResult.inputs,
         m: sleeveResult.cap.mode, l: sleeveResult.cap.lengths, sbh: sleeveResult.sourceBodiceHash };
       if (sleeveResult.derivedBodice) sig.db = ["back", "front"].map(function (pc) { return canonGeom(sleeveResult.derivedBodice[pc]); });   // 돌먼 Ⓡ: 파생 몸판 형상도 서명(다른 완료본은 필드 없음 — hash 불변)
-      if (sleeveResult.manualEdit) sig.me = editSig(sleeveResult.manualEdit);   // 수동 외곽 수정 완료본만(다른 완료본은 필드 없음 — hash 불변)
+      if (sleeveResult.manualEdit) sig.me = editSig(sleeveResult.manualEdit);
+      if (sleeveResult.cuff) sig.cf = { p: sleeveResult.cuff.piece, v: sleeveResult.cuff.vent, l: sleeveResult.cuff.lengths, s: sleeveResult.cuff.source };   // Ⓐ 커프스(있을 때만 — 다른 완료본 hash 불변)   // 수동 외곽 수정 완료본만(다른 완료본은 필드 없음 — hash 불변)
       return JSON.stringify(sig);
     }
     var dsig = {
@@ -1280,6 +1284,8 @@
     if (prim.kind) o.kind = prim.kind;   // 소매 Ⓥ: "raglan-seam"(소매 달림선 · 분할점 없음) — 다른 라인은 필드 없음(완료본 형식·hash 불변)
     return o;
   }
+  // Ⓐ 입력: 커프스가 없으면 종전 그대로 { sleeveLengthCm } (키·hash 불변).
+  function inputsA(a) { var i = { sleeveLengthCm: a.parameters.sleeveLengthCm }; if (a.parameters.cuff) i.cuff = clone(a.parameters.cuff); return i; }
   function completeA(proj, c) {
     var a = c._a, sb = proj.sourceBlock || {};
     var result = {
@@ -1287,12 +1293,13 @@
       origin: clone(A_ORIGIN),
       sourceBodiceHash: a.sourceBodiceHash,
       sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
-      inputs: { sleeveLengthCm: a.parameters.sleeveLengthCm },
+      inputs: inputsA(a),
       geometry: clone(proj.working.geometry.sleeve),
       meta: clone(a.meta), warnings: a.warnings.slice(),
       cap: capBlock(c),
       completedAt: Date.now()
     };
+    if (a.cuff) result.cuff = clone(a.cuff);   // 커프스 독립 조각 + 트임(출처·입력·geometry·길이) — 커프스 없는 Ⓐ 완료본에는 키 없음(hash 불변)
     result.hash = hashStr(signature(result));
     deepFreeze(result);
     proj.working.sleeveResult = result;
@@ -1792,6 +1799,7 @@
     var SOE = window.sleeveOutlineEdit, w = proj.working, ed = w.sleeveEdit, base = ed.base, fails = [];
     var BC = window.bodiceCheckpoint, bodice = BC && BC.latest(proj);
     if (!base || !base.geometry || base.manualEdit || hashStr(signature(base)) !== base.hash) fails.push("manual-edit-base-invalid");
+    else if (base.cuff) fails.push("manual-edit-with-cuff");   // 커프스 셔링·트임은 Ⓐ 직선 소맷부리 실측에 묶여 있다 — 외곽 수동 수정과 함께 완료하지 않는다(모순 방지)
     else {
       var pw = Object.assign({}, w, { geometry: Object.assign({}, w.geometry, { sleeve: base.geometry }), sleeveResult: base, sleeveEdit: null });
       if (isCurrentSleeveChanged(Object.assign({}, proj, { working: pw }))) fails.push("manual-edit-base-stale");
@@ -1985,7 +1993,7 @@
         geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);
     }
     if (proj.working.sleeveA) {   // 소매 Ⓐ: 같은 signature 형식(origin 이 다르면 기본↔Ⓐ 전환도 «변경»)
-      return signature({ origin: A_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: { sleeveLengthCm: c._a.parameters.sleeveLengthCm },
+      return signature({ origin: A_ORIGIN, sourceBodiceHash: c._a.sourceBodiceHash, inputs: inputsA(c._a), cuff: c._a.cuff || undefined,
         geometry: proj.working.geometry.sleeve, cap: { mode: "preset", lengths: { front: round4(c._prim.lengths.front), back: round4(c._prim.lengths.back), total: round4(c._prim.lengths.total) } } }) !== signature(res);
     }
     var cur = {
