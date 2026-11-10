@@ -141,10 +141,9 @@ let T1 = null, S2 = null;
   const ra = S.W.sleeveAApply.apply(P, S.defaultsOf("A")); ok(ra && ra.ok, "1: 소매 Ⓐ 적용");
   ok(S.SC.complete(P).ok, "1: 소매 완료(편집 전)");
   S.draw("sleeve", [{ x: -17.07, y: 25 }, { x: -15.8, y: 35 }, { x: -17.07, y: 45 }], null, "boundary");
-  // (기존 동작) 새 선 완료 = 합성 외곽 무효화 → 몸판 «변경됨» → 제품 경로대로 «디자인 외곽 합성»으로 같은 외곽 복원
-  ok(S.BC.isCurrentBodiceChanged(P) === true, "1: (기존 동작) 새 선 완료가 합성 외곽을 무효화");
-  S.DLT.doComposeDesignOutline();
-  ok(!S.BC.isCurrentBodiceChanged(P), "1: «디자인 외곽 합성» → 몸판 완료본과 다시 일치");
+  // 2026-11-10 수정: 소매 선 완료·역할 지정은 그 선 출처 파생만 무효화 — 몸판 합성 외곽(곡선 밑단) 보존 · 몸판 «변경됨» 아님
+  ok(!!(S.P().working.designOutline && S.P().working.designOutline.front && S.P().working.designOutline.back), "1: 소매 선 완료가 몸판 합성 외곽을 지우지 않음");
+  ok(!S.BC.isCurrentBodiceChanged(P), "1: 소매 선 완료 뒤에도 몸판 완료본과 일치(재합성 불필요)");
   S.DLT.syncCutStatus();
   const bpv = S.DLT.doBoundaryPreview(), bap = bpv && S.DLT.doBoundaryApply();
   ok(bpv === true && bap === true, "1: 수정 소매(뒤 옆선 외곽 반영) " + bpv + "/" + bap + " " + S.el("designBoundaryNote").textContent + " | " + J(S.P().working.patternLines.slice(-1)[0]).slice(0, 300));
@@ -335,6 +334,55 @@ let T1 = null, S2 = null;
   ok(at("projectFile.js") > at("designResult.js") && at("projectFile.js") < at("ui.js") && /projectFile\.js\?v=2026110901/.test(html), "6: projectFile 로드 순서·캐시 버전");
   ok(/id="btnSaveProject" onclick="projectFile\.onSave\(\)"/.test(html) && /id="inpOpenProject"[^>]*onchange="projectFile\.onOpenFile\(this\)"/.test(html), "6: 파일 메뉴 «프로젝트 저장»·«프로젝트 열기»");
   ok(/onclick="exportData\(\)"/.test(html) && /onchange="importDataFromFile\(this\)"/.test(html), "6: 기존 곡선 JSON 내보내기/가져오기 보존");
+}
+
+// §7 선 변경 무효화 범위(2026-11-10 김님 승인 버그 수정 — 다른 조각 파괴 금지 · 그 선 출처 파생만)
+{
+  const S = makeSession(), P = S.start(), DLT = S.DLT, w = () => S.P().working;
+  const dOJ = pc => J(w().designOutline && w().designOutline[pc]);
+  const bl = S.draw("back", [{ x: 0, y: HEM_Y }, { x: 12, y: 57.2 }, { x: SX, y: 50 }], [null, { x: 4, y: -0.6 }, null]);
+  ok(DLT.doReflectToBodice() === true, "7: 곡선 밑단(뒤) 반영");
+  const backRef = dOJ("back");
+  // (a) 앞판에 새 선 «완료» — 뒤판 반영이 지워지지 않는다(종전: designOutline 전체 null)
+  const fl = S.draw("front", [{ x: 47.5, y: HEM_Y }, { x: 35, y: 57.2 }, { x: SX, y: 50 }], [null, { x: -4, y: -0.6 }, null]);
+  ok(dOJ("back") === backRef && !w().designOutline.front, "7a: 앞 선 완료 = 뒤판 반영 보존 · 앞판 미반영 그대로");
+  ok(DLT.doReflectToBodice() === true, "7b0: 곡선 밑단(앞) 반영");
+  const frontRef = dOJ("front");
+  ok(S.BC.complete(P).ok && !S.BC.isCurrentBodiceChanged(P), "7: 몸판 완료");
+  // (c) 소매 선 · 몸판 보조선 · 절개선 역할 → 몸판 완료본 불변
+  S.draw("sleeve", [{ x: -10, y: 30 }, { x: -10, y: 40 }]);
+  ok(dOJ("front") === frontRef && dOJ("back") === backRef && !S.BC.isCurrentBodiceChanged(P), "7c: 소매 선 완료 = 몸판 합성 외곽·완료 상태 보존");
+  S.draw("front", [{ x: 30, y: 10 }, { x: 34, y: 20 }], null, "boundary");
+  ok(dOJ("front") === frontRef && !S.BC.isCurrentBodiceChanged(P), "7c: 반영 안 된 앞 선을 외곽 역할로 = 몸판 불변(반영은 명시 클릭)");
+  DLT.setRole("guide");   // 연결 안 된 시험 선 — 7g 전체 재합성에 끼지 않게 되돌림
+  // (d) 파트: 절개선 분리 → 다른 선 완료/역할 변경은 파트 보존 · 그 절개선 역할 변경만 파트 제거
+  const cut = S.draw("front", [{ x: SX, y: 30 }, { x: 47.5, y: 30 }], null, "cut");
+  DLT.syncCutStatus(); DLT.doSplit();
+  const nParts = (w().parts || []).length;
+  ok(nParts === 2 && w().parts.every(q => q.sourceCutId === cut.id), "7d: 앞판 절개선 분리 = 파트 2 (" + nParts + ")");
+  S.draw("back", [{ x: 5, y: 10 }, { x: 8, y: 20 }]);
+  ok((w().parts || []).length === 2, "7d: 다른 선 완료 = 파트 보존");
+  S.draw("front", [{ x: 30, y: 30 }, { x: 33, y: 40 }]);
+  ok((w().parts || []).length === 2, "7d: 같은 피스 다른 선 완료 = 파트 보존");
+  DLT.setMode("select"); S.click("front", { x: 40, y: 30 });
+  const selCut = DLT.getSelectedId() === cut.id;
+  if (selCut) DLT.setRole("guide");
+  ok(selCut && !(w().parts || []).length, "7d: 그 절개선을 보조선으로 = 그 선 출처 파트만 제거 (선택 " + DLT.getSelectedId() + ")");
+  ok(dOJ("front") === frontRef && !S.BC.isCurrentBodiceChanged(P), "7d: 절개선 역할 변경 = 몸판 합성 외곽 불변");
+  // (e) 반영된 앞 밑단 선 삭제 = 앞판만 반영 해제(사용자 자신의 그 조각 조작 = 정당한 무효화) · 뒤판 보존
+  DLT.setMode("select"); S.click("front", { x: 35, y: 57.2 });
+  const selF = DLT.getSelectedId() === fl.id;
+  if (selF) DLT.deleteSelected();
+  ok(selF && !w().designOutline.front && dOJ("back") === backRef, "7e: 반영된 앞 밑단 삭제 = 앞판만 해제 · 뒤판 보존 (선택 " + DLT.getSelectedId() + ")");
+  ok(S.BC.isCurrentBodiceChanged(P) === true, "7e: 앞 밑단 삭제 = 몸판 «변경됨»(정당)");
+  // (f) 반영된 뒤 밑단 선 역할 변경(외곽 → 보조선) = 뒤판 반영 해제 → designOutline 비면 null
+  DLT.setMode("select"); S.click("back", { x: 12, y: 57.2 });
+  const selB = DLT.getSelectedId() === bl.id;
+  if (selB) DLT.setRole("guide");
+  ok(selB && w().designOutline === null, "7f: 반영된 뒤 밑단을 보조선으로 = 뒤판 해제 · 남은 반영 없음 → null");
+  // (g) «디자인 외곽 합성» = 지금 boundary 전부 재합성(종전 계약) + 판정 재동기화
+  DLT.setRole("boundary"); DLT.doComposeDesignOutline();
+  ok(!!(w().designOutline && w().designOutline.back), "7g: «디자인 외곽 합성» = boundary 재합성");
 }
 
 console.log("projectFileCheck: " + PASS + " pass, " + FAIL + " fail");

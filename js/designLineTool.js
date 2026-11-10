@@ -928,7 +928,7 @@
     const p = project(); const ls = ensurePatternLines(p);
     const line = makePatternLine(nextId(ls), draft.piece, draft.anchors);
     ls.push(line);
-    invalidateParts(p);
+    invalidateForLine(p, line);              // 새 선(역할 guide) — 그 선 출처 파생만(다른 조각 불변 · 2026-11-10)
     setMode("select");                       // draft·드래그 상태 정리 + 버튼 문구(그리기 취소 → 선·곡선 그리기 / 편집 종료) · 완료 버튼 비활성
     selectedId = line.id;
     setNote("완료 · 방금 그린 선 선택됨 — 역할(절개선·외곽·보조선)을 고르세요 · anchor/핸들 드래그 · Delete 삭제 · 새 선은 «선·곡선 그리기»");
@@ -949,8 +949,8 @@
     if (isNeckAutoLine(selectedId)) { setNote("네크라인 전용선은 삭제할 수 없습니다 · 기본형으로 돌아가기로만 제거"); return; }   // 자동 네크라인 보호
     if (isSleeveCapLine(selectedId)) { setNote("소매산 관리선은 삭제할 수 없습니다 · 기본 소매산으로 돌아가기로만 제거"); return; }   // 관리형 소매산 보호
     if (isCollarBodyLine(selectedId)) { setNote("칼라 본체 관리선은 삭제할 수 없습니다 · 기본형으로 돌아가기로만 제거"); return; }   // 관리형 칼라 본체 보호
-    const p = project(); p.working.patternLines = ensurePatternLines(p).filter(l => l.id !== selectedId);
-    invalidateParts(p);
+    const p = project(), gone = findLine(selectedId); p.working.patternLines = ensurePatternLines(p).filter(l => l.id !== selectedId);
+    invalidateForLine(p, gone, { removed: true });   // 그 선 출처 파생만 · 반영된 외곽선이면 그 피스만 재합성
     selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult();
   }
   // 선택한 선의 역할 지정(cut/boundary/guide). 표시만 바뀌고 outline 분할은 다음 단계.
@@ -960,7 +960,7 @@
     if (isSleeveCapLine(selectedId)) { setNote("소매산 관리선은 역할을 바꿀 수 없습니다"); return; }   // 관리형 소매산 보호
     if (isCollarBodyLine(selectedId)) { setNote("칼라 본체 관리선은 역할을 바꿀 수 없습니다"); return; }   // 관리형 칼라 본체 보호
     const line = findLine(selectedId); if (!line) return;
-    line.role = role; invalidateParts(); setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult();
+    line.role = role; invalidateForLine(project(), line); setNote("역할: " + ROLE_LABEL[role]); syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult();
   }
   // 역할 버튼(design inspector): 선택 시 활성, 현재 역할 강조. 자동 네크라인 전용선이면 잠금(역할 변경 금지).
   function syncRoleButtons() {
@@ -1088,6 +1088,45 @@
     if (p && p.working.boundaryPreview) { p.working.boundaryPreview = null; ch = true; }
     if (p && p.working.designOutline) { p.working.designOutline = null; ch = true; }
     return ch;
+  }
+  // 선 하나의 변경(새 선 완료·역할 변경·삭제·cut/guide 편집) → **그 선에서 나온 파생만** 무효화(2026-11-10 김님 승인 버그 수정).
+  //   종전엔 invalidateParts 로 어떤 선이든 parts·미리보기·designOutline 을 통째로 지워, 소매에 보조선 하나만 그려도
+  //   완료한 몸판의 곡선 밑단(designOutline)이 사라지고 몸판·소매·카라·Design 이 연쇄 «변경됨»이 됐다(다른 조각 파괴 = 버그).
+  //   출처: parts.sourceCutId · boundaryPreview.sourceLineId · designOutline[piece].lineIds(= 앞·뒤판 boundary 선 + geometry 의 함수).
+  //   반영된 선이 반영에서 빠질 때(boundary 아닌 역할로 변경 · 삭제)만 그 피스를 **남은 반영 선으로** 재합성한다(사용자 자신의 그 조각 조작 = 정당한 무효화).
+  //   반영 안 된 선을 boundary 로 바꾸는 것만으로는 몸판이 바뀌지 않는다(«몸판 외곽으로 반영»/«디자인 외곽 합성» 명시 클릭 원칙 그대로).
+  function invalidateForLine(p, line, opts) {
+    p = p || project(); if (!p || !line) return false;
+    const w = p.working, id = line.id; let ch = false;
+    if (Array.isArray(w.parts) && w.parts.some(q => q.sourceCutId === id)) { w.parts = w.parts.filter(q => q.sourceCutId !== id); ch = true; }
+    if (w.boundaryPreview && w.boundaryPreview.sourceLineId === id) { w.boundaryPreview = null; ch = true; }
+    const ent = w.designOutline && w.designOutline[line.piece];
+    const reflected = !!(ent && (ent.lineIds || []).indexOf(id) >= 0);
+    if (reflected && ((opts && opts.removed) || line.role !== "boundary")) { recomposeReflectedPiece(p, line.piece, id); ch = true; }
+    return ch;
+  }
+  // 반영된 피스 하나를 dropId 를 뺀 «이미 반영된» boundary 선으로만 재합성(반영 안 된 boundary 를 몰래 반영하지 않는다). 다른 피스 불변.
+  //   남은 선이 없으면 그 피스 항목만 제거 · 합성 실패면 그 피스 항목만 제거 + 사유 표시. 그 피스의 parts·미리보기만 정리.
+  function recomposeReflectedPiece(p, piece, dropId) {
+    const w = p.working, ent = w.designOutline && w.designOutline[piece]; if (!ent) return;
+    const keep = (ent.lineIds || []).filter(x => x !== dropId).map(x => findLine(x)).filter(l => l && l.role === "boundary" && l.piece === piece);
+    const next = Object.assign({}, w.designOutline); let reason = null;
+    delete next[piece];
+    if (keep.length) {
+      const keys = PIECE_GEOM_KEYS[piece] || [piece];
+      const rb = buildPieceRing(outlineSegsOf(w.geometry, keys), constrLinesOf(w.geometry, keys));
+      const res = rb.ok ? composeDesignOutline(rb.ring, keep.map(boundarySegsOf), BODICE_COMPOSE_OPTS) : rb;
+      if (res.ok) next[piece] = { outline: res.outline, lineIds: keep.map(l => l.id) }; else reason = res.reason;
+    }
+    w.designOutline = Object.keys(next).length ? next : null;
+    if (Array.isArray(w.parts)) w.parts = w.parts.filter(q => q.sourcePiece !== piece);
+    if (w.boundaryPreview && w.boundaryPreview.sourcePiece === piece) w.boundaryPreview = null;
+    seamStateCache = null;
+    const pk = piece === "front" ? "앞" : "뒤";
+    setComposeNote(reason ? "외곽 반영 해제 · " + pk + "판 재합성 불가(" + reason + ") — " + pk + "판 원래 외곽으로 돌아감"
+      : keep.length ? pk + "판 외곽 재합성 · 빠진 선만 반영 해제" : pk + "판 외곽 반영 해제 · 원래 외곽");
+    if (window.refreshFrontPlacket) window.refreshFrontPlacket();      // 유효 앞판 외곽 변경 → 여밈 재파생
+    if (window.refreshDesignBodyPanel) window.refreshDesignBodyPanel();
   }
   // 파트 분리 버튼: 유효 절개선 선택 시에만 활성.
   //   v 를 넘기면 재판정하지 않는다(최종 몸판 판정은 소매 현재성 검사를 포함해 비싸다). 원래 몸판 맥락이 아니면 비활성(분리는 원래 ring 전용).
@@ -1662,7 +1701,10 @@
     p.working.parts = []; p.working.boundaryPreview = null;   // 원본 기준 파생 정리(designOutline 은 유지)
     p.working.designOutline = result;                         // 원자적 저장
     setComposeNote("디자인 외곽 합성 완료 · cut 은 이 외곽 기준으로 검증");
-    rerender();
+    // 합성 뒤 판정 재동기화(2026-11-10): 종전엔 rerender 만 해서 선택 선의 «판정 보류» 캐시가 재클릭 전까지 남았다(«몸판 외곽으로 반영»과 같은 후처리).
+    seamStateCache = null; syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult();
+    if (window.refreshFrontPlacket) window.refreshFrontPlacket();
+    if (window.refreshDesignBodyPanel) window.refreshDesignBodyPanel();
   }
   // ── «몸판 외곽으로 반영»(2026-11-06 김님 승인 UX) ──
   //   일반 앞·뒤판 사용자 선 하나를 [외곽 역할 지정 → 대체 검증(boundaryStatusOf) → 디자인 외곽 합성(composeForPiece)] 한 번의 명시 클릭으로 묶는다.
@@ -1910,7 +1952,7 @@
         else if (edited && isCollarBodyLine(edited)) { if (window.recomposeCollarBody) window.recomposeCollarBody(); }   // 칼라 본체 편집 → 본체 재합성
         else if (edited && edited.role === "boundary" && edited.piece === "sleeve") { const p = project(); if (p && p.working.boundaryPreview && p.working.boundaryPreview.sourceLineId === edited.id) p.working.boundaryPreview = null; }   // 소매 대체선 편집 → 그 미리보기만 무효(몸판 합성 외곽은 소매 선과 무관 · 2026-11-06)
         else if (edited && edited.role === "boundary") recomposeAfterBoundaryEdit();   // 대체선 편집 → designOutline 재합성
-        else invalidateParts();                                                   // 그 외(cut/guide) → 파생 무효화
+        else invalidateForLine(project(), edited);                                // 그 외(cut/guide) → 그 선 출처 파생만 무효화(2026-11-10)
         editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; seamCtx = null; seamLive = null; seamStateCache = null; try { if (e) svg.releasePointerCapture(e.pointerId); } catch (_) {}
         if (edited && (edited.role === "cut" || edited.role === "boundary")) syncCutStatus();   // 앵커·핸들을 옮긴 뒤의 실제 상태(이동 전 문구를 남기지 않음 · 대체선 포함 2026-11-06)
         rerender(); notifyDesignResult();
