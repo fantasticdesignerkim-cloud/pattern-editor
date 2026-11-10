@@ -317,7 +317,16 @@
   // 피스 밖 표시 레이어 범위(소매 Ⓡ 돌먼 파생 몸판·제도선·비교 상자 — sleeveAnnotation). 없으면 null → 기존 배치·fit 그대로.
   function displayExtents(p) {
     const SA = window.sleeveAnnotation;
-    return SA && typeof SA.dolmanExtents === "function" ? SA.dolmanExtents(p) : null;
+    const ext = SA && typeof SA.dolmanExtents === "function" ? SA.dolmanExtents(p) : null;
+    const cb = cuffDisplayBBox(p); if (!cb) return ext;
+    // 소매 Ⓐ 커프스(P.91 · 소맷부리 아래 별도 조각, 소매 좌표): fit·가로 간격용 표시 범위에만 합친다(hit bbox·geometry 불변).
+    const out = Object.assign({}, ext || {}); out.sleeve = unionBB(out.sleeve || outlineBBoxOf(p.working.geometry, "sleeve"), cb); return out;
+  }
+  // 소매 Ⓐ 커프스 표시 bbox(소매 좌표) — 커프스가 없으면 null(기존 배치·fit 그대로).
+  function cuffDisplayBBox(p) {
+    const sa = p && p.working && p.working.sleeveA, DCF = window.designCuff;
+    if (!sa || !sa.cuff || sa.blocked || !DCF || !p.working.geometry) return null;
+    return DCF.displayBBox(p.working.geometry.sleeve, sa.cuff);
   }
   // ── DOM/view 연동 ──
   function currentProject() { return (window.designWorkflow && window.designWorkflow.current()) || null; }
@@ -372,7 +381,8 @@
     // 카라(별도 조각, 스탠드∪본체): 우선 소매 오른쪽 GAP. 그 배치로 union fit 이 작아지면 아래 행 reflow.
     const cbb = collarLocalBBox(p);
     if (cbb && L.placement.collar === "auto") {
-      const bs = bsOutlineUnion(p.working.geometry, L);
+      let bs = bsOutlineUnion(p.working.geometry, L);
+      const cuffBB = cuffDisplayBBox(p); if (cuffBB) bs = unionBB(bs, offBBox(cuffBB, L.sleeve));   // 커프스 조각 아래로 카라가 겹치지 않게
       if (bs && cbb) {
         let off = collarAutoOffset(bs, cbb, "right");
         const dispRight = { minX: cbb.minX + off.dx, minY: cbb.minY + off.dy, maxX: cbb.maxX + off.dx, maxY: cbb.maxY + off.dy };
@@ -526,7 +536,7 @@
 
   window.designLayout = Object.freeze({
     // 순수(harness)
-    bboxOf, outlineBBoxOf, autoLayout, peplumDrop, peplumDisplayPiece, yokeLabels, princessLabels, sideSeamUnderarm, ensureLayout, bboxOfStand, collarAutoOffset,
+    bboxOf, outlineBBoxOf, autoLayout, displayExtents, cuffDisplayBBox, peplumDrop, peplumDisplayPiece, yokeLabels, princessLabels, sideSeamUnderarm, ensureLayout, bboxOfStand, collarAutoOffset,
     // DOM 연동
     enterDesign, centerBody, placeSleeveRight, resetLayout, refreshAutoLayout, afterBodyLength, afterCollar, resetViewForDesign,
     cancelLayoutDrag   // 모드 전환 시 진행 중 배치 드래그 취소(designLineTool.setMode 에서 호출)

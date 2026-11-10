@@ -550,6 +550,51 @@ function _appendDolmanBodice(grp, m, pc, info){
 
 // 소매 제작 정보 오버레이(표시 전용): sleeveAnnotation 표시 모델(geometry 좌표)을 소매 피스 그룹에 동승시켜 그린다. geometry·hit·계측·hash 무관.
 //   재단 외곽(남색 실선)과 구분: 설명용 = 청록 점선/가는 치수선/옅은 음영. 선 굵기·글자 크기는 px 고정(줌 무관), 글자는 흰 후광으로 읽히게 한다.
+// 소매 Ⓐ 커프스(한 장 접기 독립 조각) + 소맷부리 트임 ④ 덧단(P.91 · 김님 확정 2026-11-10). 값은 전부 working.sleeveA.cuff(designCuff 결과)에서 읽는다(재계산 없음).
+//   커프스 조각은 자체 좌표 → 소맷부리 아래(designCuff.displayOffset)에 놓는다 · 덧단·트임은 소매 좌표 그대로.
+//   pointer-events 없음(선 도구·배치 hit 는 소매 bbox 그대로 — 커프스를 소매로 오인하지 않는다). 외곽·접는선·여밈선은 늘 그리고, 글자는 제작 정보 토글을 따른다.
+// 커프스 조각을 소매 제작 정보 글자(소맷부리 아래 제목·설명 줄) 밑으로 내린다 — 글자 범위는 화면 px 라 배율마다 다르다. ui.js fit 훅과 같은 식.
+const SLEEVE_CUFF_LABEL_PX = 30;
+function _sleeveCuffGapCm(dp, info, sc){
+  if (!info || !window.sleeveAnnotation || !(sc > 0) || (window.sleeveOutlineEdit && window.sleeveOutlineEdit.isActive(dp))) return null;
+  const oh = window.sleeveAnnotation.overhang(dp, sc, { info: true, ref: false });
+  return oh && oh.bottom > 0 ? (oh.bottom + SLEEVE_CUFF_LABEL_PX) / sc : null;
+}
+window.sleeveCuffGapCm = _sleeveCuffGapCm;
+function _appendSleeveCuff(grp, dp, info){
+  const sa = dp && dp.working && dp.working.sleeveA, c = sa && sa.cuff, DCF = window.designCuff;
+  if (!c || sa.blocked || !DCF) return;
+  const g = dp.working.geometry && dp.working.geometry.sleeve; if (!g) return;
+  const off = DCF.displayOffset(g, c, _sleeveCuffGapCm(dp, info, Math.abs(c2p(1,0)[0]-c2p(0,0)[0]))); if (!off) return;
+  const f2 = v => (Math.round(v * 100) / 100).toFixed(2), L = c.lengths, I = c.inputs, V = c.vent;
+  const root = E("g", { "data-design-sleeve": "cuff", class: "sleeve-cuff" });
+  const pc2 = (p, o) => c2p(p.x + (o ? o.dx : 0), p.y + (o ? o.dy : 0));
+  const seg = (sg, o, cls, tag) => { const [x1, y1] = pc2(sg.from, o), [x2, y2] = pc2(sg.to, o); root.appendChild(E("line", { x1, y1, x2, y2, class: cls, "data-cuff": tag })); };
+  const txt = (p, o, dx, dy, anchor, text, cls, tag) => { if (!info) return; const [x, y] = pc2(p, o); root.appendChild(E("text", { x: x + dx, y: y + dy, "text-anchor": anchor, class: "sleeve-anno-text " + (cls || "sleeve-anno-label"), "data-cuff-text": tag }, text)); };
+  // 커프스 조각
+  c.piece.outline.forEach(sg => seg(sg, off, "sleeve-cuff-cut", "edge-" + sg.role));
+  c.piece.construction.forEach(sg => seg(sg, off, sg.role === "fold-line" ? "sleeve-cuff-fold" : "sleeve-cuff-overlap", sg.role));
+  const Lc = L.cuffLengthCm, Wf = L.finishedWidthCm, xo = c.piece.size.overlapStartCm;
+  txt({ x: Lc / 2, y: 0 }, off, 0, -5, "middle", "소매 달림 " + f2(L.attachLengthCm) + " (여밈 포함 · P.91 방법 A) · 셔링 " + f2(L.shirringCm) + " = 소맷부리 " + f2(L.sleeveHemCm) + " − " + f2(L.attachLengthCm), "sleeve-anno-dim", "attach");
+  // 조각 안 글자(겉/안 · 접는선 · 여밈)는 조각이 화면에서 충분히 클 때만(작으면 겹친다 — 값은 아래 설명 줄·소매 탭 정보에 그대로 있다).
+  const sc = Math.abs(c2p(1,0)[0]-c2p(0,0)[0]), roomy = 2 * Wf * sc >= 44 && Lc * sc >= 150;
+  if (roomy) {
+    txt({ x: (xo) / 2, y: Wf / 2 }, off, 0, 3, "middle", "겉 커프스 " + f2(Wf), "sleeve-anno-ref", "outer-half");
+    txt({ x: (xo) / 2, y: Wf * 1.5 }, off, 0, 3, "middle", "안 커프스 " + f2(Wf), "sleeve-anno-ref", "inner-half");
+    txt({ x: 0, y: Wf }, off, -4, 3, "end", "접는선", "sleeve-anno-edge", "fold");
+    txt({ x: xo + I.overlapCm / 2, y: Wf }, off, 0, 3, "middle", "여밈 " + f2(I.overlapCm), "sleeve-anno-dim", "overlap");
+  }
+  txt({ x: Lc / 2, y: 2 * Wf }, off, 0, 12, "middle", "커프스 (P.91 · 한 장 접기 · 시접 없음) 가로 " + f2(Lc) + " = 손목 " + f2(I.wristCm) + " + 여밈 " + f2(I.overlapCm) + " + 여유 " + f2(I.easeCm), "sleeve-anno-label", "title");
+  txt({ x: Lc / 2, y: 2 * Wf }, off, 0, 24, "middle", "펼친 폭 " + f2(L.openWidthCm) + " · 잠근 둘레 " + f2(L.closedCircumferenceCm) + "(손목+여유)" + (I.wristCm === 16 ? " · 손목 16 = 책 참고값(실측 아님)" : ""), "sleeve-anno-note", "sub");
+  // 트임 ④ 덧단(소매 위 · 완성선 표시 — 재단 조각 아님)
+  V.placket.forEach((sg, i) => seg(sg, null, "sleeve-cuff-placket", "placket-" + i));
+  if (info) { const [x, y] = c2p(V.at.x, V.at.y); root.appendChild(E("circle", { cx: x, cy: y, r: 2.6, class: "sleeve-anno-mark sleeve-anno-notch", "data-cuff": "vent-at" })); }
+  const top = { x: V.at.x + V.toCenter * V.placketWidthCm / 2, y: V.at.y - V.lengthCm };
+  txt(top, null, 0, -6, "middle", "트임 ④ 덧단 " + f2(V.lengthCm) + " · 폭 " + f2(V.placketWidthCm), "sleeve-anno-dim", "vent");
+  txt(V.at, null, V.toCenter < 0 ? 6 : -6, 12, V.toCenter < 0 ? "start" : "end", "중심→뒤 옆선 1/2", "sleeve-anno-note", "vent-pos");
+  grp.appendChild(root);
+}
+
 function _appendSleeveAnnotation(grp, model){
   if(!model) return;
   const g=E("g",{ "data-design-sleeve":model.key==="sleeveRef"?"reference":String(model.key).indexOf("dolman-")===0?"dolman-anno":"annotation", "data-sleeve-line":model.line, class:"sleeve-anno" });
@@ -791,6 +836,7 @@ function render(){
           if (_rm) _appendSleeveAnnotation(grp, _rm);
         }
       }
+      if (pc === "sleeve") _appendSleeveCuff(grp, dp, !_slvInfoChk || _slvInfoChk.checked);   // 소매 Ⓐ 커프스 조각 + 트임 ④ 덧단(P.91) — 커프스가 없으면 아무것도 안 그린다
       if ((pc === "front" || pc === "back") && window.sleeveAnnotation && window.sleeveAnnotation.bodiceMarks && (!_slvInfoChk || _slvInfoChk.checked)) {   // 소매 Ⓠ 몸판 달림 끝(표시 전용)
         const _bm = window.sleeveAnnotation.bodiceMarks(dp), _m = _bm && _bm[pc];
         if (_m) { const _g = E("g", { "data-design-sleeve": "bodice-attach", "data-anno-piece": pc, class: "sleeve-anno" }), [_x, _y] = c2p(_m.at.x, _m.at.y);

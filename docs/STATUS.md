@@ -40,7 +40,7 @@
 - **저장 전 마무리(조용한 유실 금지)**: 그리는 중 선 · 옆선 길이 맞춤 미리보기 · 몸판 «적용» 전 라인 선택 · 몸판 수치/네크라인/여밈 입력칸 미적용 · 원형 다트/곡선 편집 중 = 저장·열기 거부 + 이유. **한계**: 소매·카라 입력칸의 미적용 값은 감지하지 않는다(파일 메뉴 문구에 «적용하지 않은 입력칸 값 미포함» 명시).
 - **design stage 파일 메뉴**: 종전엔 design 에서 파일 메뉴 전체가 숨겨졌다 → 이제 design 에서는 **프로젝트 행만** 보인다(곡선 저장·가져오기·DXF 는 원형 stage 전용 그대로 · `css/style.css`).
 - 새 API: `blockWorkflow.verifyCompleted/adoptRestored` · `designWorkflow.evaluateIsolated/adoptRestored` · `window.projectSessionUI`(ui.js: snapshot·unfinished·capture·rollback·afterRestore) · `window.projectFile`. 회귀 `projectFileCheck`(98).
-- **관찰(기존 동작 · 이번 변경 아님 · 저장 범위 밖 — 별도 후보, 이번에 고치지 않음)**: ① 아무 조각에든 새 선을 «완료»하면 `invalidateParts` 가 합성 외곽(designOutline)을 지워 곡선 밑단을 반영한 몸판이 «변경됨»이 된다(소매에 선을 그려도) — «디자인 외곽 합성»을 다시 눌러야 복구. ② 그 뒤 소매 선의 «판정 보류 — 몸판이 완료 후 바뀜»이 선을 다시 클릭할 때까지 남는다(캐시된 판정). 수정 소매 흐름에서 실제로 걸린다.
+- **관찰(→ 2026-11-10 수정됨, 아래 «다음 후보» 첫 항목)**: ① 아무 조각에든 새 선을 «완료»하면 `invalidateParts` 가 합성 외곽(designOutline)을 지워 곡선 밑단을 반영한 몸판이 «변경됨»이 된다(소매에 선을 그려도) — «디자인 외곽 합성»을 다시 눌러야 복구. ② 그 뒤 소매 선의 «판정 보류 — 몸판이 완료 후 바뀜»이 선을 다시 클릭할 때까지 남는다(캐시된 판정). 수정 소매 흐름에서 실제로 걸린다.
 - **검증 구분**: ⓐ 실측함 = 실제 «파일로 저장» 버튼 클릭이 만든 Blob(82,516 B) → BroadcastChannel → 같은 격리 origin 의 **새 탭(새 세션)** 의 실제 `#inpOpenProject` change 핸들러(File.text 경로) · 거부 7종·취소·확인 교체 · 320/390 폭. ⓑ **실측 못 함** = 디스크 다운로드 → OS 파일 선택 창 왕복(내장 브라우저는 Blob 을 디스크에 쓰지 않음 — 저장 패널이 떠 Codex 가 Escape 로 취소, 파일 미기록) · 실제 다른 컴퓨터·다른 브라우저(Safari 등).
 
 ## ★ TEMP 몸판+짝 소매 곡선 세트 기본값 (2026-10-06, 제거 대상 — `js/tempDefaultCurve.js`)
@@ -189,7 +189,9 @@ body = Ⓜ + `peplumFlare:true`(waistSeam 전제). 몸판(upper)은 Ⓜ 과 **�
 
 ## 다음 후보 (아무것도 자동 착수하지 않는다 — 승인 후)
 
-- **새 선 완료가 몸판 합성 외곽을 지움(2026-11-09 발견 · 기존 동작 · blockedBy: 김님 판단 — 소매/카라 등 다른 조각 선까지 무효화하는 것이 의도인지)**: `designLineTool.commitDraft`/`setRole`/`deleteSelected` → `invalidateParts` 가 `designOutline` 을 null 로 → 곡선 밑단을 반영해 완료한 몸판이 «변경됨» · «디자인 외곽 합성»을 다시 눌러야 복구 · 그 뒤 선택 선의 «판정 보류» 캐시가 재클릭 전까지 남음. 재현 = `projectFileCheck` §1 «(기존 동작)» 단언. 프로젝트 저장 범위 밖.
+- **다음 목표 = 박시 셔츠·블라우스 한 벌(2026-11-10 조사 · 코드 무변경)** — 공정 지도·차단 버그 재현·미정 치수·작업표: [SHIRT-ONE-GARMENT.md](SHIRT-ONE-GARMENT.md) · **소매 = Ⓐ 확정(Ⓣ 게이트 완화 안 함)** · 커프스·트임 책 근거 P.91 판독 + 최소 설계 = §6 · 확정: 커프스 가로 = 손목+여밈2+여유2 · 소맷부리 셔링(김님 2026-11-10) · 커프스 폭 3 · 트임 P.91 ④ 덧단(길이 10 = 책 기본값) · 확정: 한 장 접기·커프스 포함 길이(52=49+3)·트임 = 중심→뒤 옆선 1/2·여밈까지 붙임(방법 A) · **✅ 구현(2026-11-10 · 미커밋)**: `designCuff.js` + 소매 Ⓐ 연결·완료본·표시·UI, 하네스 `designCuffCheck` · 전체 회귀 실패 2건은 검사 오탐(코드 무변경): `sleeveCUICheck` §7 Ⓒ 금지 패턴이 커프스 식별자(`sleeveCuff…`)를 오인 → `sleeveC(?![a-z])` 로 정밀화 + 패턴 자체 검증 · `sleeveIntegrationCheck` §6a Ⓐ 실패 안내 «개수 2» → 길이·커프스·엔진 3분기 원문 지정 + 순서 + Ⓩ 활성 커프스 실패 행위 검증 · 남음: 덧단·바이어스 재단 조각 치수(책에 없음 — 질문 1) · 손목 실측 = §6.5
+
+- **✅ 수정됨(2026-11-10 김님 승인 · 미커밋 · Codex 검토 대기) — 새 선 완료가 몸판 합성 외곽을 지움(2026-11-09 발견)**: `designLineTool.invalidateForLine` = 새 선 완료·역할 변경·삭제·cut/guide 편집은 **그 선 출처 파생만** 무효화(`parts.sourceCutId` · `boundaryPreview.sourceLineId`). `designOutline` 은 반영된 선(`lineIds`)이 반영에서 빠질 때(역할 변경·삭제)만 **그 피스를 남은 반영 선으로** 재합성(`recomposeReflectedPiece` — 반영 안 된 boundary 를 몰래 반영하지 않음 · 다른 피스 불변). geometry 재계산 경로(`revalidate`)는 종전대로 전체 무효화. `doComposeDesignOutline` 성공 뒤 판정 재동기화(`syncCutStatus`·`notifyDesignResult`·여밈/몸판 패널) — «판정 보류» 캐시 잔존 해소. 회귀 `projectFileCheck` §1 단언 반전 + §7(15) — 옛 코드에선 실패 확인. 격리 UI 실측(127.0.0.1 · storage 0): 뒤 반영 → 앞 선 완료 = 뒤 반영 보존 · 몸판·소매 완료 → 소매 선 완료 = designOutline 동일·변경됨 없음. 상세 [SHIRT-ONE-GARMENT.md](SHIRT-ONE-GARMENT.md) §2.
 
 - **소매 Ⓓ·Ⓔ 플레어(P.42) — 구현·연결 완료, 커밋 `316ce4b`(Ⓓ)·`0abfeb4`(Ⓔ, push 완료 · Codex 재검증 관련 828 통과).** Ⓔ 앞/뒤 분할 = 소매산 × 소매 중심선(최고점 대비 B83 ≈0.26cm 차는 이 사례에 한해 허용). [book/P042.md](book/P042.md).
 - **소매 Ⓕ 턱 소매(P.43) — 완료, 커밋 `ff90e24`**(소맷부리 자연 곡선 포함). 미확정: 박기 끝(책에 없음 — 만들지 않음). [book/P043.md](book/P043.md)

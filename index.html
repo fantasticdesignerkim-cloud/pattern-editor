@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026110901">
+<link rel="stylesheet" href="css/style.css?v=2026111001">
 </head>
 <body>
 
@@ -317,6 +317,21 @@
           <!-- 원형 소매 비교(세션 UI, 표시 전용, 기본 꺼짐): 켜면 원형(block) 소매 참고선을 다시 그린다. 원형 데이터·계측은 그대로. -->
           <div class="row" id="rowSleeveRef"><label><input type="checkbox" id="chkSleeveRef"> 원형 소매 비교</label></div>
           <div class="row"><label for="inpSleeveLength">소매길이 (cm)</label><input id="inpSleeveLength" type="number" min="10" max="90" step="0.1"></div>
+          <!-- 소매 Ⓐ 커프스·트임([패턴학교] P.91 ④ 덧단 · 김님 확정 2026-11-10 — designCuff). Ⓐ 가 선택(또는 켜짐)일 때만 ui.js 가 보인다. 기본 꺼짐 = 기존 Ⓐ 그대로.
+               켜면 소매길이 = 커프스 포함 길이(본체 = 소매길이 − 완성 폭). 빈 값·범위 밖은 기본값으로 바꾸지 않고 거부한다. -->
+          <div id="rowSleeveCuff" hidden>
+            <div class="row"><label><input type="checkbox" id="chkSleeveCuff"> 커프스·트임 (P.91 ④ 덧단)</label></div>
+            <div id="rowSleeveCuffInputs" hidden>
+              <div class="row"><label for="inpCuffWrist">손목 둘레 (cm)</label><input id="inpCuffWrist" type="number" min="0.1" step="0.1" value="16" title="기본 16 = 책 참고 치수(P.8) · 사용자 실측 아님 — 바꿀 수 있다"></div>
+              <div class="row"><label for="inpCuffOverlap">여밈량 (cm)</label><input id="inpCuffOverlap" type="number" min="0.1" step="0.1" value="2" title="커프스 겹치는 분량(몸 둘레 여유 아님)"></div>
+              <div class="row"><label for="inpCuffEase">여유량 (cm)</label><input id="inpCuffEase" type="number" min="0" step="0.1" value="2" title="손목에 두르는 여유(잠근 둘레 = 손목 + 여유)"></div>
+              <div class="row"><label for="inpCuffWidth">커프스 완성 폭 (cm)</label><input id="inpCuffWidth" type="number" min="0.1" step="0.1" value="3" title="한 장 접기 — 펼친 폭 = 2 × 완성 폭 · 시접 없음"></div>
+              <div class="row"><label for="inpCuffVentLength">트임 길이 (cm)</label><input id="inpCuffVentLength" type="number" min="0.1" step="0.1" value="10" title="소맷부리 → 덧단 뾰족 끝 · 책 기본 10(수정 가능)"></div>
+              <div class="row"><label for="inpCuffPlacketWidth">덧단 폭 (cm)</label><input id="inpCuffPlacketWidth" type="number" min="0.1" step="0.1" value="2" title="④ 덧단 완성 폭 · 책 2 — 커프스 여밈과 별개"></div>
+              <div class="row"><label for="inpCuffTip">뾰족 끝 높이 (cm)</label><input id="inpCuffTip" type="number" min="0" step="0.1" value="1" title="④ 덧단 끝 삼각 · 책 1"></div>
+              <div class="row note">고정(확정): 한 장 접기 · 여밈까지 소매 붙임(방법 A) · 소매길이 = 커프스 포함 · 트임 = 소매 중심→뒤 옆선 1/2</div>
+            </div>
+          </div>
           <!-- 소매 Ⓑ(P.41) 전용 선택 입력: 손바닥 둘레. 비우면 기본 소맷부리 W×3/4. 소맷부리 < 손바닥+3cm 는 경고만(자동 보정 없음). 라인에 따라 ui.js 가 표시/숨김. -->
           <div class="row" id="rowSleevePalm" hidden><label for="inpSleevePalm">손바닥 둘레 (cm, 선택)</label><input id="inpSleevePalm" type="number" min="10" max="40" step="0.1" placeholder="기본" title="비우면 기본 소맷부리 W×3/4"></div>
           <!-- 소매 Ⓒ(P.41 하단) 전용 입력: 팔꿈치 길이 EL(SP→팔꿈치선, 기본 31.4). 라인에 따라 ui.js 가 표시/숨김. 빈 값·범위 밖은 기본값으로 바꾸지 않고 거부한다. -->
@@ -621,7 +636,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026070731"></script>
-<script src="js/render.js?v=2026110806"></script>
+<script src="js/render.js?v=2026111004"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026071603"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -649,9 +664,9 @@
 <script src="js/peplumAnnotation.js?v=2026100404"></script>
 <!-- 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시 모델(순수·표시 전용): window.sleeveAnnotation. 형상·hash·완료본·hit 무관. -->
 <script src="js/sleeveAnnotation.js?v=2026110404"></script>
-<script src="js/designLayout.js?v=2026102904"></script>
+<script src="js/designLayout.js?v=2026111001"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026110903"></script>
+<script src="js/designLineTool.js?v=2026111001"></script>
 <script src="js/sleeveSplit.js?v=2026110604"></script>
 <script src="js/sleeveOutlineEdit.js?v=2026110604"></script>
 <script src="js/designLineQuickBar.js?v=2026110901"></script>
@@ -672,11 +687,12 @@
 <!-- 소매산 봉제선 순수 측정(읽기 전용): window.sleeveMeasure. sleeve.js·형상·시접 무변경. -->
 <script src="js/sleeveMeasure.js?v=2026082011"></script>
 <!-- 소매 모양 완료 체크포인트(S5): window.sleeveCheckpoint. 게이트 + working.sleeveResult 세션 스냅샷. -->
-<script src="js/sleeveCheckpoint.js?v=2026110604"></script>
+<script src="js/sleeveCheckpoint.js?v=2026111001"></script>
 <!-- 소매 Ⓐ(P.137–139 타입 4): window.designSleeveA 엔진 코어 · window.sleevePresets 카탈로그 · window.sleeveAApply 상태 연결(전부 순수·DOM 미접근). -->
 <script src="js/designSleeveA.js?v=2026102802"></script>
 <script src="js/sleevePresets.js?v=2026110403"></script>
-<script src="js/sleeveAApply.js?v=2026102802"></script>
+<script src="js/designCuff.js?v=2026111002"></script>
+<script src="js/sleeveAApply.js?v=2026111001"></script>
 <!-- 소매 Ⓑ(P.41 타이트): window.designSleeveB 엔진 코어 · window.sleeveBApply 상태 연결(순수·DOM 미접근). Ⓐ 모듈 뒤에 로드. -->
 <script src="js/designSleeveB.js?v=2026100601"></script>
 <script src="js/sleeveBApply.js?v=2026102802"></script>
@@ -750,7 +766,7 @@
 <script src="js/init.js?v=2026080610"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
 <script src="js/projectFile.js?v=2026110901"></script>
-<script src="js/ui.js?v=2026110901"></script>
+<script src="js/ui.js?v=2026111003"></script>
 
 </body>
 </html>

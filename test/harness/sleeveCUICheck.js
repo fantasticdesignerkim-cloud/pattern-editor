@@ -193,7 +193,7 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const order = ["js/designSleeve.js", "js/sleeveCheckpoint.js", "js/designSleeveA.js", "js/sleevePresets.js", "js/sleeveAApply.js", "js/designSleeveB.js", "js/sleeveBApply.js", "js/designSleeveC.js", "js/sleeveCApply.js", "js/ui.js"].map(f => html.indexOf('src="' + f));
   ok(order.every(i => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "7: index.html 스크립트 등록·순서(Ⓐ → Ⓑ → 엔진 Ⓒ → 연결 Ⓒ → ui.js)");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok(ver("ui.js") === "2026110901" && (["designSleeveC.js"].every(f => ver(f) === "2026100901") && ver("sleeveCApply.js") === "2026102802") && ver("sleevePresets.js") === "2026110403" && ver("sleeveCheckpoint.js") === "2026110604", "7: 캐시 버전 갱신(Ⓒ 엔진·연결 2026100901 · Ⓥ 연결 2026110101 · Ⓦ 연결로 공용 파일 2026110301)");
+  ok(ver("ui.js") === "2026111003" && (["designSleeveC.js"].every(f => ver(f) === "2026100901") && ver("sleeveCApply.js") === "2026102802") && ver("sleevePresets.js") === "2026110403" && ver("sleeveCheckpoint.js") === "2026111001", "7: 캐시 버전 갱신(Ⓒ 엔진·연결 2026100901 · Ⓥ 연결 2026110101 · Ⓦ 연결로 공용 파일 2026110301)");
   ok(/id="rowSleeveElbow"[^>]*hidden/.test(html) && /id="inpSleeveElbow"[^>]*type="number"[^>]*value="31\.4"/.test(html) && />팔꿈치 길이 EL \(cm\)</.test(html), "7: EL 입력(라벨 «팔꿈치 길이 EL (cm)»·기본 31.4·기본 숨김)");
   ok(html.indexOf('id="rowSleeveElbow"') > html.indexOf('id="rowSleevePalm"') && html.indexOf('id="rowSleeveElbow"') < html.indexOf('id="inpSleeveCuff"'), "7: EL 입력은 소매길이·손바닥 다음 줄");
   ["selSleeveFamily", "selSleevePreset", "btnApplySleevePreset", "designSleeveLineNote", "designSleeveAInfo", "btnApplySleeve", "btnResetSleeve", "btnCompleteSleeve", "inpSleeveLength", "inpSleeveCuff", "inpSleevePalm", "rowSleevePalm", "designSleeveCheckNote", "designSleeveStatusNote"]
@@ -207,7 +207,10 @@ const snap = { bodice: J(bodice), hash: bodice.hash, src: J(P.sourceBlock), ref:
   const sc = fs.readFileSync(path.join(ROOT, "js", "sleeveCApply.js"), "utf8");
   ok(!/document\.|localStorage|sessionStorage/.test(sc) && !/bodiceResult\s*=[^=]/.test(sc) && !/working\.sleeve[AB]\s*=|\.sleeve[AB]\s*=[^=]/.test(sc.replace(/\/\/.*$/gm, "")), "7: sleeveCApply 는 DOM·storage 미접근 · 몸판/Ⓐ/Ⓑ 상태를 쓰지 않는다");
   const rr = fs.readFileSync(path.join(ROOT, "js", "designRenderer.js"), "utf8") + fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
-  ok(!/sleeveC|\.rigid\b|meta\.rigid|meta\.fairing/.test(rr), "7: 렌더러는 Ⓒ meta/rigid/fairing 을 참조하지 않는다");
+  // Ⓒ 결합 = sleeveC 뒤에 소문자가 오지 않는 식별자(sleeveCApply·sleeveCOn·working.sleeveC 등) + rigid/fairing 메타. «sleeveCuff…»(커프스, 2026-11-10)는 Ⓒ 가 아니다.
+  const C_COUPLING = /sleeveC(?![a-z])|\.rigid\b|meta\.rigid|meta\.fairing/;
+  ok(["window.sleeveCApply.rederive(p)", "working.sleeveC.meta", "sleeveCOn(p)", "x.rigid", "meta.fairing"].every(t => C_COUPLING.test(t)) && !C_COUPLING.test("window.sleeveCuffGapCm(p)"), "7: Ⓒ 결합 패턴 자체 검증(Ⓒ 식별자는 잡고 커프스 식별자는 통과)");
+  ok(!C_COUPLING.test(rr), "7: 렌더러는 Ⓒ meta/rigid/fairing 을 참조하지 않는다");
 }
 
 console.log("══════════════════════════════════════════════");
