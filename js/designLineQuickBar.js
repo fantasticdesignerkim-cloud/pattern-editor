@@ -132,6 +132,36 @@
     return covers ? null : { x: x, y: y };
   }
 
+  // ── 순수: 같은 선 동안의 자리 결정(2026-11-10 김님 «밑단 수정하는데 팝업이 아래·왼쪽·오른쪽으로 너무 움직여») ──
+  // 원인(390 실측): 앵커를 막대 밑으로 끌어오면 keepPlace 가 null → place() 가 **지금 형상 기준으로 새 자리**를 골랐고,
+  //   반영 행이 다시 생겨 막대가 커지자 또 새 자리, 되돌려도 새 자리가 기준이 돼 처음 자리로 안 돌아왔다(88,8 → 196,8 → 196,92).
+  // 규칙: 같은 선을 고른 동안 선 주변 재채점(place)은 다시 하지 않는다.
+  //   · 처음 자리(home)를 크기만 clamp 해서 쓴다 — 설명줄 증감·값 갱신·드래그(중엔 숨김) 뒤에도 그대로.
+  //   · home 이 **잡는 점(앵커·핸들 점)**을 가릴 때만 캔버스 가장자리 고정 자리(dock)로 한 번 옮기고, 그 선 동안 거기 머문다
+  //     (선 몸통을 조금 덮는 것은 옮길 이유가 아니다 — 메뉴가 도망가지 않는 쪽이 우선).
+  //   · dock 자리가 다시 잡는 점을 가리면 그때만 다른 dock(같은 순서 · 동점이면 앞 자리).
+  // o = {keep:{x,y,dock:index|null}, bounds, size, grab:[{x,y}], line:[{x,y}]} → {x, y, dock:index|null}
+  function holdPlace(o) {
+    const k = o.keep;
+    if (k.dock == null) {
+      const h = keepPlace({ keep: k, bounds: o.bounds, size: o.size, essential: o.grab });
+      if (h) return { x: h.x, y: h.y, dock: null };
+    }
+    // 가장자리 자리: 잡는 점을 가장 덜 가리고 → 선 몸통 점을 덜 가리는 곳(같으면 DOCKS 순서).
+    //   지금 dock 이 있으면 **엄격히 나아질 때만** 옮긴다(동점 왕복 flip 없음). 좁은 화면에서 어디도 다 비울 수 없으면 가장 덜 가리는 곳에 머문다.
+    const b = o.bounds, w = o.size.w, hh = o.size.h, cx = Math.max(b.l, Math.round((b.l + b.r - w) / 2));
+    const P = { tl: [b.l, b.t], tr: [b.r - w, b.t], bl: [b.l, b.b - hh], br: [b.r - w, b.b - hh], tc: [cx, b.t], bc: [cx, b.b - hh] };
+    const at = i => { const n = DOCKS[i], x = Math.max(b.l, Math.min(P[n][0], b.r - w)), y = Math.max(b.t, Math.min(P[n][1], b.b - hh));
+      const cnt = pts => (pts || []).filter(q => q.x >= x - PAD && q.x <= x + w + PAD && q.y >= y - PAD && q.y <= y + hh + PAD).length;
+      return { x: x, y: y, dock: i, g: cnt(o.grab), l: cnt(o.line) }; };
+    const better = (c, d) => c.g < d.g || (c.g === d.g && c.l < d.l);
+    let best = null;
+    for (let i = 0; i < DOCKS.length; i++) { const c = at(i); if (!best || better(c, best)) best = c; }
+    if (k.dock != null && k.dock >= 0 && k.dock < DOCKS.length) { const cur = at(k.dock); if (!better(best, cur)) return { x: cur.x, y: cur.y, dock: cur.dock }; }
+    return { x: best.x, y: best.y, dock: best.dock };
+  }
+
+
   // ── 순수: 그리기 전용 고정 자리(dock · 2026-11-07 김님 «다음 점 찍을 곳을 팝업이 가림») ──
   // 그리기 중에는 다음 점이 어디로 갈지 알 수 없어서, 마지막 점 옆은 어느 방향이든 다음 점 자리를 가릴 수 있다.
   // 그래서 그리기 막대는 캔버스 가장자리 고정 자리(네 모서리 · 위/아래 가운데)에 둔다.
@@ -235,12 +265,12 @@
       return out;
     };
     const circlePt = c => local(c, c.cx.baseVal.value, c.cy.baseVal.value);
-    const obstacles = [], refs = [], pieces = [], essential = []; let prevPt = null;
+    const obstacles = [], refs = [], pieces = [], essential = [], grab = []; let prevPt = null;   // grab = 손으로 잡는 점(앵커·핸들 점)
     cv.querySelectorAll(".design-line-handle").forEach(ln => {   // 곡선 핸들선(작성 중·선택 overlay 공통)
       const x1 = ln.x1.baseVal.value, y1 = ln.y1.baseVal.value, x2 = ln.x2.baseVal.value, y2 = ln.y2.baseVal.value;
       for (let i = 0; i <= 4; i++) { const r = local(ln, x1 + (x2 - x1) * i / 4, y1 + (y2 - y1) * i / 4); if (r) { obstacles.push(r); essential.push(r); } }
     });
-    cv.querySelectorAll(".design-line-handledot").forEach(c => { const r = circlePt(c); if (r) { obstacles.push(r); essential.push(r); } });
+    cv.querySelectorAll(".design-line-handledot").forEach(c => { const r = circlePt(c); if (r) { obstacles.push(r); essential.push(r); grab.push(r); } });
     // 옆선 길이 상시 표시(2026-11-08)·그리기 거리 안내 글자도 가리지 않을 대상(글자 상자의 모서리·가운데)
     cv.querySelectorAll("text[data-seam-len-text], text[data-measure-text]").forEach(t => { let b = null; try { b = t.getBBox(); } catch (_) { b = null; } if (!b) return;
       [[0, 0], [0.5, 0], [1, 0], [0, 1], [0.5, 1], [1, 1], [0.5, 0.5]].forEach(f => { const r = local(t, b.x + b.width * f[0], b.y + b.height * f[1]); if (r) obstacles.push(r); }); });
@@ -260,7 +290,7 @@
       cv.querySelectorAll('[data-design-root="boundary"] path').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));
       const sp = cv.querySelector("path.design-line.selected");
       const anchors = []; cv.querySelectorAll(".design-line-anchor").forEach(c => { const r = circlePt(c); if (r) anchors.push(r); });
-      anchors.forEach(r => { obstacles.push(r); essential.push(r); });
+      anchors.forEach(r => { obstacles.push(r); essential.push(r); grab.push(r); });
       if (sp) {
         const pts = pathPts(sp); pts.forEach(r => { obstacles.push(r); essential.push(r); });
         if (pts.length) { refs.push(pts[Math.floor(pts.length / 2)]); refs.push(pts[0]); refs.push(pts[pts.length - 1]); }
@@ -269,7 +299,7 @@
       }
     }
     if (!refs.length) return null;
-    return { cv: cv, refs: refs, obstacles: obstacles, prev: prevPt, pieces: pieces, essential: essential };
+    return { cv: cv, refs: refs, obstacles: obstacles, prev: prevPt, pieces: pieces, essential: essential, grab: grab };
   }
 
   function hide() { if (bar && !bar.hidden) bar.hidden = true; lastPos = null; }
@@ -369,27 +399,45 @@
     let refs = tg.refs.filter(vis);
     if (!refs.length) { const v = tg.obstacles.filter(vis); if (v.length) refs = [v[Math.floor(v.length / 2)]]; }
     if (!refs.length) { bar.style.visibility = ""; hide(); return; }
-    let pos = place({ bounds: bounds, size: size, refs: refs, obstacles: tg.obstacles });
     const rk = resultKey(vm);
     if (expandedKey && expandedKey !== rk) expandedKey = null;   // 다른 선·다른 결과(무효화·재분리)면 펼침 해제
-    const mode = chooseMode(vm, pos.hits, expandedKey);
-    setCompact(mode === "compact", vm);
-    if (mode === "compact") {   // 줄인 크기로 다시 배치 — 선·파트 둘레 후보 + 캔버스 네 모서리(빈 UI 자리) 중 가장 덜 가리는 곳
-      const cs = { w: bar.offsetWidth, h: bar.offsetHeight };
-      pos = place({ bounds: bounds, size: cs, refs: refs, obstacles: tg.obstacles,
-        extra: [{ x: bounds.l, y: bounds.t }, { x: bounds.r - cs.w, y: bounds.t }, { x: bounds.l, y: bounds.b - cs.h }, { x: bounds.r - cs.w, y: bounds.b - cs.h }] });
+    // 붙박이(2026-11-10 재설계 · holdPlace): 같은 선 · 같은 결과/펼침 · 같은 창 크기 · 명시 화면 초기화 없음 → 자리·형태를 다시 고르지 않는다.
+    //   팬·줌·캔버스 높이(상태줄 증감)는 다시 고를 이유가 아니다(화면 안 clamp 만). 형태(전체/소형)도 그 결과에 대해 한 번만 정한다.
+    const winSig = (typeof window !== "undefined" ? window.innerWidth + "x" + window.innerHeight : "");
+    const modeSig = (rk || "") + "|" + (expandedKey || "");
+    const sameKey = !!(selKeep && selKeep.key === vm.key && selKeep.win === winSig && !selKeep.replace);
+    let fresh = false;
+    if (!sameKey || selKeep.modeSig !== modeSig) {
+      // 형태(전체/소형)는 결과·펼침이 바뀔 때만 한 번 정한다(전체 막대 크기로 빈자리 유무만 본다).
+      setCompact(false, vm);
+      const fs = { w: bar.offsetWidth, h: bar.offsetHeight };
+      const probe = place({ bounds: bounds, size: fs, refs: refs, obstacles: tg.obstacles });
+      const m = chooseMode(vm, probe.hits, expandedKey);
+      if (!sameKey) {   // 새 선·닫기 후 재열기·창 크기 변화·명시 화면 초기화 → 자리(home)를 새로 고른다
+        let home = probe;
+        if (m === "compact") {   // 줄인 크기로 배치 — 선·파트 둘레 후보 + 캔버스 네 모서리(빈 UI 자리) 중 가장 덜 가리는 곳
+          setCompact(true, vm);
+          const cs = { w: bar.offsetWidth, h: bar.offsetHeight };
+          home = place({ bounds: bounds, size: cs, refs: refs, obstacles: tg.obstacles,
+            extra: [{ x: bounds.l, y: bounds.t }, { x: bounds.r - cs.w, y: bounds.t }, { x: bounds.l, y: bounds.b - cs.h }, { x: bounds.r - cs.w, y: bounds.b - cs.h }] });
+        }
+        selKeep = { key: vm.key, win: winSig, x: home.x, y: home.y, dock: null };   // home = 처음 고른 자리(clamp 값으로 덮지 않음)
+        fresh = true;
+      }
+      selKeep.mode = m; selKeep.modeSig = modeSig;   // 같은 선의 결과 변화(미리보기 생김·사라짐)는 형태만 바꾸고 자리는 그대로
     }
+    const mode = selKeep.mode;
+    setCompact(mode === "compact", vm);
+    // 자리: home 을 clamp · 잡는 점을 가리면 가장자리 고정 자리(첫 배치에도 같은 규칙 → 손 뗀 뒤 두 번 움직이지 않음)
+    const hp = holdPlace({ keep: selKeep, bounds: bounds, size: { w: bar.offsetWidth, h: bar.offsetHeight }, grab: tg.grab, line: tg.essential });
+    selKeep.dock = hp.dock;
+    const pos = { x: hp.x, y: hp.y };
+    const how = hp.dock != null ? "dock" : fresh ? "placed" : "kept";
     bar.setAttribute("data-mode", mode);
-    // 붙박이: 같은 선·같은 보기·같은 형태면 지난 자리 유지(선·핸들을 가리게 될 때만 다시 고름). 값·사유 갱신은 그대로 진행된다.
-    const viewSig = [typeof viewX !== "undefined" ? viewX : 0, typeof viewY !== "undefined" ? viewY : 0, typeof viewZ !== "undefined" ? viewZ : 1, Math.round(sr.width), Math.round(sr.height), Math.round(sr.left - wr.left), Math.round(sr.top - wr.top)].join(",");
-    let kept = null;
-    if (selKeep && selKeep.key === vm.key && selKeep.view === viewSig && selKeep.mode === mode) kept = keepPlace({ keep: selKeep, bounds: bounds, size: { w: bar.offsetWidth, h: bar.offsetHeight }, essential: tg.essential });
-    if (kept) pos = Object.assign({}, pos, { x: kept.x, y: kept.y });
-    selKeep = { key: vm.key, view: viewSig, mode: mode, x: kept ? selKeep.x : pos.x, y: kept ? selKeep.y : pos.y };   // 붙박이 기준은 처음 고른 자리(clamp 로 밀린 값으로 덮지 않음 → 크기가 줄면 제자리로)
-    bar.setAttribute("data-keep", kept ? "kept" : "placed");
+    bar.setAttribute("data-keep", how);
     const x = Math.round(pos.x), y = Math.round(pos.y);
     if (!lastPos || lastPos.x !== x || lastPos.y !== y) { bar.style.left = x + "px"; bar.style.top = y + "px"; lastPos = { x: x, y: y }; }
-    bar.setAttribute("data-place", pos.around ? "around" : String(pos.index % 4));
+    bar.setAttribute("data-place", how === "dock" ? "dock-" + DOCKS[selKeep.dock] : "home");
     bar.style.visibility = "";
 
     // 포커스가 막대 안에 있었는데 그 버튼이 숨겨졌으면(완료 → 역할 단계) 지금 단계의 주 버튼으로 옮긴다.
@@ -519,13 +567,15 @@
     const release = () => { if (!press) return; press = null; if (dragging) { dragging = false; sync(); } };
     window.addEventListener("pointerup", release, true);
     window.addEventListener("pointercancel", release, true);
+    // 명시적 화면 초기화(헤더 «화면 초기화» = resetView)만 같은 선 동안에도 자리를 한 번 다시 고른다(팬·줌은 안 고름).
+    document.querySelectorAll('button[onclick^="resetView"]').forEach(btn => btn.addEventListener("click", () => { if (selKeep) { selKeep.replace = true; sync(); } }));
     // 캔버스 크기 변화(창·패널 리사이즈)에는 render 없이도 위치만 다시 맞춘다.
     // 막대 자체 크기 변화(글꼴·단계 전환으로 높이가 바뀜)도 다시 맞춘다 — sync 는 left/top 만 바꿔 크기를 안 바꾸므로 되먹임 루프 없음.
     if (typeof ResizeObserver !== "undefined" && bar.parentElement) { const ro = new ResizeObserver(() => sync()); ro.observe(bar.parentElement); ro.observe(bar); }
     sync();
   }
 
-  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, keepPlace: keepPlace, dock: dock, chooseMode: chooseMode, resultKey: resultKey,
+  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, keepPlace: keepPlace, holdPlace: holdPlace, dock: dock, chooseMode: chooseMode, resultKey: resultKey,
     viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary, actBoundaryApply: actBoundaryApply, actReflect: actReflect,
     actCompleteBodice: actCompleteBodice });
   if (typeof document !== "undefined") {

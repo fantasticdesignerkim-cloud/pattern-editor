@@ -161,6 +161,7 @@ const suites = [
   { file: "lineOutsideHitCheck.js",    golden: false },  // 조각 hit rect 밖으로 휜 사용자 선·핸들 재선택/드래그(화면 px 허용폭 · rect 피스 우선 · off/stage 무동작)
   { file: "lineAutoSelectCheck.js",     golden: false },  // 패턴선 완료(Enter·더블클릭) 직후 방금 그린 선 자동 선택·역할 버튼 활성(실제 핸들러 · 한 점·Esc 제외 · 관리선 잠금·최종 몸판 정책 불변)
   { file: "lineQuickBarCheck.js",       golden: false },  // 패턴선 «선 가까이» 빠른 도구막대(UI 전용): 단계별 표시·완료 가능 = canFinishDraw·관리선 잠금·배치(위 우선·반전·클램프·가림 회피·결정적)·기존 명령만 호출
+  { file: "designDoneMarksCheck.js",    golden: false },  // 디자인 «완료» 표시(UI 전용): 권위 check 캐시 → 소매·커프스·카라 외곽 녹색 + «소매/카라 완료» · 변경됨 · 접는선 제외 · 탭 이동 선택 해제
   { file: "sleevePartSplitCheck.js",   golden: false },  // 소매 파트 분리: 기본+Ⓐ~Ⓩ 그리기→절개선→분리(Ⓨ·Ⓩ 구체적 거부)·독립 검산(면적·공유 절개·연속·곡선)·Ⓒ 열린 V·물리 거부·현재성/무효화·몸판 분리 보존·Design hash 무관
   { file: "boundaryPreviewCheck.js",   golden: false },  // 외곽 대체 미리보기: 막대 «외곽» → «외곽 대체 미리보기»(같은 판정·명령) · 원래 몸판 종전 결과 동일 · 파생 몸판 거부 · 기본+Ⓐ~Ⓩ 소매(Ⓨ·Ⓩ 거부)·독립 검산·Ⓒ/Ⓦ V 보존·Ⓥ 같은 조각·현재성/무효화
   { file: "sideSeamMagnetCheck.js",   golden: false },  // 옆선 길이 자석 + 의도적인 여유량: 의미 승계·독립 호 길이·획득/해제·기준판 불변·잔차 0.1/0.3·hash 결속·소매 무효화

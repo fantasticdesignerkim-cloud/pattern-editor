@@ -123,7 +123,7 @@ const ret = R.indexOf("return; // 라이브 원형 draw"), syncAt = R.lastIndexO
 ok(syncAt > hitAt && hitAt > 0, "3f: design render 는 선·overlay·hit 을 그린 뒤 막대 sync(그려진 SVG 기준)");
 ok(/afterDraftRender\(\);\s*\n\s*if\(window\.designLineQuickBar\) window\.designLineQuickBar\.sync\(\);/.test(R), "3g: design 밖 render 도 sync(→ 숨김)");
 const ver = f => { const m = new RegExp(f.replace(/\./g, "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
-ok(ver("designLineQuickBar.js") === "2026110901" && ver("designLineTool.js") === "2026111001" && ver("render.js") === "2026111004" && /css\/style\.css\?v=2026111001/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
+ok(ver("designLineQuickBar.js") === "2026111003" && ver("designLineTool.js") === "2026111001" && ver("render.js") === "2026111005" && /css\/style\.css\?v=2026111002/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
 ok(html.indexOf('<script src="js/designLineQuickBar.js') > html.indexOf('<script src="js/designLineTool.js'), "3i: 막대 스크립트는 designLineTool 뒤");
 // 2026-11-08 김님 방향 전환: 자동 길이 보정 UI(길이 맞춤·후보·맞춤 반영·옆선 자석·여유/셔링·기준판) 사용자 노출 없음 — 마크업·막대 호출·설정 패널 모두
 ok(!/lineQuickSeamFit|lineQuickSeamToggle|lineQuickEase|selSeamIntent|inpSeamEase|btnApplySeamIntent|selSeamBasis|chkSeamMagnet|길이 맞춤|맞춤 반영|옆선 자석|셔링/.test(html.replace(/<!--[\s\S]*?-->/g, "")), "3j: 자동 길이 보정 UI 마크업 없음(주석 제외)");
@@ -179,8 +179,30 @@ ok(/splitBtn\.addEventListener\("click", \(\) => \{ actSplit\(\); \}\)/.test(COD
   ok(K({ keep: kp, bounds: B, size: S, essential: [{ x: 350, y: 240 }] }) === null, "9e: 선택 선·anchor·핸들을 가리게 되면 다시 고름(null)");
   ok(K({ keep: kp, bounds: B, size: S, essential: [{ x: 300 + 180 + 11, y: 210 }] }) === null && K({ keep: kp, bounds: B, size: S, essential: [{ x: 300 + 180 + 13, y: 210 }] }) !== null, "9f: 가림 판정 여유 = 배치와 같은 PAD(12px)");
   ok(K(null) === null && K({ bounds: B, size: S }) === null, "9g: 지난 자리 없음 = 새로 고름");
-  ok(/selKeep\.key === vm\.key && selKeep\.view === viewSig && selKeep\.mode === mode/.test(SRC) && /dismissedKey = vm\.key; selKeep = null/.test(SRC) && /vm\.kind !== "select"\) selKeep = null/.test(SRC), "9h: 다시 고르는 조건 = 다른 선·보기(팬·줌·캔버스) 변화·형태 변화·닫기·선택 해제뿐");
+  ok(/selKeep\.key === vm\.key && selKeep\.win === winSig && !selKeep\.replace/.test(SRC) && /dismissedKey = vm\.key; selKeep = null/.test(SRC) && /vm\.kind !== "select"\) selKeep = null/.test(SRC) && !/viewX/.test(SRC.slice(SRC.indexOf("const winSig"), SRC.indexOf("const sameKey ="))), "9h: (2026-11-10) 다시 고르는 조건 = 다른 선·닫기·선택 해제·창 크기·결과/펼침 변화·명시 화면 초기화뿐 — 팬·줌·캔버스 높이는 아님");
   ok(/if \(vm\.kind === "draw"\) \{[\s\S]{0,400}dock\(/.test(SRC), "9i: 그리기 막대는 종전 캔버스 가장자리 고정 자리(dock) 그대로");
+  // (2026-11-10 김님 «밑단 수정하는데 팝업이 아래·왼쪽·오른쪽으로 너무 움직여») holdPlace — 같은 선 동안 선 주변 재채점 없음
+  const H = Q.holdPlace, HB = { l: 0, t: 0, r: 390, b: 470 }, HS = { w: 186, h: 88 };
+  ok(typeof H === "function", "9j: holdPlace 공개(순수)");
+  let h = H({ keep: { x: 44, y: 4, dock: null }, bounds: HB, size: HS, grab: [{ x: 180, y: 400 }] });
+  ok(h.x === 44 && h.y === 4 && h.dock === null, "9k: 잡는 점을 안 가리면 처음 자리(home)");
+  h = H({ keep: { x: 44, y: 4, dock: null }, bounds: HB, size: { w: 186, h: 186 }, grab: [{ x: 180, y: 400 }] });
+  ok(h.x === 44 && h.y === 4 && h.dock === null, "9l: 반영·사유 줄이 늘어 막대가 커져도(88→186) 자리 유지");
+  h = H({ keep: { x: 44, y: 4, dock: null }, bounds: HB, size: HS, grab: [{ x: 180, y: 60 }] });
+  ok(h.dock !== null && !(180 >= h.x - 12 && 180 <= h.x + HS.w + 12 && 60 >= h.y - 12 && 60 <= h.y + HS.h + 12), "9m: 앵커를 막대 밑으로 끌어오면 = 캔버스 가장자리 고정 자리(선 주변 재채점 아님) · 그 점을 안 가림");
+  const d0 = h.dock, h2 = H({ keep: { x: 44, y: 4, dock: d0 }, bounds: HB, size: HS, grab: [{ x: 180, y: 300 }] });
+  ok(h2.dock === d0 && h2.x === h.x && h2.y === h.y, "9n: 한 번 옮긴 가장자리 자리는 그 선 동안 유지(점을 되돌려도 왕복 flip 없음)");
+  const xs = new Set(); for (let i = 0; i < 6; i++) { const r = H({ keep: { x: 44, y: 4, dock: d0 }, bounds: HB, size: { w: 186, h: 88 + (i % 2) * 98 }, grab: [{ x: 330, y: 250 + i * 10 }] }); xs.add(r.x + "," + r.dock); }
+  ok(xs.size === 1, "9o: 여러 번 드래그·높이 증감 뒤에도 같은 자리");
+  ok(/const mode = selKeep\.mode;/.test(SRC) && /selKeep\.modeSig !== modeSig/.test(SRC) && /modeSig = \(rk \|\| ""\) \+ "\|" \+ \(expandedKey \|\| ""\)/.test(SRC), "9p: 전체/소형 형태는 같은 결과·펼침 동안 재채점 없이 고정");
+  { const BIG = { w: 186, h: 371 }, g = [{ x: 218, y: 394 }, { x: 151, y: 420 }], ln = [{ x: 150, y: 450 }, { x: 100, y: 460 }];
+    const r1 = H({ keep: { x: 26, y: 46, dock: null }, bounds: HB, size: BIG, grab: g, line: ln });
+    const cover = (r, q) => q.x >= r.x - 12 && q.x <= r.x + BIG.w + 12 && q.y >= r.y - 12 && q.y <= r.y + BIG.h + 12;
+    const min = Math.min.apply(null, [0, 1, 2, 3, 4, 5].map(i => H({ keep: { x: 0, y: 0, dock: i }, bounds: HB, size: BIG, grab: [], line: [] })).map(r => g.filter(q => cover(r, q)).length));
+    ok(r1.dock !== null && g.filter(q => cover(r1, q)).length === min, "9r: 좁은 화면(막대가 커서 어디도 다 못 비움) = 잡는 점을 가장 덜 가리는 가장자리");
+    const r2 = H({ keep: { x: 26, y: 46, dock: r1.dock }, bounds: HB, size: BIG, grab: g, line: ln });
+    ok(r2.dock === r1.dock && r2.x === r1.x && r2.y === r1.y, "9s: 동점이면 지금 가장자리 유지(엄격히 나아질 때만 옮김 · 왕복 없음)"); }
+  ok(/button\[onclick\^="resetView"\][\s\S]{0,120}selKeep\.replace = true/.test(SRC), "9q: 명시 화면 초기화 = 한 번 다시 고름");
 }
 
 console.log("══════════════════════════════════════════════");

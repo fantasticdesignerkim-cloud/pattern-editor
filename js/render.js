@@ -933,6 +933,7 @@ function render(){
 
     const sb = document.getElementById("sb");
     if (sb) sb.textContent = "디자인 · 원형 " + dp.sourceBlock.id + " v" + dp.sourceBlock.version + " 참조 · 세션 전용";
+    if (window.designDoneMarks) window.designDoneMarks.apply();   // 완료 표시(녹색 외곽·«소매/카라 완료» 글자 · 캐시만 읽음 · UI 전용)
     if (window.designLineQuickBar) window.designLineQuickBar.sync();   // 패턴선 «선 가까이» 막대: 방금 그린 SVG 기준으로 위치·상태(UI 전용)
     return; // 라이브 원형 draw(gRef/pattern/sleeve/overlay/layerVisibility/statusBar) 전부 skip
   }

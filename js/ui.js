@@ -989,6 +989,13 @@
     const tabs = document.getElementById("designSubtabs"); if (!tabs) return;
     tabs.querySelectorAll(".subtab").forEach(b => b.setAttribute("aria-selected", b.getAttribute("data-subtab-btn") === tab ? "true" : "false"));
     document.querySelectorAll('[data-panel="design-body"] [data-subtab]').forEach(p => { p.hidden = p.getAttribute("data-subtab") !== tab; });
+    // (2026-11-10 김님 «소매 완료 후 카라로 넘어가도 소매가 미완료처럼 보임») 다른 탭 조각의 선을 선택한 채로 탭을 옮기면
+    //   그 선의 청록 선택 덧그림·앵커·빠른 막대가 남아 «아직 편집 중»처럼 보인다 → 선택만 해제(선·역할·형상·완료본 무변경).
+    const T = window.designLineTool, TAB_OF = { front: "body", back: "body", sleeve: "sleeve", collar: "collar" };
+    if (T && T.getMode && T.getMode() === "select" && T.getSelectedId && T.getSelectedId()) {
+      const l = T.findLine(T.getSelectedId());
+      if (l && TAB_OF[l.piece] && TAB_OF[l.piece] !== tab) T.setMode("select");
+    }
   }
   // 소매 편집 게이트: 몸판 완료(bodiceResult) + 비스테일일 때만.
   function sleeveGateOk(project) {
@@ -3642,6 +3649,7 @@
     const btn = document.getElementById("btnCompleteDesign");
     if (!project || !window.designResult) { if (btn) btn.disabled = true; if (checkNote) checkNote.textContent = ""; if (statusNote) statusNote.textContent = "Design 미완료 · 세션 전용"; return; }
     const c = window.designResult.check(project);
+    if (window.designDoneMarks) window.designDoneMarks.update(project, c);   // 완료 표시 캐시(같은 권위 검사 결과 · render 매 프레임 재검사 없음)
     if (checkNote) checkNote.textContent = c.ok ? ("몸판·소매·카라 완료 · 유효 절개선 " + c._cuts.length + "개") : ("완료 전 검사: " + designResultFailText(c, c.fails[0]));
     if (btn) btn.disabled = !c.ok;
     const latest = window.designResult.latest(project);
