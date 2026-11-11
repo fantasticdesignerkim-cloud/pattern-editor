@@ -900,6 +900,24 @@
     return m[reason] || reason;
   }
   window.bodiceFailText = bodiceFailStr;   // 패턴선 막대(옆선 행)도 같은 문구로 완료 차단 사유를 보인다(2026-11-07)
+  // 몸판 상태 문구·완료 가능(순수 · 2026-11-11 김님 실사용 «밑단·여밈 수정 뒤 몸판 모양 완료 비활성 · 아래 문구 = 몸판 변경됨 다시 완료 필요»).
+  //   원인: 완료본이 있고 변경됐으면 실제 check 결과(c.ok·c.fails)와 무관하게 «변경됨 · 다시 완료 필요» 한 문구로 덮어 차단 사유가 안 보였다.
+  //   규칙: 상태(미완료/변경됨/완료됨)와 차단 사유를 따로 말한다 — 막혔으면 사유 전부 + 옆선 사유가 있으면 앞·뒤·차 숫자 + 고친 뒤 다시 완료,
+  //   통과면 «다시 완료 가능». 완료 가능 = c.ok 하나(버튼과 같은 값) · 게이트·형상 무변경(표시만).
+  //   c = bodiceCheckpoint.check 결과 · hasLatest = 완료본 있음 · changed = 완료본과 지금 형상이 다름 · failText = 사유 문구 함수
+  function bodiceStatusView(c, hasLatest, changed, failText, sourceVersion) {
+    const ok = !!(c && c.ok), fails = (c && c.fails) || [];
+    const ss = c && c.sideSeam, r2 = v => (Math.round(v * 100) / 100).toFixed(2);
+    const seamNums = (ss && fails.some(f => /^side-seam/.test(f)) && ss.status !== "unmeasured" && isFinite(ss.front) && isFinite(ss.back))
+      ? " · 지금 옆선 앞 " + r2(ss.front) + " · 뒤 " + r2(ss.back) + " · 뒤−앞 " + (ss.back - ss.front >= 0.005 ? "+" : ss.back - ss.front <= -0.005 ? "−" : "±") + r2(Math.abs(ss.back - ss.front)) + "cm" : "";
+    const why = fails.length + "건): " + fails.map(failText).join(" · ") + seamNums;
+    let text;
+    if (!hasLatest) text = ok ? "완료 가능 · 세션 전용" : "완료 전 검사(" + why;
+    else if (changed) text = ok ? "몸판 변경됨(완료본과 다름) · 검사 통과 — «몸판 모양 완료»로 다시 완료할 수 있습니다 · 세션 전용"
+      : "몸판 변경됨(완료본과 다름) · 다시 완료 전 검사(" + why + " — 고친 뒤 «몸판 모양 완료» · 세션 전용";
+    else text = "몸판 완료됨(원형 v" + sourceVersion + ") · 세션 전용";
+    return { canComplete: ok, text: text };
+  }
   // refresh 에서 읽기 전용 — check() 실행해 검사 요약·완료 버튼·상태(미완료/완료/변경됨) 갱신.
   function updateBodiceCheckpointUI(project) {
     const checkNote = document.getElementById("designBodiceCheckNote");
@@ -913,13 +931,11 @@
     }
     const c = window.bodiceCheckpoint.check(project);
     if (checkNote) checkNote.textContent = (c.sideSeam.status === "unmeasured" ? "옆선 측정 불가" + (c.sideSeam.unmeasuredReasons ? "(옆선 일부가 의미 미정 외곽선으로 대체됨)" : "") : c.sideSeam.intent ? "옆선 차(뒤−앞) " + (Math.round(c.sideSeam.signedDiff * 100) / 100) + " · 저장된 여유 의도 목표 " + (Math.round(c.sideSeam.targetDiff * 100) / 100) + " · 잔차 " + (Math.round(c.sideSeam.residual * 100) / 100) + "cm(" + bodiceStatusStr(c.sideSeam.status) + ")" : "옆선 차 " + fmtL(c.sideSeam.diff) + "cm(" + bodiceStatusStr(c.sideSeam.status) + ")") + " · 진동 앞 " + fmtL(c.armhole.front) + "·뒤 " + fmtL(c.armhole.back) + "cm · 반패턴 목둘레 " + fmtL(c.neckline.half) + "cm";
-    if (btn) btn.disabled = !c.ok;
     const latest = window.bodiceCheckpoint.latest(project);
-    if (statusNote) {
-      if (!latest) statusNote.textContent = c.ok ? "완료 가능 · 세션 전용" : "완료 전 검사(" + c.fails.length + "건): " + c.fails.map(bodiceFailStr).join(" · ");   // 첫 건만 보이면 «옆선만 맞추면 완료»로 오해 — 전부 보인다(2026-11-07)
-      else if (window.bodiceCheckpoint.isCurrentBodiceChanged(project)) statusNote.textContent = "몸판 변경됨 · 다시 완료 필요 · 세션 전용";
-      else statusNote.textContent = "몸판 완료됨(원형 v" + latest.sourceVersion + ") · 세션 전용";
-    }
+    // 첫 건만 보이면 «옆선만 맞추면 완료»로 오해 — 전부 보인다(2026-11-07) · 변경됨 상태에서도 실제 차단 사유를 보인다(2026-11-11)
+    const view = bodiceStatusView(c, !!latest, !!(latest && window.bodiceCheckpoint.isCurrentBodiceChanged(project)), bodiceFailStr, latest && latest.sourceVersion);
+    if (btn) btn.disabled = !view.canComplete;   // = !c.ok (문구와 같은 값)
+    if (statusNote) statusNote.textContent = view.text;
     updateSleeveEaseUI(project);   // 소매산 봉제선 정합(읽기 전용) 갱신
     syncDesignSubtabGate(project); // 소매 탭 활성 게이트(몸판 완료·비스테일)
     updateSleevePanel(project);    // 소매 입력·버튼 상태

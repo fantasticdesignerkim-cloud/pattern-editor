@@ -207,7 +207,10 @@
 
   // ── DOM ──
 
-  let drawHintEl = null, failsEl = null, completeBtn = null;
+  let drawHintEl = null, failsEl = null, completeBtn = null, failsDetailEl = null;
+  // «더보기/접기»(2026-11-11 iOS 메뉴형 정리): 선택 막대는 기본으로 «지금 단계 주 작업 1개 + 한 줄 상태»만 보이고,
+  //   보조 작업(다른 다음 단계 행·완료 버튼)·긴 안내 전문·완료 차단 사유 전체는 명시적 «더보기»를 눌렀을 때만 펼친다(UI 전용 · 그 선 동안만).
+  let moreBtn = null, moreKey = null;
 
   let selKeep = null;                  // 선택 막대 붙박이 {key, view, mode, x, y}(UI 전용 · 2026-11-09)
   let dockIdx = null;                  // 그리기 막대의 지금 고정 자리(붙박이 · 그리기가 끝나면 버림)
@@ -309,6 +312,7 @@
     const vm = describe(snapshot());
     if (!vm || vm.kind !== "draw") dockIdx = null;
     if (!vm || vm.kind !== "select") selKeep = null;   // 선택이 끝나면(해제·그리기) 붙박이 자리를 버린다   // 그리기가 끝나면(완료·취소·선택) 고정 자리를 버린다 — 다음 그리기는 새로 고른다
+    if (!vm || vm.kind !== "select" || (moreKey && moreKey !== vm.key)) moreKey = null;   // 선택이 끝나거나 다른 선이면 «더보기» 펼침 해제
     if (!vm || dragging || (vm.kind === "select" && dismissedKey === vm.key)) { hide(); return; }
     const wrap = bar.parentElement; if (!wrap) { hide(); return; }
     const wr = wrap.getBoundingClientRect();
@@ -376,11 +380,32 @@
         b.setAttribute("aria-pressed", on ? "true" : "false");
         b.disabled = vm.locked; b.setAttribute("aria-disabled", vm.locked ? "true" : "false");
       });
+      // 주 작업 1개(2026-11-11): 보이는 다음 단계 행 중 첫 행(반영 > 파트 분리 > 외곽 대체) = 주 작업. 나머지 행과(주 작업이 따로 있을 때의)
+      //   «몸판 모양 완료»는 보조 작업 → «더보기»에서만. 기능 삭제·가짜 비활성화 없음(같은 버튼·같은 명령이 펼치면 그대로 보인다).
+      const open = moreKey === vm.key;
+      const nexts = [rflRow, splitRow, bndRow].filter(r => r && !r.hidden);
+      const primary = nexts[0] || null;
+      nexts.forEach(r => { r.setAttribute("data-tier", r === primary ? "main" : "more"); if (r !== primary && !open) r.hidden = true; });
+      let extra = nexts.length > 1;
+      if (seamRow && !seamRow.hidden && completeBtn && !completeBtn.hidden && primary) { extra = true; if (!open) completeBtn.hidden = true; }
+      if (failsDetailEl) { const has = !!failsDetailEl.textContent; failsDetailEl.hidden = !(open && has); if (has) extra = true; }
+      bar.setAttribute("data-more", open ? "open" : "closed");
+      moreBtn && moreBtn.setAttribute("data-extra", extra ? "1" : "0");
     }
+    if (vm.kind !== "select") bar.removeAttribute("data-more");
+    if (moreBtn && vm.kind !== "select") moreBtn.hidden = true;   // 선택 막대에서 보일지는 배치 측정 때(잘린 안내가 있는지) 정한다 — 중간에 숨기면 포커스가 빠진다
 
     // 측정 → 배치(보이기 전에 visibility 로 측정)
     const wasHidden = bar.hidden;
     if (wasHidden) { bar.style.visibility = "hidden"; bar.hidden = false; }
+    if (moreBtn && vm.kind === "select") {   // 보조 작업이 있거나 한 줄로 잘린 안내가 있을 때만 «더보기»(펼친 동안엔 «접기»)
+      const open = moreKey === vm.key;
+      const cut = !open && Array.prototype.some.call(bar.querySelectorAll(".lqb-next:not([hidden]) .lqb-reason"), el => el.offsetParent && el.scrollWidth > el.clientWidth + 1);
+      moreBtn.hidden = !(open || cut || moreBtn.getAttribute("data-extra") === "1");
+      moreBtn.textContent = open ? "접기" : "더보기";
+      moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      moreBtn.setAttribute("aria-label", open ? "보조 작업·전체 안내 접기" : "보조 작업·전체 안내 더보기");
+    }
     const size = { w: bar.offsetWidth, h: bar.offsetHeight };
     const bounds = { l: sr.left - wr.left + MARGIN, t: sr.top - wr.top + MARGIN, r: sr.right - wr.left - MARGIN, b: sr.bottom - wr.top - MARGIN };
     if (vm.kind === "draw") {   // 그리기 = 캔버스 가장자리 고정 자리(마지막 점·진행 방향을 비움 · 마지막 점이 화면 밖이어도 완료·취소는 보인다)
@@ -429,7 +454,9 @@
     const mode = selKeep.mode;
     setCompact(mode === "compact", vm);
     // 자리: home 을 clamp · 잡는 점을 가리면 가장자리 고정 자리(첫 배치에도 같은 규칙 → 손 뗀 뒤 두 번 움직이지 않음)
-    const hp = holdPlace({ keep: selKeep, bounds: bounds, size: { w: bar.offsetWidth, h: bar.offsetHeight }, grab: tg.grab, line: tg.essential });
+    //   «더보기»로 펼친 동안(사용자가 연 크기 변화)은 자리를 옮기지 않는다 — 화면 안 clamp 만(가장자리 이동·좌우 flip 없음 · 2026-11-11).
+    const opened = moreKey === vm.key;
+    const hp = holdPlace({ keep: selKeep, bounds: bounds, size: { w: bar.offsetWidth, h: bar.offsetHeight }, grab: opened ? [] : tg.grab, line: opened ? [] : tg.essential });
     selKeep.dock = hp.dock;
     const pos = { x: hp.x, y: hp.y };
     const how = hp.dock != null ? "dock" : fresh ? "placed" : "kept";
@@ -504,7 +531,9 @@
     const ok = !!(gate && gate.ok), pend = !!(gate && gate.pending);
     completeBtn.hidden = !(ok && pend);
     const F = window.bodiceFailText || (x => x);
-    failsEl.textContent = !gate ? "" : gate.ok ? (pend ? "몸판 완료 가능" : "몸판 완료됨") : "몸판 완료 막힘(" + gate.fails.length + "건): " + gate.fails.map(f => F(f) + (FAIL_ACT[f] ? " → " + FAIL_ACT[f] : "")).join(" · ");
+    // 한 줄 상태(기본) + 차단 사유 전문(«더보기»에서만 · 2026-11-11 — 390 에서 막대가 캔버스 대부분을 덮던 원인 중 하나)
+    failsEl.textContent = !gate ? "" : gate.ok ? (pend ? "몸판 완료 가능" : "몸판 완료됨") : "몸판 완료 막힘 " + gate.fails.length + "건";
+    if (failsDetailEl) failsDetailEl.textContent = (gate && !gate.ok) ? gate.fails.map(f => F(f) + (FAIL_ACT[f] ? " → " + FAIL_ACT[f] : "")).join(" · ") : "";
   }
   // 막대에서 바로 할 수 있는 조치(문구만 · 자동 수정 없음). 없는 사유는 이름만 보인다(오른쪽 몸판 패널에서 처리).
   const FAIL_ACT = {
@@ -539,6 +568,10 @@
     rflRow = bar.querySelector('[data-lqb="reflect"]'); rflBtn = document.getElementById("lineQuickReflect"); rflReason = document.getElementById("lineQuickReflectReason");
     drawHintEl = document.getElementById("lineQuickDrawHint");
     failsEl = document.getElementById("lineQuickBodiceFails"); completeBtn = document.getElementById("lineQuickCompleteBodice");
+    failsDetailEl = document.getElementById("lineQuickBodiceFailsDetail");
+    moreBtn = document.getElementById("lineQuickMore");
+    if (moreBtn) moreBtn.addEventListener("click", () => { const vm = describe(snapshot()); if (!vm || vm.kind !== "select") return;
+      moreKey = moreKey === vm.key ? null : vm.key; sync(); try { moreBtn.focus({ preventScroll: true }); } catch (_) { moreBtn.focus(); } });
     if (completeBtn) completeBtn.addEventListener("click", () => { actCompleteBodice(); });
     if (rflBtn) rflBtn.addEventListener("click", () => { actReflect(); });
 

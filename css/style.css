@@ -451,30 +451,66 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* ── 패턴선 «선 가까이» 빠른 도구막대(js/designLineQuickBar.js · 2026-11-05 시안 «선 가까이») ──
    canvas-wrap 기준 absolute — 레이아웃·SVG hit 영역은 그대로이고 막대가 덮는 자리만 막대가 받는다.
    위치(left/top)는 JS 가 그려진 선 기준으로 정한다. 터치 타깃 44px. */
-.line-quickbar{position:absolute;left:0;top:0;z-index:20;display:flex;flex-direction:column;gap:2px;padding:4px 5px 5px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 14px rgba(23,55,107,.14);max-width:calc(100% - 16px);box-sizing:border-box;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+/* 2026-11-11 iOS 메뉴형 정리(Apple HIG Popovers·Menus·Accessibility 참고): 불투명에 가까운 흰 표면 · 둥근 모서리 14px · 얇은 경계 ·
+   은은한 그림자 · 역할 = 세그먼트(선택 = 흰 칸 + ✓ · 색에만 기대지 않음) · 주 작업 1개만 시스템 파랑 채움 · 보조 작업은 옅은 파랑(«더보기»에서만) ·
+   얇은 구분선 · 44px 터치 영역 · 눌림/비활성/포커스 표시. 위치 이동 애니메이션 없음(색 전환만 · 동작 줄이기면 끔). 토큰은 막대 안에서만 쓴다. */
+.line-quickbar{--lqb-bg:#FFFFFF;--lqb-label:#1C1C1E;--lqb-label2:#5C5C62;--lqb-sep:rgba(60,60,67,.18);--lqb-fill:rgba(118,118,128,.12);--lqb-fill-press:rgba(118,118,128,.24);
+  --lqb-blue:#007AFF;--lqb-blue-press:#0062CC;--lqb-blue-tint:rgba(0,122,255,.12);--lqb-blue-tint-press:rgba(0,122,255,.22);--lqb-blue-text:#0063D1;--lqb-ok:#1E7B34;
+  --lqb-font:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  position:absolute;left:0;top:0;z-index:20;display:flex;flex-direction:column;gap:6px;padding:4px 8px 8px;min-width:min(264px,calc(100% - 16px));max-width:calc(100% - 16px);box-sizing:border-box;
+  background:var(--lqb-bg);color:var(--lqb-label);font-family:var(--lqb-font);border:1px solid var(--lqb-sep);border-radius:14px;
+  box-shadow:0 10px 30px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.08);touch-action:manipulation;-webkit-user-select:none;user-select:none}
+@supports ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px))){   /* 반투명은 흐림을 지원할 때만(격자가 글자 뒤로 비치지 않게) · 아니면 불투명 흰색 */
+  .line-quickbar{--lqb-bg:rgba(255,255,255,.94);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}}
+@media (prefers-reduced-transparency:reduce),(prefers-contrast:more){.line-quickbar{--lqb-bg:#FFFFFF;-webkit-backdrop-filter:none;backdrop-filter:none;--lqb-sep:rgba(60,60,67,.45);--lqb-label2:#3A3A3F}}
 .line-quickbar[hidden],.line-quickbar [hidden]{display:none!important}
-.lqb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:24px;padding-left:6px;font-size:11px;color:var(--muted)}
-.lqb-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.lqb-dismiss{flex-shrink:0;min-width:36px;min-height:30px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:17px;line-height:1;cursor:pointer}
-.lqb-dismiss:hover{background:color-mix(in srgb,var(--navy) 8%,var(--surface))}
+.lqb-head{display:flex;align-items:center;justify-content:space-between;gap:4px;min-height:36px;padding-left:6px;font-size:13px;color:var(--lqb-label2)}
+.lqb-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-weight:500}
+.lqb-head-actions{display:flex;align-items:center;flex-shrink:0;margin-right:-4px}
+.lqb-more{min-height:44px;min-width:44px;padding:0 8px;border:0;border-radius:10px;background:transparent;color:var(--lqb-blue-text);font:inherit;font-size:14px;font-weight:500;cursor:pointer}
+.lqb-more::after{content:"";display:inline-block;width:6px;height:6px;margin-left:6px;border:solid currentColor;border-width:0 1.6px 1.6px 0;transform:translateY(-3px) rotate(45deg)}
+.lqb-more[aria-expanded="true"]::after{transform:translateY(1px) rotate(-135deg)}
+/* 닫기 «×» = 회색 원(28px) · 누르는 영역 44×44 */
+.lqb-dismiss{position:relative;isolation:isolate;flex-shrink:0;min-width:44px;min-height:44px;border:0;border-radius:22px;background:transparent;color:var(--lqb-label2);font-size:17px;font-weight:600;line-height:1;cursor:pointer}
+.lqb-dismiss::before{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--lqb-fill);z-index:-1}
+.lqb-dismiss:hover::before{background:var(--lqb-fill-press)}
 @media (pointer:coarse){.lqb-dismiss{min-width:44px;min-height:44px}}   /* 손가락: 접기도 터치 타깃 44×44 */
-.lqb-row{display:flex;gap:3px;flex-wrap:wrap}
-.lqb-btn{min-height:44px;min-width:44px;padding:8px 12px;border:1px solid transparent;border-radius:8px;background:var(--surface);color:var(--navy);font:inherit;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer}
-.lqb-btn:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface));border-color:var(--cyan)}
-.lqb-btn[aria-pressed="true"]{background:color-mix(in srgb,var(--cyan) 16%,var(--surface));border-color:var(--cyan)}
-.lqb-btn:disabled{opacity:.45;cursor:default}
-.lqb-main{background:var(--orange);color:#fff}
-.lqb-main:not(:disabled):hover{background:color-mix(in srgb,var(--orange) 88%,#000);border-color:transparent}
-.lqb-btn:focus-visible,.lqb-dismiss:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
-/* 다음 단계 행(절개선 → 파트 분리): 역할 행과 분리된 별도 행. 이유 글은 막대 폭을 늘리지 않고 줄바꿈(width:0 + min-width:100%). */
-.lqb-next{display:flex;flex-direction:column;gap:3px;margin-top:3px;padding-top:5px;border-top:1px solid var(--border)}
+.lqb-row{display:flex;gap:6px;flex-wrap:wrap}
+.lqb-btn{min-height:44px;min-width:44px;padding:8px 14px;border:0;border-radius:12px;background:var(--lqb-fill);color:var(--lqb-label);font:inherit;font-size:15px;font-weight:500;white-space:nowrap;cursor:pointer;transition:background-color .12s,color .12s}
+.lqb-btn:not(:disabled):hover{background:var(--lqb-fill-press)}
+.lqb-btn:not(:disabled):active{background:var(--lqb-fill-press);opacity:.75}
+.lqb-btn:disabled{background:var(--lqb-fill);color:rgba(60,60,67,.38);cursor:default}
+/* 역할 = 세그먼트(트랙 + 선택 칸). 선택 칸은 흰 바탕·그림자·굵게·✓(색에만 기대지 않음). */
+.lqb-row[data-lqb="role"]{flex-wrap:nowrap;gap:2px;padding:2px;border-radius:12px;background:var(--lqb-fill)}
+.lqb-row[data-lqb="role"] .lqb-btn{flex:1 1 0;padding:8px 6px;border-radius:10px;background:transparent;font-size:14px}
+.lqb-row[data-lqb="role"] .lqb-btn:not(:disabled):hover{background:rgba(255,255,255,.6)}
+.lqb-row[data-lqb="role"] .lqb-btn[aria-pressed="true"]{background:#FFFFFF;font-weight:600;box-shadow:0 3px 8px rgba(0,0,0,.12),0 1px 1px rgba(0,0,0,.06)}
+.lqb-row[data-lqb="role"] .lqb-btn[aria-pressed="true"]::before{content:"✓";margin-right:4px;color:var(--lqb-blue-text);font-weight:700}
+.lqb-row[data-lqb="role"] .lqb-btn:disabled{background:transparent}
+.lqb-row[data-lqb="role"] .lqb-btn[aria-pressed="true"]:disabled{background:rgba(255,255,255,.7);box-shadow:none}
+/* 주 작업 = 시스템 파랑 채움(한 번에 1개) · 보조 작업(«더보기») = 옅은 파랑 */
+.lqb-main{background:var(--lqb-blue);color:#fff;font-weight:600}
+.lqb-main:not(:disabled):hover{background:var(--lqb-blue-press)}
+.lqb-main:not(:disabled):active{background:var(--lqb-blue-press);opacity:.8}
+.lqb-next[data-tier="more"] .lqb-btn,.lqb-next .lqb-btn:not(.lqb-main){background:var(--lqb-blue-tint);color:var(--lqb-blue-text)}
+.lqb-next[data-tier="more"] .lqb-btn:not(:disabled):hover,.lqb-next .lqb-btn:not(.lqb-main):not(:disabled):hover{background:var(--lqb-blue-tint-press)}
+.line-quickbar[data-more="open"] .lqb-next[data-tier="main"]:not([hidden]) ~ .lqb-next[data-lqb="seam"] .lqb-main{background:var(--lqb-blue-tint);color:var(--lqb-blue-text)}   /* 펼쳐도 채움 파랑은 1개 */
+.lqb-next .lqb-btn:disabled{background:var(--lqb-fill);color:rgba(60,60,67,.38)}
+.lqb-btn:focus-visible,.lqb-dismiss:focus-visible,.lqb-more:focus-visible{outline:3px solid rgba(0,122,255,.55);outline-offset:1px}
+/* 다음 단계 행: 얇은 구분선으로 묶음. 안내 글은 막대 폭을 늘리지 않고(width:0 + min-width:100%) 기본은 한 줄(잘리면 «더보기»로 전문). */
+.lqb-next{display:flex;flex-direction:column;gap:4px;padding-top:7px;border-top:1px solid var(--lqb-sep)}
 .lqb-wide{width:100%}
-.lqb-reason{width:0;min-width:100%;padding:0 4px 1px;font-size:11px;line-height:1.35;color:var(--muted);white-space:normal;overflow-wrap:anywhere}
+.lqb-reason{width:0;min-width:100%;padding:0 4px;font-size:12px;line-height:1.35;color:var(--lqb-label2);white-space:normal;overflow-wrap:anywhere}
 .lqb-reason:empty{display:none}
-.lqb-next[data-state="ok"] .lqb-reason,.lqb-next[data-state="done"] .lqb-reason{color:#0E7490}
+.line-quickbar[data-kind="select"]:not([data-more="open"]) .lqb-next .lqb-reason{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lqb-next[data-state="ok"] .lqb-reason,.lqb-next[data-state="done"] .lqb-reason{color:var(--lqb-ok)}
+.lqb-detail{padding:6px 8px;border-radius:10px;background:var(--lqb-fill);color:var(--lqb-label)}
+.lqb-next[data-lqb="seam"]{gap:2px}
 /* 소형 상태줄(분리 결과 확인 · 좁은 화면에서 빈자리가 없을 때만): 글 + «도구» 44px. 도구 버튼을 줄이지 않는다. */
 .lqb-compact{display:flex;align-items:center;gap:8px;padding-left:6px}
-.lqb-compact-text{font-size:12px;color:#0E7490;white-space:nowrap}
+.lqb-compact-text{font-size:13px;color:var(--lqb-ok);white-space:nowrap}
+.line-quickbar[data-kind="draw"]{min-width:0}
+@media (prefers-reduced-motion:reduce){.lqb-btn{transition:none}}
 /* 디자인 «완료» 표시(2026-11-10 · js/designDoneMarks.js): 유효 완료본과 현재 형상이 같을 때만 소매·커프스·카라 재단 외곽을
    몸판 수정 외곽(.design-outline-composed)과 같은 녹색·굵기로. 접는선·보조선은 대상 아님. #cv 스코프로 각 조각 기본색보다 우선. */
 #cv .stage-done{stroke:#0E9F6E;stroke-width:2.8}
