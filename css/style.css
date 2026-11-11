@@ -449,21 +449,34 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-working[data-sleeve-line] [data-geometry-role="construction"]{stroke:#0E7490;opacity:.7;stroke-dasharray:4 3}
 
 /* ── 패턴선 «선 가까이» 빠른 도구막대(js/designLineQuickBar.js · 2026-11-05 시안 «선 가까이») ──
-   canvas-wrap 기준 absolute — 레이아웃·SVG hit 영역은 그대로이고 막대가 덮는 자리만 막대가 받는다.
-   위치(left/top)는 JS 가 그려진 선 기준으로 정한다. 터치 타깃 44px. */
+   canvas-wrap 기준 absolute — 레이아웃·SVG hit 영역은 그대로이고 막대가 덮는 자리만 막대가 받는다. 터치 타깃 44px.
+   2026-11-11 하단 고정(김님 «애플같이 아래에 고정» · Apple HIG Sheets·Toolbars·Menus 참고 — iOS 네이티브 UI 그 자체는 아님):
+   자리는 이 CSS 만 정한다(JS 는 좌표를 쓰지 않음). 선택 패널·그리기 패널이 같은 자리를 쓴다(동시에 하나만 보임).
+   · 데스크톱 = 사이드바를 뺀 캔버스(canvas-wrap) 하단 가운데 · 폭 제한 카드(최대 420px)
+   · 좁은 화면(≤615px) = 캔버스 하단에 붙은 시트(위 모서리만 둥글게 · 하단 safe-area 만큼 안쪽 여백)
+   · «더보기»는 같은 아래 기준점에서 위로 펼친다 — 높이 제한 + 패널 안 스크롤(머리줄 고정). 위치 애니메이션 없음. */
 /* 2026-11-11 iOS 메뉴형 정리(Apple HIG Popovers·Menus·Accessibility 참고): 불투명에 가까운 흰 표면 · 둥근 모서리 14px · 얇은 경계 ·
    은은한 그림자 · 역할 = 세그먼트(선택 = 흰 칸 + ✓ · 색에만 기대지 않음) · 주 작업 1개만 시스템 파랑 채움 · 보조 작업은 옅은 파랑(«더보기»에서만) ·
    얇은 구분선 · 44px 터치 영역 · 눌림/비활성/포커스 표시. 위치 이동 애니메이션 없음(색 전환만 · 동작 줄이기면 끔). 토큰은 막대 안에서만 쓴다. */
 .line-quickbar{--lqb-bg:#FFFFFF;--lqb-label:#1C1C1E;--lqb-label2:#5C5C62;--lqb-sep:rgba(60,60,67,.18);--lqb-fill:rgba(118,118,128,.12);--lqb-fill-press:rgba(118,118,128,.24);
   --lqb-blue:#007AFF;--lqb-blue-press:#0062CC;--lqb-blue-tint:rgba(0,122,255,.12);--lqb-blue-tint-press:rgba(0,122,255,.22);--lqb-blue-text:#0063D1;--lqb-ok:#1E7B34;
   --lqb-font:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
-  position:absolute;left:0;top:0;z-index:20;display:flex;flex-direction:column;gap:6px;padding:4px 8px 8px;min-width:min(264px,calc(100% - 16px));max-width:calc(100% - 16px);box-sizing:border-box;
+  position:absolute;left:50%;top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:20;display:flex;flex-direction:column;gap:6px;padding:0 8px 8px;
+  width:min(420px,calc(100% - 24px));max-height:min(calc(100% - 24px),max(168px,55%));overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;
   background:var(--lqb-bg);color:var(--lqb-label);font-family:var(--lqb-font);border:1px solid var(--lqb-sep);border-radius:14px;
   box-shadow:0 10px 30px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.08);touch-action:manipulation;-webkit-user-select:none;user-select:none}
 @supports ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px))){   /* 반투명은 흐림을 지원할 때만(격자가 글자 뒤로 비치지 않게) · 아니면 불투명 흰색 */
   .line-quickbar{--lqb-bg:rgba(255,255,255,.94);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}}
 @media (prefers-reduced-transparency:reduce),(prefers-contrast:more){.line-quickbar{--lqb-bg:#FFFFFF;-webkit-backdrop-filter:none;backdrop-filter:none;--lqb-sep:rgba(60,60,67,.45);--lqb-label2:#3A3A3F}}
 .line-quickbar[hidden],.line-quickbar [hidden]{display:none!important}
+.line-quickbar>*{flex-shrink:0}
+.line-quickbar[data-more="open"]{max-height:min(max(200px,62%),calc(100% - 24px))}   /* 펼침: 아래 기준점 그대로 위로 · 캔버스 위쪽은 남긴다 */
+.lqb-head{position:sticky;top:0;z-index:1;padding-top:4px;background:var(--lqb-bg)}   /* 패널 안 스크롤 중에도 «더보기/접기»·닫기는 보인다 */
+/* 기본(접힘) 높이 상한 = 캔버스의 55%(최소 168px — 머리줄·역할·주 작업 버튼은 늘 보임). 낮은 화면에서 나머지 안내는 패널 안 스크롤. */
+@media (max-width:615px){
+  .line-quickbar{left:0;right:0;bottom:0;transform:none;width:auto;max-height:min(calc(100% - 12px),max(168px,55%));border-width:1px 0 0;border-radius:14px 14px 0 0;
+    padding:0 12px calc(8px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 24px rgba(0,0,0,.10),0 -1px 2px rgba(0,0,0,.06)}
+  .line-quickbar[data-more="open"]{max-height:min(max(200px,62%),calc(100% - 12px))}}
 .lqb-head{display:flex;align-items:center;justify-content:space-between;gap:4px;min-height:36px;padding-left:6px;font-size:13px;color:var(--lqb-label2)}
 .lqb-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-weight:500}
 .lqb-head-actions{display:flex;align-items:center;flex-shrink:0;margin-right:-4px}
@@ -509,7 +522,6 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 소형 상태줄(분리 결과 확인 · 좁은 화면에서 빈자리가 없을 때만): 글 + «도구» 44px. 도구 버튼을 줄이지 않는다. */
 .lqb-compact{display:flex;align-items:center;gap:8px;padding-left:6px}
 .lqb-compact-text{font-size:13px;color:var(--lqb-ok);white-space:nowrap}
-.line-quickbar[data-kind="draw"]{min-width:0}
 @media (prefers-reduced-motion:reduce){.lqb-btn{transition:none}}
 /* 디자인 «완료» 표시(2026-11-10 · js/designDoneMarks.js): 유효 완료본과 현재 형상이 같을 때만 소매·커프스·카라 재단 외곽을
    몸판 수정 외곽(.design-outline-composed)과 같은 녹색·굵기로. 접는선·보조선은 대상 아님. #cv 스코프로 각 조각 기본색보다 우선. */

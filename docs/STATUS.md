@@ -66,6 +66,27 @@ JSON 불러오기 했을 때 선택되는 마지막 기록(index 24, SL52/Hem30/
   브라우저(격리 127.0.0.1 · storage 0 · 실제 마우스): 완료(hash c817f63f) → 앞 밑단 앵커 드래그 = 비활성 + «…앞 28.43 · 뒤 29.37 · 뒤−앞 +0.95cm…» · 되돌림 = 완료됨 ·
   여밈 1.2/1.2 = 활성 + «검사 통과 — 다시 완료» · 완료본 hash 유지 · 콘솔 0. 캐시 ui 2026111101(핀 갱신: sleeve*UI·sleeveR~Z·Annotation 등 ui.js 핀).
 
+## 패턴선 편집 패널 하단 고정 (2026-11-11 김님 «애플같이 아래에 고정» · 미커밋 · Codex 검토 대기)
+
+참고: Apple HIG Sheets·Toolbars·Menus(구조·크기만 참고 — iOS 네이티브 UI 아님). 범위 = `js/designLineQuickBar.js` 배치 로직 · `css/style.css` 막대 블록 ·
+`index.html` 주석·캐시 · `js/designLineTool.js` 1줄(Space 팬). 엔진·완료 게이트·선/역할 명령·저장 형식·프로젝트 파일 무변경. **아래 두 절의 «자리» 규칙(선 근처 후보 · `holdPlace` 붙박이 · 그리기 dock)은 이것으로 대체됨.**
+
+- **자리 = CSS 만**: 선택 패널·그리기 패널이 같은 고정 자리(동시에 하나). 데스크톱 = 사이드바를 뺀 캔버스(canvas-wrap) 하단 가운데 카드(폭 ≤420 · bottom 12) ·
+  ≤615px = 캔버스 하단 시트(좌우 꽉 · 위 모서리만 둥글게 · safe-area 하단 여백 — `viewport-fit=cover` 가 없어 지금 env 값은 0). JS 는 좌표를 쓰지 않는다.
+  `place`·`keepPlace`·`holdPlace`·`dock`·`selKeep`·`dockIdx` 삭제 → 순수 함수는 `coverCount`(분리 결과를 덮는지 → 소형 상태줄 판정) 하나.
+- 높이: 기본 상한 = 캔버스 55%(최소 168 — 머리줄·역할·주 작업 버튼은 늘 보임) · «더보기» = 같은 아래 기준점에서 위로 max(200,62%) · 넘치면 패널 안 스크롤(머리줄 sticky).
+- 드래그·팬·핀치 중 숨기지 않고 내용 고정 → 손 떼면 한 번 갱신. 화면 밖으로 팬해도 선택 중이면 패널 유지. 패널 위 pointer·wheel 은 캔버스로 안 감(기존).
+- 실측(실제 마우스 · 격리 127.0.0.1 · storage 0 전후 · 콘솔 0): 1024 = x162 w420 bottom12(앵커 드래그 3회·휠 줌·더보기 h363·역할 변경·그리기 완료/취소·다른 선·닫기·탭/스테이지 전환 모두 같은 x/bottom) ·
+  390 = 시트 bottom0 h238(더보기 292 내부 스크롤) · 320×640 = 238 → 상한 후 177 · 844×390 가로 = 가운데 bottom12 h178 · 버튼 44 · 가로 스크롤 없음.
+- **Space+드래그 팬 선택 유지(Codex 후속 · 최소 보완)**: 원인 = `init.js` 팬과 `designLineTool` 이 같은 `svg` pointerdown(같은 요소라 stopPropagation 무효) →
+  선택 해제(그리기면 점 추가). `designLineTool` pointerdown 첫머리에 `spaceDown` 이면 무시 한 줄(형상·저장·게이트 무변경). 실측: 그리기 중 팬 = 점 안 찍힘 ·
+  선택 중 팬 = 선택·역할·«더보기» 유지. (Space 는 합성 keydown + 실제 마우스 드래그.)
+- **반영 성공 실측**: 앞판 옆선 밑 → 앞중심 밑 스냅 곡선 밑단 → 외곽 → «몸판 외곽으로 반영» 성공(녹색 합성 외곽) · 패널 190 → 160 같은 x/bottom ·
+  «몸판 완료 막힘 1건»(더보기 = «옆허리 다트 c 허리 부착 불일치») · 패널 완료 버튼 숨김 = 오른쪽 «몸판 모양 완료» disabled 와 같은 게이트. 완료 가능 상태는 이 선으로는 재현 못 함.
+- **한계**: 실제 터치(핀치·두 손가락 팬은 pointerdown 이 선 도구로도 감)·iOS Safari 실기기·브라우저 확대(⌘+) 미검증 · 좁은 화면은 캔버스 자체가 작아(320 = 322px) 접힌 시트도 55% 를 쓴다.
+- 검사: `lineQuickBarCheck` 86 → 59(옛 배치 순수 검사 제거 · 하단 고정 계약 §2·§9 · Space 팬 2h 신설) · 캐시: css 2026111103 · 막대 2026111104 · designLineTool 2026111101
+  (핀: `lineQuickBarCheck` · `sleeveAUICheck` · `sleeveAnnotationCheck` · `sleeveRCheck` · `sleeveSCheck` · `sleeveVCheck`).
+
 ## 선 근처 팝업·그리기 막대 iOS 메뉴형 정리 (2026-11-11 김님 «애플 아이폰 UI 참고» · 미커밋 · Codex 검토 대기)
 
 참고: Apple HIG Popovers·Menus·Accessibility(공식 .md). 범위 = `css/style.css` 막대 블록 · `index.html` 막대 마크업 2곳(«더보기» 버튼 · 차단 사유 전문 칸) ·

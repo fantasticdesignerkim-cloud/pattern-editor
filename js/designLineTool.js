@@ -1886,6 +1886,9 @@
   if (typeof svg !== "undefined" && svg) {
     svg.addEventListener("pointerdown", e => {
       if (mode === "off" || e.button !== 0 || !inDesign()) return;
+      // Space+드래그 = 화면 팬(init.js) — 같은 svg pointerdown 이라 여기서도 돌면 선택 해제·점 추가가 일어났다(2026-11-11 실측).
+      //   명시적 팬 제스처 동안은 선 도구가 손대지 않는다(선택·작성 중 선 유지 · 형상·저장 무변경).
+      if (typeof spaceDown !== "undefined" && spaceDown) return;
       const piece = pieceAt(e.target);
       if (mode === "draw") {
         const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();

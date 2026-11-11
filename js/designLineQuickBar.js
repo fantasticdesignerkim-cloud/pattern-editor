@@ -1,8 +1,8 @@
 // ══════════════════════════════════════════════
-// js/designLineQuickBar.js — 패턴선 «선 가까이» 빠른 도구막대(UI 전용 · 2026-11-05 김님 시안 «선 가까이» 승인).
+// js/designLineQuickBar.js — 패턴선 하단 고정 편집 패널(옛 «선 가까이» 빠른 도구막대)(UI 전용 · 2026-11-05 김님 시안 «선 가까이» 승인).
 //
 // 무엇: 패턴 위, 지금 작업 대상 가까이에 작은 도구막대를 띄워 오른쪽 패널 왕복을 줄인다.
-//   · 그리기 중(점 ≥1) → 캔버스 가장자리 고정 자리(dock · 2026-11-07 — 마지막 점·진행 방향을 비움)에 «그리기 취소» · «그리기 완료»(완료 가능 = designLineTool.canFinishDraw 그대로)
+//   · 그리기 중(점 ≥1) → 하단 고정 패널(2026-11-11 · 선택 패널과 같은 자리)에 «그리기 취소» · «그리기 완료»(완료 가능 = designLineTool.canFinishDraw 그대로)
 //   · 선 선택(정상 완료 직후 자동 선택 포함 · 기존 선 재선택) → 그 선 근처에 절개선 · 외곽 · 보조선(현재 역할 강조)
 //   · 관리형 선(네크라인 전용 · 소매산 · 칼라 본체)은 역할 버튼 잠금(designLineTool 의 잠금 판정 그대로)
 //   · 선택한 선이 절개선이면 별도 «다음 단계» 행에 «파트 분리»(2026-11-05 김님 요청) — 오른쪽 «파트 분리»와 **같은 판정**
@@ -19,10 +19,10 @@
 //     오른쪽 버튼·id·단축키(Enter·Esc·Backspace·Delete)는 그대로이고, 둘 다 같은 명령이라 자동 동기화된다.
 //   · UI 상태: «접기(×)» = 지금 선택한 선에 대해서만 막대를 접는다(선·선택 무변경). 캔버스를 다시 누르면 풀린다.
 //     «도구»(소형 상태줄 → 전체 막대, 2026-11-05) = 분리 결과 확인용 상태줄을 그 결과에 대해서만 펼친다. 선택·결과 변화·캔버스 누름에 풀린다.
-//   · 위치 기준 = **실제로 그려진 SVG**(선택 선 path · overlay 앵커/핸들 · 작성 중 preview/vertex)의 화면 좌표(getScreenCTM).
-//     피스 offset·파생 몸판·카라 레이어·줌·팬이 무엇이든 화면에 그려진 선과 정합. 커서 위치는 쓰지 않는다(흔들림 없음).
-//   · 배치 = 기준점 위/아래/오른쪽/왼쪽 후보 중 **선·앵커·핸들 점을 가리지 않는 첫 후보**(같으면 위 우선) → 캔버스 안으로 클램프.
-//   · 캔버스 위 드래그(곡선 핸들·앵커 이동·팬·핀치) 중에는 숨기고, 손을 떼면 다시 계산한다.
+//   · 위치(2026-11-11 김님 «애플같이 아래에 고정» — 선 근처·가장자리 dock 배치 대체): 선택 패널·그리기 패널이 **같은 하단 고정 자리**를 쓴다
+//     (데스크톱 = 사이드바를 뺀 캔버스 하단 가운데 폭 제한 카드 · 좁은 화면 = 하단 시트 + safe-area). 자리는 CSS 만 정하고 JS 는 좌표를 쓰지 않는다.
+//     선 근처 후보·좌우 flip·커서 추종·상단 회피 없음. 가려진 부분은 기존 팬으로 옮겨 본다(형상·저장 좌표 무변경).
+//   · 캔버스 위 드래그(곡선 핸들·앵커 이동·팬·핀치) 중에는 패널을 그대로 두고(숨기지 않음), 손을 떼면 내용만 한 번 갱신한다.
 //   · 막대는 #cv 의 형제(SVG 밖) → 막대 클릭은 캔버스 점 추가·피스 드래그로 전파되지 않는다.
 // ══════════════════════════════════════════════
 (function () {
@@ -30,10 +30,8 @@
 
   const PIECE_LABEL = { front: "앞판", back: "뒤판", sleeve: "소매", collar: "카라" };
   const LOCK_TITLE = { neck: "네크라인 전용선 · 역할 고정", cap: "소매산 관리선 · 역할 고정", collar: "칼라 본체 관리선 · 역할 고정" };
-  const GAP = 18;        // 기준점과 막대 사이(손가락·핸들 여유)
   const PAD = 12;        // 가림 판정 여유(막대 사각형을 이만큼 키워 점이 들어오면 «가림»)
-  const MARGIN = 8;      // 캔버스 가장자리 여백
-  const DRAG_PX = 4;     // 이 이상 움직이면 캔버스 드래그로 보고 숨김(designLineTool DRAG_PX 와 같은 값)
+  const DRAG_PX = 4;     // 이 이상 움직이면 캔버스 드래그로 본다(패널 내용 고정 · designLineTool DRAG_PX 와 같은 값)
 
   // ── 순수: 도구 상태 → 막대 표시 모델 ──
   // s = {design, mode, draft:{piece,n}|null, canFinish, sel:{id,piece,role,lock}|null}
@@ -86,123 +84,14 @@
     return (k && fullHits > 0 && expandedKey !== k) ? "compact" : "full";
   }
 
-  // ── 순수: 배치 ──
-  // o = {bounds:{l,t,r,b}, size:{w,h}, refs:[{x,y}], obstacles:[{x,y}]} (모두 canvas-wrap 기준 px)
-  // 반환 {x, y, hits, index} — 후보 순서: 각 기준점마다 위 · 아래 · 오른쪽 · 왼쪽. 가림 점 수가 가장 적은 첫 후보.
-  function place(o) {
-    const b = o.bounds, w = o.size.w, h = o.size.h;
-    const clampX = x => Math.max(b.l, Math.min(x, b.r - w));
-    const clampY = y => Math.max(b.t, Math.min(y, b.b - h));
-    const cands = [];
-    (o.refs || []).forEach(p => {
-      cands.push({ x: p.x - w / 2, y: p.y - GAP - h });   // 위
-      cands.push({ x: p.x - w / 2, y: p.y + GAP });       // 아래(위가 막히면 반전)
-      cands.push({ x: p.x + GAP, y: p.y - h / 2 });       // 오른쪽
-      cands.push({ x: p.x - GAP - w, y: p.y - h / 2 });   // 왼쪽
-    });
-    // 가림 대상 묶음(선·분리 파트) 바깥 네 방향(2026-11-05 소매 파트 분리) — 좁은 화면에서 선 주변 후보가 모두 파트를 덮을 때만 뽑힌다
-    //   (동점이면 앞 후보 유지 → 선 주변에 빈자리가 있으면 종전 위치 그대로).
-    const nRef = cands.length, ob = o.obstacles || [];
-    if (ob.length) {
-      let l = Infinity, r = -Infinity, t = Infinity, bt = -Infinity;
-      ob.forEach(q => { l = Math.min(l, q.x); r = Math.max(r, q.x); t = Math.min(t, q.y); bt = Math.max(bt, q.y); });
-      const mx = (l + r) / 2, my = (t + bt) / 2;
-      cands.push({ x: mx - w / 2, y: bt + GAP }, { x: mx - w / 2, y: t - GAP - h }, { x: l - GAP - w, y: my - h / 2 }, { x: r + GAP, y: my - h / 2 });
-    }
-    (o.extra || []).forEach(c => cands.push({ x: c.x, y: c.y }));   // 호출부가 더하는 자리(소형 상태줄 = 캔버스 네 모서리) — 맨 뒤라 동점이면 앞 후보 우선
-    let best = null;
-    cands.forEach((c, i) => {
-      const x = clampX(c.x), y = clampY(c.y);
-      let hits = 0;
-      (o.obstacles || []).forEach(q => { if (q.x >= x - PAD && q.x <= x + w + PAD && q.y >= y - PAD && q.y <= y + h + PAD) hits++; });
-      if (!best || hits < best.hits) best = { x: x, y: y, hits: hits, index: i, around: i >= nRef };
-    });
-    return best;
-  }
-
-  // ── 순수: 선택 막대 붙박이(2026-11-09 김님 «팝업창이 계속 움직인다») ──
-  // 같은 선을 선택한 동안에는 처음 고른 자리를 지킨다 — hover·rerender·설명줄 증감·값 갱신·핸들 드래그 뒤에도 그대로.
-  // 다시 고르는 경우는 최소: (1) 다른 선 선택·닫기 후 재열기 (2) 보기(팬·줌)·캔버스 크기 변화 (3) 지금 자리가 선택 선·anchor·핸들을 가리게 됨.
-  // 크기만 바뀌면 화면 안으로만 밀어 넣는다(clamp). o = {keep:{x,y}, bounds, size, essential:[{x,y}]} → {x,y} | null(다시 골라야 함)
-  function keepPlace(o) {
-    if (!o || !o.keep) return null;
-    const b = o.bounds, w = o.size.w, h = o.size.h;
-    const x = Math.max(b.l, Math.min(o.keep.x, b.r - w)), y = Math.max(b.t, Math.min(o.keep.y, b.b - h));
-    const covers = (o.essential || []).some(q => q.x >= x - PAD && q.x <= x + w + PAD && q.y >= y - PAD && q.y <= y + h + PAD);
-    return covers ? null : { x: x, y: y };
-  }
-
-  // ── 순수: 같은 선 동안의 자리 결정(2026-11-10 김님 «밑단 수정하는데 팝업이 아래·왼쪽·오른쪽으로 너무 움직여») ──
-  // 원인(390 실측): 앵커를 막대 밑으로 끌어오면 keepPlace 가 null → place() 가 **지금 형상 기준으로 새 자리**를 골랐고,
-  //   반영 행이 다시 생겨 막대가 커지자 또 새 자리, 되돌려도 새 자리가 기준이 돼 처음 자리로 안 돌아왔다(88,8 → 196,8 → 196,92).
-  // 규칙: 같은 선을 고른 동안 선 주변 재채점(place)은 다시 하지 않는다.
-  //   · 처음 자리(home)를 크기만 clamp 해서 쓴다 — 설명줄 증감·값 갱신·드래그(중엔 숨김) 뒤에도 그대로.
-  //   · home 이 **잡는 점(앵커·핸들 점)**을 가릴 때만 캔버스 가장자리 고정 자리(dock)로 한 번 옮기고, 그 선 동안 거기 머문다
-  //     (선 몸통을 조금 덮는 것은 옮길 이유가 아니다 — 메뉴가 도망가지 않는 쪽이 우선).
-  //   · dock 자리가 다시 잡는 점을 가리면 그때만 다른 dock(같은 순서 · 동점이면 앞 자리).
-  // o = {keep:{x,y,dock:index|null}, bounds, size, grab:[{x,y}], line:[{x,y}]} → {x, y, dock:index|null}
-  function holdPlace(o) {
-    const k = o.keep;
-    if (k.dock == null) {
-      const h = keepPlace({ keep: k, bounds: o.bounds, size: o.size, essential: o.grab });
-      if (h) return { x: h.x, y: h.y, dock: null };
-    }
-    // 가장자리 자리: 잡는 점을 가장 덜 가리고 → 선 몸통 점을 덜 가리는 곳(같으면 DOCKS 순서).
-    //   지금 dock 이 있으면 **엄격히 나아질 때만** 옮긴다(동점 왕복 flip 없음). 좁은 화면에서 어디도 다 비울 수 없으면 가장 덜 가리는 곳에 머문다.
-    const b = o.bounds, w = o.size.w, hh = o.size.h, cx = Math.max(b.l, Math.round((b.l + b.r - w) / 2));
-    const P = { tl: [b.l, b.t], tr: [b.r - w, b.t], bl: [b.l, b.b - hh], br: [b.r - w, b.b - hh], tc: [cx, b.t], bc: [cx, b.b - hh] };
-    const at = i => { const n = DOCKS[i], x = Math.max(b.l, Math.min(P[n][0], b.r - w)), y = Math.max(b.t, Math.min(P[n][1], b.b - hh));
-      const cnt = pts => (pts || []).filter(q => q.x >= x - PAD && q.x <= x + w + PAD && q.y >= y - PAD && q.y <= y + hh + PAD).length;
-      return { x: x, y: y, dock: i, g: cnt(o.grab), l: cnt(o.line) }; };
-    const better = (c, d) => c.g < d.g || (c.g === d.g && c.l < d.l);
-    let best = null;
-    for (let i = 0; i < DOCKS.length; i++) { const c = at(i); if (!best || better(c, best)) best = c; }
-    if (k.dock != null && k.dock >= 0 && k.dock < DOCKS.length) { const cur = at(k.dock); if (!better(best, cur)) return { x: cur.x, y: cur.y, dock: cur.dock }; }
-    return { x: best.x, y: best.y, dock: best.dock };
-  }
-
-
-  // ── 순수: 그리기 전용 고정 자리(dock · 2026-11-07 김님 «다음 점 찍을 곳을 팝업이 가림») ──
-  // 그리기 중에는 다음 점이 어디로 갈지 알 수 없어서, 마지막 점 옆은 어느 방향이든 다음 점 자리를 가릴 수 있다.
-  // 그래서 그리기 막대는 캔버스 가장자리 고정 자리(네 모서리 · 위/아래 가운데)에 둔다.
-  //   · 가림 금지(필수): 작성 중 선·꼭짓점·핸들 점 / 마지막 점 둘레 CLEAR 반경 / 진행 방향 앞쪽(직전→마지막 연장) 반경
-  //   · 그다음: 몸판·소매 조각 영역(hit rect)과 덜 겹치는 자리
-  //   · 붙박이: 지금 자리(keep)가 여전히 필수 조건을 지키면 움직이지 않는다 — 새 점이 그 자리 가까이 찍혔을 때만 옮긴다.
-  //     커서 위치는 쓰지 않는다(버튼을 누르러 가는 동안 막대가 도망가거나 깜빡이지 않음).
-  // o = {bounds, size, last:{x,y}|null, prev:{x,y}|null, draft:[{x,y}], pieces:[{l,t,r,b}], keep:index|null}
-  // 반환 {x, y, index, name, hits, near, overlap}
-  const DOCKS = ["bl", "br", "tl", "tr", "bc", "tc"];
-  function dockClear(b) { return Math.max(72, Math.min(160, Math.min(b.r - b.l, b.b - b.t) * 0.28)); }
-  function dock(o) {
-    const b = o.bounds, w = o.size.w, h = o.size.h;
-    const cx = Math.max(b.l, Math.round((b.l + b.r - w) / 2));
-    const pos = { tl: [b.l, b.t], tr: [b.r - w, b.t], bl: [b.l, b.b - h], br: [b.r - w, b.b - h], tc: [cx, b.t], bc: [cx, b.b - h] };
-    const clear = dockClear(b);
-    const zones = [];
-    if (o.last) {
-      zones.push({ x: o.last.x, y: o.last.y, r: clear });
-      if (o.prev) {   // 진행 방향 앞쪽 — 연속으로 같은 방향(가로·세로·긴 곡선)으로 갈 때 다음 점 자리
-        const dx = o.last.x - o.prev.x, dy = o.last.y - o.prev.y, L = Math.hypot(dx, dy);
-        if (L > 1) zones.push({ x: o.last.x + dx / L * clear * 1.6, y: o.last.y + dy / L * clear * 1.6, r: clear });
-      }
-    }
-    const distRect = (x, y, q) => { const ex = Math.max(x - q.x, 0, q.x - (x + w)), ey = Math.max(y - q.y, 0, q.y - (y + h)); return Math.hypot(ex, ey); };
-    const evalAt = (i) => {
-      const name = DOCKS[i], x = Math.max(b.l, Math.min(pos[name][0], b.r - w)), y = Math.max(b.t, Math.min(pos[name][1], b.b - h));
-      let hits = 0; (o.draft || []).forEach(q => { if (q.x >= x - PAD && q.x <= x + w + PAD && q.y >= y - PAD && q.y <= y + h + PAD) hits++; });
-      let near = 0; zones.forEach(z => { near += Math.max(0, z.r - distRect(x, y, z)); });
-      let overlap = 0; (o.pieces || []).forEach(p => { const ix = Math.min(x + w, p.r) - Math.max(x, p.l), iy = Math.min(y + h, p.b) - Math.max(y, p.t); if (ix > 0 && iy > 0) overlap += ix * iy; });
-      return { x: x, y: y, index: i, name: name, hits: hits, near: near, overlap: overlap / Math.max(1, w * h) };
-    };
-    if (o.keep != null && o.keep >= 0 && o.keep < DOCKS.length) { const k = evalAt(o.keep); if (k.hits === 0 && k.near === 0) return k; }
-    let best = null;
-    for (let i = 0; i < DOCKS.length; i++) {
-      const c = evalAt(i);
-      const better = !best || c.hits < best.hits || (c.hits === best.hits && ((c.near > 0) !== (best.near > 0) ? c.near === 0
-        : c.near > 0 ? c.near < best.near - 0.5 : c.overlap < best.overlap - 0.02));
-      if (better) best = c;
-    }
-    return best;
+  // ── 순수: 하단 고정 패널 가림 수(2026-11-11 김님 «애플같이 아래에 고정») ──
+  // 자리는 계산하지 않는다(CSS 가 캔버스 하단 가운데에 고정). 여기서는 «고정 패널 사각형이 가리는 점 수»만 센다 —
+  // 분리 결과가 생긴 순간 전체 패널이 파트를 덮으면 소형 상태줄로 시작할지(chooseMode)를 정하는 데만 쓴다.
+  // rect = {l,t,r,b}, pts = [{x,y}] (같은 좌표계) → 정수
+  function coverCount(rect, pts) {
+    if (!rect) return 0; let n = 0;
+    (pts || []).forEach(q => { if (q.x >= rect.l - PAD && q.x <= rect.r + PAD && q.y >= rect.t - PAD && q.y <= rect.b + PAD) n++; });
+    return n;
   }
 
   // ── DOM ──
@@ -212,8 +101,7 @@
   //   보조 작업(다른 다음 단계 행·완료 버튼)·긴 안내 전문·완료 차단 사유 전체는 명시적 «더보기»를 눌렀을 때만 펼친다(UI 전용 · 그 선 동안만).
   let moreBtn = null, moreKey = null;
 
-  let selKeep = null;                  // 선택 막대 붙박이 {key, view, mode, x, y}(UI 전용 · 2026-11-09)
-  let dockIdx = null;                  // 그리기 막대의 지금 고정 자리(붙박이 · 그리기가 끝나면 버림)
+  let modeMemo = null;                 // {key, sig, mode}: 같은 선·같은 결과/펼침 동안 전체/소형 형태를 한 번만 정한다(자리는 CSS 고정)
   let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
   let splitRow = null, splitBtn = null, splitReason = null;
   let bndRow = null, bndBtn = null, bndReason = null, bndApply = null, bndUndo = null, seamRow = null, seamText = null;
@@ -225,7 +113,6 @@
   let bndNote = null;                  // {key, text}: 막대 «외곽 대체 미리보기»를 눌렀는데 미리보기가 안 생겼을 때 doBoundaryPreview 가 남긴 안내(#designBoundaryNote)
   let dismissedKey = null;            // «접기(×)» 한 선택 키(UI 전용)
   let press = null, dragging = false;  // 캔버스 위 누름·드래그 상태
-  let lastPos = null;
 
   function tool() { return window.designLineTool || null; }
   // 몸판 완료 게이트(권위 check 그대로 · 모든 차단 사유) — 옆선 행에서 «무엇이 남았나»를 정직하게 보이기 위해.
@@ -256,64 +143,39 @@
     return { design: true, mode: mode };
   }
 
-  // 화면에 그려진 대상 → 기준점·가림 점(canvas-wrap 기준 px).
+  // 화면에 그려진 대상(2026-11-11 하단 고정): 자리 계산에는 쓰지 않는다. 대상이 그려져 있는지(없으면 패널도 없음)와,
+  // 소형/전체 판정용 «분리·외곽 대체 결과 외곽 점»(canvas-wrap 기준 px)만 본다. 화면 밖으로 팬해도 패널은 그대로 보인다.
   function collectTargets(kind, wrapRect) {
     const cv = (typeof svg !== "undefined" && svg) ? svg : document.getElementById("cv");
     if (!cv) return null;
+    const drawn = kind === "draw" ? !!cv.querySelector(".design-line-vertex")
+      : !!(cv.querySelector("path.design-line.selected") || cv.querySelector(".design-line-anchor"));
+    if (!drawn) return null;
     const local = (el, x, y) => { const m = el.getScreenCTM && el.getScreenCTM(); if (!m) return null; return { x: m.a * x + m.c * y + m.e - wrapRect.left, y: m.b * x + m.d * y + m.f - wrapRect.top }; };
-    const pathPts = (p) => {
-      const out = []; let L = 0; try { L = p.getTotalLength(); } catch (_) { return out; }
+    const pathPts = (p, out) => {
+      let L = 0; try { L = p.getTotalLength(); } catch (_) { return; }
       const n = Math.max(16, Math.min(120, Math.ceil(L / 8)));
       for (let i = 0; i <= n; i++) { const q = p.getPointAtLength(L * i / n); const r = local(p, q.x, q.y); if (r) out.push(r); }
-      return out;
     };
-    const circlePt = c => local(c, c.cx.baseVal.value, c.cy.baseVal.value);
-    const obstacles = [], refs = [], pieces = [], essential = [], grab = []; let prevPt = null;   // grab = 손으로 잡는 점(앵커·핸들 점)
-    cv.querySelectorAll(".design-line-handle").forEach(ln => {   // 곡선 핸들선(작성 중·선택 overlay 공통)
-      const x1 = ln.x1.baseVal.value, y1 = ln.y1.baseVal.value, x2 = ln.x2.baseVal.value, y2 = ln.y2.baseVal.value;
-      for (let i = 0; i <= 4; i++) { const r = local(ln, x1 + (x2 - x1) * i / 4, y1 + (y2 - y1) * i / 4); if (r) { obstacles.push(r); essential.push(r); } }
-    });
-    cv.querySelectorAll(".design-line-handledot").forEach(c => { const r = circlePt(c); if (r) { obstacles.push(r); essential.push(r); grab.push(r); } });
-    // 옆선 길이 상시 표시(2026-11-08)·그리기 거리 안내 글자도 가리지 않을 대상(글자 상자의 모서리·가운데)
-    cv.querySelectorAll("text[data-seam-len-text], text[data-measure-text]").forEach(t => { let b = null; try { b = t.getBBox(); } catch (_) { b = null; } if (!b) return;
-      [[0, 0], [0.5, 0], [1, 0], [0, 1], [0.5, 1], [1, 1], [0.5, 0.5]].forEach(f => { const r = local(t, b.x + b.width * f[0], b.y + b.height * f[1]); if (r) obstacles.push(r); }); });
-    if (kind === "draw") {
-      const pv = cv.querySelector(".design-line-preview");
-      if (pv) pathPts(pv).forEach(r => obstacles.push(r));
-      const vs = cv.querySelectorAll(".design-line-vertex");
-      vs.forEach(c => { const r = circlePt(c); if (r) obstacles.push(r); });
-      if (vs.length) { const r = circlePt(vs[vs.length - 1]); if (r) refs.push(r); }   // 마지막 점
-      if (vs.length > 1) { const r = circlePt(vs[vs.length - 2]); if (r) prevPt = r; }   // 직전 점(진행 방향)
-      cv.querySelectorAll('[data-design-root="hit"] > *').forEach(el => {   // 조각 영역(클릭 가능한 hit rect) — 고정 자리는 덜 덮는 곳
-        const q = el.getBoundingClientRect(); if (q.width > 0 && q.height > 0) pieces.push({ l: q.left - wrapRect.left, t: q.top - wrapRect.top, r: q.right - wrapRect.left, b: q.bottom - wrapRect.top });
-      });
-    } else {
-      // 파트 분리 결과(색 미리보기) 외곽도 가리지 않을 대상 — 분리 직후 막대가 작은 파트를 덮지 않게.
-      cv.querySelectorAll('[data-design-root="parts"] path').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));
-      cv.querySelectorAll('[data-design-root="boundary"] path').forEach(pp => pathPts(pp).forEach(r => obstacles.push(r)));
-      const sp = cv.querySelector("path.design-line.selected");
-      const anchors = []; cv.querySelectorAll(".design-line-anchor").forEach(c => { const r = circlePt(c); if (r) anchors.push(r); });
-      anchors.forEach(r => { obstacles.push(r); essential.push(r); grab.push(r); });
-      if (sp) {
-        const pts = pathPts(sp); pts.forEach(r => { obstacles.push(r); essential.push(r); });
-        if (pts.length) { refs.push(pts[Math.floor(pts.length / 2)]); refs.push(pts[0]); refs.push(pts[pts.length - 1]); }
-      } else if (anchors.length) {   // 관리형 선(유효 상태는 path 를 따로 그리지 않음) → overlay 앵커 기준
-        refs.push(anchors[Math.floor(anchors.length / 2)]); refs.push(anchors[0]); refs.push(anchors[anchors.length - 1]);
-      }
-    }
-    if (!refs.length) return null;
-    return { cv: cv, refs: refs, obstacles: obstacles, prev: prevPt, pieces: pieces, essential: essential, grab: grab };
+    let pts = null;   // 필요할 때만(결과 형태를 정할 때) 계산
+    const obstacles = () => {
+      if (pts) return pts; pts = [];
+      cv.querySelectorAll('[data-design-root="parts"] path, [data-design-root="boundary"] path').forEach(pp => pathPts(pp, pts));
+      return pts;
+    };
+    return { cv: cv, obstacles: obstacles };
   }
 
-  function hide() { if (bar && !bar.hidden) bar.hidden = true; lastPos = null; }
+  function hide() { if (bar && !bar.hidden) bar.hidden = true; }
 
   function sync() {
     if (!bar) return;
     const vm = describe(snapshot());
-    if (!vm || vm.kind !== "draw") dockIdx = null;
-    if (!vm || vm.kind !== "select") selKeep = null;   // 선택이 끝나면(해제·그리기) 붙박이 자리를 버린다   // 그리기가 끝나면(완료·취소·선택) 고정 자리를 버린다 — 다음 그리기는 새로 고른다
+    if (!vm || vm.kind !== "select") modeMemo = null;   // 선택이 끝나면(해제·그리기) 형태 기억을 버린다
     if (!vm || vm.kind !== "select" || (moreKey && moreKey !== vm.key)) moreKey = null;   // 선택이 끝나거나 다른 선이면 «더보기» 펼침 해제
-    if (!vm || dragging || (vm.kind === "select" && dismissedKey === vm.key)) { hide(); return; }
+    // 캔버스 드래그·팬·핀치 중에는 패널을 그대로 둔다(숨기지도 다시 그리지도 않음 — 하단 고정이라 움직일 이유가 없다). 손을 떼면 한 번 갱신.
+    if (dragging && vm && !bar.hidden) return;
+    if (!vm || (vm.kind === "select" && dismissedKey === vm.key)) { hide(); return; }
     const wrap = bar.parentElement; if (!wrap) { hide(); return; }
     const wr = wrap.getBoundingClientRect();
     const tg = collectTargets(vm.kind, wr);
@@ -395,7 +257,9 @@
     if (vm.kind !== "select") bar.removeAttribute("data-more");
     if (moreBtn && vm.kind !== "select") moreBtn.hidden = true;   // 선택 막대에서 보일지는 배치 측정 때(잘린 안내가 있는지) 정한다 — 중간에 숨기면 포커스가 빠진다
 
-    // 측정 → 배치(보이기 전에 visibility 로 측정)
+    // 하단 고정 패널(2026-11-11 김님 «애플같이 아래에 고정»): 자리 = CSS(캔버스 하단 가운데 · 모바일 = 하단 시트)만 정한다.
+    //   JS 는 left/top/transform 을 쓰지 않는다 — 드래그·팬·줌·선 이동·반영/상태 변화에도 x·bottom 이 그대로다.
+    //   선 근처 후보·좌우 flip·커서 추종·상단 회피·가장자리 dock 이동 없음. «더보기»는 같은 아래 기준점에서 위로 펼친다(CSS max-height + 내부 스크롤).
     const wasHidden = bar.hidden;
     if (wasHidden) { bar.style.visibility = "hidden"; bar.hidden = false; }
     if (moreBtn && vm.kind === "select") {   // 보조 작업이 있거나 한 줄로 잘린 안내가 있을 때만 «더보기»(펼친 동안엔 «접기»)
@@ -406,65 +270,23 @@
       moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
       moreBtn.setAttribute("aria-label", open ? "보조 작업·전체 안내 접기" : "보조 작업·전체 안내 더보기");
     }
-    const size = { w: bar.offsetWidth, h: bar.offsetHeight };
-    const bounds = { l: sr.left - wr.left + MARGIN, t: sr.top - wr.top + MARGIN, r: sr.right - wr.left - MARGIN, b: sr.bottom - wr.top - MARGIN };
-    if (vm.kind === "draw") {   // 그리기 = 캔버스 가장자리 고정 자리(마지막 점·진행 방향을 비움 · 마지막 점이 화면 밖이어도 완료·취소는 보인다)
-      const d = dock({ bounds: bounds, size: size, last: tg.refs[0], prev: tg.prev, draft: tg.obstacles, pieces: tg.pieces, keep: dockIdx });
-      dockIdx = d.index;
+    bar.setAttribute("data-place", "bottom");
+    if (vm.kind === "draw") {
       setCompact(false, vm); bar.setAttribute("data-mode", "full");
-      const dx = Math.round(d.x), dy = Math.round(d.y);
-      if (!lastPos || lastPos.x !== dx || lastPos.y !== dy) { bar.style.left = dx + "px"; bar.style.top = dy + "px"; lastPos = { x: dx, y: dy }; }
-      bar.setAttribute("data-place", "dock-" + d.name);
-      bar.style.visibility = "";
-      if (hadFocus && !bar.contains(document.activeElement)) focusPrimary(vm);
-      return;
-    }
-    // 화면 안에 보이는 기준점만 쓴다. 기준점이 모두 밖이면 보이는 선 위 점 하나로 · 대상이 통째로 화면 밖(팬·줌)이면 막대도 숨김.
-    const vis = q => q.x >= bounds.l && q.x <= bounds.r && q.y >= bounds.t && q.y <= bounds.b;
-    let refs = tg.refs.filter(vis);
-    if (!refs.length) { const v = tg.obstacles.filter(vis); if (v.length) refs = [v[Math.floor(v.length / 2)]]; }
-    if (!refs.length) { bar.style.visibility = ""; hide(); return; }
-    const rk = resultKey(vm);
-    if (expandedKey && expandedKey !== rk) expandedKey = null;   // 다른 선·다른 결과(무효화·재분리)면 펼침 해제
-    // 붙박이(2026-11-10 재설계 · holdPlace): 같은 선 · 같은 결과/펼침 · 같은 창 크기 · 명시 화면 초기화 없음 → 자리·형태를 다시 고르지 않는다.
-    //   팬·줌·캔버스 높이(상태줄 증감)는 다시 고를 이유가 아니다(화면 안 clamp 만). 형태(전체/소형)도 그 결과에 대해 한 번만 정한다.
-    const winSig = (typeof window !== "undefined" ? window.innerWidth + "x" + window.innerHeight : "");
-    const modeSig = (rk || "") + "|" + (expandedKey || "");
-    const sameKey = !!(selKeep && selKeep.key === vm.key && selKeep.win === winSig && !selKeep.replace);
-    let fresh = false;
-    if (!sameKey || selKeep.modeSig !== modeSig) {
-      // 형태(전체/소형)는 결과·펼침이 바뀔 때만 한 번 정한다(전체 막대 크기로 빈자리 유무만 본다).
-      setCompact(false, vm);
-      const fs = { w: bar.offsetWidth, h: bar.offsetHeight };
-      const probe = place({ bounds: bounds, size: fs, refs: refs, obstacles: tg.obstacles });
-      const m = chooseMode(vm, probe.hits, expandedKey);
-      if (!sameKey) {   // 새 선·닫기 후 재열기·창 크기 변화·명시 화면 초기화 → 자리(home)를 새로 고른다
-        let home = probe;
-        if (m === "compact") {   // 줄인 크기로 배치 — 선·파트 둘레 후보 + 캔버스 네 모서리(빈 UI 자리) 중 가장 덜 가리는 곳
-          setCompact(true, vm);
-          const cs = { w: bar.offsetWidth, h: bar.offsetHeight };
-          home = place({ bounds: bounds, size: cs, refs: refs, obstacles: tg.obstacles,
-            extra: [{ x: bounds.l, y: bounds.t }, { x: bounds.r - cs.w, y: bounds.t }, { x: bounds.l, y: bounds.b - cs.h }, { x: bounds.r - cs.w, y: bounds.b - cs.h }] });
-        }
-        selKeep = { key: vm.key, win: winSig, x: home.x, y: home.y, dock: null };   // home = 처음 고른 자리(clamp 값으로 덮지 않음)
-        fresh = true;
+    } else {
+      const rk = resultKey(vm);
+      if (expandedKey && expandedKey !== rk) expandedKey = null;   // 다른 선·다른 결과(무효화·재분리)면 펼침 해제
+      // 형태(전체/소형)는 결과·펼침이 바뀔 때만 한 번 정한다: 분리 결과가 생겼는데 전체 패널이 파트를 덮으면 소형 상태줄로 시작(«도구»로 복귀).
+      const sig = (rk || "") + "|" + (expandedKey || "");
+      if (!modeMemo || modeMemo.key !== vm.key || modeMemo.sig !== sig) {
+        setCompact(false, vm);
+        const r = bar.getBoundingClientRect();
+        const hits = rk ? coverCount({ l: r.left - wr.left, t: r.top - wr.top, r: r.right - wr.left, b: r.bottom - wr.top }, tg.obstacles()) : 0;
+        modeMemo = { key: vm.key, sig: sig, mode: chooseMode(vm, hits, expandedKey) };
       }
-      selKeep.mode = m; selKeep.modeSig = modeSig;   // 같은 선의 결과 변화(미리보기 생김·사라짐)는 형태만 바꾸고 자리는 그대로
+      setCompact(modeMemo.mode === "compact", vm);
+      bar.setAttribute("data-mode", modeMemo.mode);
     }
-    const mode = selKeep.mode;
-    setCompact(mode === "compact", vm);
-    // 자리: home 을 clamp · 잡는 점을 가리면 가장자리 고정 자리(첫 배치에도 같은 규칙 → 손 뗀 뒤 두 번 움직이지 않음)
-    //   «더보기»로 펼친 동안(사용자가 연 크기 변화)은 자리를 옮기지 않는다 — 화면 안 clamp 만(가장자리 이동·좌우 flip 없음 · 2026-11-11).
-    const opened = moreKey === vm.key;
-    const hp = holdPlace({ keep: selKeep, bounds: bounds, size: { w: bar.offsetWidth, h: bar.offsetHeight }, grab: opened ? [] : tg.grab, line: opened ? [] : tg.essential });
-    selKeep.dock = hp.dock;
-    const pos = { x: hp.x, y: hp.y };
-    const how = hp.dock != null ? "dock" : fresh ? "placed" : "kept";
-    bar.setAttribute("data-mode", mode);
-    bar.setAttribute("data-keep", how);
-    const x = Math.round(pos.x), y = Math.round(pos.y);
-    if (!lastPos || lastPos.x !== x || lastPos.y !== y) { bar.style.left = x + "px"; bar.style.top = y + "px"; lastPos = { x: x, y: y }; }
-    bar.setAttribute("data-place", how === "dock" ? "dock-" + DOCKS[selKeep.dock] : "home");
     bar.style.visibility = "";
 
     // 포커스가 막대 안에 있었는데 그 버튼이 숨겨졌으면(완료 → 역할 단계) 지금 단계의 주 버튼으로 옮긴다.
@@ -588,27 +410,24 @@
     // 소형 상태줄 «도구» = 이 결과에 대해 전체 막대(역할·파트 분리)로 복귀.
     if (expandBtn) expandBtn.addEventListener("click", () => { const vm = describe(snapshot()); expandedKey = resultKey(vm); sync();
       const t = roleBtns.filter(b => b.getAttribute("aria-pressed") === "true" && !b.disabled)[0]; if (t) { try { t.focus({ preventScroll: true }); } catch (_) { t.focus(); } } });
-    dismissBtn.addEventListener("click", () => { const vm = describe(snapshot()); if (vm && vm.kind === "select") { dismissedKey = vm.key; selKeep = null; hide(); } });   // 닫기 → 다시 열면 새로 고름
+    dismissBtn.addEventListener("click", () => { const vm = describe(snapshot()); if (vm && vm.kind === "select") { dismissedKey = vm.key; hide(); } });   // 닫기 = 패널만 접는다(선·선택·역할 보존) · 캔버스를 다시 누르면 같은 자리에 다시 보임
 
-    // 캔버스 드래그 중 숨김 · 손 떼면 재계산. 캔버스를 누르면 «접기» 해제(같은 선 재선택에도 다시 보임).
+    // 캔버스 드래그 중에는 패널 내용·자리를 고정 · 손 떼면 한 번 갱신. 캔버스를 누르면 «접기» 해제(같은 선 재선택에도 다시 보임).
     const cv = (typeof svg !== "undefined" && svg) ? svg : document.getElementById("cv");
     if (cv) cv.addEventListener("pointerdown", e => { press = { x: e.clientX, y: e.clientY, id: e.pointerId }; dismissedKey = null; expandedKey = null; }, true);
     window.addEventListener("pointermove", e => {
       if (!press || dragging) return;
-      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > DRAG_PX) { dragging = true; hide(); }
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > DRAG_PX) dragging = true;   // 숨기지 않는다(하단 고정)
     }, true);
     const release = () => { if (!press) return; press = null; if (dragging) { dragging = false; sync(); } };
     window.addEventListener("pointerup", release, true);
     window.addEventListener("pointercancel", release, true);
-    // 명시적 화면 초기화(헤더 «화면 초기화» = resetView)만 같은 선 동안에도 자리를 한 번 다시 고른다(팬·줌은 안 고름).
-    document.querySelectorAll('button[onclick^="resetView"]').forEach(btn => btn.addEventListener("click", () => { if (selKeep) { selKeep.replace = true; sync(); } }));
-    // 캔버스 크기 변화(창·패널 리사이즈)에는 render 없이도 위치만 다시 맞춘다.
-    // 막대 자체 크기 변화(글꼴·단계 전환으로 높이가 바뀜)도 다시 맞춘다 — sync 는 left/top 만 바꿔 크기를 안 바꾸므로 되먹임 루프 없음.
-    if (typeof ResizeObserver !== "undefined" && bar.parentElement) { const ro = new ResizeObserver(() => sync()); ro.observe(bar.parentElement); ro.observe(bar); }
+    // 캔버스 크기 변화(창·사이드바·회전)에는 render 없이도 내용(잘린 안내 «더보기» 여부)만 다시 맞춘다. 자리는 CSS 가 정한다.
+    if (typeof ResizeObserver !== "undefined" && bar.parentElement) { const ro = new ResizeObserver(() => sync()); ro.observe(bar.parentElement); }
     sync();
   }
 
-  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, place: place, keepPlace: keepPlace, holdPlace: holdPlace, dock: dock, chooseMode: chooseMode, resultKey: resultKey,
+  window.designLineQuickBar = Object.freeze({ sync: () => { try { sync(); } catch (_) { hide(); } }, describe: describe, coverCount: coverCount, chooseMode: chooseMode, resultKey: resultKey,
     viewModel: () => describe(snapshot()), actSplit: actSplit, actBoundary: actBoundary, actBoundaryApply: actBoundaryApply, actReflect: actReflect,
     actCompleteBodice: actCompleteBodice });
   if (typeof document !== "undefined") {
