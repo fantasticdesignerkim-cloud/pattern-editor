@@ -3459,6 +3459,10 @@
     const id = window.designLineTool.nextId(ls);
     ls.push({ id: id, piece: "collar", role: "boundary", managedBy: "collar-body", segments: lc.segments });
     cd.body.mode = "manual"; cd.body.lineId = id; cd.body.invalid = false; cd.body.invalidReason = null; cd.body.manualLocked = lc.locked;
+    // 2026-11-11 김님 «M 기본형 적용했는데 선 수정이 안 된다»: 관리선만 만들고 선택·편집 모드로 들어가지 않아, 아래 «선택·편집»을
+    //   따로 켜기 전엔 칼라를 눌러도 아무 일이 없었다. 바로 선택·편집으로 들어간다(작성 중 그리기는 버리지 않음 · 형상·잠금 무변경).
+    const T = window.designLineTool;
+    if (T.getMode() !== "select" && !(T.getMode() === "draw" && T.getDraft())) T.setMode("select");
     if (typeof render === "function") render();
     updateCollarBodyPanel(project);
   }

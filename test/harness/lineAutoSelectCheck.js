@@ -667,6 +667,15 @@ function autoPlace(P) { const a = DLy.autoLayout(P.working.geometry, W.sleeveAnn
   ok(iL > 0 && iL < iF && iF < iS, "9: 기존 도구 줄(그리기 · 완료 · 선택·편집) 안에 배치");
 }
 
+// 2026-11-11 김님 «카라 M 기본형 적용했는데 선 수정이 안 된다»: «본체 직접 수정»은 관리선을 만든 뒤 바로 선택·편집 모드로 들어간다
+//   (작성 중 그리기는 버리지 않음). 이전엔 아래 «선택·편집»을 따로 켜기 전까지 칼라를 눌러도 아무 일이 없었다.
+{
+  const U = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), at = U.indexOf("function onCollarBodyManual()"), end = U.indexOf("function onCollarBodyRevert()", at);
+  const body = U.slice(at, end);
+  ok(at > 0 && /if \(T\.getMode\(\) !== "select" && !\(T\.getMode\(\) === "draw" && T\.getDraft\(\)\)\) T\.setMode\("select"\);/.test(body)
+    && body.indexOf('T.setMode("select")') > body.indexOf('managedBy: "collar-body"'), "collar-manual: 본체 직접 수정 → 관리선 생성 뒤 선택·편집 모드 진입(그리기 중 draft 보존)");
+}
+
 console.log("  원래 외곽 밖 파생 표본점(앞+뒤): " + Object.entries(EXT_SEEN).map(([k, v]) => k + " " + v).join(" · "));
 console.log("lineAutoSelectCheck: " + PASS + " passed, " + FAIL + " failed");
 if (FAIL) { fails.slice(0, 40).forEach(f => console.log("  FAIL " + f)); process.exit(1); }
