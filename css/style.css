@@ -517,6 +517,24 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .lqb-reason:empty{display:none}
 .line-quickbar[data-kind="select"]:not([data-more="open"]) .lqb-next .lqb-reason{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lqb-next[data-state="ok"] .lqb-reason,.lqb-next[data-state="done"] .lqb-reason{color:var(--lqb-ok)}
+.lqb-next[data-state="editing"] .lqb-reason{color:var(--lqb-label2);font-style:italic}   /* 드래그 중 = 놓아야 확정되는 판정(현재값인 척 안 함) */
+/* 접힌 패널 높이 맞춤(2026-11-11 · JS applyFit 이 캔버스 높이 25% 예산으로 정함): dense = 한 줄 안내(제목·역할·사유) + [주 작업 | 더보기·닫기] 한 줄.
+   버튼은 44px 그대로 · 잘라내지 않는다(글자만 말줄임) · 역할·상세는 «더보기»(펼치면 종전 배치로 위로 열림 + 내부 스크롤). */
+.line-quickbar[data-fit="dense"]:not([data-more="open"]){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:6px;row-gap:0}
+.line-quickbar[data-fit="dense"]:not([data-more="open"]) .lqb-head{display:contents}
+.line-quickbar[data-fit="dense"]:not([data-more="open"]) .lqb-title{grid-column:1/-1;grid-row:1;padding:2px 4px 4px;font-size:12px;line-height:16px}
+.line-quickbar[data-fit="dense"]:not([data-more="open"]) .lqb-head-actions{grid-column:2;grid-row:2}
+.line-quickbar[data-fit="dense"]:not([data-more="open"])>.lqb-row:not([hidden]),.line-quickbar[data-fit="dense"]:not([data-more="open"])>.lqb-next:not([hidden]){grid-column:1;grid-row:2;min-width:0;flex-direction:row;flex-wrap:nowrap;border-top:0;padding-top:0}
+.line-quickbar[data-fit="dense"]:not([data-more="open"]) .lqb-reason{display:none}
+.line-quickbar[data-fit="dense"]:not([data-more="open"]) .lqb-btn{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.line-quickbar[data-fit="dense"]:not([data-more="open"]) .lqb-row[data-lqb="role"] .lqb-btn{font-size:13px;padding:8px 4px}
+/* row = 낮은 가로 화면: [안내(말줄임) | 주 작업 | 더보기·닫기] 한 줄 · 버튼 44px 그대로 */
+.line-quickbar[data-fit="row"]:not([data-more="open"]){display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;column-gap:6px}
+.line-quickbar[data-fit="row"]:not([data-more="open"]) .lqb-head{display:contents}
+.line-quickbar[data-fit="row"]:not([data-more="open"]) .lqb-title{grid-column:1;grid-row:1;padding:0 4px;font-size:12px;line-height:16px}
+.line-quickbar[data-fit="row"]:not([data-more="open"]) .lqb-head-actions{grid-column:3;grid-row:1}
+.line-quickbar[data-fit="row"]:not([data-more="open"])>.lqb-row:not([hidden]),.line-quickbar[data-fit="row"]:not([data-more="open"])>.lqb-next:not([hidden]){grid-column:2;grid-row:1;flex-direction:row;flex-wrap:nowrap;border-top:0;padding-top:0}
+.line-quickbar[data-fit="row"]:not([data-more="open"]) .lqb-reason{display:none}
 .lqb-detail{padding:6px 8px;border-radius:10px;background:var(--lqb-fill);color:var(--lqb-label)}
 .lqb-next[data-lqb="seam"]{gap:2px}
 /* 소형 상태줄(분리 결과 확인 · 좁은 화면에서 빈자리가 없을 때만): 글 + «도구» 44px. 도구 버튼을 줄이지 않는다. */

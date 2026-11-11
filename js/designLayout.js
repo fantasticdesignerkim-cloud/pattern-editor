@@ -503,6 +503,15 @@
     });
     document.addEventListener("keydown", e => { if (e.code === "Space") spaceHeld = true; });
     document.addEventListener("keyup", e => { if (e.code === "Space") spaceHeld = false; });
+    // 창 전환·탭 숨김에서 keyup 을 못 받아 Space 가 눌린 채 남으면 복귀 후 조각 드래그가 먹통 → 해제(2026-11-11).
+    window.addEventListener("blur", () => { spaceHeld = false; });
+    document.addEventListener("visibilitychange", () => { if (document.hidden) spaceHeld = false; });
+    // 두 번째 손가락(핀치·두 손가락 팬) = 진행 중 조각 배치 드래그를 시작 자리로 되돌리고 끝낸다.
+    if (window.canvasPan) window.canvasPan.onMultiTouch(() => {
+      if (!drag) return; const p = currentProject();
+      if (p) { const L = ensureLayout(p); L[drag.piece].dx = drag.dx0; L[drag.piece].dy = drag.dy0; if (drag.place0 !== undefined) L.placement[drag.piece] = drag.place0; }
+      cancelLayoutDrag(); if (typeof render === "function") render();
+    });
     svg.addEventListener("pointerdown", e => {
       if (e.button !== 0 || spaceHeld || !inDesign()) return;
       if (!layoutDragAllowed()) return;   // ★ 선 도구가 off 일 때만 배치 드래그 시작(강한 게이트)
@@ -511,7 +520,7 @@
       const piece = hit.getAttribute("data-layout-piece");
       const p = currentProject(); if (!p || PIECES.indexOf(piece) < 0) return;
       const L = ensureLayout(p);
-      drag = { piece, pointerId: e.pointerId, x: e.clientX, y: e.clientY, dx0: L[piece].dx, dy0: L[piece].dy };
+      drag = { piece, pointerId: e.pointerId, x: e.clientX, y: e.clientY, dx0: L[piece].dx, dy0: L[piece].dy, place0: L.placement ? L.placement[piece] : undefined };
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       e.stopPropagation();
     });

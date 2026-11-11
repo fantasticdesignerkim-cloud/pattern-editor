@@ -53,7 +53,7 @@ ok(Object.keys(locks).every(k => { const v = D({ design: true, mode: "select", s
   ok(!/function (place|keepPlace|holdPlace|dock)\(|DOCKS|selKeep|dockIdx|lastPos/.test(CODE), "2d: 옛 배치 상태·후보 계산 잔재 없음");
   ok(!/\.style\.(left|top|right|bottom|transform)\s*=/.test(CODE), "2e: JS 는 패널 좌표를 쓰지 않는다(자리 = CSS)");
   ok(!/clientX|clientY/.test(CODE.slice(CODE.indexOf("function sync("), CODE.indexOf("function setCompact("))), "2f: sync 는 커서 좌표를 읽지 않음(커서 추종 없음)");
-  ok(/if \(dragging && vm && !bar\.hidden\) return;/.test(CODE) && !/dragging = true; hide\(\)/.test(CODE), "2g: 드래그·팬 중 숨기지 않고 그대로(손 떼면 한 번 갱신)");
+  ok(/if \(dragging && vm && !bar\.hidden\) \{ liveText\(vm\); return; \}/.test(CODE) && !/dragging = true; hide\(\)/.test(CODE), "2g: 드래그·팬 중 숨기지 않고 행 구성 그대로 · 글자만 현재값(손 떼면 한 번 갱신)");
 }
 
 { // 2h(2026-11-11 Codex 후속): Space+드래그 팬(init.js)은 같은 svg pointerdown — 선 도구가 선택 해제·점 추가를 하지 않는다(하단 패널 가림 회복용 팬)
@@ -69,7 +69,7 @@ ok(cvAt > 0 && barAt > cvAt && barAt < mainEnd, "3a: 막대는 #cv 뒤 형제(ca
 ok(["lineQuickTitle", "lineQuickDismiss", "lineQuickCancel", "lineQuickFinish", "lineQuickRoleCut", "lineQuickRoleBoundary", "lineQuickRoleGuide"].every(id => html.indexOf('id="' + id + '"') > 0), "3b: 막대 요소 정적 마크업(재생성 없음)");
 ok(/id="btnDesignLine"[^>]*onclick="designLineTool\.toggle\(\)"/.test(html) && /id="btnDesignFinish"[^>]*onclick="designLineTool\.finishDraw\(\)"/.test(html) && /id="btnRoleCut"[^>]*onclick="designLineTool\.setRole\('cut'\)"/.test(html) && /id="btnDesignSelect"[^>]*onclick="designLineTool\.toggleSelect\(\)"/.test(html), "3c: 기존 오른쪽 버튼 id·onclick 보존");
 const calls = (CODE.match(/T\.(\w+)\(/g) || []).map(s => s.slice(2, -1)).filter((v, i, arr) => arr.indexOf(v) === i).sort();
-const READ = ["getReflectState", "getSeamState", "canFinishDraw", "findLine", "getBoundaryState", "getDraft", "getMode", "getSelectedId", "getSplitState", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine", "getDrawHint"], CMD = ["cancel", "doReflectToBodice", "doBoundaryApply", "doBoundaryPreview", "doSleeveEditUndo", "doSplit", "finishDraw", "setRole"];   // 2026-11-06 소매 «외곽 반영»·«반영 되돌리기»(오른쪽 버튼과 같은 명령)
+const READ = ["getReflectState", "getSeamState", "canFinishDraw", "findLine", "getBoundaryState", "getDraft", "getMode", "getSelectedId", "getSplitState", "isCollarBodyLine", "isNeckAutoLine", "isSleeveCapLine", "getDrawHint", "getSeamLive", "isEditDragging"], CMD = ["cancel", "doReflectToBodice", "doBoundaryApply", "doBoundaryPreview", "doSleeveEditUndo", "doSplit", "finishDraw", "setRole"];   // 2026-11-06 소매 «외곽 반영»·«반영 되돌리기»(오른쪽 버튼과 같은 명령)
 ok(calls.every(f => READ.concat(CMD).indexOf(f) >= 0) && CMD.every(f => calls.indexOf(f) >= 0), "3d: 도구 호출 = 읽기 + 기존 명령(finishDraw·cancel·setRole·doSplit·doBoundaryPreview·doBoundaryApply·doSleeveEditUndo)뿐 [" + calls.join(",") + "]");
 ok(!/patternLines|\.role\s*=[^=]|localStorage|innerHTML|makePatternLine|setMode\(/.test(CODE), "3e: 선 생성·역할 대입·저장·innerHTML·모드 직접 전환 없음");
 const R = fs.readFileSync(path.join(ROOT, "js/render.js"), "utf8");
@@ -77,7 +77,7 @@ const ret = R.indexOf("return; // 라이브 원형 draw"), syncAt = R.lastIndexO
 ok(syncAt > hitAt && hitAt > 0, "3f: design render 는 선·overlay·hit 을 그린 뒤 막대 sync(그려진 SVG 기준)");
 ok(/afterDraftRender\(\);\s*\n\s*if\(window\.designLineQuickBar\) window\.designLineQuickBar\.sync\(\);/.test(R), "3g: design 밖 render 도 sync(→ 숨김)");
 const ver = f => { const m = new RegExp(f.replace(/\./g, "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
-ok(ver("designLineQuickBar.js") === "2026111104" && ver("designLineTool.js") === "2026111101" && ver("render.js") === "2026111005" && /css\/style\.css\?v=2026111103/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
+ok(ver("designLineQuickBar.js") === "2026111108" && ver("designLineTool.js") === "2026111105" && ver("render.js") === "2026111005" && /css\/style\.css\?v=2026111107/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
 ok(html.indexOf('<script src="js/designLineQuickBar.js') > html.indexOf('<script src="js/designLineTool.js'), "3i: 막대 스크립트는 designLineTool 뒤");
 // 2026-11-08 김님 방향 전환: 자동 길이 보정 UI(길이 맞춤·후보·맞춤 반영·옆선 자석·여유/셔링·기준판) 사용자 노출 없음 — 마크업·막대 호출·설정 패널 모두
 ok(!/lineQuickSeamFit|lineQuickSeamToggle|lineQuickEase|selSeamIntent|inpSeamEase|btnApplySeamIntent|selSeamBasis|chkSeamMagnet|길이 맞춤|맞춤 반영|옆선 자석|셔링/.test(html.replace(/<!--[\s\S]*?-->/g, "")), "3j: 자동 길이 보정 UI 마크업 없음(주석 제외)");
@@ -128,6 +128,20 @@ ok(/splitBtn\.addEventListener\("click", \(\) => \{ actSplit\(\); \}\)/.test(COD
   ok(/\.lqb-head\{position:sticky;top:0;/.test(css), "9d: 패널 안 스크롤 중에도 머리줄(더보기·닫기) 고정");
   ok(/@media \(max-width:615px\)\{\s*\.line-quickbar\{left:0;right:0;bottom:0;transform:none;width:auto;[\s\S]{0,200}padding:0 12px calc\(8px \+ env\(safe-area-inset-bottom,0px\)\)/.test(css), "9e: 좁은 화면 = 하단 시트(좌우 꽉 · safe-area 여백)");
   ok(!/\.line-quickbar[^{]*\{[^}]*transition:[^}]*(left|top|transform)/.test(css), "9f: 위치 애니메이션 없음");
+}
+
+// §10 접힌 패널 높이 맞춤·드래그 중 글자·빈 사유(2026-11-11 김님 리뷰 보완)
+{
+  const css = fs.readFileSync(path.join(ROOT, "css", "style.css"), "utf8");
+  ok(/const FIT_RATIO = 0\.25;/.test(CODE) && /bar\.scrollHeight <= budget/.test(CODE), "10a: 접힌 패널 예산 = 캔버스 높이 25%(실제 내용 높이로 판정)");
+  ok(/data-fit", "lean"/.test(CODE) && /data-fit", "dense"/.test(CODE) && /moreBtn\.setAttribute\("data-extra", "1"\); moreBtn\.hidden = false;/.test(CODE), "10b: full → lean(역할·상세를 «더보기»로 · 더보기 보장) → dense 단계");
+  ok(/data-mode"\) === "compact" \|\| bar\.getAttribute\("data-more"\) === "open"\) return;/.test(CODE), "10c: «더보기» 펼침·소형 상태줄은 맞춤 대상 아님(펼침 = 종전 위로 열림 + 내부 스크롤)");
+  ok(/" · 역할 " \+ \(ROLE_LABEL\[vm\.role\]/.test(CODE) && /main = primary \|\| \(seamRow && !seamRow\.hidden \? seamRow : roleRow\)/.test(CODE), "10d: 역할을 접어도 머리줄에 현재 역할 · 다음 단계가 없으면 역할 선택이 주 작업");
+  ok(/\.line-quickbar\[data-fit="dense"\]:not\(\[data-more="open"\]\)\{display:grid/.test(css) && !/data-fit[^{]*\{[^}]*max-height/.test(css) && /data-fit="dense"\][^{]*\.lqb-btn\{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis\}/.test(css), "10e: dense = 그리드 한 줄(버튼 44px 유지 · 글자만 말줄임) · max-height 로 버튼을 감추지 않음");
+  ok(/data-fit", "row"\);\s*if \(fits\(\) && titleEl\.clientWidth >= 96 && bar\.scrollWidth <= bar\.clientWidth \+ 1\) return;\s*bar\.setAttribute\("data-fit", "dense"\);/.test(CODE) && /\.line-quickbar\[data-fit="row"\]:not\(\[data-more="open"\]\)\{display:grid;grid-template-columns:minmax\(0,1fr\) auto auto/.test(css), "10e2: 낮은 가로 화면 = 한 줄(row) · 안내 칸 96px 미만·가로 넘침이면 dense 유지");
+  ok(/function liveText\(vm\)/.test(CODE) && !/liveText[\s\S]{0,1600}\.hidden = /.test(CODE.slice(CODE.indexOf("function liveText"), CODE.indexOf("function applyFit"))), "10f: 드래그 중 = 글자만 갱신(행 숨김·형태 불변 → 포커스·자리 유지)");
+  ok(/if \(!editing\) return;/.test(CODE) && /el\.textContent = EDIT_NOTE; row\.setAttribute\("data-state", "editing"\)/.test(CODE) && /failsEl\.textContent = EDIT_NOTE;/.test(CODE), "10g: 편집 드래그 중 놓아야 확정되는 판정 = «편집 중» 표시(팬·핀치 중엔 글자 그대로)");
+  ok(/fl\.length \? "몸판 완료 막힘 " \+ fl\.length \+ "건" : "몸판 완료 막힘 · 검사가 사유를 돌려주지 않음/.test(CODE) && /completeBtn\.hidden = !\(ok && pend\)/.test(CODE), "10h: 사유 없는 막힘 = «0건»·빈 목록 대신 검사 결과 문구 · 완료 버튼은 그대로 숨김(게이트 완화 없음)");
 }
 
 console.log("══════════════════════════════════════════════");

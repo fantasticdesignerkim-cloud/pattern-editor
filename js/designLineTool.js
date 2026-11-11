@@ -742,6 +742,7 @@
   function pxToCm() { const s = SC * viewZ; return s > 0 ? 1 / s : 1; }
   function ensurePatternLines(p) { if (!Array.isArray(p.working.patternLines)) p.working.patternLines = []; return p.working.patternLines; }
   function setNote(m) { const el = document.getElementById("designLineNote"); if (el) el.textContent = m; }
+  function noteText() { const el = document.getElementById("designLineNote"); return el ? el.textContent : ""; }
   // draw 상태가 바뀌는 모든 경로(점 추가·Backspace·Esc·완료·모드 전환)가 rerender 를 부르므로 «그리기 완료» 활성도 여기서 함께 맞춘다.
   function rerender() { syncFinishButton(); if (typeof render === "function") render(); }
   function syncButtons() {
@@ -1793,7 +1794,7 @@
       if (line && line.piece === piece && (!only || only(line))) {
         // 핸들 먼저(위에 그려짐)
         const hs = handlesOf(line);
-        for (const h of hs) if (Math.hypot(geo.x - h.c.x, geo.y - h.c.y) < rCm) { editDrag = { kind: "handle", seg: h.seg, which: h.which }; return; }
+        for (const h of hs) if (Math.hypot(geo.x - h.c.x, geo.y - h.c.y) < rCm) { editDrag = { kind: "handle", seg: h.seg, which: h.which, orig: JSON.parse(JSON.stringify(line.segments)) }; return; }   // orig = 두 손가락 전환 시 되돌리기(2026-11-11)
         const as = anchorsFromSegments(line.segments);
         for (let k = 0; k < as.length; k++) if (Math.hypot(geo.x - as[k].x, geo.y - as[k].y) < rCm) {
           if (isSleeveCapLine(line) && (k === 0 || k === as.length - 1)) { setNote("소매산 진동밑점은 고정됩니다 · SP·중간 anchor·핸들만 편집"); return; }   // 진동밑 endpoint 고정
@@ -1901,22 +1902,39 @@
         }
         // 새 anchor 는 snap 적용(같은 피스 · working geometry 기준 · Alt 해제).
         const placeGeo = pc => { const g = geoAt(e, pc); const s = snapForCursor(g, pc, e.altKey, null); snapHint = s ? { piece: pc, point: s.point, type: s.type } : null; return s ? { x: s.point.x, y: s.point.y } : g; };
+        // 2026-11-11: 조각 밖 누름은 점을 찍지 않는다 → 끌면 화면 이동(canvasPan) · 그냥 클릭이면 종전 안내(그리기 우선 · 작성 중 선 보존).
+        const CP = window.canvasPan;
         if (!draft) {
-          if (!piece) { setNote("피스 위를 클릭하세요"); return; }
+          if (!piece) { if (CP && CP.press(e, () => { setNote("피스 위를 클릭하세요"); rerender(); })) { e.stopPropagation(); return; } setNote("피스 위를 클릭하세요"); return; }
           draft = { piece: piece, anchors: [{ p: placeGeo(piece), h: null }] }; setNote(DRAW_NOTE);
         } else if (piece !== draft.piece) {   // 거부: 점 안 찍힘 — 이유를 막대에도(좁은 화면은 오른쪽 안내가 안 보임)
-          setNote("같은 피스 안에서 이어 그리세요");
-          drawHint = "점이 찍히지 않음 — " + ({ front: "앞판", back: "뒤판", sleeve: "소매", collar: "카라" }[draft.piece] || "같은 조각") + " 안을 누르세요(다른 조각·바깥은 이어 그릴 수 없음)";
-          if (window.designLineQuickBar) window.designLineQuickBar.sync(); return;
+          const reject = () => {
+            setNote("같은 피스 안에서 이어 그리세요");
+            drawHint = "점이 찍히지 않음 — " + ({ front: "앞판", back: "뒤판", sleeve: "소매", collar: "카라" }[draft.piece] || "같은 조각") + " 안을 누르세요(다른 조각·바깥은 이어 그릴 수 없음)";
+            if (window.designLineQuickBar) window.designLineQuickBar.sync();
+          };
+          if (!piece && CP && CP.press(e, () => { if (draft) reject(); })) { e.stopPropagation(); return; }   // 조각 밖 = 끌면 팬 · 클릭이면 거부 안내
+          reject(); return;
         }
         else { draft.anchors.push({ p: placeGeo(draft.piece), h: null }); setNote(DRAW_NOTE); }
         drawHint = null; hoverPt = null;   // 새 점 확정 → 커서가 다시 움직이기 전까지는 «마지막 구간» 표시(터치에도 보임)
         lastDown = { t: now, x: e.clientX, y: e.clientY };
-        drawDrag = { startX: e.clientX, startY: e.clientY };
+        drawDrag = { startX: e.clientX, startY: e.clientY, pointerId: e.pointerId, created: draft.anchors.length === 1 };
       } else { // select
         const selPiece = resolveSelectPiece(e, piece);   // 조각 hit rect 밖으로 휜 선·핸들도 화면 위치 그대로 선택(전역 rect 없음)
-        if (!selPiece) { selectedId = null; editDrag = null; setNote(SELECT_NOTE); }
+        // 2026-11-11 빈 곳(선·핸들·anchor 어느 것도 안 맞음) 누름: 끌면 화면 이동(선택 보존) · 그냥 클릭이면 종전대로 선택 해제.
+        //   판정은 종전 selectDown 그대로 — 맞은 게 없을 때(해제 결과 · 편집 드래그 없음)만 해제를 클릭 시점으로 미룬다. canvasPan 없으면 종전 즉시 해제.
+        const prevSel = selectedId, prevNote = noteText();
+        if (!selPiece) { selectedId = null; editDrag = null; }
         else selectDown(e, selPiece, geoAt(e, selPiece), selPiece !== piece ? pickableLine : null);   // 보정 피스에서는 보정 대상 선만
+        const CP = window.canvasPan;
+        if (!selectedId && !editDrag && CP) {
+          selectedId = prevSel; setNote(prevNote);
+          const tap = () => { selectedId = null; editDrag = null; setNote(SELECT_NOTE); syncRoleButtons(); syncCutStatus(); rerender(); };
+          if (CP.press(e, tap)) { e.stopPropagation(); return; }
+          tap(); e.stopPropagation(); return;
+        }
+        if (!selectedId && !editDrag) setNote(SELECT_NOTE);
         seamBegin();                          // 옆선 자석 문맥(편집 드래그 시작 때 한 번 — 매 프레임 재합성 없음)
         syncRoleButtons(); syncCutStatus();   // 선택 변화 → 역할 버튼·절개 검사 갱신
       }
@@ -1963,6 +1981,18 @@
     };
     svg.addEventListener("pointerup", endDrag);
     svg.addEventListener("pointercancel", endDrag);
+    // 두 번째 손가락(핀치·두 손가락 팬 · canvasPan) = 한 손가락으로 시작한 편집·점 추가를 되돌린다 — 핀치가 형상 좌표를 바꾸지 않게(2026-11-11).
+    if (window.canvasPan) window.canvasPan.onMultiTouch(() => {
+      if (mode === "select" && editDrag) {
+        const l = findLine(selectedId); if (l && editDrag.orig) l.segments = JSON.parse(JSON.stringify(editDrag.orig));
+        editDrag = null; snapHint = null; lastHandleGeo = null; _handleShift = false; seamCtx = null; seamLive = null; seamStateCache = null;
+        setNote("두 손가락 = 화면 이동·확대 — 편집 드래그 취소(선은 원래대로)"); rerender();
+      } else if (mode === "draw" && drawDrag && draft) {
+        if (drawDrag.created) draft = null; else draft.anchors.pop();
+        drawDrag = null; lastDown = null; snapHint = null; lastHandleGeo = null; _handleShift = false; hoverPt = null;
+        setNote("두 손가락 = 화면 이동·확대 — 방금 찍힌 점 취소"); rerender();
+      }
+    });
     // Shift 즉시 반영: 핸들 드래그 중(마우스 정지 상태 포함) Shift 누름/뗌에 각도 고정/해제.
     let _handleShift = false;
     function onShift(shift) {
@@ -2145,7 +2175,7 @@
     doSplit, invalidateParts, visibleParts, pruneStaleSleeveParts, doBoundaryPreview, doBoundaryApply, doSleeveEditUndo, validateSelectedBoundary, doComposeDesignOutline,
     getBoundaryState, visibleBoundaryPreview, boundaryStatusOf, pruneStaleBoundaryPreview,
     // 옆선 길이 자석(2026-11-06)
-    getSeamState, getSeamLive, getReflectState, doReflectToBodice, sideSeamLabels, getMeasureGuide, measureAlong: alongExisting, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
+    getSeamState, getSeamLive, isEditDragging: () => !!(editDrag && mode === "select"), getReflectState, doReflectToBodice, sideSeamLabels, getMeasureGuide, measureAlong: alongExisting, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
     // 옆선 «길이 맞춤»(2026-11-07) · 그리기 중 거부 안내
     getSeamFit, getSeamFitPreview, previewSeamFit, applySeamFit, cancelSeamFit, getDrawHint: () => (mode === "draw" && draft ? drawHint : null),
     // 순수

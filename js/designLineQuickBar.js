@@ -31,7 +31,10 @@
   const PIECE_LABEL = { front: "앞판", back: "뒤판", sleeve: "소매", collar: "카라" };
   const LOCK_TITLE = { neck: "네크라인 전용선 · 역할 고정", cap: "소매산 관리선 · 역할 고정", collar: "칼라 본체 관리선 · 역할 고정" };
   const PAD = 12;        // 가림 판정 여유(막대 사각형을 이만큼 키워 점이 들어오면 «가림»)
-  const DRAG_PX = 4;     // 이 이상 움직이면 캔버스 드래그로 본다(패널 내용 고정 · designLineTool DRAG_PX 와 같은 값)
+  const DRAG_PX = 4;     // 이 이상 움직이면 캔버스 드래그로 본다(패널 자리·행 구성 고정 · designLineTool DRAG_PX 와 같은 값)
+  const FIT_RATIO = 0.25; // 접힌 패널 높이 예산 = 캔버스 높이의 25%(2026-11-11 김님 리뷰 «20~25% 이내»)
+  const ROLE_LABEL = { cut: "절개선", boundary: "외곽", guide: "보조선" };
+  const EDIT_NOTE = "편집 중 · 손을 떼면 다시 검사합니다";   // 드래그 중: 놓을 때만 확정되는 판정은 현재값인 척 보이지 않는다
 
   // ── 순수: 도구 상태 → 막대 표시 모델 ──
   // s = {design, mode, draft:{piece,n}|null, canFinish, sel:{id,piece,role,lock}|null}
@@ -174,7 +177,8 @@
     if (!vm || vm.kind !== "select") modeMemo = null;   // 선택이 끝나면(해제·그리기) 형태 기억을 버린다
     if (!vm || vm.kind !== "select" || (moreKey && moreKey !== vm.key)) moreKey = null;   // 선택이 끝나거나 다른 선이면 «더보기» 펼침 해제
     // 캔버스 드래그·팬·핀치 중에는 패널을 그대로 둔다(숨기지도 다시 그리지도 않음 — 하단 고정이라 움직일 이유가 없다). 손을 떼면 한 번 갱신.
-    if (dragging && vm && !bar.hidden) return;
+    //   2026-11-11: 단, 같은 대상이면 글자만 현재값으로(옆선 실시간 길이) — 행 숨김·형태·자리는 그대로(포커스·드래그 안 끊김).
+    if (dragging && vm && !bar.hidden) { liveText(vm); return; }
     if (!vm || (vm.kind === "select" && dismissedKey === vm.key)) { hide(); return; }
     const wrap = bar.parentElement; if (!wrap) { hide(); return; }
     const wr = wrap.getBoundingClientRect();
@@ -287,11 +291,68 @@
       setCompact(modeMemo.mode === "compact", vm);
       bar.setAttribute("data-mode", modeMemo.mode);
     }
+    applyFit(vm, wrap);
     bar.style.visibility = "";
 
     // 포커스가 막대 안에 있었는데 그 버튼이 숨겨졌으면(완료 → 역할 단계) 지금 단계의 주 버튼으로 옮긴다.
     if (hadFocus && !bar.contains(document.activeElement)) focusPrimary(vm);
     else if (hadFocus && document.activeElement && document.activeElement.closest("[hidden]")) focusPrimary(vm);
+  }
+  // 드래그 중 글자 갱신(2026-11-11): 행 구성·숨김·형태는 손대지 않는다. 실시간 계측(옆선 live)만 현재값,
+  //   손을 떼야 확정되는 판정(분리·외곽 대체·반영 가능 여부·몸판 완료 검사)은 «편집 중»으로 표시(이전 판정을 현재값처럼 두지 않음).
+  function liveText(vm) {
+    if (bar.getAttribute("data-kind") !== vm.kind) return;
+    const T = tool(), editing = vm.kind === "select" && !!(T && T.isEditDragging && T.isEditDragging());
+    if (vm.kind === "draw") {
+      if (bar.getAttribute("data-fit") !== "dense") titleEl.textContent = vm.title;
+      finishBtn.disabled = !vm.canFinish; finishBtn.setAttribute("aria-disabled", vm.canFinish ? "false" : "true");
+      return;
+    }
+    if (!editing) return;                              // 화면 이동·핀치 = 값 변화 없음 → 글자도 그대로
+    const live = vm.seam && T.getSeamLive && T.getSeamLive();
+    if (seamRow && !seamRow.hidden) {
+      if (live) seamText.textContent = vm.seam.text;  // getSeamState(live) = 같은 길이 함수의 실시간 값
+      failsEl.textContent = EDIT_NOTE;
+      seamRow.setAttribute("data-state", "editing");
+    }
+    [[rflRow, rflReason], [splitRow, splitReason], [bndRow, bndReason]].forEach(([row, el]) => {
+      if (row && el && !row.hidden) { el.textContent = EDIT_NOTE; row.setAttribute("data-state", "editing"); }
+    });
+    if (bar.getAttribute("data-fit") === "dense") titleEl.textContent = vm.title + " · " + EDIT_NOTE;
+  }
+  // 접힌 패널 높이 맞춤(2026-11-11 김님 리뷰 «접힌 패널 = 캔버스 높이 20~25%»): 버튼을 잘라내거나 max-height 로 감추지 않는다.
+  //   full(종전) → lean(역할 선택·옆선 상세를 «더보기»로 · 머리줄에 현재 역할 표시) → dense(한 줄 안내 + 주 작업 버튼·더보기·닫기 한 줄).
+  //   주 작업 = 보이는 다음 단계 첫 행(반영·분리·외곽 대체) · 없으면 옆선 행(몸판 완료) · 그것도 없으면 역할 선택.
+  //   «더보기» 펼침·소형 상태줄은 대상 아님(펼침 = 종전 위로 열림 + 내부 스크롤). 드래그 중에는 다시 정하지 않는다(sync 조기 반환).
+  function applyFit(vm, wrap) {
+    bar.removeAttribute("data-fit");
+    const H = wrap.clientHeight;
+    if (!(H > 0) || bar.getAttribute("data-mode") === "compact" || bar.getAttribute("data-more") === "open") return;
+    const budget = H * FIT_RATIO, fits = () => bar.scrollHeight <= budget + 0.5;
+    if (fits()) return;
+    let cap = vm.title;
+    if (vm.kind === "select") {
+      const primary = bar.querySelector('.lqb-next[data-tier="main"]:not([hidden])');
+      const main = primary || (seamRow && !seamRow.hidden ? seamRow : roleRow);
+      let folded = false;
+      if (roleRow !== main && !roleRow.hidden) { roleRow.hidden = true; folded = true; cap += " · 역할 " + (ROLE_LABEL[vm.role] || vm.role); }
+      if (seamRow && seamRow !== main && !seamRow.hidden) { seamRow.hidden = true; folded = true; }
+      if (folded && moreBtn) { moreBtn.setAttribute("data-extra", "1"); moreBtn.hidden = false; }
+      titleEl.textContent = cap;
+      bar.setAttribute("data-fit", "lean");
+      if (fits()) return;
+      // 옆선 행이 주 작업이면 몸판 완료 상태(막힘·가능)를 먼저 — 한 줄로 줄여도 «왜 완료가 안 되나»가 보이게.
+      const why = main === seamRow ? [failsEl, seamText].map(el => el && !el.hidden ? el.textContent : "").filter(Boolean).join(" · ")
+        : main && Array.prototype.map.call(main.querySelectorAll(".lqb-reason"), el => (el.hidden ? "" : el.textContent)).filter(Boolean)[0];
+      if (why) cap += " · " + why;   // dense: 행 안 안내는 한 줄 머리말로 옮긴다(잘려도 «더보기»에서 전문)
+    } else if (vm.kind === "draw" && drawHintEl && drawHintEl.textContent) cap += " · " + drawHintEl.textContent;
+    titleEl.textContent = cap;
+    bar.setAttribute("data-fit", "dense");
+    if (fits()) return;
+    // 낮은 가로 화면(예: 640×320 — 2줄 dense 도 25% 초과): 안내·주 작업·더보기/닫기를 한 줄로. 안내 칸이 너무 좁아지면(<96px) dense 유지.
+    bar.setAttribute("data-fit", "row");
+    if (fits() && titleEl.clientWidth >= 96 && bar.scrollWidth <= bar.clientWidth + 1) return;
+    bar.setAttribute("data-fit", "dense");
   }
   // 소형 상태줄 켜기/끄기 — 전체 막대의 행은 그대로 두고 보이기만 바꾼다(요소 재생성 없음).
   function setCompact(on, vm) {
@@ -354,8 +415,11 @@
     completeBtn.hidden = !(ok && pend);
     const F = window.bodiceFailText || (x => x);
     // 한 줄 상태(기본) + 차단 사유 전문(«더보기»에서만 · 2026-11-11 — 390 에서 막대가 캔버스 대부분을 덮던 원인 중 하나)
-    failsEl.textContent = !gate ? "" : gate.ok ? (pend ? "몸판 완료 가능" : "몸판 완료됨") : "몸판 완료 막힘 " + gate.fails.length + "건";
-    if (failsDetailEl) failsDetailEl.textContent = (gate && !gate.ok) ? gate.fails.map(f => F(f) + (FAIL_ACT[f] ? " → " + FAIL_ACT[f] : "")).join(" · ") : "";
+    // 2026-11-11: 사유가 비어 있는데 막힘이면 «0건»·빈 목록 대신 검사 결과 그대로(게이트 완화 없음 — 완료 버튼은 계속 숨김).
+    const fl = gate && !gate.ok ? (gate.fails || []).filter(f => f != null && f !== "") : [];
+    failsEl.textContent = !gate ? (dragging ? EDIT_NOTE : "") : gate.ok ? (pend ? "몸판 완료 가능" : "몸판 완료됨")
+      : fl.length ? "몸판 완료 막힘 " + fl.length + "건" : "몸판 완료 막힘 · 검사가 사유를 돌려주지 않음 — 오른쪽 몸판 패널에서 확인";
+    if (failsDetailEl) failsDetailEl.textContent = fl.map(f => F(f) + (FAIL_ACT[f] ? " → " + FAIL_ACT[f] : "")).join(" · ");
   }
   // 막대에서 바로 할 수 있는 조치(문구만 · 자동 수정 없음). 없는 사유는 이름만 보인다(오른쪽 몸판 패널에서 처리).
   const FAIL_ACT = {
@@ -423,7 +487,12 @@
     window.addEventListener("pointerup", release, true);
     window.addEventListener("pointercancel", release, true);
     // 캔버스 크기 변화(창·사이드바·회전)에는 render 없이도 내용(잘린 안내 «더보기» 여부)만 다시 맞춘다. 자리는 CSS 가 정한다.
-    if (typeof ResizeObserver !== "undefined" && bar.parentElement) { const ro = new ResizeObserver(() => sync()); ro.observe(bar.parentElement); }
+    //   2026-11-11: 회전(390×844 → 844×390)에서 관찰 콜백이 중간 레이아웃으로 맞춤(applyFit)을 정해 32.8% 로 남던 것(실측) →
+    //   다음 프레임(레이아웃 확정 뒤)에 한 번 다시 맞춘다. 창 resize 도 같은 경로.
+    let rsRaf = 0;
+    const resync = () => { if (rsRaf || typeof requestAnimationFrame !== "function") { if (!rsRaf) sync(); return; } rsRaf = requestAnimationFrame(() => { rsRaf = 0; sync(); }); };
+    if (typeof ResizeObserver !== "undefined" && bar.parentElement) { const ro = new ResizeObserver(() => resync()); ro.observe(bar.parentElement); }
+    window.addEventListener("resize", resync);
     sync();
   }
 

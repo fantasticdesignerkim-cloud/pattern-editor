@@ -27,41 +27,34 @@ svg.addEventListener("wheel",e=>{
   render();
 },{passive:false});
 
-let panStart=null,spaceDown=false;
-document.addEventListener("keydown",e=>{if(e.code==="Space"){e.preventDefault();spaceDown=true;svg.style.cursor="grab";}});
-document.addEventListener("keyup",e=>{if(e.code==="Space"){spaceDown=false;svg.style.cursor="";}});
+// 화면 이동(2026-11-11 리뷰 보완): 팬·핀치 계산은 canvasPan.js 한 곳(뷰 변환만 · 형상 무변경). 여기서는 Space 상태만 소유한다.
+//   · Space 를 누른 채 드래그 = 즉시 팬(종전 명시적 팬 수단 · 모든 stage).
+//   · 입력칸·키보드로 포커스한 버튼/체크박스의 Space(글자 입력·누르기)는 가로채지 않는다 — 마우스로 누른 버튼에 포커스가 남은 경우는 종전처럼 팬.
+//   · 창 전환(blur)·탭 숨김(visibilitychange)에서 Space 를 놓친 채(keyup 미수신) 남지 않게 해제 → 복귀 후 선 도구·조각 드래그 먹통 방지.
+let spaceDown=false;
+function _spaceForControl(t){
+  if(!t||t===document.body||t===document.documentElement)return false;
+  if(t.isContentEditable)return true;
+  const tag=t.tagName;
+  if(tag==="TEXTAREA"||tag==="SELECT")return true;
+  if(tag==="INPUT"){const ty=(t.type||"text").toLowerCase();if(!/^(checkbox|radio|button|submit|reset|range|color|file|image)$/.test(ty))return true;}
+  if(tag==="INPUT"||tag==="BUTTON"||tag==="A"||tag==="SUMMARY"||(t.getAttribute&&t.getAttribute("role")==="button")){
+    try{return t.matches(":focus-visible");}catch(_){return false;}   // 키보드로 온 포커스 = 그 컨트롤의 Space
+  }
+  return false;
+}
+function releaseSpace(){ if(!spaceDown)return; spaceDown=false; svg.style.cursor=""; if(window.canvasPan&&!window.canvasPan.panning())window.canvasPan.cancel(); }
+document.addEventListener("keydown",e=>{
+  if(e.code!=="Space"||e.isComposing||e.ctrlKey||e.metaKey||e.altKey)return;
+  if(_spaceForControl(e.target))return;
+  e.preventDefault();spaceDown=true;if(!(window.canvasPan&&window.canvasPan.panning()))svg.style.cursor="grab";
+});
+document.addEventListener("keyup",e=>{if(e.code==="Space"&&spaceDown){e.preventDefault();releaseSpace();}});
+window.addEventListener("blur",()=>{ releaseSpace(); if(window.canvasPan)window.canvasPan.cancel(); });
+document.addEventListener("visibilitychange",()=>{ if(document.hidden){ releaseSpace(); if(window.canvasPan)window.canvasPan.cancel(); } });
 svg.addEventListener("pointerdown",e=>{
-  if(e.button===0&&spaceDown){panStart={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y};svg.setPointerCapture(e.pointerId);}
+  if(e.button===0&&spaceDown&&window.canvasPan)window.canvasPan.press(e,null,{immediate:true});
 });
-svg.addEventListener("pointermove",e=>{
-  if(!panStart)return;
-  view.x=panStart.vx+(e.clientX-panStart.x);
-  view.y=panStart.vy+(e.clientY-panStart.y);
-  syncViewVars();
-  render();
-});
-svg.addEventListener("pointerup",()=>{panStart=null;});
-
-let pD0=null,pZ0=null,pMX=null,pMY=null;
-svg.addEventListener("touchstart",e=>{
-  if(e.touches.length===2){e.preventDefault();
-    const t1=e.touches[0],t2=e.touches[1];
-    pD0=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);pZ0=viewZ;
-    const r=svg.getBoundingClientRect();
-    pMX=(t1.clientX+t2.clientX)/2-r.left;pMY=(t1.clientY+t2.clientY)/2-r.top;}
-},{passive:false});
-svg.addEventListener("touchmove",e=>{
-  if(e.touches.length===2&&pD0){e.preventDefault();
-    const t1=e.touches[0],t2=e.touches[1];
-    const d2=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
-    const nz=Math.min(Math.max(pZ0*d2/pD0,_minZoom()),10);
-    view.x=pMX-view.MX-(pMX-view.MX-view.x)*(nz/view.z);
-    view.y=pMY-view.MY-(pMY-view.MY-view.y)*(nz/view.z);
-    view.z=nz;
-    syncViewVars();
-    render();}
-},{passive:false});
-svg.addEventListener("touchend",e=>{if(e.touches.length<2)pD0=null;},{passive:true});
 
 function resetView(){
   // design 화면에서는 배치(layout)를 건드리지 않고 기본 zoom 복원 + 몸판 재중앙만.

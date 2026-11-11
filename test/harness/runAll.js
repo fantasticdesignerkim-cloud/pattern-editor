@@ -161,6 +161,7 @@ const suites = [
   { file: "lineOutsideHitCheck.js",    golden: false },  // 조각 hit rect 밖으로 휜 사용자 선·핸들 재선택/드래그(화면 px 허용폭 · rect 피스 우선 · off/stage 무동작)
   { file: "lineAutoSelectCheck.js",     golden: false },  // 패턴선 완료(Enter·더블클릭) 직후 방금 그린 선 자동 선택·역할 버튼 활성(실제 핸들러 · 한 점·Esc 제외 · 관리선 잠금·최종 몸판 정책 불변)
   { file: "lineQuickBarCheck.js",       golden: false },  // 패턴선 «선 가까이» 빠른 도구막대(UI 전용): 단계별 표시·완료 가능 = canFinishDraw·관리선 잠금·배치(위 우선·반전·클램프·가림 회피·결정적)·기존 명령만 호출
+  { file: "canvasPanCheck.js",          golden: false },  // 화면 이동: 빈 곳 클릭/팬 임계값 · Space 즉시 팬 · 두 손가락 핀치+팬(뷰만) · 두 번째 손가락 = 진행 중 편집 되돌림 · Space blur 해제·입력칸 비가로채기 (2026-11-11)
   { file: "bodiceStatusNoteCheck.js",   golden: false },  // 몸판 상태 문구·완료 버튼 정합(2026-11-11): 변경됨 상태에서도 실제 차단 사유·옆선 앞뒤·차 · 통과면 다시 완료 가능 · 버튼 = c.ok
   { file: "designDoneMarksCheck.js",    golden: false },  // 디자인 «완료» 표시(UI 전용): 권위 check 캐시 → 소매·커프스·카라 외곽 녹색 + «소매/카라 완료» · 변경됨 · 접는선 제외 · 탭 이동 선택 해제
   { file: "sleevePartSplitCheck.js",   golden: false },  // 소매 파트 분리: 기본+Ⓐ~Ⓩ 그리기→절개선→분리(Ⓨ·Ⓩ 구체적 거부)·독립 검산(면적·공유 절개·연속·곡선)·Ⓒ 열린 V·물리 거부·현재성/무효화·몸판 분리 보존·Design hash 무관

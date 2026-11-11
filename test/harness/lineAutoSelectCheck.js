@@ -54,6 +54,9 @@ sb.globalThis = sb; vm.createContext(sb);
 sb.window.designWorkflow = { current: () => PROJECT };
 sb.window.isDesignStageActive = () => true;
 sb.window.addEventListener = () => {};
+// canvasPan 대역(2026-11-11 §18): 기본 off(press → false = 종전 즉시 해제·안내 경로 그대로). §18 에서만 켠다.
+const PAN = { on: false, tap: null, presses: 0, hooks: [] };
+sb.window.canvasPan = { press(e, onTap) { if (!PAN.on) return false; PAN.presses++; PAN.tap = onTap; return true; }, onMultiTouch(f) { PAN.hooks.push(f); } };
 let NOTIFY = 0; sb.window.refreshDesignResultUI = () => { NOTIFY++; };
 const files = ["designLineTool.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designYokeSeam.js", "designPrincess.js", "designBodice.js", "bodicePresets.js",
   "designLayout.js", "designRenderer.js", "bodiceCheckpoint.js", "peplumAnnotation.js", "designSleeve.js", "sleeveMeasure.js", "sleeveCheckpoint.js", "sleevePresets.js"];
@@ -674,6 +677,37 @@ function autoPlace(P) { const a = DLy.autoLayout(P.working.geometry, W.sleeveAnn
   const body = U.slice(at, end);
   ok(at > 0 && /if \(T\.getMode\(\) !== "select" && !\(T\.getMode\(\) === "draw" && T\.getDraft\(\)\)\) T\.setMode\("select"\);/.test(body)
     && body.indexOf('T.setMode("select")') > body.indexOf('managedBy: "collar-body"'), "collar-manual: 본체 직접 수정 → 관리선 생성 뒤 선택·편집 모드 진입(그리기 중 draft 보존)");
+}
+
+// §18 빈 곳 누름 = 클릭/화면 이동 구분 · 두 손가락 = 진행 중 편집·점 되돌림(2026-11-11 리뷰 보완) — 실제 designLineTool 핸들러 + canvasPan 대역
+{
+  const P = projectOn("A"), [m, h] = splittableFront(P.working.geometry);
+  DLT.toggle(); click("front", m); click("front", h); key("Enter");
+  const line = last(), id = line.id;
+  PAN.on = true; PAN.presses = 0; PAN.tap = null;
+  const far = () => Object.assign(evAt("front", { x: -500, y: -500 }), { target: { closest: () => null } });
+  down(far());
+  ok(PAN.presses === 1 && DLT.getSelectedId() === id, "18a: 선택·편집 빈 곳 누름 = 팬 후보(canvasPan.press) · 누르는 순간 선택 해제 안 함");
+  up(far());
+  ok(DLT.getSelectedId() === id, "18b: 끌어서 화면 이동(클릭 아님)한 뒤에도 선택 보존");
+  down(far()); PAN.tap();
+  ok(DLT.getSelectedId() === null, "18c: 움직이지 않은 클릭 = 종전대로 선택 해제");
+  PAN.presses = 0; click("front", m);
+  ok(PAN.presses === 0 && DLT.getSelectedId() === id, "18d: 선 위 누름 = 선택(팬 후보 아님 · 선 우선)");
+  const orig = J(line.segments), as = DLT.anchorsFromSegments(line.segments), to = { x: as[0].x + 1, y: as[0].y + 1 };
+  down(evAt("front", as[0])); move(evAt("front", to, { altKey: true }));
+  const moved = J(line.segments) !== orig;
+  PAN.hooks.forEach(f => f()); up(evAt("front", to, { altKey: true }));
+  ok(PAN.presses === 0 && moved && J(line.segments) === orig && DLT.getSelectedId() === id, "18e: 앵커 드래그 중 두 번째 손가락 = 형상 원래대로(핀치가 좌표를 바꾸지 않음) · 선택 유지");
+  DLT.setMode("draw"); click("front", m);
+  const n1 = DLT.getDraft() ? DLT.getDraft().anchors.length : -1;
+  down(far());
+  ok(PAN.presses === 1 && DLT.getDraft() && DLT.getDraft().anchors.length === n1 && !DLT.getDrawHint(), "18f: 그리기 중 조각 밖 누름 = 점 없음 · 팬 후보(누르는 순간 거부 안내 없음)");
+  PAN.tap();
+  ok(/같은 피스/.test(note()) && /점이 찍히지 않음/.test(DLT.getDrawHint() || "") && DLT.getDraft().anchors.length === n1, "18g: 움직이지 않은 클릭 = 종전 거부 안내");
+  down(evAt("front", h)); const n2 = DLT.getDraft().anchors.length; PAN.hooks.forEach(f => f()); up(evAt("front", h));
+  ok(n2 === n1 + 1 && DLT.getDraft() && DLT.getDraft().anchors.length === n1, "18h: 점을 찍은 손가락 + 두 번째 손가락 = 방금 점 취소(작성 중 선은 보존)");
+  key("Escape"); DLT.setMode("off"); PAN.on = false;
 }
 
 console.log("  원래 외곽 밖 파생 표본점(앞+뒤): " + Object.entries(EXT_SEEN).map(([k, v]) => k + " " + v).join(" · "));
