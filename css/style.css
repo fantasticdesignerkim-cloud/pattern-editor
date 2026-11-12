@@ -197,6 +197,8 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .app-header{display:flex;align-items:center;gap:clamp(6px,1.3vw,16px);height:44px;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
 .brand-block{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
 .brand-sub{font-size:11px;color:var(--muted)}
+/* 앱 버전(정적 번호 — index.html 한 곳). 색만이 아니라 글자 자체가 정보다. */
+.brand-ver{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;cursor:help}
 .stage-bar{display:flex;align-items:center;gap:2px}
 .stage{font:inherit;font-size:12px;font-weight:500;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px clamp(7px,1vw,12px);line-height:1.2;cursor:pointer}
 .stage:not(:disabled):hover{background:color-mix(in srgb,var(--cyan) 10%,var(--surface))}
@@ -348,6 +350,10 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
      숨겨진 모바일에선 죽은 여백이라 0. actions 는 버튼 사이 수평 gap 만 줄인다
      (터치 타깃 40px 불변). 실측 결과 320px 간격 -17.9px → +5.4px. */
   .brand{font-size:12px;letter-spacing:.02em;margin-right:0}
+  /* 버전을 옆에 두면 390px 에서 actions 가 한 줄 더 감겨 header 가 42px 높아진다(실측 91→133).
+     좁은 폭에서만 DOROBO 바로 아래로 쌓아 brand 폭을 그대로 둔다. */
+  .brand-block{flex-direction:column;align-items:flex-start;gap:0}
+  .brand-ver{font-size:9px;line-height:1.1}
   /* (3단계) 1단계에서 화면 초기화 버튼이 header 로 이동해 actions 내용폭이 317px 로
      늘며 320px 에서 brand 를 다시 덮었다(실측 -67.8px). DOM·텍스트를 바꾸지 않고
      좁은 폭에서만 actions 를 오른쪽 정렬 2줄로 감아 해소한다(넓은 모바일은 1줄 유지). */
