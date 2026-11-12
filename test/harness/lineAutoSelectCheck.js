@@ -677,6 +677,13 @@ function autoPlace(P) { const a = DLy.autoLayout(P.working.geometry, W.sleeveAnn
   const body = U.slice(at, end);
   ok(at > 0 && /if \(T\.getMode\(\) !== "select" && !\(T\.getMode\(\) === "draw" && T\.getDraft\(\)\)\) T\.setMode\("select"\);/.test(body)
     && body.indexOf('T.setMode("select")') > body.indexOf('managedBy: "collar-body"'), "collar-manual: 본체 직접 수정 → 관리선 생성 뒤 선택·편집 모드 진입(그리기 중 draft 보존)");
+  // 2026-11-12 김님 «카라 모양 수정은 아직 안 되는 것 같다»: 이미 직접 수정(manual)인데 선 도구가 꺼진 상태(편집 종료 · 파일 열기 뒤)에서 다시 들어가는 길.
+  ok(/if \(cd\.body\.mode === "manual"\) \{ reenterCollarBodyEdit\(project\); return; \}/.test(body)
+    && /function reenterCollarBodyEdit\(project\) \{[\s\S]*?if \(T\.getMode\(\) === "draw" && T\.getDraft\(\)\) \{ setCollarBodyNote\(COLLAR_EDIT_DRAFT_NOTE\); return; \}\s*if \(T\.getMode\(\) !== "select"\) \{ T\.setMode\("select"\);/.test(body),
+    "collar-manual: 이미 직접 수정 중이면 선택·편집 재진입 · 그리던 선이 있으면 버리지 않고 안내만");
+  ok(/if \(T\.getMode\(\) !== "select"\) setCollarBodyNote\(COLLAR_EDIT_DRAFT_NOTE\);/.test(body), "collar-manual: 첫 진입이 그리기 보존 분기면 왜 안 잡히는지 안내");
+  ok(/manualBtn\.hidden = !twoPiece; manualBtn\.disabled = !\(twoPiece && ready && hasBody\); manualBtn\.textContent = manual \? "본체 선 편집 켜기" : "본체 직접 수정";/.test(U),
+    "collar-manual: 직접 수정 중에도 버튼 유지(«본체 선 편집 켜기») — 다시 켤 길이 숨지 않는다");
 }
 
 // §18 빈 곳 누름 = 클릭/화면 이동 구분 · 두 손가락 = 진행 중 편집·점 되돌림(2026-11-11 리뷰 보완) — 실제 designLineTool 핸들러 + canvasPan 대역

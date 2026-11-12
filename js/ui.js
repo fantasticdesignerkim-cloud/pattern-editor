@@ -3390,7 +3390,7 @@
     else if (!pd.ok) setCollarBodyNote(collarSelectionStr(pd.reason) + (cb.has ? " · 현재 본체 형상은 그대로 유지" : ""));
     else if (collarBodyManual(project)) {
       if (collarBodyInvalid(project)) setCollarBodyNote("칼라 본체 편집 무효 · " + collarBodyReasonStr(project.working.collarDraft.body.invalidReason) + " · 편집 복구 또는 기본형으로 돌아가기");
-      else { const m = cb.measure || {}; setCollarBodyNote("칼라 본체 직접 수정 중 · endpoint 고정 · 외곽·포인트 anchor·핸들 편집 · 포인트 사선 " + fmtL(m.pointDiagonalLenCm || 0) + "cm · 외곽선 " + fmtL(m.outerEdgeLenCm || 0) + "cm"); }
+      else { const m = cb.measure || {}; setCollarBodyNote("칼라 본체 직접 수정 중 · endpoint 고정 · 외곽·포인트 anchor·핸들 편집 · 포인트 사선 " + fmtL(m.pointDiagonalLenCm || 0) + "cm · 외곽선 " + fmtL(m.outerEdgeLenCm || 0) + "cm · 선이 안 잡히면 «본체 선 편집 켜기»"); }
     }
     // 읽기 전용 실제 결과: CB 폭·앞쪽 폭·앞끝 접선 돌출·포인트 사선 길이(=앞폭·투영 합성)·앞끝 기울기.
     //   ★ 기울기는 부착선 로컬 접선 기준 평면 기하값(캔버스 축·착용 spread 아님). frontRise 와 무관.
@@ -3452,7 +3452,7 @@
     if (!collarStandReady(project)) { setCollarBodyNote("카라 스탠드 적용 후 직접 수정할 수 있습니다"); return; }
     const cd = project.working.collarDraft;
     if (!cd.body || !cd.body.geometry) { setCollarBodyNote("먼저 본체를 적용한 뒤 직접 수정할 수 있습니다"); return; }
-    if (cd.body.mode === "manual") return;
+    if (cd.body.mode === "manual") { reenterCollarBodyEdit(project); return; }
     const lc = window.designCollar.collarBodyLineFromGeometry(cd.body.geometry);
     if (!lc) { setCollarBodyNote("본체를 관리선으로 변환할 수 없습니다"); return; }
     const ls = project.working.patternLines || (project.working.patternLines = []);
@@ -3465,6 +3465,18 @@
     if (T.getMode() !== "select" && !(T.getMode() === "draw" && T.getDraft())) T.setMode("select");
     if (typeof render === "function") render();
     updateCollarBodyPanel(project);
+    if (T.getMode() !== "select") setCollarBodyNote(COLLAR_EDIT_DRAFT_NOTE);   // 그리던 선 보존 분기 — 왜 칼라 선이 안 잡히는지 알린다
+  }
+  // 2026-11-12 김님 «카라 모양 수정은 아직 안 되는 것 같다»: 본체가 이미 직접 수정(manual)인데 선 도구가 꺼져 있으면(«편집 종료» · 파일 열기 뒤 ·
+  //   그리기 취소 뒤) 패널은 «직접 수정 중»이라 하면서 칼라 선을 눌러도 아무 일이 없고, 다시 켤 버튼(«본체 직접 수정»)은 숨겨져 있었다.
+  //   → manual 중에는 같은 버튼을 «본체 선 편집 켜기»로 남겨 선택·편집으로 다시 들어가게 한다(형상·관리선·잠금 무변경 · 그리던 선은 버리지 않음).
+  const COLLAR_EDIT_DRAFT_NOTE = "그리는 중인 선이 있어 칼라 선 편집을 켜지 않았습니다(그리던 선 보존) · 아래 «그리기 완료» 또는 «그리기 취소» 뒤 «본체 선 편집 켜기»를 누르세요";
+  function reenterCollarBodyEdit(project) {
+    const T = window.designLineTool; if (!T) return;
+    if (T.getMode() === "draw" && T.getDraft()) { setCollarBodyNote(COLLAR_EDIT_DRAFT_NOTE); return; }
+    if (T.getMode() !== "select") { T.setMode("select"); if (typeof render === "function") render(); }
+    updateCollarBodyPanel(project);
+    setCollarBodyNote("칼라 선 편집 켜짐 · 위 칼라의 바깥선(뒤중심 → 칼라 끝 → 앞)을 누르면 점이 나타납니다 · 중간 점·칼라 끝 점을 끌어 수정(양 끝 점은 고정)");
   }
   // 기본형으로 돌아가기(manual → parametric): 관리선만 제거(다른 선 보존), 보존 파라미터로 재파생.
   function onCollarBodyRevert() {
@@ -3492,7 +3504,8 @@
     const twoPiece = isTwoPieceCollar(project);
     const manual = twoPiece && collarBodyManual(project), ready = collarStandReady(project), hasBody = committedCollarBody(project).has;
     const manualBtn = document.getElementById("btnCollarBodyManual"), revertBtn = document.getElementById("btnCollarBodyRevert");
-    if (manualBtn) { manualBtn.hidden = !twoPiece || manual; manualBtn.disabled = !(twoPiece && ready && hasBody && !manual); }
+    // manual 중에도 버튼을 남긴다(«본체 선 편집 켜기» — 선 도구가 꺼졌을 때 다시 들어가는 길 · reenterCollarBodyEdit).
+    if (manualBtn) { manualBtn.hidden = !twoPiece; manualBtn.disabled = !(twoPiece && ready && hasBody); manualBtn.textContent = manual ? "본체 선 편집 켜기" : "본체 직접 수정"; }
     if (revertBtn) revertBtn.hidden = !twoPiece || !manual;
     // 입력은 manual 이면 잠금·아니면 해제(다른 disable 조건 없음). 부착선이 스탠드에 고정되므로 스탠드 입력도 잠금.
     ["inpCollarStandHeight", "inpCollarFrontRise", "inpCollarBodyWidth", "inpCollarBodyFrontWidth", "inpCollarBodyProjection", "inpCollarBodyBow"]

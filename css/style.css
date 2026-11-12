@@ -544,6 +544,8 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 /* 디자인 «완료» 표시(2026-11-10 · js/designDoneMarks.js): 유효 완료본과 현재 형상이 같을 때만 소매·커프스·카라 재단 외곽을
    몸판 수정 외곽(.design-outline-composed)과 같은 녹색·굵기로. 접는선·보조선은 대상 아님. #cv 스코프로 각 조각 기본색보다 우선. */
 #cv .stage-done{stroke:#0E9F6E;stroke-width:2.8}
+/* 몸판 합성 외곽이 완료본과 다를 때(미완료·변경됨): 녹색 = 완료 하나의 뜻이 되게 남색으로(2026-11-12 · 원래 몸판 맥락만). */
+#cv .design-outline-composed.stage-undone{stroke:#1D4ED8}
 #cv .done-badge{pointer-events:none}
 #cv .done-badge text{font:600 11px system-ui,-apple-system,sans-serif;fill:#0B7A55}
 #cv .done-badge rect{fill:#FFFFFF;fill-opacity:.92;stroke:#0E9F6E;stroke-width:1}

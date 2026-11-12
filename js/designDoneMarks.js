@@ -8,6 +8,9 @@
 //   · 조각 근처 작은 글자 «소매 완료» / «카라 완료»
 //   완료본이 있는데 지금 형상·입력·몸판이 달라졌으면 녹색 없이 «소매 변경됨» / «카라 변경됨»(다시 완료 필요).
 //   완료본이 없으면 아무 표시도 없다(탭에 들어갔다는 이유로 완료 처리하지 않는다).
+//   · 몸판(2026-11-12 김님 «박시 A → 여밈 → 몸판 완료 하면 외곽선 색이 안 바뀐다»): 종전엔 몸판 녹색이 «합성 외곽(designOutline)이 있는가»에만
+//     묶여 있어, 외곽 수정 없이 완료하면 색이 안 바뀌고 반대로 완료 전 합성 외곽은 녹색이었다. → 앞·뒤판의 «지금 외곽»(합성 외곽이 있으면 그 선,
+//     없으면 working 재단 외곽)을 몸판 완료본 = 현재 형상일 때만 녹색 + «몸판 완료». 원래 몸판 맥락에서만(소매 Ⓡ~Ⓩ 파생 몸판·분리 조각 제외).
 //
 // 계약(제품 엔진 불변):
 //   · 판정 = designResult.check 의 권위 체인 그대로(isCurrentSleeveChanged · invalidatedByBodice · isCurrentCollarChanged ·
@@ -33,11 +36,13 @@
 
   // ── 순수: designResult.check 결과 → 단계 표시 상태 ── null(완료본 없음) | "done" | "changed"
   function stateOf(c) {
-    if (!c || !c.fails) return { sleeve: null, collar: null };
+    if (!c || !c.fails) return { bodice: null, sleeve: null, collar: null };
     const has = list => list.some(f => c.fails.indexOf(f) >= 0);
+    // 몸판(2026-11-12): 완료본이 있고 bodiceCheckpoint.isCurrentBodiceChanged(= "bodice-changed") 가 아니면 완료. 합성 외곽 유무·탭 진입과 무관.
+    const bodice = !c._bodice ? null : has(["bodice-changed"]) ? "changed" : "done";
     const sleeve = !c._sleeve ? null : has(SLEEVE_BAD) ? "changed" : "done";
     const collar = !c._collar ? null : (has(COLLAR_BAD) || sleeve !== "done") ? "changed" : "done";
-    return { sleeve: sleeve, collar: collar };
+    return { bodice: bodice, sleeve: sleeve, collar: collar };
   }
 
   let st = null;   // {proj, bodiceRes, sleeveRes, collarRes, collarType, sleeve, collar}
@@ -46,8 +51,15 @@
     if (!proj || !proj.working || !c) { st = null; apply(); return; }
     const w = proj.working, s = stateOf(c);
     st = { proj: proj, bodiceRes: w.bodiceResult || null, sleeveRes: w.sleeveResult || null, collarRes: w.collarResult || null,
-      collarType: w.collarResult ? w.collarResult.type : null, sleeve: s.sleeve, collar: s.collar };
+      collarType: w.collarResult ? w.collarResult.type : null, bodice: s.bodice, sleeve: s.sleeve, collar: s.collar,
+      original: originalCtx(proj) };
     apply();
+  }
+  // 화면의 앞·뒤판이 원래 몸판인가(소매 Ⓡ~Ⓩ 파생 몸판 맥락이 아니다) — designLineTool 의 같은 판정. update 때 한 번만(매 render 재판정 없음).
+  //   판정 불가면 false(표시 안 함 — 파생 몸판에 원래 몸판 완료색을 묻히지 않는다).
+  function originalCtx(proj) {
+    const T = window.designLineTool;
+    try { return !!(T && T.isOriginalBodiceContext && T.isOriginalBodiceContext(proj)); } catch (_) { return false; }
   }
   function current(proj) {
     if (!st || !proj || st.proj !== proj) return null;
@@ -96,9 +108,25 @@
     const root = cv(); if (!root) return;
     root.querySelectorAll("[data-done-badge]").forEach(el => el.remove());
     root.querySelectorAll(".stage-done").forEach(el => el.classList.remove("stage-done"));
+    root.querySelectorAll(".stage-undone").forEach(el => el.classList.remove("stage-undone"));
     const design = typeof window.isDesignStageActive === "function" && window.isDesignStageActive();
     if (!design) return;
     const s = current(projectNow()); if (!s) return;
+    // 몸판: 원래 몸판 맥락에서만. 조각별로 «지금 외곽» = 합성 외곽(designOutline)이 있으면 그 선, 없으면 working 재단 외곽.
+    //   완료 = 녹색 · 완료본 없음/변경됨 = 합성 외곽도 녹색이 아니다(녹색 = 완료 하나의 뜻 — 합성 버튼·외곽 수정 유무와 분리).
+    //   분리 조각(parts)·외곽 미리보기·파생 몸판 재단선·여밈·접는선은 대상 아님.
+    if (s.original) {
+      const now = [];
+      ["front", "back"].forEach(pc => {
+        const comp = root.querySelectorAll('[data-design-outline="' + pc + '"] path.design-outline-composed');
+        if (comp.length) { comp.forEach(el => { now.push(el); if (s.bodice !== "done") el.classList.add("stage-undone"); }); return; }
+        root.querySelectorAll('[data-design-root="working"] [data-layout-piece="' + pc + '"] [data-design-layer="working"][data-geometry-role="outline"]').forEach(el => now.push(el));
+      });
+      if (s.bodice && now.length) {
+        if (s.bodice === "done") now.forEach(el => el.classList.add("stage-done"));
+        badge(root, "bodice", s.bodice, s.bodice === "done" ? "몸판 완료" : "몸판 변경됨 · 다시 완료", now);
+      }
+    }
     if (s.sleeve) {
       const els = Array.prototype.slice.call(root.querySelectorAll('[data-design-root="working"] [data-piece="sleeve"][data-geometry-role="outline"], .sleeve-cuff .sleeve-cuff-cut'));
       if (els.length) {   // 별도 소매 조각이 없는 일체형(Ⓧ·Ⓨ·Ⓩ)은 표시할 소매 외곽이 없다 → 표시 없음(몸판에 거짓 표시하지 않음)
@@ -129,5 +157,5 @@
   }
 
   window.designDoneMarks = Object.freeze({ update: update, apply: () => { try { apply(); } catch (_) { /* 표시 전용 — 실패해도 도안에 영향 없음 */ } },
-    stateOf: stateOf, COLLAR_GROUPS: COLLAR_GROUPS, peek: () => st ? { sleeve: st.sleeve, collar: st.collar, collarType: st.collarType } : null });
+    stateOf: stateOf, COLLAR_GROUPS: COLLAR_GROUPS, peek: () => st ? { bodice: st.bodice, original: st.original, sleeve: st.sleeve, collar: st.collar, collarType: st.collarType } : null });
 })();
