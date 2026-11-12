@@ -7,10 +7,12 @@ function markDirty(ev){
     el.style.color = "#e07800";
     el.style.fontWeight = "700";
   }
-  // 몸판 치수(B/W/BL)가 바뀔 때만 몸판 핸들 리셋
-  // 소매단둘레(inpHem)는 소매 하단 폭만 바꾸므로 몸판/소매산 핸들을 리셋하지 않는다
+  // 몸판 치수(B/W/BL)가 바뀔 때만 몸판 핸들 리셋.
+  // 소매길이(inpSL)·소매단둘레(inpHem)는 몸판 형상과 무관하다 — 예전엔 inpHem 만 빼서 SL 을 바꾸면
+  // 편집한 몸판 곡선이 사라지고, 다음 저장이 기본 곡선으로 그 치수의 저장값을 덮어썼다(2026-11-12 수정).
+  // 소매산 핸들은 render() 가 소매 치수키 변화로 따로 다룬다.
   const changedId = ev?.target?.id;
-  if(changedId !== "inpHem"){
+  if(changedId === "inpB" || changedId === "inpW" || changedId === "inpBL"){
     resetBodyCurveHandles();
   }
 }

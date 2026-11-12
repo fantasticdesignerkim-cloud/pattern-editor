@@ -75,7 +75,9 @@ for (const [B, W, BL] of [[85.5, 64, 38], [83, 66, 38], [83, 64, 40], [84, 64, 3
     anchors: { a1: { x: 1, y: 1 }, a2: { x: 2, y: 2 }, a3: { x: 3, y: 3 } },
     handles: { h0: { x: 9, y: 9 }, h1a: { x: 9, y: 9 }, h1b: { x: 9, y: 9 }, h2a: { x: 9, y: 9 },
                h2b: { x: 9, y: 9 }, h3a: { x: 9, y: 9 }, h3b: { x: 9, y: 9 }, h4: { x: 9, y: 9 } },
-    fArmhole: { hGa: { x: 7, y: 7 } }, bNeckline: { h0: { x: 7, y: 7 } }, fNeckline: { h0: { x: 7, y: 7 } } };
+    // 2026-11-12: 부분 누락 항목은 이제 거부된다(curveStoreSafetyCheck) → 픽스처를 완전한 항목으로.
+    fArmhole: { hGa: { x: 7, y: 7 }, hGb: { x: 7, y: 7 }, hFa: { x: 7, y: 7 }, hFb: { x: 7, y: 7 } },
+    bNeckline: { h0: { x: 7, y: 7 }, h1: { x: 7, y: 7 } }, fNeckline: { h0: { x: 7, y: 7 }, h1: { x: 7, y: 7 } } };
   // (a) 부팅 시점에 이미 저장값이 있음(kv)
   const kv = JSON.stringify({ "83-64-38": userEntry });
   const a = boot(M(83, 64, 38), { armhole_data_kv: kv, armhole_data: JSON.stringify([userEntry]) });
@@ -169,7 +171,8 @@ if (fs.existsSync(USER_JSON)) {
     anchors: { a1: { x: 1, y: 1 }, a2: { x: 2, y: 2 }, a3: { x: 3, y: 3 } },
     handles: { h0: { x: 9, y: 9 }, h1a: { x: 9, y: 9 }, h1b: { x: 9, y: 9 }, h2a: { x: 9, y: 9 }, h2b: { x: 9, y: 9 },
                h3a: { x: 9, y: 9 }, h3b: { x: 9, y: 9 }, h4: { x: 9, y: 9 } },
-    fArmhole: { hGa: { x: 7, y: 7 } }, bNeckline: { h0: { x: 7, y: 7 } }, fNeckline: { h0: { x: 7, y: 7 } }, sleevePattern: userSleeve };
+    fArmhole: { hGa: { x: 7, y: 7 }, hGb: { x: 7, y: 7 }, hFa: { x: 7, y: 7 }, hFb: { x: 7, y: 7 } },
+    bNeckline: { h0: { x: 7, y: 7 }, h1: { x: 7, y: 7 } }, fNeckline: { h0: { x: 7, y: 7 }, h1: { x: 7, y: 7 } }, sleevePattern: userSleeve };
   const e1 = boot(MS(83, 64, 38), { armhole_data_kv: JSON.stringify({ "83-64-38": userEntry }), armhole_data: JSON.stringify([userEntry]) });
   e1.sb.state.sleeveH = null;
   e1.sb.restoreSavedSleevePatternForAnchorCount(9);

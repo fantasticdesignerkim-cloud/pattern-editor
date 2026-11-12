@@ -1,11 +1,205 @@
 // ── 진동선 데이터 저장/내보내기 ──────────────────
+// 저장소 키는 두 개다(둘 다 곡선 JSON — 프로젝트 파일(js/projectFile.js)과 무관):
+//   armhole_data    : 이력 배열(내보내기 형식)        armhole_data_kv : 치수키(B-W-BL)별 최신 1건
+//
+// 안전 계약(2026-11-12):
+//   1. 읽기(readCurveStore)는 **절대 쓰지 않는다.** 손상된 원문은 그대로 둔다(자동 삭제·덮어쓰기 없음).
+//   2. 쓰기는 검증(validateCurveEntry) → 기존 원문 읽기 가능 확인 → 두 키 기록(둘째 실패 시 첫째 원복) 순서.
+//      검증이 끝나기 전에는 state·localStorage 를 건드리지 않는다.
+//   3. 실패하면 사유를 돌려주고 화면에 표시한다 — 성공한 척하지 않는다.
+const CURVE_STORE_KEY = 'armhole_data';
+const CURVE_STORE_KV_KEY = 'armhole_data_kv';
+const CURVE_COORD_MAX = 10000;        // cm. 이보다 큰 좌표는 곡선이 아니라 깨진 값이다.
+const CURVE_MEASURE_MAX = 1000;       // cm
+let curveStoreNotice = '';            // 마지막 저장 실패 사유(성공하면 비운다) — 저장 건수 줄에 표시
+let curveAutoSaveWarned = '';         // 자동 저장 실패를 같은 사유로 반복 알리지 않기 위한 기억
+
+function _curveIsObj(v){ return v !== null && typeof v === 'object' && !Array.isArray(v); }
+function _curveNum(v, min, max){ return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max; }
+function _curvePt(p){ return _curveIsObj(p) && _curveNum(p.x, -CURVE_COORD_MAX, CURVE_COORD_MAX) && _curveNum(p.y, -CURVE_COORD_MAX, CURVE_COORD_MAX); }
+// 전체 순회: 위험 키·비유한 수·과도한 깊이. 문제 경로를 돌려주고, 없으면 ''.
+function _curveScan(v, path, depth){
+  if(typeof v === 'number') return Number.isFinite(v) ? '' : (path || '값') + ': 유한한 수가 아님';
+  if(v === null || typeof v !== 'object') return '';
+  if(depth > 12) return (path || '값') + ': 구조가 너무 깊음';
+  if(Array.isArray(v)){
+    for(let i=0;i<v.length;i++){ const r = _curveScan(v[i], path + '[' + i + ']', depth+1); if(r) return r; }
+    return '';
+  }
+  for(const k of Object.keys(v)){
+    if(k === '__proto__' || k === 'constructor' || k === 'prototype') return (path ? path + '.' : '') + k + ': 허용되지 않는 키';
+    const r = _curveScan(v[k], (path ? path + '.' : '') + k, depth+1); if(r) return r;
+  }
+  return '';
+}
+const CURVE_POINT_GROUPS = {
+  anchors:   ['a1','a2','a3'],
+  handles:   ['h0','h1a','h1b','h2a','h2b','h3a','h3b','h4'],
+  fArmhole:  ['hGa','hGb','hFa','hFb'],
+  bNeckline: ['h0','h1'],
+  fNeckline: ['h0','h1'],
+};
+// 곡선 항목 1건의 구조·수치 검증. 순수 함수(읽기만). { ok:true } 또는 { ok:false, reason }.
+// 구버전 항목(SL·Hem·capFormula·sleevePattern·anchorOffsets 없음)은 정상으로 받는다.
+function validateCurveEntry(e){
+  const bad = reason => ({ ok:false, reason });
+  if(!_curveIsObj(e)) return bad('항목이 객체가 아님');
+  const scan = _curveScan(e, '', 0);
+  if(scan) return bad(scan);
+  const m = e.measurements;
+  if(!_curveIsObj(m)) return bad('measurements 없음');
+  for(const k of ['B','W','BL']){
+    if(!(_curveNum(m[k], 0, CURVE_MEASURE_MAX) && m[k] > 0)) return bad('measurements.' + k + ': 올바른 치수가 아님');
+  }
+  for(const k of ['SL','Hem']){
+    if(m[k] != null && !_curveNum(m[k], 0, CURVE_MEASURE_MAX)) return bad('measurements.' + k + ': 올바른 치수가 아님');
+  }
+  if(e.capFormula != null && !(typeof e.capFormula === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(e.capFormula))) return bad('capFormula: 올바른 값이 아님');
+  if(e.timestamp != null && typeof e.timestamp !== 'string') return bad('timestamp: 문자열이 아님');
+  if(e.auto != null && typeof e.auto !== 'boolean') return bad('auto: 참/거짓이 아님');
+  let curves = 0;
+  for(const g of Object.keys(CURVE_POINT_GROUPS)){
+    const v = e[g];
+    if(v == null) continue;
+    if(!_curveIsObj(v)) return bad(g + ': 객체가 아님');
+    for(const k of CURVE_POINT_GROUPS[g]){
+      if(!_curvePt(v[k])) return bad(g + '.' + k + ': 좌표가 없거나 올바르지 않음');
+    }
+    curves++;
+  }
+  if((e.anchors == null) !== (e.handles == null)) return bad('anchors 와 handles 는 함께 있어야 함');
+  const sp = e.sleevePattern;
+  if(sp != null){
+    if(!_curveIsObj(sp)) return bad('sleevePattern: 객체가 아님');
+    const cnt = sp.anchorCount;
+    if(!(Number.isInteger(cnt) && cnt >= 2 && cnt <= 64)) return bad('sleevePattern.anchorCount: 올바른 개수가 아님');
+    if(!Array.isArray(sp.segments) || sp.segments.length !== cnt-1) return bad('sleevePattern.segments: 개수가 anchorCount 와 맞지 않음');
+    for(let i=0;i<sp.segments.length;i++){
+      const seg = sp.segments[i];
+      if(!_curveIsObj(seg) || !_curvePt(seg.c1) || !_curvePt(seg.c2)) return bad('sleevePattern.segments[' + i + ']: 좌표가 없거나 올바르지 않음');
+    }
+    if(sp.anchorOffsets != null){
+      if(!Array.isArray(sp.anchorOffsets) || (sp.anchorOffsets.length !== cnt && sp.anchorOffsets.length !== 0)) return bad('sleevePattern.anchorOffsets: 개수가 anchorCount 와 맞지 않음');
+      for(let i=0;i<sp.anchorOffsets.length;i++){
+        const o = sp.anchorOffsets[i];
+        if(!_curveIsObj(o) || !_curveNum(o.dx, -CURVE_COORD_MAX, CURVE_COORD_MAX) || !_curveNum(o.dy, -CURVE_COORD_MAX, CURVE_COORD_MAX)) return bad('sleevePattern.anchorOffsets[' + i + ']: 올바르지 않음');
+      }
+    }
+    curves++;
+  }
+  if(curves === 0) return bad('곡선 데이터가 없음');
+  return { ok:true };
+}
+
+// 저장소 읽기(쓰기 없음). 복원·건수 판정이 **같은 목록**(entries)을 쓴다.
+//   entries = kv 의 유효 항목 + (kv 에 유효 항목이 없는 치수에 한해) 이력 배열의 치수별 마지막 유효 항목.
+//   순서는 [배열 유래…, kv 유래…] — findLast 류가 뒤에서부터 찾으므로 kv 가 이긴다.
+function readCurveStore(){
+  const out = { arr:null, kv:null, arrRaw:null, kvRaw:null, arrBad:false, kvBad:false, blocked:false,
+                problems:[], entries:[], invalid:0 };
+  try{
+    out.arrRaw = localStorage.getItem(CURVE_STORE_KEY);
+    out.kvRaw  = localStorage.getItem(CURVE_STORE_KV_KEY);
+  } catch(e){
+    out.blocked = true;
+    out.problems.push('브라우저 저장소에 접근할 수 없습니다 (' + ((e && e.name) || '오류') + ')');
+    return out;
+  }
+  if(out.arrRaw != null){
+    try{ const v = JSON.parse(out.arrRaw); if(!Array.isArray(v)) throw new Error('not array'); out.arr = v; }
+    catch(e){ out.arrBad = true; out.problems.push('저장 이력(armhole_data)이 손상되어 읽을 수 없음 — 원문은 그대로 둠'); }
+  }
+  if(out.kvRaw != null){
+    try{ const v = JSON.parse(out.kvRaw); if(!_curveIsObj(v)) throw new Error('not object'); out.kv = v; }
+    catch(e){ out.kvBad = true; out.problems.push('치수별 저장(armhole_data_kv)이 손상되어 읽을 수 없음 — 원문은 그대로 둠'); }
+  }
+  const kvValid = [], have = new Set();
+  if(out.kv){
+    for(const k of Object.keys(out.kv)){
+      const e = out.kv[k];
+      if(validateCurveEntry(e).ok){ kvValid.push(e); have.add(getBodySaveKey(e.measurements.B, e.measurements.W, e.measurements.BL)); }
+      else out.invalid++;
+    }
+  }
+  const fromArr = new Map();
+  if(out.arr){
+    for(const e of out.arr){
+      if(!validateCurveEntry(e).ok){ out.invalid++; continue; }
+      const key = getBodySaveKey(e.measurements.B, e.measurements.W, e.measurements.BL);
+      if(have.has(key)) continue;
+      fromArr.delete(key);            // 같은 치수는 뒤 항목이 이긴다(삽입 순서 갱신)
+      fromArr.set(key, e);
+    }
+  }
+  out.entries = Array.from(fromArr.values()).concat(kvValid);
+  return out;
+}
+function _curveStoreError(e){
+  const quota = e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
+  return quota ? '브라우저 저장 공간이 가득 찼습니다(용량 초과).'
+               : '브라우저 저장소에 쓸 수 없습니다 (' + ((e && e.name) || '오류') + ').';
+}
+// 쓰기 준비: 기존 원문을 읽을 수 없으면 **덮어쓰지 않고** 거부한다.
+function openCurveStoreForWrite(){
+  const st = readCurveStore();
+  if(st.blocked) throw new Error(st.problems[0]);
+  if(st.arrBad) throw new Error('기존 저장 이력(armhole_data)이 손상되어 있습니다. 원문을 지키기 위해 덮어쓰지 않았습니다.');
+  if(st.kvBad)  throw new Error('기존 치수별 저장(armhole_data_kv)이 손상되어 있습니다. 원문을 지키기 위해 덮어쓰지 않았습니다.');
+  return { arr: st.arr || [], kv: st.kv || {}, arrRaw: st.arrRaw, kvRaw: st.kvRaw };
+}
+function putCurveEntryInKv(w, entry){
+  const key = getBodySaveKey(entry.measurements.B, entry.measurements.W, entry.measurements.BL);
+  if(Object.prototype.hasOwnProperty.call(w.kv, key) && !validateCurveEntry(w.kv[key]).ok){
+    throw new Error('이 치수(' + key + ')의 기존 저장 항목을 읽을 수 없습니다. 원문을 지키기 위해 덮어쓰지 않았습니다.');
+  }
+  w.kv[key] = entry;
+}
+// 두 키 기록. 둘째가 실패하면 첫째를 원래 원문으로 되돌린다(반쪽 저장 금지).
+function commitCurveStore(w){
+  const arrText = JSON.stringify(w.arr), kvText = JSON.stringify(w.kv);
+  try{ localStorage.setItem(CURVE_STORE_KEY, arrText); }
+  catch(e){ throw new Error(_curveStoreError(e)); }
+  try{ localStorage.setItem(CURVE_STORE_KV_KEY, kvText); }
+  catch(e){
+    try{ if(w.arrRaw == null) localStorage.removeItem(CURVE_STORE_KEY); else localStorage.setItem(CURVE_STORE_KEY, w.arrRaw); } catch(_){}
+    throw new Error(_curveStoreError(e));
+  }
+}
+// 항목 1건 저장(수동·자동 공용). { ok:true } 또는 { ok:false, reason }.
+function storeCurveEntry(entry, replaceAuto){
+  try{
+    const v = validateCurveEntry(entry);
+    if(!v.ok) throw new Error('현재 곡선에 저장할 수 없는 값이 있습니다 (' + v.reason + ').');
+    const w = openCurveStoreForWrite();
+    putCurveEntryInKv(w, entry);
+    let replaced = false;
+    if(replaceAuto){
+      for(let i=w.arr.length-1;i>=0;i--){
+        const d = w.arr[i];
+        if(d && d.auto && measurementMatches(d) && sleeveMeasurementMatches(d)){ w.arr[i] = entry; replaced = true; break; }
+      }
+    }
+    if(!replaced) w.arr.push(entry);
+    commitCurveStore(w);
+    curveStoreNotice = '';
+    updateSaveCount();
+    return { ok:true };
+  } catch(e){
+    curveStoreNotice = '저장 실패: ' + e.message;
+    updateSaveCount();
+    return { ok:false, reason: e.message };
+  }
+}
+
 function saveCurveData(){
-  if(!state.armH && !state.sleeveH){ alert('저장할 곡선 데이터가 없습니다.'); return; }
+  if(!state.armH && !state.sleeveH){ alert('저장할 곡선 데이터가 없습니다.'); return false; }
   const B  = +document.getElementById('inpB').value;
   const W  = +document.getElementById('inpW').value;
   const BL = +document.getElementById('inpBL').value;
   const H = state.armH; // null일 수 있음
-  const entry = {
+  let entry;
+  try{
+  entry = {
     timestamp: new Date().toISOString(),
     measurements: { B, W, BL, SL: n("inpSL"), Hem: n("inpHem") },
     capFormula: document.getElementById("selCapFormula")?.value || "culture",
@@ -50,14 +244,14 @@ function saveCurveData(){
       }))
     } : null,
   };
-  const key = 'armhole_data';
-  const existing = JSON.parse(localStorage.getItem(key) || '[]');
-  existing.push(entry);
-  localStorage.setItem(key, JSON.stringify(existing));
-  // 새 키-값 구조에도 저장
-  setSavedCurveEntry(entry);
-  updateSaveCount();
+  } catch(e){
+    alert('저장하지 못했습니다.\n현재 곡선에 빠진 점이 있습니다 (' + e.message + ').');
+    return false;
+  }
+  const r = storeCurveEntry(entry, false);
+  if(!r.ok){ alert('저장하지 못했습니다.\n' + r.reason); return false; }
   alert('저장 완료! B=' + B + ' W=' + W + ' BL=' + BL);
+  return true;
 }
 
 
@@ -77,21 +271,23 @@ function autoSaveCurveData(){
     fNeckline: state.fNeckH ? { h0:safePt(state.fNeckH.h0), h1:safePt(state.fNeckH.h1) } : null,
     sleevePattern: state.sleeveH ? { anchorCount: state.sleeveH.anchorCount, segments: state.sleeveH.segments.map(seg=>({ c1:safePt(seg.c1), c2:safePt(seg.c2) })), anchorOffsets: (state.sleeveH.anchorOffsets || []).map(o=>({dx:+o.dx.toFixed(4),dy:+o.dy.toFixed(4)})) } : null
   };
-  // 키-값 구조에 저장 (치수별 최신 1건만 유지)
-  setSavedCurveEntry(entry);
-  // 구버전 배열에도 호환성 유지
-  const key='armhole_data';
-  const data = JSON.parse(localStorage.getItem(key) || '[]');
-  for(let i=data.length-1;i>=0;i--){
-    if(data[i].auto && measurementMatches(data[i]) && sleeveMeasurementMatches(data[i])){ data[i]=entry; localStorage.setItem(key, JSON.stringify(data)); return true; }
+  // 치수별 최신 1건(kv) + 이력 배열(같은 치수의 자동 저장 항목은 교체) — 두 키를 한 번에 기록한다.
+  const r = storeCurveEntry(entry, true);
+  if(!r.ok){
+    // 자동 저장은 마우스를 놓을 때마다 돈다 — 같은 사유는 한 번만 알리고, 저장 건수 줄에는 계속 표시한다.
+    if(curveAutoSaveWarned !== r.reason){
+      curveAutoSaveWarned = r.reason;
+      alert('자동 저장하지 못했습니다.\n' + r.reason + '\n(같은 이유로는 다시 알리지 않습니다 — 파일 메뉴의 저장 건수 줄에 계속 표시됩니다.)');
+    }
+    return false;
   }
-  data.push(entry);
-  localStorage.setItem(key, JSON.stringify(data));
+  curveAutoSaveWarned = '';
   return true;
 }
 function exportData(){
-  const key = 'armhole_data';
-  const data = JSON.parse(localStorage.getItem(key) || '[]');
+  const st = readCurveStore();
+  if(st.blocked || st.arrBad){ alert('내보내지 못했습니다.\n' + st.problems.join('\n')); return; }
+  const data = st.arr || [];
   if(data.length === 0){ alert('저장된 데이터가 없습니다.'); return; }
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], {type:'application/json'});
@@ -113,9 +309,8 @@ function exportData(){
 //
 // ★ **두 키를 모두 복원한다** — saveCurveData/autoSaveCurveData가 항상 양쪽에 쓰기 때문:
 //   - `armhole_data`    : append-only 배열(내보내기 형식). 이력 전체.
-//   - `armhole_data_kv` : 치수키(B-W-BL)별 최신 1건. getSavedCurveEntries가 **먼저** 읽고
-//                         updateSaveCount가 세는 곳. 여기를 안 채우면 "저장 0건"으로 보인다.
-//   kv는 배열에서 재구성한다(같은 치수는 뒤 항목이 이김 — setSavedCurveEntry와 같은 규칙).
+//   - `armhole_data_kv` : 치수키(B-W-BL)별 최신 1건.
+//   kv는 새로 들어온 항목으로 갱신한다(같은 치수는 뒤 항목이 이김).
 //
 // 병합 방식(덮어쓰지 않는다): 기존 항목을 지우지 않고 뒤에 붙인다. 같은 치수가 있으면
 // kv에서 가져온 쪽이 최신이 된다. 되돌릴 수 없는 삭제를 하지 않는 쪽이 안전하다.
@@ -123,45 +318,51 @@ function exportData(){
 // 멱등성: 같은 파일을 두 번 가져와도 결과가 같아야 한다. 예전엔 무조건 뒤에 붙여서
 // 'JSON 불러오기'를 두 번 누르면 이력이 조용히 2배가 됐다 — kv는 치수키로 덮어쓰니
 // UI 카운트는 그대로라 눈치채기 어려웠다. 회사↔맥을 오갈수록 계속 불어난다.
+//
+// 전부-아니면-전무(2026-11-12): 항목이 하나라도 올바르지 않으면 **파일 전체를 거부**하고
+// 아무것도 쓰지 않는다(예전엔 measurements 만 보고 통과시켜 깨진 좌표가 저장·적용됐다).
 function importCurveEntries(entries){
-  if(!Array.isArray(entries)) throw new Error('배열이 아닙니다 (내보낸 JSON이 맞는지 확인하세요)');
-  const valid = entries.filter(e => e && e.measurements &&
-    e.measurements.B != null && e.measurements.W != null && e.measurements.BL != null);
-  if(valid.length === 0) throw new Error('가져올 항목이 없습니다 (measurements가 있는 항목이 하나도 없음)');
+  if(_curveIsObj(entries) && typeof entries.format === 'string' && entries.format.indexOf('.project') >= 0){
+    throw new Error('이 파일은 프로젝트 파일입니다. 곡선 데이터가 아니므로 파일 메뉴의 «프로젝트 열기»로 여세요.');
+  }
+  if(!Array.isArray(entries)) throw new Error('곡선 데이터 형식이 아닙니다 (내보낸 JSON 이 맞는지 확인하세요).');
+  if(entries.length === 0) throw new Error('가져올 항목이 없습니다 (빈 파일).');
+  const badList = [];
+  for(let i=0;i<entries.length;i++){
+    const v = validateCurveEntry(entries[i]);
+    if(!v.ok) badList.push((i+1) + '번째 항목 — ' + v.reason);
+  }
+  if(badList.length){
+    throw new Error('올바르지 않은 항목이 ' + badList.length + '건 있어 아무것도 가져오지 않았습니다.\n'
+      + badList.slice(0,3).join('\n') + (badList.length > 3 ? '\n…' : ''));
+  }
 
-  const key = 'armhole_data';
-  const existing = JSON.parse(localStorage.getItem(key) || '[]');
+  const w = openCurveStoreForWrite();     // 기존 원문이 손상돼 있으면 여기서 거부(덮어쓰지 않음)
 
   // 이미 있는 항목은 건너뛴다. 같은 치수·같은 순간이라도 내용이 다르면 남긴다
   // (자동저장 auto:true와 수동저장은 초 단위로 붙어 나오는 별개 항목이다).
-  const seen = new Set(existing.map(curveEntryFingerprint));
+  const seen = new Set(w.arr.map(curveEntryFingerprint));
   const fresh = [];
-  for(const e of valid){
+  for(const e of entries){
     const fp = curveEntryFingerprint(e);
     if(seen.has(fp)) continue;
     seen.add(fp);
     fresh.push(e);
   }
-  const merged = existing.concat(fresh);
-  localStorage.setItem(key, JSON.stringify(merged));
-
   // kv는 **새로 들어온 항목으로만** 갱신한다. 전부 중복이면 건드리지 않는다 —
   // 가져온 뒤 편집해서 자동저장된 최신 곡선이 있는데 같은 파일을 다시 가져오면,
-  // valid 전체로 덮어쓸 경우 그 최신 작업이 파일의 옛 항목으로 되돌아가 버린다.
+  // 전체로 덮어쓸 경우 그 최신 작업이 파일의 옛 항목으로 되돌아가 버린다.
   if(fresh.length){
-    const kv = JSON.parse(localStorage.getItem('armhole_data_kv') || '{}');
-    for(const e of fresh){
-      kv[getBodySaveKey(e.measurements.B, e.measurements.W, e.measurements.BL)] = e;
-    }
-    localStorage.setItem('armhole_data_kv', JSON.stringify(kv));
+    for(const e of fresh){ putCurveEntryInKv(w, e); w.arr.push(e); }
+    commitCurveStore(w);
   }
-
+  curveStoreNotice = '';
   updateSaveCount();
   return {
     imported: fresh.length,
-    duplicates: valid.length - fresh.length,
-    skipped: entries.length - valid.length,
-    total: merged.length
+    duplicates: entries.length - fresh.length,
+    skipped: 0,
+    total: w.arr.length
   };
 }
 
@@ -182,20 +383,20 @@ function importDataFromFile(input){
   const reader = new FileReader();
   reader.onload = () => {
     try{
-      const parsed = JSON.parse(reader.result);
-      const before = getSavedCurveEntries().length;
+      let parsed;
+      try{ parsed = JSON.parse(reader.result); }
+      catch(e){ throw new Error('JSON 파일이 아니거나 내용이 깨져 있습니다.'); }
+      const before = countSavedCurveKeys();
       const r = importCurveEntries(parsed);
-      let msg = '가져오기 완료!\n' + r.imported + '건 가져옴 (기존 ' + before + '건 → 치수별 '
-        + Object.keys(JSON.parse(localStorage.getItem('armhole_data_kv') || '{}')).length + '건)';
+      let msg = '가져오기 완료!\n' + r.imported + '건 가져옴 (치수별 ' + before + '건 → ' + countSavedCurveKeys() + '건)';
       if(r.duplicates > 0) msg += '\n' + r.duplicates + '건은 이미 있는 항목이라 건너뜀';
-      if(r.skipped > 0) msg += '\n' + r.skipped + '건은 형식이 맞지 않아 건너뜀';
       // 현재 치수에 해당하는 곡선이 들어왔으면 바로 화면에 반영한다.
       const applied = loadSavedCurveForCurrentMeasurements(false);
       msg += applied ? '\n현재 치수의 곡선을 불러왔습니다.' : '\n현재 치수와 일치하는 곡선은 없습니다.';
       alert(msg);
       if(typeof render === 'function') render();
     } catch(e){
-      alert('가져오기 실패: ' + e.message);
+      alert('가져오기 실패 — 현재 작업과 저장 데이터는 그대로입니다.\n' + e.message);
     }
     input.value = '';   // 같은 파일을 다시 고를 수 있게 초기화
   };
@@ -203,45 +404,32 @@ function importDataFromFile(input){
   reader.readAsText(file);
 }
 
+// 저장 건수 = 복원 가능한 치수 수(getSavedCurveEntries 와 같은 목록에서 센다).
+function countSavedCurveKeys(st){
+  const s = st || readCurveStore();
+  return new Set(s.entries.map(e => getBodySaveKey(e.measurements.B, e.measurements.W, e.measurements.BL))).size;
+}
 function updateSaveCount(){
-  try{
-    const kvData = localStorage.getItem('armhole_data_kv');
-    const count = kvData ? Object.keys(JSON.parse(kvData)).length : 0;
-    const el = document.getElementById('saveCount');
-    if(el) el.textContent = '저장 ' + count + '건 (치수별)';
-  } catch(e){}
+  const st = readCurveStore();
+  let text = '저장 ' + countSavedCurveKeys(st) + '건 (치수별)';
+  if(st.invalid) text += ' · 읽을 수 없는 항목 ' + st.invalid + '건(원문 보존)';
+  if(st.problems.length) text += ' · ⚠ ' + st.problems.join(' / ');
+  if(curveStoreNotice) text += ' · ⚠ ' + curveStoreNotice;
+  const el = document.getElementById('saveCount');
+  if(el) el.textContent = text;
+  return text;
 }
 
-// ── 저장 데이터 구조 (키-값 방식으로 개선) ──────────
-// 키: "B-W-BL" 형태로 치수별 최신 데이터만 유지
-// 기존 배열 방식과 호환성 유지
+// ── 저장 데이터 구조 ──────────
+// 키: "B-W-BL" 형태로 치수별 최신 데이터만 유지(kv) + 구버전 이력 배열 호환.
+// 검증을 통과한 항목만 돌려준다(깨진 항목은 저장소에 그대로 두고 복원에서만 제외).
 function getSavedCurveEntries(){
-  try{
-    // 새 키-값 구조 먼저 확인
-    const kvData = localStorage.getItem('armhole_data_kv');
-    if(kvData){
-      const kv = JSON.parse(kvData);
-      return Object.values(kv);
-    }
-    // 구버전 배열 방식 fallback
-    return JSON.parse(localStorage.getItem('armhole_data') || '[]');
-  }
-  catch(e){ return []; }
+  return readCurveStore().entries;
 }
 
 function getBodySaveKey(B, W, BL){ return `${B}-${W}-${BL}`; }
 function getSleeveSaveKey(B, W, BL, SL, capFormula){ return `${B}-${W}-${BL}-${SL}-${capFormula}`; }
 
-function setSavedCurveEntry(entry){
-  try{
-    const kvData = localStorage.getItem('armhole_data_kv');
-    const kv = kvData ? JSON.parse(kvData) : {};
-    const key = getBodySaveKey(entry.measurements.B, entry.measurements.W, entry.measurements.BL);
-    kv[key] = entry;
-    localStorage.setItem('armhole_data_kv', JSON.stringify(kv));
-    updateSaveCount();
-  } catch(e){}
-}
 function measurementMatches(entry){
   if(!entry || !entry.measurements) return false;
   const m = entry.measurements;
@@ -256,8 +444,9 @@ function sleeveMeasurementMatches(entry){
   const mode = document.getElementById("selCapFormula")?.value || "culture";
   return same(m.SL,n('inpSL')) && (!entry.capFormula || entry.capFormula === mode);
 }
+// 검증을 통과한 항목만 state 에 적용한다. 통과 전에는 state·화면 입력을 건드리지 않는다.
 function applySavedCurveEntry(entry, includeSleeve=true){
-  if(!entry) return false;
+  if(!entry || !validateCurveEntry(entry).ok) return false;
   if(entry.capFormula){
     const sel = document.getElementById("selCapFormula");
     if(sel) sel.value = entry.capFormula;
@@ -342,20 +531,28 @@ function restoreSavedSleevePatternForCurrentSleeve(showAlert=false){
   if(showAlert) alert('현재 소매 기준과 같은 저장 데이터가 없습니다.');
   return false;
 }
+// 현재 치수의 저장 곡선을 state 에 복원한다.
+// ★ 자동 경로(showAlert=false)는 **state 만 바꾸고 그리지 않는다** — 호출자가 그린다:
+//    · 이 파일 맨 아래(페이지 로드): 뒤따르는 스크립트(dartMove.js 등)가 아직 없어 render 를 부를 수 없다
+//      (부르면 ReferenceError 로 이 파일 실행이 끊겨 저장 건수도 갱신되지 않았다). 첫 그리기는 init.js.
+//    · render() 의 치수 전환 분기: render 안에서 다시 render 를 부르면 무한 재귀(스택 초과)였다.
+//    · importDataFromFile: 직후에 스스로 render 한다.
+//   사용자가 «불러오기» 버튼을 누른 경로(showAlert=true)만 여기서 그린다.
 function loadSavedCurveForCurrentMeasurements(showAlert=false){
   const entry = findLastSavedForCurrentMeasurements();
-  if(!entry){
+  if(!entry || !applySavedCurveEntry(entry, true)){
     if(showAlert) alert('현재 치수와 같은 저장 데이터가 없습니다.');
     return false;
   }
-  applySavedCurveEntry(entry, true);
-  if(showAlert) alert('현재 치수의 마지막 저장선을 불러왔습니다.');
-  render();
+  if(showAlert){
+    alert('현재 치수의 마지막 저장선을 불러왔습니다.');
+    render();
+  }
   return true;
 }
-// 마지막 저장 데이터로 핸들 복원: 현재 치수와 같은 데이터만 자동 복원
-if(n("inpB") && n("inpW") && n("inpBL")) loadSavedCurveForCurrentMeasurements(false);
+// 페이지 로드: 저장 건수 표시 → 현재 치수와 같은 저장 곡선만 state 에 복원(그리기는 init.js).
 updateSaveCount();
+if(n("inpB") && n("inpW") && n("inpBL")) loadSavedCurveForCurrentMeasurements(false);
 
 
 // ── DXF 내보내기 (SVG 패턴선 직접 읽기 방식) ──────────────

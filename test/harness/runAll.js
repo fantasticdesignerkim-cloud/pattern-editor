@@ -178,6 +178,8 @@ const suites = [
   { file: "sleeveAnnotationCheck.js",   golden: false },
   // TEMP B83/W64/BL38 몸판 곡선 기본값(js/tempDefaultCurve.js): 우선순위·다른 치수 무영향·storage 0쓰기·import 동등성.
   { file: "tempDefaultCurveCheck.js",   golden: false },
+  // 곡선 저장·복원 안전성(2026-11-12): 로드 순서(자동 복원이 render 를 안 부름)·잘못된 가져오기 거부(전후 동일)·깨진 로컬값 원문 보존·저장 실패 보고·markDirty 소매 입력 = 몸판 곡선 불변.
+  { file: "curveStoreSafetyCheck.js",   golden: false },
   // 소매 모양 완료 체크포인트(S5): 완료 게이트·불변 스냅샷·형상전용 스테일·몸판 무효화(스텁 project).
   { file: "sleeveCheckpointCheck.js",   golden: false },
   // 카라 모양 C1(designCollar): bodiceResult → 칼라 스탠드 직선 스캐폴드 순수 파생·봉제/연장 분리.
