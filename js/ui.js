@@ -3390,7 +3390,7 @@
     else if (!pd.ok) setCollarBodyNote(collarSelectionStr(pd.reason) + (cb.has ? " · 현재 본체 형상은 그대로 유지" : ""));
     else if (collarBodyManual(project)) {
       if (collarBodyInvalid(project)) setCollarBodyNote("칼라 본체 편집 무효 · " + collarBodyReasonStr(project.working.collarDraft.body.invalidReason) + " · 편집 복구 또는 기본형으로 돌아가기");
-      else { const m = cb.measure || {}; setCollarBodyNote("칼라 본체 직접 수정 중 · endpoint 고정 · 외곽·포인트 anchor·핸들 편집 · 포인트 사선 " + fmtL(m.pointDiagonalLenCm || 0) + "cm · 외곽선 " + fmtL(m.outerEdgeLenCm || 0) + "cm · 선이 안 잡히면 «본체 선 편집 켜기»"); }
+      else { const m = cb.measure || {}; setCollarBodyNote("칼라 본체 직접 수정 중 · 둥근 점 = 끌어서 이동 · 네모 점(양 끝) = 고정 · 휘게 하려면 선을 누르고 «곡선으로» · 포인트 사선 " + fmtL(m.pointDiagonalLenCm || 0) + "cm · 외곽선 " + fmtL(m.outerEdgeLenCm || 0) + "cm · 선이 안 잡히면 «본체 선 편집 켜기»"); }
     }
     // 읽기 전용 실제 결과: CB 폭·앞쪽 폭·앞끝 접선 돌출·포인트 사선 길이(=앞폭·투영 합성)·앞끝 기울기.
     //   ★ 기울기는 부착선 로컬 접선 기준 평면 기하값(캔버스 축·착용 spread 아님). frontRise 와 무관.
@@ -3476,7 +3476,7 @@
     if (T.getMode() === "draw" && T.getDraft()) { setCollarBodyNote(COLLAR_EDIT_DRAFT_NOTE); return; }
     if (T.getMode() !== "select") { T.setMode("select"); if (typeof render === "function") render(); }
     updateCollarBodyPanel(project);
-    setCollarBodyNote("칼라 선 편집 켜짐 · 위 칼라의 바깥선(뒤중심 → 칼라 끝 → 앞)을 누르면 점이 나타납니다 · 중간 점·칼라 끝 점을 끌어 수정(양 끝 점은 고정)");
+    setCollarBodyNote("칼라 선 편집 켜짐 · 위 칼라의 바깥선(뒤중심 → 칼라 끝 → 앞)을 누르면 점이 나타납니다 · 둥근 점을 끌어 수정(네모 = 양 끝 고정) · 휘게 하려면 아래 «곡선으로»");
   }
   // 기본형으로 돌아가기(manual → parametric): 관리선만 제거(다른 선 보존), 보존 파라미터로 재파생.
   function onCollarBodyRevert() {

@@ -912,7 +912,8 @@
     const line = findLine(selectedId); if (!line) return null;
     return {
       piece: line.piece,
-      anchors: anchorsFromSegments(line.segments),
+      // locked: 관리선(소매산·칼라 본체)의 양 끝 = 끌 수 없는 점(render 가 다른 모양으로 그린다 · 선택 hit 규칙과 같은 조건).
+      anchors: anchorsFromSegments(line.segments).map((a, k, as) => ({ x: a.x, y: a.y, locked: (isSleeveCapLine(line) || isCollarBodyLine(line)) && (k === 0 || k === as.length - 1) })),
       handles: handlesOf(line).map(h => ({ c: { x: h.c.x, y: h.c.y }, a: { x: h.a.x, y: h.a.y } }))
     };
   }
@@ -954,6 +955,31 @@
     invalidateForLine(p, gone, { removed: true });   // 그 선 출처 파생만 · 반영된 외곽선이면 그 피스만 재합성
     selectedId = null; editDrag = null; setNote("선 삭제됨 · 다른 선을 클릭"); syncRoleButtons(); syncCutStatus(); rerender(); notifyDesignResult();
   }
+  // ── 칼라 본체 관리선: 직선 구간 → 같은 모양의 곡선(2026-11-12 김님 «카라 모양을 몸판·소매처럼») ──
+  //   기본 M 은 외곽 휨 0 = 직선 구간이라 곡선 핸들이 없었다. 직선 세그를 제어점 1/3·2/3 인 cubic 으로 바꾼다(형상 동일 · 점 위치 무변경).
+  //   양 끝점·부착선 잠금·검증(computeFromBodyLine)은 그대로 — 관리선 세그의 kind 만 바뀐다. 칼라 본체 관리선 전용(일반 선·소매산·네크라인 무변경).
+  function curveLineSegCount(line) { return line ? line.segments.filter(s => s.kind !== "cubic" && Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y) > EPS).length : 0; }
+  function getCurveState() {
+    if (mode !== "select" || !selectedId) return null;
+    const line = findLine(selectedId); if (!line || !isCollarBodyLine(line)) return null;
+    const n = curveLineSegCount(line), nh = handlesOf(line).length;
+    return { show: true, allowed: n > 0 && !editDrag, lineSegs: n, handles: nh };
+  }
+  function doToCurve() {
+    const st = getCurveState(); if (!st || !st.allowed) return false;
+    const line = findLine(selectedId);
+    line.segments = line.segments.map(s => {
+      if (s.kind === "cubic" || Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y) <= EPS) return s;
+      const f = s.from, t = s.to, c = { kind: "cubic", from: { x: f.x, y: f.y }, c1: { x: f.x + (t.x - f.x) / 3, y: f.y + (t.y - f.y) / 3 }, c2: { x: f.x + (t.x - f.x) * 2 / 3, y: f.y + (t.y - f.y) * 2 / 3 }, to: { x: t.x, y: t.y } };
+      if (s.part) c.part = s.part;
+      return c;
+    });
+    if (window.recomposeCollarBody) window.recomposeCollarBody();   // 같은 형상으로 재합성·검증(편집 pointerup 과 같은 경로)
+    setNote("곡선으로 바뀜 · 모양은 그대로 · 점에서 나온 핸들을 끌어 휘게 하세요(양 끝 점은 고정)");
+    syncRoleButtons(); rerender(); notifyDesignResult();
+    return true;
+  }
+
   // 선택한 선의 역할 지정(cut/boundary/guide). 표시만 바뀌고 outline 분할은 다음 단계.
   function setRole(role) {
     if (mode !== "select" || !selectedId || !ROLE_LABEL[role]) return;
@@ -1798,7 +1824,7 @@
         const as = anchorsFromSegments(line.segments);
         for (let k = 0; k < as.length; k++) if (Math.hypot(geo.x - as[k].x, geo.y - as[k].y) < rCm) {
           if (isSleeveCapLine(line) && (k === 0 || k === as.length - 1)) { setNote("소매산 진동밑점은 고정됩니다 · SP·중간 anchor·핸들만 편집"); return; }   // 진동밑 endpoint 고정
-          if (isCollarBodyLine(line) && (k === 0 || k === as.length - 1)) { setNote("칼라 본체 endpoint(cbOuter·attachFront)는 고정됩니다 · 외곽·포인트 anchor·핸들만 편집"); return; }   // endpoint 고정
+          if (isCollarBodyLine(line) && (k === 0 || k === as.length - 1)) { setNote("이 점은 고정입니다(뒤중심·밴드 부착 앞끝 — 네모 표시) · 둥근 점과 핸들은 끌어서 수정할 수 있습니다"); return; }   // endpoint 고정
           editDrag = { kind: "anchor", k: k, startGeo: geo, origAnchor: { x: as[k].x, y: as[k].y }, orig: JSON.parse(JSON.stringify(line.segments)) }; return;
         }
       }
@@ -1808,7 +1834,7 @@
     lines().forEach(l => { if (l.piece !== piece || (only && !only(l))) return; const d = distToLine(geo, l); if (d < bestD) { bestD = d; best = l; } });
     selectedId = best ? best.id : null;
     setNote(best ? (isSleeveCapLine(selectedId) ? "소매산 관리선 · 진동밑 고정 · SP·중간 anchor·핸들 편집(재합성)"
-      : isCollarBodyLine(selectedId) ? "칼라 본체 관리선 · endpoint 고정 · 외곽·포인트 anchor·핸들 편집(재합성) · 기본형으로 돌아가기로만 제거"
+      : isCollarBodyLine(selectedId) ? "위 칼라 바깥선 · 둥근 점 = 끌어서 이동 · 네모 점(양 끝) = 고정 · 곡선 핸들 = 휨 조절 · 지우려면 «기본형으로 돌아가기»"
       : isNeckAutoLine(selectedId) ? "네크라인 전용선 · 역할 변경·삭제 금지(기본형으로 돌아가기로만) · anchor/핸들만 편집"
       : "선택됨 · Delete 삭제 · anchor/핸들 드래그 · Esc 해제") : SELECT_NOTE);
   }
@@ -2175,7 +2201,7 @@
     doSplit, invalidateParts, visibleParts, pruneStaleSleeveParts, doBoundaryPreview, doBoundaryApply, doSleeveEditUndo, validateSelectedBoundary, doComposeDesignOutline,
     getBoundaryState, visibleBoundaryPreview, boundaryStatusOf, pruneStaleBoundaryPreview,
     // 옆선 길이 자석(2026-11-06)
-    getSeamState, getSeamLive, isEditDragging: () => !!(editDrag && mode === "select"), getReflectState, doReflectToBodice, sideSeamLabels, getMeasureGuide, measureAlong: alongExisting, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
+    getCurveState, doToCurve, getSeamState, getSeamLive, isEditDragging: () => !!(editDrag && mode === "select"), getReflectState, doReflectToBodice, sideSeamLabels, getMeasureGuide, measureAlong: alongExisting, setSeamMagnet, setSeamBasis, getSeamSettings, seamInfoFor,
     // 옆선 «길이 맞춤»(2026-11-07) · 그리기 중 거부 안내
     getSeamFit, getSeamFitPreview, previewSeamFit, applySeamFit, cancelSeamFit, getDrawHint: () => (mode === "draw" && draft ? drawHint : null),
     // 순수

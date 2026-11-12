@@ -29,7 +29,7 @@
   "use strict";
 
   const PIECE_LABEL = { front: "앞판", back: "뒤판", sleeve: "소매", collar: "카라" };
-  const LOCK_TITLE = { neck: "네크라인 전용선 · 역할 고정", cap: "소매산 관리선 · 역할 고정", collar: "칼라 본체 관리선 · 역할 고정" };
+  const LOCK_TITLE = { neck: "네크라인 전용선 · 역할 고정", cap: "소매산 관리선 · 역할 고정", collar: "위 칼라 바깥선 · 모양 수정 가능" };
   const PAD = 12;        // 가림 판정 여유(막대 사각형을 이만큼 키워 점이 들어오면 «가림»)
   const DRAG_PX = 4;     // 이 이상 움직이면 캔버스 드래그로 본다(패널 자리·행 구성 고정 · designLineTool DRAG_PX 와 같은 값)
   const FIT_RATIO = 0.25; // 접힌 패널 높이 예산 = 캔버스 높이의 25%(2026-11-11 김님 리뷰 «20~25% 이내»)
@@ -61,7 +61,12 @@
       // 옆선 행(2026-11-08): 권위 계측 숫자 + 몸판 완료 차단 사유·완료 버튼만(자동 길이 맞춤·자석·여유 설정 없음).
       const seam = (!lock && role === "boundary" && s.sel.seam && s.sel.seam.show) ? { text: s.sel.seam.text, bodice: s.sel.bodice || null } : null;
       const rf = (!lock && s.sel.reflect && !s.sel.reflect.done) ? { allowed: !!s.sel.reflect.allowed, text: s.sel.reflect.reason } : null;   // 몸판 외곽으로 반영(앞·뒤판 일반 선 · 아직 미반영일 때)
-      return { kind: "select", reflect: rf, seam: seam, key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };
+      // 칼라 본체 관리선(2026-11-12): «역할 고정»이 «점 전부 잠금»으로 읽히지 않게 — 무엇을 끌 수 있고 무엇이 고정인지 글로 + 직선 구간 «곡선으로».
+      const cs = (lock === "collar" && s.sel.curve && s.sel.curve.show) ? s.sel.curve : null;
+      const curve = cs ? { allowed: !!cs.allowed, lineSegs: cs.lineSegs || 0,
+        text: (cs.lineSegs > 0 ? "«곡선으로» = 모양 그대로, 휨 핸들이 생깁니다(직선 구간 " + cs.lineSegs + "개) · 둥근 점 = 이동 · 네모 점(양 끝) = 고정"
+          : "둥근 점 = 이동 · 작은 채운 점 = 휨 핸들 · 네모 점(양 끝) = 고정") + "(뒤중심·밴드 부착) · 역할은 외곽으로 고정" } : null;
+      return { kind: "select", curve: curve, reflect: rf, seam: seam, key: "sel:" + s.sel.id, title: lock ? LOCK_TITLE[lock] : "선택한 선 · " + (PIECE_LABEL[s.sel.piece] || s.sel.piece), role: role, locked: !!lock, split: split, boundary: boundary };
     }
     return null;
   }
@@ -105,7 +110,7 @@
   let moreBtn = null, moreKey = null;
 
   let modeMemo = null;                 // {key, sig, mode}: 같은 선·같은 결과/펼침 동안 전체/소형 형태를 한 번만 정한다(자리는 CSS 고정)
-  let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [];
+  let bar = null, titleEl = null, dismissBtn = null, drawRow = null, roleRow = null, finishBtn = null, cancelBtn = null, roleBtns = [], curveRow = null, curveBtn = null, curveReason = null;
   let splitRow = null, splitBtn = null, splitReason = null;
   let bndRow = null, bndBtn = null, bndReason = null, bndApply = null, bndUndo = null, seamRow = null, seamText = null;
   let rflRow = null, rflBtn = null, rflReason = null;
@@ -140,7 +145,7 @@
       if (!l) return { design: true, mode: mode, sel: null };
       const lock = T.isNeckAutoLine(id) ? "neck" : T.isSleeveCapLine(l) ? "cap" : T.isCollarBodyLine(l) ? "collar" : null;
       const seamSt = T.getSeamState ? T.getSeamState() : null;   // 옆선 행이 있을 때만 완료 게이트를 계산(매 render 비용 최소)
-      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, split: T.getSplitState ? T.getSplitState() : null, boundary: T.getBoundaryState ? T.getBoundaryState() : null, seam: seamSt, reflect: T.getReflectState ? T.getReflectState() : null,
+      return { design: true, mode: mode, sel: { id: id, piece: l.piece, role: l.role || "guide", lock: lock, curve: T.getCurveState ? T.getCurveState() : null, split: T.getSplitState ? T.getSplitState() : null, boundary: T.getBoundaryState ? T.getBoundaryState() : null, seam: seamSt, reflect: T.getReflectState ? T.getReflectState() : null,
         bodice: (!dragging && seamSt) ? bodiceGate() : null } };
     }
     return { design: true, mode: mode };
@@ -193,7 +198,15 @@
     bar.setAttribute("aria-label", "패턴선 빠른 조작 · " + vm.title);
     bar.setAttribute("data-kind", vm.kind);
     drawRow.hidden = vm.kind !== "draw";
-    roleRow.hidden = vm.kind !== "select";
+    roleRow.hidden = vm.kind !== "select" || !!vm.curve;   // 칼라 본체: 못 누르는 역할 버튼 3개 대신 «무엇이 고정인지» 글(curve 행)
+    if (curveRow) {
+      const cv_ = vm.kind === "select" ? vm.curve : null; curveRow.hidden = !cv_;
+      if (cv_) {
+        curveBtn.hidden = !(cv_.lineSegs > 0);
+        curveBtn.disabled = !cv_.allowed; curveBtn.setAttribute("aria-disabled", cv_.allowed ? "false" : "true");
+        curveReason.textContent = cv_.text; curveRow.setAttribute("data-state", "ok");
+      }
+    }
     if (vm.kind !== "select") { splitRow.hidden = true; if (bndRow) bndRow.hidden = true; if (rflRow) rflRow.hidden = true; }
     if (rflRow && vm.kind === "select") {
       const rf = vm.reflect; rflRow.hidden = !rf;
@@ -249,7 +262,7 @@
       // 주 작업 1개(2026-11-11): 보이는 다음 단계 행 중 첫 행(반영 > 파트 분리 > 외곽 대체) = 주 작업. 나머지 행과(주 작업이 따로 있을 때의)
       //   «몸판 모양 완료»는 보조 작업 → «더보기»에서만. 기능 삭제·가짜 비활성화 없음(같은 버튼·같은 명령이 펼치면 그대로 보인다).
       const open = moreKey === vm.key;
-      const nexts = [rflRow, splitRow, bndRow].filter(r => r && !r.hidden);
+      const nexts = [curveRow, rflRow, splitRow, bndRow].filter(r => r && !r.hidden);
       const primary = nexts[0] || null;
       nexts.forEach(r => { r.setAttribute("data-tier", r === primary ? "main" : "more"); if (r !== primary && !open) r.hidden = true; });
       let extra = nexts.length > 1;
@@ -360,7 +373,7 @@
     if (on) {
       const t = compactText(vm);
       compactText_.textContent = t;
-      headRow.hidden = true; roleRow.hidden = true; splitRow.hidden = true; if (seamRow) seamRow.hidden = true; if (bndRow) bndRow.hidden = true; if (rflRow) rflRow.hidden = true; drawRow.hidden = true; compactRow.hidden = false;
+      headRow.hidden = true; roleRow.hidden = true; if (curveRow) curveRow.hidden = true; splitRow.hidden = true; if (seamRow) seamRow.hidden = true; if (bndRow) bndRow.hidden = true; if (rflRow) rflRow.hidden = true; drawRow.hidden = true; compactRow.hidden = false;
       bar.setAttribute("aria-label", "패턴선 빠른 조작 · " + vm.title + " · " + t);
     } else { compactRow.hidden = true; headRow.hidden = false; }
   }
@@ -456,6 +469,7 @@
     failsEl = document.getElementById("lineQuickBodiceFails"); completeBtn = document.getElementById("lineQuickCompleteBodice");
     failsDetailEl = document.getElementById("lineQuickBodiceFailsDetail");
     moreBtn = document.getElementById("lineQuickMore");
+    curveRow = bar.querySelector('[data-lqb="curve"]'); curveBtn = document.getElementById("lineQuickToCurve"); curveReason = document.getElementById("lineQuickCurveReason");
     if (moreBtn) moreBtn.addEventListener("click", () => { const vm = describe(snapshot()); if (!vm || vm.kind !== "select") return;
       moreKey = moreKey === vm.key ? null : vm.key; sync(); try { moreBtn.focus({ preventScroll: true }); } catch (_) { moreBtn.focus(); } });
     if (completeBtn) completeBtn.addEventListener("click", () => { actCompleteBodice(); });
@@ -468,6 +482,7 @@
     roleBtns.forEach(b => b.addEventListener("click", () => { const T = tool(); if (T) T.setRole(b.getAttribute("data-role")); }));
     // 파트 분리 = 오른쪽 버튼과 같은 doSplit. 파트가 안 생기면(분할 직전 재검증·ring 실패) doSplit 이 남긴 안내를 막대에도 보인다.
     splitBtn.addEventListener("click", () => { actSplit(); });
+    if (curveBtn) curveBtn.addEventListener("click", () => { const T = tool(); if (T && T.doToCurve) T.doToCurve(); sync(); });   // 칼라 본체 직선 구간 → 같은 모양 곡선
     if (bndBtn) bndBtn.addEventListener("click", () => { actBoundary(); });   // 외곽 대체 미리보기 = 오른쪽 버튼과 같은 doBoundaryPreview
     if (bndApply) bndApply.addEventListener("click", () => { actBoundaryApply(); });   // 외곽 반영 = 오른쪽 버튼과 같은 doBoundaryApply
     if (bndUndo) bndUndo.addEventListener("click", () => { const T = tool(); if (T && T.doSleeveEditUndo) T.doSleeveEditUndo(); sync(); });   // 되돌리기 = 오른쪽과 같은 doSleeveEditUndo

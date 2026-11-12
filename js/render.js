@@ -109,7 +109,13 @@ function _appendSelectionOverlay(grp, overlay){
     grp.appendChild(E("line",{ x1:ax, y1:ay, x2:cx, y2:cy, class:"design-line-handle" }));
     grp.appendChild(E("circle",{ cx, cy, r:3.5, class:"design-line-handledot" }));
   });
-  (overlay.anchors||[]).forEach(a=>{ const [x,y]=c2p(a.x, a.y); grp.appendChild(E("circle",{ cx:x, cy:y, r:4, class:"design-line-anchor" })); });
+  // 이동 가능 점 = 흰 원(청록 테두리) · 고정 점(관리선 양 끝) = 회색 네모 + 가로 막대(모양으로 구분 — 색만으로 구분하지 않는다).
+  (overlay.anchors||[]).forEach(a=>{ const [x,y]=c2p(a.x, a.y);
+    if(a.locked){
+      grp.appendChild(E("rect",{ x:x-4.5, y:y-4.5, width:9, height:9, rx:1.5, class:"design-line-anchor-locked" }));
+      grp.appendChild(E("line",{ x1:x-2.5, y1:y, x2:x+2.5, y2:y, class:"design-line-anchor-lockmark" }));
+    } else grp.appendChild(E("circle",{ cx:x, cy:y, r:4, class:"design-line-anchor" }));
+  });
 }
 
 // 옆선 길이 상시 표시(2026-11-08): 값·문구 = designLineTool.sideSeamLabels(권위 계측). 색 = 그 판에 실제로 그려진 외곽선의 계산된 stroke

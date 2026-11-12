@@ -153,6 +153,17 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   ok(C.computeFromBodyLine(moveA(lc.segments, 0, { x: 99, y: 99 }), lc.locked).reason === "endpoint-cbouter", "7: cbOuter 이동 거부");
   ok(C.computeFromBodyLine(moveA(lc.segments, 3, { x: 99, y: 99 }), lc.locked).reason === "endpoint-attachfront", "7: Ⓒ 이동 거부");
   ok(C.computeFromBodyLine(moveA(lc.segments, 1, { x: lc.anchors[1].x, y: lc.anchors[1].y - 1 }), lc.locked).ok, "7: 유효 편집 ok");
+  // 직선 → 같은 모양 cubic(1/3·2/3) 전환(2026-11-12 «곡선으로» · designLineTool.doToCurve 와 같은 식): 검증기·잠금 무변경으로 통과 · 길이 불변
+  {
+    const cub = s => ({ kind: "cubic", from: { x: s.from.x, y: s.from.y }, c1: { x: s.from.x + (s.to.x - s.from.x) / 3, y: s.from.y + (s.to.y - s.from.y) / 3 }, c2: { x: s.from.x + (s.to.x - s.from.x) * 2 / 3, y: s.from.y + (s.to.y - s.from.y) * 2 / 3 }, to: { x: s.to.x, y: s.to.y } });
+    const cs = lc.segments.map(cub), rc = C.computeFromBodyLine(cs, lc.locked);
+    ok(rc.ok && near(rc.attachLenCm, rt.attachLenCm, 1e-9) && near(rc.measure.outerEdgeLenCm, rt.measure.outerEdgeLenCm, 1e-3) && near(rc.measure.pointDiagonalLenCm, rt.measure.pointDiagonalLenCm, 1e-9), "7: 곡선 전환 = 같은 형상(부착·외곽·사선 길이 불변)");
+    const bent = cs.map(s => JSON.parse(JSON.stringify(s))); bent[0].c2.y -= 1; bent[1].c1.y -= 1;
+    const rb = C.computeFromBodyLine(bent, lc.locked);
+    ok(rb.ok && near(rb.attachLenCm, rt.attachLenCm, 1e-9) && rb.measure.outerEdgeLenCm > rt.measure.outerEdgeLenCm && J(rb.bodyGeometry.outline.filter(s => s.part === "attach")) === J(rt.bodyGeometry.outline.filter(s => s.part === "attach")), "7: 핸들로 휨 = 유효 · 부착선 불변 · 외곽만 길어짐");
+    const bad = cs.map(s => JSON.parse(JSON.stringify(s))); bad[0].from = { x: 99, y: 99 };
+    ok(C.computeFromBodyLine(bad, lc.locked).reason === "endpoint-cbouter", "7: 곡선에서도 끝점 고정");
+  }
   ok(C.computeFromBodyLine([], lc.locked).reason === "no-line" && C.computeFromBodyLine(lc.segments, { attachSegs: [] }).reason === "no-attach", "7: 실패 계약");
   const segStr = J(lc.segments), lockStr = J(lc.locked), gStr = J(body0.bodyGeometry);
   C.computeFromBodyLine(lc.segments, lc.locked); C.collarBodyLineFromGeometry(body0.bodyGeometry);
