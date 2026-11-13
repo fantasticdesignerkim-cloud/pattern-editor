@@ -5,14 +5,19 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
 <link rel="stylesheet" href="css/style.css?v=2026111205">
+<!-- 라이트 테마 덮어쓰기(apple-light-ui · 2026-11-13 통합): style.css 원문은 그대로, 표시만 바꾼다. -->
+<link rel="stylesheet" href="css/apple.css?v=2026111302">
+<!-- 화면 모드(시스템/밝게/어둡게): 첫 그리기 전에 data-theme 을 정해 깜빡임을 막는다. 저장 키 dorobo.ui.theme · 연결은 js/appleChrome.js -->
+<script>try{var t=localStorage.getItem('dorobo.ui.theme');var d=t==='dark'||(t!=='light'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}catch(e){}</script>
 </head>
 <body>
 
 <header class="app-header">
   <div class="brand-block">
+    <span class="app-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M5 19c3-1 4.5-13 8-13 2.6 0 3.4 4.6 6 5"/></svg></span>
     <span class="brand">DOROBO</span>
     <!-- 앱 버전 단일 원천: 배포할 때 이 번호만 올린다 (docs/STATUS.md § 앱 버전 표시) -->
-    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.12.2">v2026.11.12.2</span>
+    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.13.1">v2026.11.13.1</span>
     <span class="brand-sub">문화식 원형</span>
   </div>
 
@@ -39,12 +44,16 @@
              만들지 않아 toggleLayer 가 대상 없이 끝나는 **기존 결함**이며, 이번 UI 작업에서
              엔진을 고치지 않는다. input 의 id·onchange·checked 는 그대로 보존한다
              (DOM id 계약 유지 + 렌더 결함이 고쳐지면 hidden 만 떼면 된다). -->
-        <div class="row"><label>기초선</label><input type="checkbox" id="chkBase" checked onchange="toggleLayer('layer-base',this.checked)"></div>
-        <div class="row" hidden><label>허리다트</label><input type="checkbox" id="chkDartWaist" checked onchange="applyLayerVisibility()"></div>
-        <div class="row"><label>치수</label><input type="checkbox" id="chkDim" checked onchange="toggleLayer('layer-dim',this.checked)"></div>
-        <div class="row" hidden><label>패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
-        <div class="row"><label>안내점</label><input type="checkbox" id="chkGuide" checked onchange="toggleLayer('layer-points',this.checked)"></div>
-        <div class="row" hidden><label>종속선</label><input type="checkbox" id="chkDep" checked onchange="toggleLayer('layer-dep',this.checked)"></div>
+        <div class="row"><label for="chkBase">기초선</label><input type="checkbox" id="chkBase" checked onchange="toggleLayer('layer-base',this.checked)"></div>
+        <div class="row" hidden><label for="chkDartWaist">허리다트</label><input type="checkbox" id="chkDartWaist" checked onchange="applyLayerVisibility()"></div>
+        <div class="row"><label for="chkDim">치수</label><input type="checkbox" id="chkDim" checked onchange="toggleLayer('layer-dim',this.checked)"></div>
+        <div class="row" hidden><label for="chkPattern">패턴선</label><input type="checkbox" id="chkPattern" checked onchange="toggleLayer('layer-pattern',this.checked)"></div>
+        <div class="row"><label for="chkGuide">안내점</label><input type="checkbox" id="chkGuide" checked onchange="toggleLayer('layer-points',this.checked)"></div>
+        <div class="row" hidden><label for="chkDep">종속선</label><input type="checkbox" id="chkDep" checked onchange="toggleLayer('layer-dep',this.checked)"></div>
+        <div class="ax-theme" id="axTheme" role="radiogroup" aria-label="화면 모드">
+          <span class="ax-theme-label">화면 모드</span>
+          <span class="ax-theme-seg"><button type="button" role="radio" data-theme-pref="system">시스템</button><button type="button" role="radio" data-theme-pref="light">밝게</button><button type="button" role="radio" data-theme-pref="dark">어둡게</button></span>
+        </div>
       </div>
     </details>
 
@@ -140,6 +149,16 @@
     </div>
 
     <svg id="cv" xmlns="http://www.w3.org/2000/svg"></svg>
+    <!-- 확대 알약(UI 전용 · js/appleChrome.js): 축소/배율/확대 · 화면 초기화(resetView) · 이동 안내(원형 = Space+드래그 · 디자인 = 빈 곳 드래그 · 터치 = 두 손가락 — js/canvasPan.js). #cv 의 형제라 캔버스 hit 와 무관. -->
+    <div class="zoom-pill" role="toolbar" aria-label="확대·축소">
+      <button type="button" id="zoomOut" aria-label="축소" title="축소">&minus;</button>
+      <span class="zp-val" id="zoomPct">100%</span>
+      <button type="button" id="zoomIn" aria-label="확대" title="확대">+</button>
+      <span class="zp-sep"></span>
+      <button type="button" id="zoomFit" aria-label="화면 초기화" title="화면 초기화"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <span class="zp-sep zp-hint-sep"></span>
+      <span class="zp-hint"><span class="zp-hint-draft"><kbd>Space</kbd>+ 드래그 · 두 손가락으로 이동</span><span class="zp-hint-design">빈 곳 드래그 · 두 손가락으로 이동</span></span>
+    </div>
     <!-- 패턴선 하단 고정 편집 패널(UI 전용 · js/designLineQuickBar.js · 2026-11-11 캔버스 하단 고정). #cv 의 형제라 막대 클릭은 캔버스로 가지 않는다.
          버튼은 오른쪽 패턴선 버튼과 같은 명령(finishDraw · cancel · setRole)만 부른다. 요소는 최초부터 존재하고 hidden 으로만 전환. -->
     <div class="line-quickbar" id="lineQuickBar" role="toolbar" aria-label="패턴선 빠른 조작" hidden>
@@ -194,6 +213,10 @@
   <!-- 원형 stage 전용 치수 inspector. design stage 에서는 ui.js 가 hidden 처리하고
        CSS :has 가 280px column 도 함께 제거한다. -->
   <aside class="inspector" aria-label="속성">
+  <!-- 좁은 화면 하단 시트 그래버(UI 전용 · js/appleChrome.js): 끌어서 접힘/중간/펼침 · 탭하면 접기/펼치기 · 상태는 localStorage. 데스크톱에서는 숨김. -->
+  <button type="button" class="insp-grabber" id="inspectorGrabber" aria-label="속성 시트 접기/펼치기" aria-expanded="true" title="끌거나 눌러 속성 시트 크기 조절"></button>
+  <!-- 좁은 화면 전용 이세 요약 칩(읽기 전용 · js/inspectorInsights.js): 캔버스 이세 카드를 좁은 화면에서 숨기는 대신 시트 머리줄에 요약한다. -->
+  <div class="ax-ease-chip" id="axEaseChip" aria-live="polite" hidden></div>
     <details class="insp" open data-panel="measurements">
       <summary>원형 · 치수</summary>
       <div class="insp-body">
@@ -217,6 +240,9 @@
         <div class="row completion-row"><button class="btn" id="btnStartDesign" disabled aria-disabled="true" title="원형을 완료한 뒤 디자인을 시작할 수 있습니다">디자인 시작</button></div>
       </div>
     </details>
+
+    <!-- 원형 이세·계산 노트(읽기 전용 · js/inspectorInsights.js): 이미 계산되어 화면에 나온 값(소매 이세 카드 · 하단 상태줄)만 다시 보여 준다. 제도 계산 무변경. -->
+    <section class="ax-insights" id="axInsightsDraft" aria-label="이세·계산 노트" aria-live="polite" hidden></section>
 
     <!-- design stage 전용 몸판 디자인 패널(DB1b). ui.js 가 stage 로 measurements 와 상호배타로
          표시한다(동시 노출 금지). 버튼은 inline handler 없이 bind()에서 연결(inline 37 유지). -->
@@ -514,6 +540,8 @@
           <div class="row note" id="designSleeveNote" aria-live="polite"></div>
           <!-- 소매산 봉제선 정합(읽기 전용): 완료 몸판 진동 ↔ 소매산(파생 cap) ↔ 이세. 수치만. -->
           <div class="row note" id="designSleeveEaseNote" aria-live="polite"></div>
+          <!-- 원형 소매 vs 디자인 입력값 비교(읽기 전용 · js/inspectorInsights.js): 원형 = designSleeve.referenceSilhouette, 디자인 = 위 입력칸 값. -->
+          <div class="ax-compare" id="axSleeveCompare" aria-live="polite" hidden></div>
           <!-- 소매 모양 완료(S5, sleeveCheckpoint): 게이트 통과 시 working.sleeveResult 세션 스냅샷.
                sourceBodiceHash 고정. 아직 시접·너치·커프스·트임·재단선 아님. -->
           <div class="row" style="margin-top:8px"><label>소매 완료</label></div>
@@ -778,6 +806,10 @@
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
 <script src="js/projectFile.js?v=2026110901"></script>
 <script src="js/ui.js?v=2026111301"></script>
+<!-- 라이트 테마 크롬(UI 전용): 확대 알약 · 폰 하단 시트 · 화면 모드. 기존 전역 함수만 호출. -->
+<script src="js/appleChrome.js?v=2026111302"></script>
+<!-- 원형 이세 배지·계산 노트 · 원형/디자인 비교(읽기 전용 · UI 전용). -->
+<script src="js/inspectorInsights.js?v=2026111302"></script>
 
 </body>
 </html>

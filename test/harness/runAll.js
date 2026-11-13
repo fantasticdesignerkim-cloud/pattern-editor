@@ -195,6 +195,8 @@ const suites = [
   { file: "designLayoutCheck.js",       golden: false },
   { file: "draftLayoutCheck.js",        golden: false },
   { file: "designLineToolCheck.js",     golden: false },
+  // 라이트 테마 UI 레이어 통합 불변식(2026-11-13): 로드 순서·기능 보존·우선순위·저장 키·안내(원문 검사).
+  { file: "appleUiCheck.js",            golden: false },
 ];
 
 let anyFail = false;

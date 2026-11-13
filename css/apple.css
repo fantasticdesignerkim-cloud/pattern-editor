@@ -1,0 +1,489 @@
+/* ══════════════════════════════════════════════════════════════════════
+   DOROBO 라이트 테마 — 데스크톱 OS 스타일 오마주(2026-11-12, 브랜치 apple-light-ui)
+   · style.css 다음에 로드되는 **덮어쓰기 전용** 시트. style.css 는 손대지 않는다
+     (하네스가 style.css 원문 계약을 정규식으로 검사하기 때문).
+   · id·onclick·hidden 계약 무변경. 표시(display) 규칙은 기존 [hidden]/:has 계약을 깨지 않도록
+     가능한 한 건드리지 않고 색·모양·위치만 바꾼다.
+   · 로고·제품명·상표 자산 없음. 시스템 글꼴 스택만 지정한다.
+   ══════════════════════════════════════════════════════════════════════ */
+:root{
+  --ax-accent:#007AFF; --ax-accent-press:#0062CC; --ax-accent-soft:rgba(0,122,255,.12); --ax-accent-soft2:rgba(0,122,255,.20);
+  --ax-text:#1D1D1F; --ax-text2:rgba(60,60,67,.62); --ax-text3:rgba(60,60,67,.38);
+  --ax-canvas:#ECECF0; --ax-dot:rgba(60,60,67,.10);
+  --ax-toolbar:rgba(246,246,248,.82); --ax-inspector:#F2F2F7; --ax-group:#FFFFFF;
+  --ax-fill:rgba(118,118,128,.12); --ax-fill-hover:rgba(118,118,128,.20);
+  --ax-sep:rgba(60,60,67,.14); --ax-hair:rgba(0,0,0,.12);
+  --ax-seg-track:rgba(118,118,128,.16); --ax-seg-shadow:0 .5px 1px rgba(0,0,0,.08),0 1px 3px rgba(0,0,0,.10);
+  --ax-shadow-pop:0 0 0 .5px rgba(0,0,0,.12),0 8px 28px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.08);
+  --ax-shadow-float:0 0 0 .5px rgba(0,0,0,.10),0 4px 16px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.06);
+  --ax-green:#1F8A3C; --ax-red:#D70015; --ax-orange:#B25E09;
+  --ax-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Noto Sans CJK KR","Malgun Gothic",sans-serif;
+  /* 기존 토큰을 새 팔레트로 재매핑(기존 규칙들이 자동으로 따라온다) */
+  --navy:#1D1D1F; --muted:rgba(60,60,67,.62); --border:rgba(60,60,67,.14); --cyan:#007AFF; --orange:#FF9500;
+  --surface:#FFFFFF; --canvas:#ECECF0;
+  --grid-minor:rgba(60,60,67,.045); --grid-major:rgba(60,60,67,.09);
+  color-scheme:light;
+}
+body{font-family:var(--ax-font);color:var(--ax-text);background:var(--ax-canvas);font-size:13px;letter-spacing:-.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+button,input,select{font-family:inherit}
+:focus-visible{outline:3px solid rgba(0,122,255,.45);outline-offset:1px}
+
+/* ── 통합 상단 툴바 ───────────────────────────────────────────────── */
+.app-header{height:52px;padding:0 12px 0 16px;gap:12px;background:var(--ax-toolbar);border-bottom:.5px solid var(--ax-hair);
+  -webkit-backdrop-filter:saturate(180%) blur(30px);backdrop-filter:saturate(180%) blur(30px);position:relative;z-index:40}
+.brand-block{align-items:center;gap:8px}
+.app-mark{width:24px;height:24px;border-radius:6px;background:var(--ax-accent);display:grid;place-items:center;box-shadow:0 .5px 1px rgba(0,0,0,.15);flex-shrink:0}
+.app-mark svg{display:block}
+.brand{font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--ax-text);margin-right:0}
+.brand-sub{font-size:13px;color:var(--ax-text2);display:inline-flex;align-items:center}
+.brand-sub::before{content:"";display:inline-block;width:1px;height:12px;background:rgba(60,60,67,.22);margin:0 9px 0 1px}
+
+/* 단계 = 세그먼트 컨트롤(트랙 + 떠오르는 흰 칸). 가운데 정렬. */
+.stage-bar{gap:0;height:28px;padding:2px;background:var(--ax-seg-track);border-radius:8px;position:absolute;left:50%;transform:translateX(-50%)}
+.stage{height:24px;padding:0 14px;border:0;border-radius:6px;font-size:13px;font-weight:500;color:var(--ax-text);background:transparent;line-height:24px}
+.stage:not(:disabled):hover{background:rgba(255,255,255,.55)}
+.stage[aria-selected="true"]{background:#fff;border:0;color:var(--ax-text);font-weight:600;box-shadow:var(--ax-seg-shadow)}
+.stage:disabled{opacity:1;color:var(--ax-text3)}
+
+/* 오른쪽 동작: 투명 툴바 버튼(hover 시 옅은 회색) */
+.header-actions{gap:2px;align-items:center}
+.header-actions .btn{height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ax-text);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:5px}
+.header-actions .btn:not(:disabled):hover{background:var(--ax-fill);border:0}
+/* 실행취소·다시실행 = 아이콘 버튼(글자는 시각적으로만 숨김 · aria-label 유지) */
+.header-actions .edit-history{font-size:0;width:30px;padding:0;justify-content:center}
+.header-actions .edit-history::before{content:"";width:17px;height:17px;background:currentColor;
+  -webkit-mask:var(--ax-ico) center/contain no-repeat;mask:var(--ax-ico) center/contain no-repeat}
+.header-actions .edit-history[onclick="undoEdit()"]{--ax-ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14 4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 0 11H11'/%3E%3C/svg%3E")}
+.header-actions .edit-history[onclick="redoEdit()"]{--ax-ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 14 5-5-5-5'/%3E%3Cpath d='M20 9H9.5a5.5 5.5 0 0 0 0 11H13'/%3E%3C/svg%3E")}
+.header-actions .edit-history:last-of-type{margin-right:6px}
+
+/* 보기·파일 = 툴바 팝업 버튼. 열림 = 파란 틴트. */
+.pop>summary{height:28px;display:inline-flex;align-items:center;padding:0 9px;border:0;border-radius:6px;font-size:13px;font-weight:500;color:var(--ax-text)}
+.pop>summary::after{content:"";width:6px;height:6px;margin-left:6px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:translateY(-2px) rotate(45deg);opacity:.55}
+.pop>summary:hover{background:var(--ax-fill)}
+.pop[open]>summary{background:var(--ax-accent-soft);color:var(--ax-accent);border:0}
+.pop[open]>summary::after{opacity:1;color:var(--ax-accent)}
+.pop[data-menu="view"]>summary::before{content:"";width:16px;height:16px;margin-right:5px;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8'%3E%3Cpath d='M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8'%3E%3Cpath d='M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E") center/contain no-repeat}
+
+/* 팝오버 = 반투명 메뉴 패널 */
+.pop-body{top:calc(100% + 8px);padding:6px;gap:0;width:260px;border:0;border-radius:12px;background:rgba(255,255,255,.90);box-shadow:var(--ax-shadow-pop);
+  -webkit-backdrop-filter:saturate(180%) blur(30px);backdrop-filter:saturate(180%) blur(30px)}
+.pop-body .row{min-height:28px;padding:3px 8px;border-radius:6px}
+.pop-body .row label{font-size:13px;font-weight:400;color:var(--ax-text)}
+.pop-body .row.note{min-height:0;padding:4px 8px;font-size:11.5px;color:var(--ax-text2)}
+.pop-body .btn{width:auto;height:24px;padding:0 10px;font-size:12px;border:0;border-radius:6px;background:var(--ax-fill);color:var(--ax-text)}
+.pop-body .btn:not(:disabled):hover{background:var(--ax-fill-hover)}
+/* 보기 메뉴: 체크 표시가 앞, 이름이 뒤(메뉴 항목처럼) · 줄 전체가 hover 강조 */
+[data-menu="view"] .pop-body .row{flex-direction:row-reverse;justify-content:flex-end;gap:8px;cursor:default}
+[data-menu="view"] .pop-body .row:hover{background:var(--ax-accent);}
+[data-menu="view"] .pop-body .row:hover label{color:#fff}
+[data-menu="view"] .pop-body .row label{flex:1;cursor:default}
+[data-menu="view"] .pop-body .row input[type=checkbox]{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin:0;border:0;background:transparent;display:grid;place-items:center;cursor:default}
+[data-menu="view"] .pop-body .row input[type=checkbox]::before{content:"";width:12px;height:12px;background:var(--ax-text);opacity:0;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12.5 9.5 18 20 6'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12.5 9.5 18 20 6'/%3E%3C/svg%3E") center/contain no-repeat}
+[data-menu="view"] .pop-body .row input[type=checkbox]:checked::before{opacity:1}
+[data-menu="view"] .pop-body .row:hover input[type=checkbox]::before{background:#fff}
+[data-menu="file"] .pop-body{width:300px}
+[data-menu="file"] .pop-body .row + .row.note{margin-bottom:2px}
+.pop-body .project-row:first-of-type{border-top:.5px solid var(--ax-sep)}
+
+/* ── 작업 영역 ────────────────────────────────────────────────────── */
+.workspace{grid-template-columns:minmax(0,1fr) 308px}
+.canvas-wrap{background-color:var(--ax-canvas);background-image:radial-gradient(var(--ax-dot) 1px,transparent 1px);background-size:16px 16px}
+
+/* 떠 있는 도구 팔레트(왼쪽 세로 캡슐). design stage 숨김 규칙(display:none)은 기존 그대로 유지. */
+.canvas-toolbar{position:absolute;left:14px;top:50%;transform:translateY(-50%);z-index:12;flex-direction:column;align-items:stretch;gap:6px;height:auto;padding:6px;
+  border:0;border-radius:12px;background:rgba(255,255,255,.88);box-shadow:var(--ax-shadow-float);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+.canvas-toolbar .seg{flex-direction:column;gap:0;padding:2px;border-radius:8px;background:var(--ax-seg-track)}
+.canvas-toolbar .mode-btn{padding:0 8px;height:26px;font-size:12px;font-weight:500;color:var(--ax-text);border-radius:6px}
+.canvas-toolbar .mode-btn.active{background:#fff;box-shadow:var(--ax-seg-shadow);font-weight:600;color:var(--ax-text)}
+.canvas-toolbar .bar-divider{width:auto;height:.5px;margin:0 4px;background:var(--ax-sep)}
+.canvas-toolbar .seg:last-child{background:transparent;padding:0;gap:2px}
+.canvas-toolbar .tool{height:32px;min-width:0;width:100%;padding:0;border-radius:7px;color:var(--ax-text)}
+.canvas-toolbar .tool:not(:disabled):hover{background:var(--ax-fill)}
+.canvas-toolbar .tool[aria-pressed="true"]:not(:disabled){background:var(--ax-accent-soft);color:var(--ax-accent)}
+.tool-dart::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231D1D1F' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 3 6 21M12 3l6 18'/%3E%3Cpath d='M8.2 15a6 6 0 0 0 7.6 0'/%3E%3C/svg%3E")}
+
+/* 도구 상황 카드(다트 이동·곡선 편집): 확대 막대 위에 떠 있는 흰 카드 */
+.context-host:has(> [data-panel]:not([hidden])){bottom:64px;border:0;border-radius:14px;background:rgba(255,255,255,.92);box-shadow:var(--ax-shadow-float);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+.context-host .insp>summary{color:var(--ax-text);font-weight:600;font-size:12px}
+
+/* 확대 알약(캔버스 하단 가운데) */
+.zoom-pill{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:11;display:flex;align-items:center;gap:2px;height:36px;padding:0 6px;
+  border-radius:18px;background:rgba(255,255,255,.88);box-shadow:var(--ax-shadow-float);font-size:12px;color:var(--ax-text);white-space:nowrap;
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);-webkit-user-select:none;user-select:none}
+.zoom-pill button{width:28px;height:28px;border:0;border-radius:14px;background:transparent;color:var(--ax-text);font-size:16px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.zoom-pill button:hover{background:var(--ax-fill)}
+.zoom-pill .zp-val{min-width:44px;text-align:center;font-variant-numeric:tabular-nums;font-weight:500}
+.zoom-pill .zp-sep{width:1px;height:16px;background:var(--ax-sep);margin:0 4px}
+.zoom-pill .zp-hint{display:inline-flex;align-items:center;gap:5px;padding:0 6px 0 2px;color:var(--ax-text2)}
+.zoom-pill kbd{font:inherit;font-size:11px;font-weight:600;color:var(--ax-text);padding:1px 6px;border-radius:5px;background:var(--ax-fill);box-shadow:inset 0 -1px 0 rgba(0,0,0,.08)}
+/* 패턴선 빠른 도구가 떠 있으면 확대 알약은 캔버스 오른쪽 위로 비켜 준다(2026-11-13: 아래 오른쪽에 두면 1024 폭에서 막대와 12px 겹쳤다 — 실측) */
+.canvas-wrap:has(#lineQuickBar:not([hidden])) .zoom-pill{top:10px;bottom:auto;left:auto;right:14px;transform:none}
+.canvas-wrap:has(#lineQuickBar:not([hidden])) .zoom-pill .zp-hint,
+.canvas-wrap:has(#lineQuickBar:not([hidden])) .zoom-pill .zp-sep{display:none}
+
+/* ── 오른쪽 inspector = 설정 앱식 묶음 목록 ────────────────────────── */
+.inspector{background:var(--ax-inspector);border-left:.5px solid var(--ax-hair);padding:4px 14px 16px}
+.inspector .insp{border-bottom:0}
+.inspector .insp>summary{font-size:15px;font-weight:700;letter-spacing:-.02em;color:var(--ax-text);padding:12px 4px 8px}
+.inspector .insp>summary::after{content:"";float:right;width:7px;height:7px;margin-top:4px;border:solid var(--ax-text3);border-width:0 1.7px 1.7px 0;transform:rotate(45deg)}
+.inspector .insp:not([open])>summary::after{transform:rotate(-45deg)}
+/* 본문 = 흰 둥근 묶음 카드 · 행 사이 얇은 구분선(왼쪽 들여쓰기) */
+.inspector .insp-body{gap:0;padding:0 12px;background:var(--ax-group);border-radius:10px;box-shadow:0 0 0 .5px rgba(0,0,0,.04)}
+.inspector .insp-body .row{min-height:40px;padding:6px 0;gap:10px;box-shadow:inset 0 -.5px 0 var(--ax-sep)}
+.inspector .insp-body .row:last-child{box-shadow:none}
+.inspector .insp-body .row label{font-size:13px;font-weight:400;color:var(--ax-text);white-space:normal}
+.inspector .insp-body .row.note{min-height:0;padding:6px 0 8px;font-size:11.5px;line-height:1.4;color:var(--ax-text2);box-shadow:none}
+.inspector .insp-body .row.note:empty{display:none}
+/* 묶음 제목 행(라벨 하나만 있는 행: «네크라인»·«앞중심 여밈»·«소매 완료» 등) = 회색 띠 + 작은 머리글 → 카드가 묶음별로 나뉘어 보인다 */
+.inspector .insp-body .row[style*="margin-top:8px"]{margin:0 -12px!important;padding:16px 16px 6px;min-height:0;background:var(--ax-inspector);box-shadow:none}
+.inspector .insp-body .row[style*="margin-top:8px"] label{font-size:12px;font-weight:500;color:var(--ax-text2);letter-spacing:0}
+.sleeve-v-group span{font-size:11.5px;font-weight:600;color:var(--ax-text2)}
+
+/* 입력칸 = 회색 채움 · 오른쪽 정렬 · 포커스 파란 링 */
+.row input[type=number]{width:84px;height:28px;padding:0 8px;border:0;border-radius:7px;background:var(--ax-fill);color:var(--ax-text);font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
+.row input[type=number]:focus{outline:none;background:#fff;box-shadow:0 0 0 3px rgba(0,122,255,.35),0 0 0 1px var(--ax-accent) inset}
+.row select{height:28px;padding:0 8px;border:0;border-radius:7px;background:var(--ax-fill);color:var(--ax-text);font-size:13px}
+.row select:focus{outline:none;box-shadow:0 0 0 3px rgba(0,122,255,.35)}
+.row input[type=range]{accent-color:var(--ax-accent);width:96px}
+.row input[type=checkbox]{accent-color:var(--ax-accent)}
+.slv{color:var(--ax-text2);font-variant-numeric:tabular-nums}
+.prop-val{color:var(--ax-text);font-variant-numeric:tabular-nums}
+
+/* 버튼: 기본 = 회색 채움 · 주 작업 = 시스템 파랑 채움 */
+.btn{min-height:32px;padding:4px 12px;border:0;border-radius:8px;background:var(--ax-fill);color:var(--ax-text);font-size:13px;font-weight:500}
+.btn:not(:disabled):hover{background:var(--ax-fill-hover);border:0}
+.btn:not(:disabled):active{filter:none;opacity:.8}
+.btn:disabled{opacity:.4}
+.action-primary,.btn.action-primary{background:var(--ax-accent);color:#fff;border:0;font-weight:600}
+.action-primary:not(:disabled):hover,.btn.action-primary:not(:disabled):hover{background:var(--ax-accent-press);border:0}
+/* 원형 완료 = 파란 틴트(주 작업과 구분) */
+#btnCompleteDraft:not(:disabled){border:0;background:var(--ax-accent-soft);color:var(--ax-accent);font-weight:600}
+#btnCompleteDraft:not(:disabled):hover{background:var(--ax-accent-soft2)}
+.inspector .insp-body .row:has(> .btn:only-child),.inspector .insp-body .row[style*="gap:4px"]{box-shadow:none;padding:4px 0}
+.inspector .insp-body .row:has(> .btn:only-child) + .row:has(> .btn:only-child){padding-top:0}
+.completion-note{margin-top:0;padding-top:10px;border-top:0}
+.inspector .insp-body .row label~.btn{min-height:28px;padding:2px 10px}
+.header-actions .btn,.pop-body .btn{min-height:0}
+/* 디자인 서브탭 = 세그먼트 */
+.subtabs{gap:0;padding:2px;margin:10px 0;border:0;border-radius:8px;background:var(--ax-seg-track)}
+.subtab{flex:1 1 0;height:26px;padding:0;border:0;border-radius:6px;margin:0;font-size:13px;font-weight:500;color:var(--ax-text)}
+.subtab[aria-selected="true"]{background:#fff;color:var(--ax-text);font-weight:600;border:0;box-shadow:var(--ax-seg-shadow)}
+.subtab:disabled{color:var(--ax-text3)}
+.neck-card{border:0;border-radius:8px;background:var(--ax-fill);color:var(--ax-text);font-size:12px;padding:6px 10px}
+.neck-card:hover{background:var(--ax-fill-hover)}
+.neck-card[aria-pressed="true"]{background:var(--ax-accent);color:#fff}
+#btnDesignLine[aria-pressed="true"],#btnDesignSelect[aria-pressed="true"],#btnRoleCut[aria-pressed="true"],#btnRoleBoundary[aria-pressed="true"],#btnRoleGuide[aria-pressed="true"]{background:var(--ax-accent);color:#fff;border:0}
+#btnDesignSplit:not(:disabled),#btnDesignBoundary:not(:disabled),#btnDesignCompose:not(:disabled){border:0;background:var(--ax-accent-soft);color:var(--ax-accent)}
+.cds-title{color:var(--ax-text)}
+
+/* 상태 표시줄 */
+.statusbar{height:24px;background:var(--ax-toolbar);border-top:.5px solid var(--ax-hair)}
+.sb{color:var(--ax-text2);font-size:11px}
+
+/* SVG 강조색만 시스템 파랑 계열로(형상·선 굵기·레이어 구조 무변경) */
+.pt{fill:var(--ax-accent)}
+.pattern{stroke:#1D1D1F}
+
+/* 패턴선 빠른 도구(#lineQuickBar)의 크기·배치는 style.css + js/designLineQuickBar.js(data-fit 압축 배치 · «더보기» · 소형 상태줄)가 그대로 맡는다.
+   핸드오프의 접기 그래버·높이 상한 덮어쓰기는 그 압축 배치(grid · display:contents)와 충돌해 통합하지 않았다(2026-11-13). */
+
+/* 중간 폭: 가운데 고정 세그먼트가 오른쪽 버튼과 겹치지 않게 일반 흐름으로 */
+/* ── 중간 폭(616–1100px · iPad 세로/가로 분할 등) ──────────────────────
+   3칸 격자(왼쪽 1fr · 단계 auto · 오른쪽 1fr)로 단계 세그먼트를 정확히 가운데에 둔다. */
+@media (max-width:1100px) and (min-width:616px){
+  .app-header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px}
+  .brand-block{justify-self:start;min-width:0;overflow:hidden;white-space:nowrap}
+  .stage-bar{position:static;transform:none;justify-self:center}
+  .stage{white-space:nowrap}
+  .header-actions{justify-self:end;flex-wrap:nowrap;margin-left:0;min-width:0}
+  .header-actions .btn,.pop>summary{white-space:nowrap}
+  .workspace{grid-template-columns:minmax(0,1fr) clamp(272px,32vw,308px)}
+}
+/* 860px 이하: 부제 숨김 · 보기/파일은 아이콘만 · 화면 초기화는 확대 알약 ⤢ 로 대신(기능 동일 resetView) */
+@media (max-width:860px) and (min-width:616px){
+  .brand-sub{display:none}
+  .stage{padding:0 10px}
+  .header-actions .btn[onclick="resetView()"]{display:none}
+  .pop>summary{width:34px;padding:0;justify-content:center;font-size:0}
+  .pop>summary::after{display:none}
+  .pop[data-menu="view"]>summary::before{margin:0;width:18px;height:18px}
+  .pop[data-menu="file"]>summary::before{content:"";width:18px;height:18px;background:currentColor;
+    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E") center/contain no-repeat;
+    mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E") center/contain no-repeat}
+}
+
+/* ── 좁은 화면(기존 breakpoint 615px 그대로) ───────────────────────── */
+@media (max-width:615px){
+  .app-header{height:auto;padding:6px 10px;row-gap:6px}
+  .stage-bar{position:static;transform:none;justify-self:stretch;height:36px}
+  .stage{flex:1 1 0;height:32px;line-height:32px;min-height:0;padding:0 6px}
+  .brand-sub{display:none}
+  .app-mark{width:22px;height:22px}
+  .header-actions .btn,.pop>summary{min-height:36px;height:36px}
+  .header-actions .edit-history{width:36px}
+  .workspace{grid-template-columns:minmax(0,1fr)}
+  .inspector{border-left:0;border-top:.5px solid var(--ax-hair);padding:0 10px 12px}
+  .inspector .insp>summary{padding:10px 4px 6px}
+  /* 팔레트: 왼쪽 위 가로 캡슐(캔버스 가운데를 가리지 않게) */
+  .canvas-toolbar{top:8px;left:8px;transform:none;flex-direction:row;align-items:center;padding:4px;gap:4px}
+  .canvas-toolbar .seg{flex-direction:row}
+  .canvas-toolbar .bar-divider{width:.5px;height:24px;margin:0}
+  .canvas-toolbar .mode-btn{min-height:36px;height:36px;padding:0 10px}
+  .canvas-toolbar .tool{width:40px;min-height:36px;height:36px}
+  .canvas-toolbar .seg:last-child{flex-direction:row}
+  .zoom-pill{bottom:10px;height:40px}
+  .zoom-pill button{width:36px;height:36px}
+  .zoom-pill .zp-hint,.zoom-pill .zp-sep.zp-hint-sep{display:none}
+  .context-host:has(> [data-panel]:not([hidden])){bottom:60px}
+  .canvas-wrap:has(#lineQuickBar:not([hidden])) .zoom-pill{display:none}
+}
+
+/* 버튼 여러 개가 한 줄에 있는 행: 글자가 두 줄로 꺾이지 않게 조금 작게 */
+.inspector .insp-body .row[style*="gap:4px"] .btn{font-size:12px;padding:4px 6px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* ── 좁은 화면 inspector = 하단 시트(그래버 · 접힘/중간/펼침) — js/appleChrome.js 가 --ax-sheet-h 를 정한다 ── */
+.insp-grabber{display:none}
+@media (max-width:615px){
+  .inspector{height:var(--ax-sheet-h,clamp(180px,32vh,260px));max-height:none;padding-top:0;border-radius:14px 14px 0 0;
+    box-shadow:0 -6px 24px rgba(0,0,0,.08),0 -.5px 0 rgba(0,0,0,.12);transition:height .22s cubic-bezier(.2,.8,.2,1);position:relative;z-index:25}
+  .inspector > *{flex-shrink:0}
+  .inspector.ax-dragging{transition:none}
+  .inspector[data-sheet="collapsed"]{overflow:hidden}
+  .insp-grabber{display:block;position:sticky;top:0;z-index:3;flex-shrink:0;width:calc(100% + 20px);margin:0 -10px;height:24px;padding:0;border:0;
+    background:var(--ax-inspector);cursor:grab;touch-action:none}
+  .insp-grabber::before{content:"";display:block;width:36px;height:5px;margin:9px auto 0;border-radius:3px;background:rgba(60,60,67,.30)}
+  .inspector[data-sheet="collapsed"] .insp-grabber::before{background:var(--ax-accent)}
+  .inspector .insp>summary{padding-top:4px}
+}
+@media (max-width:615px) and (prefers-reduced-motion:reduce){.inspector{transition:none}}
+
+/* ── inspector 이세 배지 · 계산 노트 · 원형/디자인 비교(js/inspectorInsights.js · 읽기 전용) ── */
+.ax-insights{padding:4px 0 8px}
+.ax-sec-label{font-size:12px;font-weight:500;color:var(--ax-text2);padding:14px 4px 6px}
+.ax-group{background:var(--ax-group);border-radius:10px;padding:0 12px;box-shadow:0 0 0 .5px rgba(0,0,0,.04)}
+.ax-cell{padding:9px 0;font-size:13px;color:var(--ax-text);box-shadow:inset 0 -.5px 0 var(--ax-sep)}
+.ax-cell:last-child{box-shadow:none}
+.ax-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ax-val{font-variant-numeric:tabular-nums;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.ax-muted{color:var(--ax-text2);font-size:12px}
+.ax-k{font-size:11.5px;color:var(--ax-text2);margin-bottom:2px}
+.ax-v{font-variant-numeric:tabular-nums;line-height:1.45}
+.ax-foot{font-size:11px;line-height:1.4;color:var(--ax-text2);padding:6px 4px 0}
+.ax-badge{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11px;font-weight:600;line-height:16px}
+.ax-badge-ok{background:rgba(52,199,89,.16);color:#1F8A3C}
+.ax-badge-warn{background:rgba(255,159,10,.18);color:#B25E09}
+.ax-badge-bad{background:rgba(255,59,48,.14);color:#D70015}
+.ax-dart{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
+.ax-dart>div{background:var(--ax-fill);border-radius:7px;padding:5px 8px;display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.ax-dart span{color:var(--ax-text2)}
+.ax-compare{margin:4px 0 8px}
+.ax-compare .ax-group{background:var(--ax-inspector)}
+.ax-tri{display:grid;grid-template-columns:minmax(0,1fr) 52px 84px;gap:6px;align-items:center;font-variant-numeric:tabular-nums}
+.ax-tri>span:not(:first-child){text-align:right}
+.ax-tri>span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ax-head{font-size:11px;color:var(--ax-text2);padding:6px 0}
+
+/* ── 좁은 화면 다듬기(2026-11-12 3차) ─────────────────────────────────
+   · 머리줄 한 줄: 아이콘 | 단계 세그먼트 | 실행취소·다시실행·보기·파일 (글자 «DOROBO»·«화면 초기화»는 숨김 — 화면 맞춤은 확대 알약 ⤢ 가 같은 resetView 를 부른다)
+   · 도구 팔레트 = 캔버스 위 고정 줄(떠 있지 않음) → 그림과 겹치지 않는다
+   · 캔버스 이세 카드는 숨기고 시트 머리줄 칩 + 시트 안 «소매산 이세» 묶음으로 보여 준다 */
+.ax-ease-chip{display:none}
+@media (max-width:615px){
+  .app-header{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;height:48px;padding:0 8px;row-gap:0}
+  .brand{display:none}
+  .brand-block{flex-shrink:0}
+  .stage-bar{position:static;transform:none;flex:1 1 auto;min-width:0;height:32px}
+  .stage{flex:1 1 0;min-width:0;height:28px;line-height:28px;padding:0 4px;font-size:13px}
+  .header-actions{flex-wrap:nowrap;gap:0;margin-left:0;flex-shrink:0}
+  .header-actions .btn[onclick="resetView()"]{display:none}
+  .header-actions .edit-history,.header-actions .btn{width:32px;min-height:36px;height:36px;padding:0}
+  .pop>summary{min-height:36px;height:36px;width:36px;padding:0;justify-content:center;font-size:0}
+  .pop>summary::after{display:none}
+  .pop[data-menu="view"]>summary::before{margin:0;width:18px;height:18px}
+  .pop[data-menu="file"]>summary::before{content:"";width:18px;height:18px;background:currentColor;
+    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E") center/contain no-repeat;
+    mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E") center/contain no-repeat}
+  .pop-body,.pop-right .pop-body{top:calc(100% + 4px)}
+  /* 도구 팔레트: 캔버스 위 고정 줄 */
+  .canvas-toolbar{position:static;transform:none;flex-direction:row;justify-content:flex-start;align-items:center;gap:6px;padding:4px 8px;border-radius:0;
+    background:var(--ax-toolbar);box-shadow:inset 0 -.5px 0 var(--ax-hair)}
+  /* 이세: 캔버스 카드 숨김 → 시트 칩 */
+  .ax-ease-chip:not([hidden]){display:inline-flex;align-items:center;gap:6px;position:absolute;top:28px;right:40px;z-index:4;font-size:12px;font-variant-numeric:tabular-nums;color:var(--ax-text)}
+  /* 빠른 도구가 떠 있을 때 확대 알약은 캔버스 오른쪽 위로(화면 맞춤 ⤢ 는 늘 보이게) */
+  .canvas-wrap:has(#lineQuickBar:not([hidden])) .zoom-pill{display:flex;top:8px;bottom:auto;right:8px;left:auto;transform:none}
+}
+@media (max-width:615px){
+  /* 시트를 크게 펼치면 캔버스가 낮아져 확대 알약이 그림을 덮는다 → 펼침 상태에서는 숨김(접으면 다시 보임) */
+  .workspace:has(> .inspector[data-sheet="expanded"]) .zoom-pill{display:none}
+}
+
+/* 입력칸 범위 안내(js/inspectorInsights.js addRangeHints · 코드에 있는 범위만) */
+.ax-range{display:block;margin-top:1px;font-size:11px;font-weight:400;color:var(--ax-text3);letter-spacing:0;white-space:nowrap}
+
+/* 좁은 중간 폭(616–860px): 세로 팔레트가 작아진 그림 왼쪽을 덮음 → 캔버스 왼쪽 위 가로 팔레트로 */
+@media (max-width:860px) and (min-width:616px){
+  .canvas-toolbar{top:10px;left:10px;transform:none;flex-direction:row;align-items:center;padding:4px;gap:4px}
+  .canvas-toolbar .seg{flex-direction:row}
+  .canvas-toolbar .bar-divider{width:.5px;height:20px;margin:0 2px}
+  .canvas-toolbar .tool{width:32px}
+}
+
+/* ══ 화면 모드: 어둡게 (html[data-theme="dark"] · js/appleChrome.js + index.html 머리 스크립트) ══════
+   · 툴바·인스펙터·팝오버·떠 있는 도구만 어둡게. 도면 캔버스는 «종이»라 밝게 둔다
+     (도면 선·글자 색은 흰 바탕 기준이라, 캔버스까지 뒤집으면 읽을 수 없고 SVG 를 바꿔야 함 → 하지 않음). */
+.ax-theme{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 0;padding:8px 8px 4px;border-top:.5px solid var(--ax-sep)}
+.ax-theme-label{font-size:13px;color:var(--ax-text)}
+.ax-theme-seg{display:inline-flex;padding:2px;border-radius:7px;background:var(--ax-seg-track)}
+.ax-theme-seg button{height:22px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:var(--ax-text);font-size:12px;font-weight:500;cursor:pointer}
+.ax-theme-seg button[aria-checked="true"]{background:var(--ax-seg-on,#fff);box-shadow:var(--ax-seg-shadow);font-weight:600}
+[data-theme="dark"]{--ax-canvas:#D6D6DB;color-scheme:light}
+[data-theme="dark"] body{background:#1C1C1E}
+[data-theme="dark"] :is(.app-header,.inspector,.statusbar,.canvas-toolbar,.zoom-pill,.line-quickbar,.context-host){color-scheme:dark;
+  --ax-accent:#0A84FF;--ax-accent-press:#409CFF;--ax-accent-soft:rgba(10,132,255,.24);--ax-accent-soft2:rgba(10,132,255,.34);
+  --ax-text:#F5F5F7;--ax-text2:rgba(235,235,245,.62);--ax-text3:rgba(235,235,245,.40);
+  --ax-toolbar:rgba(38,38,41,.92);--ax-inspector:#1C1C1E;--ax-group:#2C2C2E;
+  --ax-fill:rgba(118,118,128,.26);--ax-fill-hover:rgba(118,118,128,.40);
+  --ax-sep:rgba(84,84,88,.62);--ax-hair:rgba(255,255,255,.10);
+  --ax-seg-track:rgba(118,118,128,.26);--ax-seg-on:#636366;--ax-seg-shadow:0 .5px 1px rgba(0,0,0,.35);
+  --ax-shadow-pop:0 0 0 .5px rgba(255,255,255,.12),0 10px 30px rgba(0,0,0,.55);
+  --ax-shadow-float:0 0 0 .5px rgba(255,255,255,.12),0 6px 18px rgba(0,0,0,.45);
+  --ax-green:#30D158;--ax-red:#FF6961;--ax-orange:#FFB340;
+  --navy:#F5F5F7;--muted:rgba(235,235,245,.62);--border:rgba(84,84,88,.65);--cyan:#0A84FF;--surface:#2C2C2E}
+[data-theme="dark"] .app-header,[data-theme="dark"] .statusbar{background:rgba(38,38,41,.96)}
+[data-theme="dark"] .brand-sub::before{background:rgba(235,235,245,.22)}
+[data-theme="dark"] .stage:not(:disabled):hover{background:rgba(255,255,255,.08)}
+[data-theme="dark"] :is(.stage[aria-selected="true"],.canvas-toolbar .mode-btn.active,.subtab[aria-selected="true"]){background:#636366;color:#fff}
+[data-theme="dark"] .pop-body{background:rgba(44,44,46,.96)}
+[data-theme="dark"] .canvas-toolbar,[data-theme="dark"] .zoom-pill,[data-theme="dark"] .context-host:has(> [data-panel]:not([hidden])){background:rgba(44,44,46,.94)}
+[data-theme="dark"] .row input[type=number]:focus{background:#1C1C1E}
+[data-theme="dark"] .inspector :is(input[type=number],input[type=text],select){color:var(--ax-text)}
+/* 어둡게: 상태 글자색(초록/빨강/주황)·배지·부제 회색을 어두운 바탕용 밝은 톤으로 */
+[data-theme="dark"] .inspector :is(#designCutStatus,#designBoundaryStatus,#designSideLenNote,#designGirthNote)[data-ok="1"],
+[data-theme="dark"] .inspector .cds-list dd[data-status="match"]{color:#30D158}
+[data-theme="dark"] .inspector :is(#designCutStatus,#designBoundaryStatus,#designGirthNote)[data-ok="0"],
+[data-theme="dark"] .inspector .cds-list dd[data-status="mismatch"]{color:#FF6961}
+[data-theme="dark"] .inspector .cds-list dt{color:var(--ax-text2)}
+[data-theme="dark"] .ax-badge-ok{background:rgba(48,209,88,.20);color:#30D158}
+[data-theme="dark"] .ax-badge-warn{background:rgba(255,159,10,.22);color:#FFB340}
+[data-theme="dark"] .ax-badge-bad{background:rgba(255,69,58,.22);color:#FF6961}
+/* #dirtyState 는 handles.js 가 인라인 color(#0F6E56 완료 / #e07800 변경됨)를 넣음 → 어둡게에서만 밝은 톤으로 */
+[data-theme="dark"] #dirtyState:is([style*="#0F6E56" i],[style*="rgb(15, 110, 86)"]){color:#30D158!important}
+[data-theme="dark"] #dirtyState:is([style*="#e07800" i],[style*="rgb(224, 120, 0)"]){color:#FFB340!important}
+
+/* 캔버스 이세 카드(뒤/앞 암홀·소매산·총 이세)는 모든 폭에서 숨김 — 인스펙터 «소매산 이세» 묶음·시트 칩과 중복.
+   요소·계산은 DOM 에 그대로 두고(inspectorInsights.js 가 textContent 로 읽음) 표시만 끈다. */
+#cv .ease-card{display:none}
+
+/* ── 도면(SVG) 색: CSS 덧씌우기만(그리는 코드·좌표·내보내기 무변경) ──────────────────
+   2026-11-13 정리: 커밋마다 뒤에 덧붙여 서로 덮던 규칙을 «최종으로 적용되던 값» 하나씩으로 합쳤다(정리 전후 computed style 동일 확인).
+   · 앞/뒤판 외곽 = 테라코타/슬레이트(render.js DEBUG_COLORS 인라인 style 을 덮으므로 !important · 플래그·기하 무변경)
+   · 구조 다트(가슴·어깨) = 그 판 외곽색(data-piece) · 허리다트 a–f = 청록 · 다트 중심 안내 = 옅은 청록
+   · 치수선·치수 숫자 = 황토 · 주요 점 = 벽돌색 · 기초선 = 옅은 회색 · 종속 = 보라 · 소매 앞/뒤 가이드 = 초록/파랑
+   · 어둡게 모드에서도 캔버스는 밝은 종이 — 도면 색은 한 톤만 진하게. */
+/* 2026-11-13 팔레트 통일(가역 · 값만): 종속 보라 #8455e8 → #7A62B8 · 문화식 보조 #9a4fd0 → #8A5FB0 · 소매 앞 가이드 초록 #1c8a5a → #3F8468 ·
+   소매 뒤 가이드 파랑 #0a64d2 → #3F6FAE — 색상(의미)은 그대로, 외곽·다트·치수와 같은 채도대로 낮췄다. */
+:root{--ax-ln-ink:#1d1d1f;--ax-ln-back:#3F6FAE;--ax-ln-dep:#7A62B8;--ax-ln-aux:#8A5FB0;--ax-ln-green:#3F8468;
+  --ax-ln-base:rgba(60,60,67,.42);--ax-ln-text:#3a3a3c;
+  --ax-outline-front:#B5655A;--ax-outline-back:#4F6F9A;
+  --ax-ln-dart:#2F7C78;--ax-ln-dart-guide:rgba(47,124,120,.45);--ax-ln-cons:#B88A3E;--ax-ln-cons-text:#9A6F28;--ax-pt-main:#9E4F45}
+[data-theme="dark"]{--ax-outline-front:#A3564B;--ax-outline-back:#41608B;
+  --ax-ln-dart:#276A66;--ax-ln-dart-guide:rgba(39,106,102,.50);--ax-ln-cons:#A67A31;--ax-ln-cons-text:#86601F;--ax-pt-main:#8C433A}
+/* 외곽 */
+#cv .pattern,#cv .sleeve-cap,#cv .sleeve-pattern-line{stroke:var(--ax-ln-ink)}
+#cv .pattern[style*="#cc2222"]{stroke:var(--ax-outline-front)!important}
+#cv .pattern[style*="#0066cc"]{stroke:var(--ax-outline-back)!important}
+#cv .sleeve-pattern-anchor{fill:var(--ax-ln-ink)}
+/* 다트 */
+#cv .dart,#cv .dart-struct{fill:none;stroke:var(--ax-ln-dart)}
+#cv .dart[style*="#cc2222"],#cv .dart[style*="#0066cc"]{stroke:var(--ax-ln-dart)!important}
+#cv .dart[data-piece="front"]{stroke:var(--ax-outline-front)!important}
+#cv .dart[data-piece="back"]{stroke:var(--ax-outline-back)!important}
+#cv .dart-waist{stroke:var(--ax-ln-dart)}
+#cv .dart-guide{stroke:var(--ax-ln-dart-guide)}
+/* 기초선·치수·점 */
+#cv .base{stroke:var(--ax-ln-base)}
+#cv .dim,#cv .sleeve-sch-reco{stroke:var(--ax-ln-cons)}
+#cv text[fill="#e07800"]{fill:var(--ax-ln-cons-text)}
+#cv .pt-main,#cv circle[fill="#e44"]{fill:var(--ax-pt-main)}
+#cv .txt-dark{fill:var(--ax-ln-text)}
+/* 남아 있던 원색 표시점(render.js 인라인 fill · 코드 무변경): GG·B0 청록 → 다트 청록 · B4 주황 → 치수 황토 */
+#cv circle[fill="#0cf"],#cv circle[fill="#0af"]{fill:var(--ax-ln-dart)}
+#cv circle[fill="#f90"]{fill:var(--ax-ln-cons)}
+/* 종속 */
+#cv .dep{stroke:var(--ax-ln-dep)}
+#cv .pt-dep,#cv .txt-dep{fill:var(--ax-ln-dep)}
+#cv [data-sleeve-root] .txt-dep{fill:#5D4A9C}
+/* 소매 보조·앞/뒤 가이드 */
+#cv .sleeve-culture-aux,#cv .sleeve-culture-aux-copy,#cv .sleeve-sch-culture{stroke:var(--ax-ln-aux)}
+#cv .sleeve-culture-aux-point{fill:var(--ax-ln-aux)}
+#cv .sleeve-front-guide,#cv .sleeve-front-circ,#cv .sleeve-front-circ-light{stroke:var(--ax-ln-green)}
+#cv .sleeve-back-guide,#cv .sleeve-back-circ,#cv .sleeve-back-circ-light{stroke:var(--ax-ln-back)}
+#cv text[fill="#0F6E56"]{fill:var(--ax-ln-green)}
+#cv text[fill="#185FA5"],#cv circle[fill="#185FA5"]{fill:var(--ax-ln-back)}
+/* 가슴선·허리선 안내 */
+#cv .rBL{stroke:rgba(10,100,210,.38)}
+#cv text[fill="#a0c4e8"]{stroke:none;fill:rgba(10,100,210,.55)}
+#cv .rWL{stroke:rgba(214,54,59,.38)}
+#cv text[fill="#f0a888"]{fill:rgba(214,54,59,.55)}
+#cv text[fill="#ddd"]{fill:rgba(60,60,67,.14)}
+
+/* ══ 2026-11-13 통합 보정(현재 HEAD 기능 보존) ══════════════════════════════════════
+   이 시트는 style.css 뒤에 오므로, 같은 특이도의 규칙은 여기 것이 이긴다. 아래는 «덮이면 안 되는 것»을 명시적으로 다시 고정한다. */
+
+/* ① 디자인 «완료» 색(js/designDoneMarks.js): 완료 = 녹색 · 몸판 합성 외곽이 완료본과 다르면 남색.
+      위 «#cv .pattern{stroke:…}»·앞/뒤 외곽색(!important)보다 우선해야 완료 표시가 사라지지 않는다. */
+#cv .stage-done{stroke:#0E9F6E!important;stroke-width:2.8}
+#cv .design-outline-composed.stage-undone{stroke:#1D4ED8!important}
+#cv .design-outline-composed:not(.stage-undone):not(.stage-done){stroke:#0E9F6E}
+
+/* ② 선 편집 점(js/render.js 선택 overlay): 이동 점 = 흰 원 + 청록 테 · 고정 점 = 회색 네모 + 막대 · 휨 핸들 = 청록 점/연결선.
+      --cyan 을 시스템 파랑으로 재매핑했지만 편집 점은 도면 위 표식이라 종전 청록(#16BCE4)을 그대로 쓴다. «.pt{fill}» 등에 덮이지 않게 #cv 스코프. */
+#cv .design-line-anchor{fill:#fff;stroke:#16BCE4;stroke-width:1.6}
+#cv .design-line-handle{stroke:#16BCE4;stroke-width:1;fill:none;opacity:.9}
+#cv .design-line-handledot{fill:#16BCE4;stroke:#fff;stroke-width:.8}
+#cv .design-line-anchor-locked{fill:#E5E7EB;stroke:#4B5563;stroke-width:1.4}
+#cv .design-line-anchor-lockmark{stroke:#4B5563;stroke-width:1.6;stroke-linecap:round}
+
+/* ③ 확대 알약 이동 안내: 원형 = Space+드래그 · 디자인 = 빈 곳 드래그(js/canvasPan.js) · 터치 = 두 손가락(모든 단계) */
+.zoom-pill .zp-hint-design{display:none}
+[data-workspace-stage="design"] .zoom-pill .zp-hint-draft{display:none}
+[data-workspace-stage="design"] .zoom-pill .zp-hint-design{display:inline-flex;align-items:center;gap:5px}
+.zoom-pill .zp-hint-draft{display:inline-flex;align-items:center;gap:5px}
+
+/* ④ 폰(≤615px) 머리줄: 앱 버전은 숨기지 않는다 — 아이콘 아래에 작은 글씨로(지금 불러온 판 확인용). */
+@media (max-width:615px){
+  .brand-block{flex-direction:column;align-items:flex-start;gap:1px}
+  .brand-ver{display:block;font-size:9px;line-height:1.1}
+  /* 단계 글자가 두 줄로 꺾이지 않게(실측 390px: «디자인»이 «디자/인»으로 꺾였다): 칸 폭을 글자 수에 맞추고 한 줄 고정 */
+  .stage{flex:1 1 auto;white-space:nowrap;padding:0 4px}
+  .app-mark{width:18px;height:18px;border-radius:5px}
+  .app-mark svg{width:12px;height:12px}
+}
+
+/* ④-2 아주 좁은 폰(≤360px): 한 줄에 단계 4칸이 안 들어간다(실측 320px: 칸 폭 20px · 글자 잘림) → 단계 줄을 둘째 줄로 내린다
+      (DOM 순서 그대로 · order 만). 첫 줄 = 아이콘·버전 | 실행취소·보기·파일. */
+@media (max-width:360px){
+  .app-header{flex-wrap:wrap;height:auto;padding:4px 8px;row-gap:4px}
+  .header-actions{margin-left:auto}
+  .stage-bar{order:3;flex:1 0 100%}
+}
+
+/* ⑤ 디자인 단계에서도 화면 모드를 바꿀 수 있게: «보기» 메뉴를 보이되 원형용 레이어 행은 숨기고 화면 모드만 남긴다
+      (style.css 는 디자인 단계에서 보기 메뉴 전체를 숨긴다 — 레이어 토글이 디자인 화면에 해당 없어서). */
+[data-workspace-stage="design"] [data-menu="view"]{display:block}
+[data-workspace-stage="design"] [data-menu="view"] .pop-body > .row{display:none}
+[data-workspace-stage="design"] [data-menu="view"] .ax-theme{margin-top:0;border-top:0}
+
+/* ⑥ 디자인 패널 세부(2026-11-13 · 최소):
+   · «선·곡선 그리기» 버튼이 308px 인스펙터에서 3px 잘려 말줄임표가 됐다(실측 81>78) → 그 줄만 안쪽 여백을 줄인다.
+   · 체크박스가 든 행(«제도 치수 표시» 등)은 묶음 제목 띠가 아니라 보통 행으로(위 [style*="margin-top:8px"] 규칙이 제목 띠로 칠하던 것). */
+#btnDesignLine,#btnDesignFinish,#btnDesignSelect{padding-left:3px;padding-right:3px;letter-spacing:-.03em}
+.inspector .insp-body .row[style*="margin-top:8px"]:has(input[type=checkbox]){margin:0!important;padding:6px 0;min-height:40px;background:transparent;box-shadow:inset 0 .5px 0 var(--ax-sep)}
+.inspector .insp-body .row[style*="margin-top:8px"]:has(input[type=checkbox]) label{font-size:13px;font-weight:400;color:var(--ax-text)}
