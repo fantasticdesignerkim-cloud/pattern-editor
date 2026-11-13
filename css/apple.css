@@ -396,7 +396,7 @@ button,input,select{font-family:inherit}
 [data-theme="dark"]{--ax-outline-front:#A3564B;--ax-outline-back:#41608B;
   --ax-ln-dart:#276A66;--ax-ln-dart-guide:rgba(39,106,102,.50);--ax-ln-cons:#A67A31;--ax-ln-cons-text:#86601F;--ax-pt-main:#8C433A}
 /* 외곽 */
-#cv .pattern,#cv .sleeve-cap,#cv .sleeve-pattern-line{stroke:var(--ax-ln-ink)}
+#cv .pattern,#cv .sleeve-cap,#cv .sleeve-pattern-line,#cv .dolman-sleeve{stroke:var(--ax-ln-ink)}
 #cv .pattern[style*="#cc2222"]{stroke:var(--ax-outline-front)!important}
 #cv .pattern[style*="#0066cc"]{stroke:var(--ax-outline-back)!important}
 #cv .sleeve-pattern-anchor{fill:var(--ax-ln-ink)}
@@ -516,3 +516,60 @@ button,input,select{font-family:inherit}
 [data-theme="dark"] .ax-badge-info{background:rgba(10,132,255,.24);color:#64B5FF}
 [data-theme="dark"] .ax-badge-mute{background:rgba(142,142,147,.26);color:#C7C7CC}
 [data-theme="dark"] .ax-badge-chg{background:rgba(191,90,242,.26);color:#DA9BF5}
+
+/* ══ 재단 준비 1단계(js/cutPrep.js · 읽기 전용 오버레이 · 2026-11-13) ══
+   stage 는 design 그대로 — 열려 있는 동안 디자인 캔버스·속성 패널은 보이지 않게만(배치·상태 유지) 하고 그 위에 재단 화면을 덮는다. */
+.workspace{position:relative}
+html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] .workspace > .inspector{visibility:hidden}
+.cut-view{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;min-width:0;background:var(--ax-inspector);color:var(--ax-text);font-family:var(--ax-font)}
+.cut-view[hidden]{display:none}
+.cut-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px;border-bottom:.5px solid var(--ax-hair);background:var(--ax-toolbar)}
+.cut-title{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.cut-title b{font-size:15px;font-weight:600}
+.cut-sub{font-size:12px;color:var(--ax-text2)}
+.cut-status{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--ax-fill);color:var(--ax-text2)}
+.cut-status[data-state="ok"]{background:rgba(31,138,60,.12);color:var(--ax-green)}
+.cut-status[data-state="warn"],.cut-status[data-state="blocked"]{background:rgba(178,94,9,.12);color:var(--ax-orange)}
+.cut-actions{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.cut-actions .btn{min-height:30px;width:auto;flex:0 0 auto;margin:0}
+.cut-body{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 308px}
+.cut-canvas{width:100%;height:100%;min-height:0;display:block;background:var(--ax-canvas);touch-action:none;cursor:grab}
+.cut-side{min-height:0;overflow-y:auto;padding:10px 14px 16px;border-left:.5px solid var(--ax-hair)}
+.cut-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.cut-list-h{margin:10px 2px 2px;font-size:12px;font-weight:600;color:var(--ax-text2)}
+.cut-list-h:first-child{margin-top:0}
+.cut-item-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;padding:8px 10px;border:0;border-radius:10px;
+  background:var(--ax-group);color:var(--ax-text);box-shadow:0 0 0 .5px rgba(0,0,0,.06);font:inherit;cursor:pointer}
+.cut-item-btn[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ax-accent)}
+.cut-item-btn:disabled{cursor:default;opacity:1}
+.ci-name{font-size:14px;font-weight:600}
+.ci-size,.ci-note{font-size:12px;color:var(--ax-text2)}
+.ci-ok{font-size:11px;color:var(--ax-green)}
+.ci-bad{font-size:12px;color:var(--ax-orange)}
+.cut-miss,.cut-info{font-size:12px;line-height:1.45;color:var(--ax-text2);padding:6px 10px;border-radius:8px;background:var(--ax-fill)}
+.cut-miss b{color:var(--ax-text);font-weight:600}
+.cut-source{margin:12px 2px 0;font-size:11px;color:var(--ax-text3);overflow-wrap:anywhere}
+.cut-blocked{padding:12px;border-radius:10px;background:rgba(178,94,9,.10);margin-bottom:8px}
+.cut-blocked p{margin:0 0 8px;font-size:13px;line-height:1.45}
+.cut-blocked[hidden]{display:none}
+#cutCv .cut-piece-outline{fill:rgba(255,255,255,.72);stroke:#1D1D1F;stroke-width:1.4px;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+#cutCv .cut-piece.is-sel .cut-piece-outline{stroke:var(--ax-accent);stroke-width:2.6px;fill:rgba(0,122,255,.08)}
+#cutCv .cut-mark{fill:none;stroke-width:1.2px;vector-effect:non-scaling-stroke;stroke-dasharray:5 4}
+#cutCv .cut-mark-placket{stroke:var(--ax-orange)}
+#cutCv .cut-mark-cut{stroke:#6E6E73}
+#cutCv .cut-piece-label{fill:#1D1D1F;font-weight:600;text-anchor:middle;font-family:var(--ax-font);pointer-events:none}
+#cutCv .cut-piece-size{fill:rgba(60,60,67,.75);text-anchor:middle;font-family:var(--ax-font);pointer-events:none}
+#cutCv .cut-scale path{stroke:#1D1D1F;stroke-width:1.2px;vector-effect:non-scaling-stroke;fill:none}
+#cutCv .cut-scale text{fill:rgba(60,60,67,.75);font-family:var(--ax-font)}
+.stage#stageCut:disabled{color:var(--ax-text3)}
+@media (max-width:860px){
+  .cut-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(220px,1fr) minmax(0,42%)}
+  .cut-side{border-left:0;border-top:.5px solid var(--ax-hair)}
+}
+@media (max-width:615px){
+  .cut-head{padding:8px 16px;gap:6px 8px}
+  .cut-actions{margin-left:0;width:100%}
+  .cut-actions .btn{flex:1 1 auto;min-width:0;min-height:36px;padding:0 6px;width:auto}
+  .cut-side{padding:8px 16px 14px}
+}
+[data-theme="dark"] .cut-view{background:var(--ax-inspector)}

@@ -201,6 +201,8 @@ const suites = [
   { file: "seamMatchCheck.js",          golden: false },
   // 맞춤 길이 카드 실제 엔진 통합(2026-11-13): 박시 Ⓐ + 여밈 → 소매 Ⓐ → 카라 M — 카드 수치 = 측정 권위 · 불변 · 변경 시 숨김 · 저장 복원.
   { file: "seamMatchIntegrationCheck.js", golden: false },
+  // 재단 준비 1단계(2026-11-13): Design 완료본 → 읽기 전용 재단 조각(시접 전) · 폐곡선 검사 · 누락 이유 · 무효화 · 저장 복원 · 소매 파생/분리 중복 방지.
+  { file: "cutPrepIntegrationCheck.js", golden: false },
 ];
 
 let anyFail = false;

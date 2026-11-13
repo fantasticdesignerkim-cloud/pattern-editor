@@ -2211,6 +2211,7 @@
 
   window.designLineTool = Object.freeze({
     toggle, toggleSelect, setMode, getMode, cancel: () => setMode("off"), isActive, finishDraw, canFinishDraw: () => draftFinishable(),
+    buildPieceRing,   // 재단 준비(js/cutPrep.js)가 읽기 전용으로 쓰는 열린 다트 입구 → 다트 다리 폐곡선 구성(순수 · 동작 무변경)
     convertNecklineToBoundary, revertNecklineToParametric, recomposeDesignOutline, necklineBoundaryLen, isNeckAutoLine, isSleeveCapLine, isCollarBodyLine, findLine: (id) => findLine(id),
     getDraft, getSelectedId, getSelectionOverlay, resolveSelectPiece, getSnapHint, deleteSelected, setRole,
     validateSelectedCut, getSplitState, revalidate, validateCut, gatherValidCuts, flattenLine, segCross, distPtToSegs,

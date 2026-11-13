@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026111205">
+<link rel="stylesheet" href="css/style.css?v=2026111304">
 <!-- 라이트 테마 덮어쓰기(apple-light-ui · 2026-11-13 통합): style.css 원문은 그대로, 표시만 바꾼다. -->
-<link rel="stylesheet" href="css/apple.css?v=2026111303">
+<link rel="stylesheet" href="css/apple.css?v=2026111305">
 <!-- 화면 모드(시스템/밝게/어둡게): 첫 그리기 전에 data-theme 을 정해 깜빡임을 막는다. 저장 키 dorobo.ui.theme · 연결은 js/appleChrome.js -->
 <script>try{var t=localStorage.getItem('dorobo.ui.theme');var d=t==='dark'||(t!=='light'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}catch(e){}</script>
 </head>
@@ -17,14 +17,14 @@
     <span class="app-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M5 19c3-1 4.5-13 8-13 2.6 0 3.4 4.6 6 5"/></svg></span>
     <span class="brand">DOROBO</span>
     <!-- 앱 버전 단일 원천: 배포할 때 이 번호만 올린다 (docs/STATUS.md § 앱 버전 표시) -->
-    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.13.2">v2026.11.13.2</span>
+    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.13.3">v2026.11.13.3</span>
     <span class="brand-sub">문화식 원형</span>
   </div>
 
   <nav class="stage-bar" aria-label="작업 단계" role="tablist">
     <button type="button" class="stage" role="tab" data-stage="draft"  aria-selected="true"  title="원형">원형</button>
     <button type="button" class="stage" role="tab" data-stage="design" aria-selected="false" disabled aria-disabled="true" title="원형 완료 후 디자인 시작 준비">디자인</button>
-    <button type="button" class="stage" disabled aria-disabled="true" title="준비 중">재단</button>
+    <button type="button" class="stage" role="tab" id="stageCut" aria-selected="false" aria-controls="cutView" disabled aria-disabled="true" title="Design 형상 완료 후 재단 준비(시접 전)">재단</button>
     <button type="button" class="stage" disabled aria-disabled="true" title="준비 중">출력</button>
   </nav>
 
@@ -617,6 +617,8 @@
             <button class="btn action-primary" id="btnCompleteDesign">Design 형상 완료</button>
           </div>
           <div class="row note" id="designResultStatusNote" aria-live="polite">Design 미완료 · 세션 전용</div>
+          <!-- 재단 준비(js/cutPrep.js · 읽기 전용): 유효한 Design 완료본일 때만 상단 «재단» 활성. 불가 사유·돌아갈 곳을 여기 적는다. -->
+          <div class="row note" id="cutPrepNote" aria-live="polite"></div>
         </div><!-- /subtab collar -->
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
         <div class="row" style="margin-top:8px"><label>배치</label></div>
@@ -667,6 +669,32 @@
       </div>
     </details>
   </aside>
+
+  <!-- 재단 준비 1단계(js/cutPrep.js · 읽기 전용 오버레이): uiState.stage 는 "design" 그대로. Design 완료본의 조각을
+       시접 전 완성선 그대로(실물 치수) 보여 준다. 시접·너치·식서·재단 수량·배치·출력 없음. 저장하지 않는다. -->
+  <section class="cut-view" id="cutView" aria-label="재단 준비" hidden>
+    <div class="cut-head">
+      <div class="cut-title"><b>재단 준비</b><span class="cut-sub">시접 전 · 완성선(봉제선) 그대로 · 실물 치수</span></div>
+      <span class="cut-status" id="cutStatus" aria-live="polite"></span>
+      <div class="cut-actions">
+        <button type="button" class="btn" id="btnCutZoomOut" aria-label="축소">−</button>
+        <button type="button" class="btn" id="btnCutFit">전체 보기</button>
+        <button type="button" class="btn" id="btnCutZoomIn" aria-label="확대">+</button>
+        <button type="button" class="btn action-primary" id="btnCutBack">디자인으로</button>
+      </div>
+    </div>
+    <div class="cut-body">
+      <svg id="cutCv" class="cut-canvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="재단 조각(시접 전)"></svg>
+      <div class="cut-side">
+        <div class="cut-blocked" id="cutBlocked" hidden>
+          <p id="cutBlockedText"></p>
+          <button type="button" class="btn action-primary" id="btnCutReturnTo"></button>
+        </div>
+        <ul class="cut-list" id="cutList" aria-label="재단 조각 목록"></ul>
+        <p class="cut-source" id="cutSource"></p>
+      </div>
+    </div>
+  </section>
 </div>
 
 <footer class="statusbar">
@@ -678,7 +706,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026111201"></script>
-<script src="js/render.js?v=2026111202"></script>
+<script src="js/render.js?v=2026111304"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026111201"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -705,11 +733,11 @@
 <!-- 페플럼 제작 정보 표시 모델(순수·표시 전용): window.peplumAnnotation. 형상·hash·hit 무관. -->
 <script src="js/peplumAnnotation.js?v=2026100404"></script>
 <!-- 소매 Ⓐ/Ⓑ/Ⓒ 제작 정보 표시 모델(순수·표시 전용): window.sleeveAnnotation. 형상·hash·완료본·hit 무관. -->
-<script src="js/sleeveAnnotation.js?v=2026110404"></script>
+<script src="js/sleeveAnnotation.js?v=2026111304"></script>
 <script src="js/canvasPan.js?v=2026111105"></script>
 <script src="js/designLayout.js?v=2026111105"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026111204"></script>
+<script src="js/designLineTool.js?v=2026111303"></script>
 <script src="js/sleeveSplit.js?v=2026110604"></script>
 <script src="js/sleeveOutlineEdit.js?v=2026110604"></script>
 <script src="js/designLineQuickBar.js?v=2026111203"></script>
@@ -811,13 +839,15 @@
 <script src="js/init.js?v=2026111105"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
 <script src="js/projectFile.js?v=2026110901"></script>
-<script src="js/ui.js?v=2026111301"></script>
+<script src="js/ui.js?v=2026111303"></script>
 <!-- 라이트 테마 크롬(UI 전용): 확대 알약 · 폰 하단 시트 · 화면 모드. 기존 전역 함수만 호출. -->
 <script src="js/appleChrome.js?v=2026111302"></script>
 <!-- 원형 이세 배지·계산 노트 · 원형/디자인 비교(읽기 전용 · UI 전용). -->
 <script src="js/inspectorInsights.js?v=2026111302"></script>
 <!-- 맞춤 길이 카드(읽기 전용 파생 표시 · UI 전용): 기존 측정 권위만 읽는다. -->
 <script src="js/seamMatch.js?v=2026111302"></script>
+<!-- 재단 준비 1단계(읽기 전용 파생 · UI 전용): designResult 권위만 읽는다. 저장 형식·stage 무변경. -->
+<script src="js/cutPrep.js?v=2026111304"></script>
 
 </body>
 </html>

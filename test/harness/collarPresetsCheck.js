@@ -1395,7 +1395,7 @@ const BAND_FAM = "shirt-collar-with-band";
     "39: 정상 동선 초기값 = M 레코드 기본값(무변경)");
   ok(/\.stand\.frontEndCm/.test(ui) && /pd\.body\.gapCm/.test(ui), "39: 입력 없는 값(앞 끝선·gap)은 레코드 기본값에서");
   ok(/function collarLockedHitReason\(/.test(lt) && /collarLockedHitReason\(selPiece/.test(lt) && /showCollarLockedReason\(why\)/.test(lt), "39: 잠긴 칼라 선 누름 → 이유 안내 배선");
-  ok(/앱 버전 2026\.11\.13\.2">v2026\.11\.13\.2</.test(html), "39: 화면 버전 v2026.11.13.2");
+  ok(/앱 버전 2026\.11\.13\.3">v2026\.11\.13\.3</.test(html), "39: 화면 버전 v2026.11.13.3");
 }
 
 // 40. 2026-11-12 밴드 곡선 규칙 변경과 저장 호환 — 옛 규칙으로 저장된 밴드는 자동으로 덮어쓰지 않는다.

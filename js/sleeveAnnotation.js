@@ -1162,6 +1162,26 @@
     }
     return out;
   }
+  // 파생 조각이 원래 몸판 조각의 **완전한 복제**(Ⓣ·Ⓤ 뒤판 «그대로»)인데 다트 다리를 들고 오지 않았으면, 원래 몸판 construction 에서
+  //   열린 다트 입구를 닫는 다리만(designLineTool.buildPieceRing — 디자인 «파트 분리»와 같은 판정) 읽어 재단선에 더한다(표시 전용 · 엔진·hash 무변경).
+  //   닫힌 다트(허리 다트 등 외곽 입구가 없는 것)는 ring 에 들어가지 않으므로 그려지지 않는다.
+  function inheritedMouthLegs(project, piece, pc) {
+    var br = project && project.working && project.working.bodiceResult, orig = br && br[pc], DLT = window.designLineTool;
+    if (!piece || !orig || !Array.isArray(orig.construction) || !DLT || typeof DLT.buildPieceRing !== "function") return [];
+    if ((piece.construction || []).some(function (c) { return c && c.dart; }) || JSON.stringify(piece.outline) !== JSON.stringify(orig.outline)) return [];
+    var flat = [];   // buildPieceRing 은 line/cubic 만 읽는다 — path(M·C·L)를 같은 점의 cubic/line 으로 펼쳐 넘긴다(형상 그대로)
+    piece.outline.forEach(function (sg) {
+      if (sg.kind !== "path") { flat.push(sg); return; }
+      var cur = null; (sg.commands || []).forEach(function (c) {
+        if (c.type === "M") cur = c.points[0];
+        else if (c.type === "C") { flat.push({ kind: "cubic", from: P(cur), c1: P(c.points[0]), c2: P(c.points[1]), to: P(c.points[2]) }); cur = c.points[2]; }
+        else if (c.type === "L") { flat.push({ kind: "line", from: P(cur), to: P(c.points[0]) }); cur = c.points[0]; }
+      });
+    });
+    var r = DLT.buildPieceRing(flat, orig.construction.filter(function (c) { return c && c.kind === "line"; }));
+    if (!r || !r.ok) return [];
+    return r.ring.filter(function (x) { return x.source === "dartleg"; }).map(function (x) { return { kind: "line", from: P(x.seg.from), to: P(x.seg.to), edge: "dart-leg" }; });
+  }
   // 소매 Ⓣ(셔츠 슬리브) 몸판 위 표시(표시 전용 · geometry·hash 무관 · 값은 working.sleeveT 엔진 meta — 재계산 없음):
   //   파생 몸판 재단선(앞 = AH 다트 → 옆 다트, 뒤 = 그대로) · 몸판 진동에 겹쳐 그린 소매 반쪽 제도선 · 제도 순서 번호(P.140–141 단계).
   function shirtBodice(st, sym, project) {
@@ -1169,9 +1189,11 @@
     var m = st.meta, out = {}, ext = {};
     ["back", "front"].forEach(function (pc) {
       var dl = m.draftLayer[pc];
-      out[pc] = { cut: st.derivedBodice[pc].outline,
-        draft: [dl.cap, dl.center, dl.shoulderExt, dl.slopeDrop, dl.width, dl.underarmGuide, dl.cuffLine, dl.underarm] };
-      ext[pc] = segsBBox(out[pc].cut.concat(out[pc].draft));
+      out[pc] = { cut: st.derivedBodice[pc].outline.concat(inheritedMouthLegs(project, st.derivedBodice[pc], pc)),
+        // 소매 반쪽 실제 외곽(소매산 · 소매 밑선 · 소맷부리 E→C) = 외곽 실선 / 기초·경사·폭선·안내선·소맷부리 기준선(E→G, ● 잘라 냄) = 점선
+        sleeve: [dl.cap, dl.underarm, { kind: "line", from: P(dl.E), to: P(dl.C) }],
+        draft: [dl.center, dl.shoulderExt, dl.slopeDrop, dl.width, dl.underarmGuide, dl.cuffLine] };
+      ext[pc] = segsBBox(out[pc].cut.concat(out[pc].sleeve, out[pc].draft));
     });
     ["back", "front"].forEach(function (pc) {
       out[pc].anno = shirtAnno(m, pc, ext[pc], sym || "T");

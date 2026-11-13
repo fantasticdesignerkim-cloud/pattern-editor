@@ -436,6 +436,7 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .sleeve-anno-past{stroke:#94A3B8;stroke-width:0.8;stroke-dasharray:3 3;fill:none}
 .design-working .dolman-cut{stroke:#BE185D;stroke-width:2;fill:none}   /* 소매 Ⓡ 파생 몸판 재단 외곽(새로 그린 선) — 원래 몸판(남색)과 구분, 표시 전용 */
 .design-working .dolman-draft{stroke:#0E7490;stroke-width:0.9;stroke-dasharray:4 3;fill:none}   /* 소매 Ⓡ 몸판 위에 겹쳐 그린 소매 반쪽 제도선 — 재단선 아님 */
+.design-working .dolman-sleeve{stroke:#1D1D1F;stroke-width:1.6;fill:none;stroke-linejoin:round}   /* 소매 Ⓣ·Ⓤ 몸판 위 소매 반쪽 실제 외곽(소매산·밑선·소맷부리) — 실선 · 제도선(점선)과 구분 */
 .design-working .dolman-sh{fill:none;stroke-width:1.4}   /* 소매 Ⓡ 뒤 어깨 다트 닫힘 비교(표시 전용) */
 .design-working .dolman-sh-before{stroke:#9CA3AF;stroke-dasharray:4 3}
 .design-working .dolman-sh-after{stroke:#EA580C}

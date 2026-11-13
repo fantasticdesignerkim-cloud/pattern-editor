@@ -249,7 +249,7 @@ ok(S.parameters.sleeveLengthCm === SL && STA.keys().every(k => typeof S.paramete
   const md = SAN.buildModel(Q);
   ok(md && md.line === "T" && ["back", "front", "len", "cap-h", "width", "cuff-back", "cuff-front", "cut-back", "cut-front", "n-back", "n-front"].every(id => md.lines.some(l => l.id === id) || md.dims.some(d => d.id === id)), "10: 한 장 소매 표시(앞뒤 · 소매길이 · ◉ · 폭 · 소맷부리 · ● · 맞춤)");
   const db = SAN.dolmanBodice(Q);
-  ok(db && db.back && db.front && db.back.cut === Q.working.sleeveT.derivedBodice.back.outline && db.front.draft.length === 8 && !db.back.shoulder, "10: 몸판 위 표시(재단선 · 제도선 8)");
+  ok(db && db.back && db.front && JSON.stringify(db.back.cut.slice(0, Q.working.sleeveT.derivedBodice.back.outline.length)) === JSON.stringify(Q.working.sleeveT.derivedBodice.back.outline) && db.back.cut.length === Q.working.sleeveT.derivedBodice.back.outline.length + 2 && db.back.cut.slice(-2).every(s => s.edge === "dart-leg") && JSON.stringify(db.front.cut) === JSON.stringify(Q.working.sleeveT.derivedBodice.front.outline) && db.front.sleeve.length === 3 && db.back.sleeve.length === 3 && db.front.draft.length === 6 && !db.back.shoulder, "10: 몸판 위 표시(재단선 = 파생 외곽 + 뒤 어깨 다트 열린 V 다리 2 · 소매 실제 외곽 실선 3 · 제도선 점선 6)");
   const ids = (pc) => db[pc].anno.lines.map(l => l.id);
   ok(["t1", "t1s", "t2r", "t2d", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t9c", "t10"].every(id => ids("front").indexOf(id) >= 0) && ids("back").indexOf("t1") < 0 && ids("back").indexOf("t9") >= 0, "10: 제도 공정 번호(앞 ①~⑩ · 뒤 ②~⑩)");
   ok(db.front.anno.marks.filter(k => k.cls === "notch").length >= 4 && db.back.anno.lines.some(l => l.text === "‖") && db.front.anno.lines.some(l => l.text === "|"), "10: ★ · 맞춤 ‖ | 표시");
@@ -265,7 +265,7 @@ ok(S.parameters.sleeveLengthCm === SL && STA.keys().every(k => typeof S.paramete
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8");
   const ver = (f) => { const mm = html.match(new RegExp("js/" + f.replace(".", "\\.") + "\\?v=(\\d+)")); return mm ? mm[1] : null; };
   // 이력: 2026102911 = Ⓤ 연결 · 2026103001 = 소매산 재보완(엔진 · ★ 기본값 · 표시 문구)
-  ok(["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === (f === "ui.js" ? "2026111301" : f === "sleeveCheckpoint.js" ? "2026111001" : f === "sleeveAnnotation.js" ? "2026110404" : "2026110403")) && ver("sleeveTApply.js") === "2026103001", "11: 캐시 버전(Ⓤ 연결 2026102911 · 재보완 2026103001 — sleeveTApply 는 2026102908 에서 올림 · Ⓥ 연결 2026110101 · Ⓦ 연결로 공용 파일 2026110301)");
+  ok(["ui.js", "sleeveCheckpoint.js", "sleevePresets.js", "sleeveAnnotation.js"].every(f => ver(f) === (f === "ui.js" ? "2026111303" : f === "sleeveCheckpoint.js" ? "2026111001" : f === "sleeveAnnotation.js" ? "2026111304" : "2026110403")) && ver("sleeveTApply.js") === "2026103001", "11: 캐시 버전(Ⓤ 연결 2026102911 · 재보완 2026103001 — sleeveTApply 는 2026102908 에서 올림 · Ⓥ 연결 2026110101 · Ⓦ 연결로 공용 파일 2026110301)");
   ok(ver("designSleeveT.js") === "2026110101", "11: designSleeveT.js 캐시 버전 2026110101(2026103001 소매산 재보완 → Ⓥ 재사용 경계 parts 추가 · Ⓣ·Ⓤ 결과 무변경)");
   ok(html.indexOf("js/sleeveSApply.js") < html.indexOf("js/designSleeveT.js") && html.indexOf("js/designSleeveT.js") < html.indexOf("js/sleeveTApply.js") && html.indexOf("js/sleeveTApply.js") < html.indexOf("js/ui.js"), "11: 스크립트 순서");
   const rec = SP.get("bunka-sleeve-T");

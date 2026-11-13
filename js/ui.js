@@ -157,7 +157,8 @@
       // design 탭 활성 = designWorkflow.hasProject()(계약 교정 1). project 가 없으면
       // 완료본이 있어도 disabled — 탭만으로 빈 design 진입 금지. draft 는 상시 가용.
       const available = stageAvailable(stage);
-      const isCurrent = stage === uiState.stage;
+      // 재단 준비 화면(js/cutPrep.js 오버레이 · stage 는 design 그대로)이 열려 있으면 «재단» 탭이 선택 표시를 갖는다.
+      const isCurrent = stage === uiState.stage && !(window.cutPrep && window.cutPrep.isOpen());
       btn.setAttribute("aria-selected", String(isCurrent));
       const blocked = !available || (!!busy && !isCurrent);
       btn.disabled = blocked;

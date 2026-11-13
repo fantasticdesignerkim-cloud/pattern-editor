@@ -523,6 +523,11 @@ function _appendDolmanBodice(grp, m, pc, info){
     const gd=E("g",{ "data-dolman-layer":"draft" });
     m.draft.forEach((s,i)=>gd.appendChild(E("path",{ d:segD(s), class:"dolman-draft", "data-anno":"draft-"+i })));
     g.appendChild(gd);
+    if(m.sleeve){   // 몸판 위 소매 반쪽의 실제 외곽(소매산·밑선·소맷부리) — 제도 기준선(점선)과 구분해 외곽 실선. 완료 녹색 대상 아님(data-piece 없음)
+      const gsl=E("g",{ "data-dolman-layer":"sleeve" });
+      m.sleeve.forEach((s,i)=>gsl.appendChild(E("path",{ d:segD(s), class:"dolman-sleeve", "data-anno":"sleeve-"+i })));
+      g.appendChild(gsl);
+    }
   }
   const gc=E("g",{ "data-dolman-layer":"cut" });
   m.cut.forEach((s,i)=>gc.appendChild(E("path",{ d:segD(s), class:"dolman-cut", "data-anno":"cut-"+(s.edge||i) })));
