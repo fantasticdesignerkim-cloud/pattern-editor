@@ -2781,9 +2781,8 @@
   }
   // 버튼 문구 + 선택 상태 안내(형상은 안 건드린다).
   function syncCollarPresetLabel() {
-    const btn = document.getElementById("btnCollarBaseM"), r = resolveCollarSelection();
+    const r = resolveCollarSelection();
     const rec = r.ok ? window.collarPresets.get(r.presetId) : null;
-    if (btn) btn.textContent = (rec ? rec.label : "선택 제도형") + "으로 초기화";
     const note = document.getElementById("designCollarCatalogNote");
     if (note && window.collarPresets) {
       const fid = selectedCollarFamilyId();
@@ -3319,9 +3318,10 @@
       const m = c.measure;
       const red = (m.baselineReductionCm > 0 || m.guideRiseCm > 0)
         ? " · 기초선 " + fmtL(m.baseLineLenCm) + "cm(감산 " + fmtL(m.baselineReductionCm) + "·2/3 안내점 " + fmtL(m.guideRiseCm) + " 올림)" : "";
-      setCollarNote("달림선 " + fmtL(m.lowerNeckSeamLenCm) + "cm = 목둘레 " + fmtL(m.neckTargetCm != null ? m.neckTargetCm : m.lowerNeckSeamLenCm) + "cm(뒤중심 보정 " + fmtL(m.cbTrimCm || 0) + "cm) · 밴드 윗선 " + fmtL(m.upperNeckSegmentLenCm) + "cm · 앞 끝선 " + fmtL(m.lowerExtensionLenCm) + "cm · 앞 중심 올림 " + fmtL(c.frontRiseCm) + "cm" + red + " · 세션 전용");
+      setCollarNote("달림선 " + fmtL(m.lowerNeckSeamLenCm) + "cm = 목둘레 " + fmtL(m.neckTargetCm != null ? m.neckTargetCm : m.lowerNeckSeamLenCm) + "cm(" + ((m.cbTrimCm || 0) < 0 ? "뒤중심 연장 " + fmtL(-m.cbTrimCm) : "뒤중심 보정 " + fmtL(m.cbTrimCm || 0)) + "cm) · 밴드 윗선 " + fmtL(m.upperNeckSegmentLenCm) + "cm · 앞 끝선 " + fmtL(m.lowerExtensionLenCm) + "cm · 앞 중심 올림 " + fmtL(c.frontRiseCm) + "cm" + red + " · 세션 전용");
     }
     else setCollarNote("스탠드 높이·앞끝 올림 적용으로 카라 스탠드 생성 · 세션 전용");
+    if (gate && pd.ok && collarStandOutdated(project)) { const n = document.getElementById("designCollarNote"); if (n) n.textContent += COLLAR_STAND_OUTDATED_NOTE; }
     updateCollarBodyPanel(project);
   }
   function refreshCollarUI(project) { syncCollarSubtabGate(project); updateCollarPanel(project); }
@@ -3337,13 +3337,41 @@
     if (!window.designCollar || !window.bodiceCheckpoint) return { ok: false, reason: "no-module" };
     const cd = project.working.collarDraft; if (!cd) return { ok: false, reason: "invalid-stand" };
     // 스탠드 result 재생성(순수, upperNeckPath·anchors 확보) → 본체 파생.
-    const stand = window.designCollar.computeStand(window.bodiceCheckpoint.latest(project), cd.parameters.stand, cd.construction);
+    let stand = window.designCollar.computeStand(window.bodiceCheckpoint.latest(project), cd.parameters.stand, cd.construction);
     if (!stand.ok) return stand;
+    // 2026-11-12 밴드 곡선 규칙 변경: 옛 규칙으로 저장된 밴드(화면에 보이는 그 형상)는 자동으로 덮어쓰지 않는다 →
+    //   본체도 **저장된 밴드 윗선**에 맞춘다(재계산한 새 밴드에 맞추면 화면의 밴드와 어긋난다). 새 곡선은 «카라 적용»으로만.
+    if (!sameCollarOutline(stand.standGeometry.outline, cd.standGeometry && cd.standGeometry.outline)) {
+      const top = storedBandTopPath(cd.standGeometry);
+      if (!top) return { ok: false, reason: "invalid-stand" };
+      stand = { ok: true, upperNeckPath: top };
+    }
     const r = window.designCollar.computeBody(stand, bodyParams);
     if (!r.ok) return r;
     cd.body = { parameters: bodyParams, geometry: r.bodyGeometry, attachLenCm: r.attachLenCm, measure: r.measure, anchors: r.anchors };   // anchors = 표시 전용(hash 미포함)
     return { ok: true, result: r };
   }
+  // 저장된 밴드 형상이 지금 규칙의 재계산 결과와 같은가(좌표 1e-7). 다르면 = 옛 곡선 규칙으로 만든 밴드(파일 열기 등).
+  function sameCollarOutline(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    const near = (p, q) => (!p && !q) || (!!p && !!q && Math.abs(p.x - q.x) < 1e-7 && Math.abs(p.y - q.y) < 1e-7);
+    return a.every((s, i) => s.kind === b[i].kind && near(s.from, b[i].from) && near(s.to, b[i].to) && near(s.c1, b[i].c1) && near(s.c2, b[i].c2));
+  }
+  // 저장된 밴드 외곽의 윗선(part "top" · 앞 → 뒤중심 순)을 뒤중심 → 앞 방향 경로로(computeBody 의 upperNeckPath 와 같은 꼴).
+  function storedBandTopPath(g) {
+    const top = (g && Array.isArray(g.outline)) ? g.outline.filter(q => q.part === "top") : [];
+    if (!top.length) return null;
+    return top.slice().reverse().map(q => q.kind === "cubic"
+      ? { kind: "cubic", from: { x: q.to.x, y: q.to.y }, c1: { x: q.c2.x, y: q.c2.y }, c2: { x: q.c1.x, y: q.c1.y }, to: { x: q.from.x, y: q.from.y }, part: "attach" }
+      : { kind: "line", from: { x: q.to.x, y: q.to.y }, to: { x: q.from.x, y: q.from.y }, part: "attach" });
+  }
+  function collarStandOutdated(project) {
+    const cd = project && project.working && project.working.collarDraft;
+    if (!cd || cd.type !== "shirt-two-piece" || !cd.standGeometry || !cd.parameters || !cd.parameters.stand || !window.designCollar || !window.bodiceCheckpoint || collarStale(project)) return false;
+    const st = window.designCollar.computeStand(window.bodiceCheckpoint.latest(project), cd.parameters.stand, cd.construction);
+    return !!(st.ok && !sameCollarOutline(st.standGeometry.outline, cd.standGeometry.outline));
+  }
+  const COLLAR_STAND_OUTDATED_NOTE = " · ⚠ 이 밴드는 예전 곡선 규칙으로 만든 모양입니다(자동으로 바꾸지 않음) — «카라 적용»을 다시 누르면 새 곡선이 됩니다(직접 수정 중이면 먼저 «수치형으로 돌아가기»)";
   function setCollarBodyNote(t) { const n = document.getElementById("designCollarBodyNote"); if (n) n.textContent = t; }
   function collarBodyFailStr(reason) {
     const m = { "invalid-stand": "스탠드를 먼저 적용", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-point-diagonal": "칼라 끝 사선 길이는 앞끝 돌출보다 커야 합니다", "invalid-gap": "CB 제도 간격 확인", "cb-correction-failed": "위칼라 이음선 길이를 밴드와 맞출 수 없습니다", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "invalid-outer-bow": "외곽 휨 값 확인(−2–2)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
@@ -3485,7 +3513,7 @@
     project.working.patternLines = (project.working.patternLines || []).filter(l => l.id !== cd.body.lineId);   // 관리선만 제거
     const r = deriveCollarBody(project, cd.body.parameters);   // 보존 파라미터로 parametric 재생성(mode 없음=parametric)
     if (typeof render === "function") render();
-    updateCollarBodyPanel(project);
+    updateCollarPanel(project);   // 밴드 쪽 버튼·안내까지 다시 맞춘다(종전: 본체 패널만 갱신 → «카라 적용»이 잠긴 채 남았다 · 2026-11-12 실측)
     setCollarBodyNote(r.ok ? "기본형으로 복원됨 · 세션 전용" : "복원 실패: " + collarBodyFailStr(r.reason));
   }
   // designLineTool 관리선 편집 pointerup 이 호출: 검증→갱신/무효(마지막 유효 geometry 유지).
@@ -3512,11 +3540,7 @@
       .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = manual; });
     // 적용/초기화 버튼은 기존 gate/ready 상태 위에 manual 잠금을 얹는다(manual 이면 무조건 disabled).
     if (manual) ["btnApplyCollar", "btnResetCollar", "btnApplyCollarBody", "btnResetCollarBody"].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
-    // ★ 교재 M 기본형 버튼은 **양방향** 상태를 여기서 단일 관리한다(manual 진입 시 disable, 수치형 복귀 시 re-enable).
-    //   조건 = gate 통과 + manual 아님. updateCollarPanel·updateCollarBodyPanel·manual 진입/복귀 전 경로가 이 함수를 거친다.
-    const baseM = document.getElementById("btnCollarBaseM");
-    const selectable = !manual && collarGateOk(project);
-    if (baseM) baseM.disabled = !selectable || !resolveCollarSelection().ok;   // 관리형 직접 편집 중·미구현 제도형에서는 초기화 금지
+    const selectable = !manual && collarGateOk(project);   // («교재 M 기본형으로 초기화» 버튼은 2026-11-12 제거 — 선택 → 적용이 정상 동선)
     ["selCollarPreset", "selCollarFamily"].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !selectable; });
   }
 
@@ -4086,8 +4110,6 @@
       presetSel.addEventListener("change", onSelChange);
     }
     syncCollarPresetLabel();
-    const collarBaseM = document.getElementById("btnCollarBaseM");
-    if (collarBaseM) collarBaseM.addEventListener("click", () => { if (!collarBaseM.disabled) onCollarBaseM(); });
     // 위 칼라: CB 폭·끝 사선·앞끝 돌출·외곽 휨 Enter 로 적용, 본체 적용/초기화.
     ["inpCollarBodyWidth", "inpCollarBodyFrontWidth", "inpCollarBodyProjection", "inpCollarBodyBow"].forEach(id => {
       const el = document.getElementById(id); if (!el) return;

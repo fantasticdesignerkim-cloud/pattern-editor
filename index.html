@@ -12,7 +12,7 @@
   <div class="brand-block">
     <span class="brand">DOROBO</span>
     <!-- 앱 버전 단일 원천: 배포할 때 이 번호만 올린다 (docs/STATUS.md § 앱 버전 표시) -->
-    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.12.1">v2026.11.12.1</span>
+    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.12.2">v2026.11.12.2</span>
     <span class="brand-sub">문화식 원형</span>
   </div>
 
@@ -527,12 +527,12 @@
              computeStand/computeBody 가 P.148로, 한 장 셔츠 칼라(G·H·I·J·K)는 computeOnePiece 가 P.147로 만든다. 소매 완료·비스테일일 때만 활성.
              몸판 hash 변경 시 geometry 를 숨기고 stale 표시(파라미터 보존, 명시적 재적용 필요). -->
         <div class="subtab-panel" data-subtab="collar" hidden>
-          <!-- 선택 제도형으로 초기화: 밴드·위 칼라를 그 preset 기준값으로 정확히 적용(M: 밴드 3·올림 1·앞 끝선 0.5·
-               gap 3·CB폭 4·돌출 1.5·사선 6→앞폭 √33.75·외곽휨 0). '수치형으로 돌아가기'(직접 편집 전 사용자 값 복귀)와 다름. -->
+          <!-- 2026-11-12 김님: «교재 M 기본형으로 초기화» 버튼 제거. 종류·세부 제도 선택 → «카라 적용»(밴드) → «본체 적용»(위 칼라)이
+               정상 동선이고 입력칸 초기값 = 선택 제도형 레코드 기본값(M: 밴드 3·올림 1 · CB폭 4·사선 6·돌출 1.5·외곽휨 0, 앞 끝선 0.5·gap 3 은 레코드값).
+               '수치형으로 돌아가기'(직접 편집 전 사용자 값 복귀)는 별개 기능으로 유지. -->
           <div class="row row-stack"><label for="selCollarFamily">카라 종류</label><select id="selCollarFamily"></select></div>
           <div class="row row-stack"><label for="selCollarPreset">세부 제도</label><select id="selCollarPreset"></select></div>
           <div class="row note" id="designCollarCatalogNote" aria-live="polite"></div>
-          <div class="row" style="margin-bottom:6px"><button class="btn" id="btnCollarBaseM">교재 M 기본형으로 초기화</button></div>
           <div class="row" data-collar-kind="hood"><label for="inpHoodHead">머리 둘레 (cm)</label><input id="inpHoodHead" type="number" min="30" max="80" step="0.5"></div>
           <div class="row" data-collar-kind="hood"><label for="inpHoodMeasure">후드 치수 (cm)</label><input id="inpHoodMeasure" type="number" min="20" max="70" step="0.5"></div>
           <div class="row" data-collar-kind="two-piece"><label for="inpCollarStandHeight">밴드 폭 (cm)</label><input id="inpCollarStandHeight" type="number" min="1" max="8" step="0.1"></div>
@@ -675,7 +675,7 @@
 <script src="js/canvasPan.js?v=2026111105"></script>
 <script src="js/designLayout.js?v=2026111105"></script>
 <!-- 디자인 패턴선 도구(1차: 직선). window.designLineTool. 소유권 기록 + offset 역변환 저장. -->
-<script src="js/designLineTool.js?v=2026111202"></script>
+<script src="js/designLineTool.js?v=2026111204"></script>
 <script src="js/sleeveSplit.js?v=2026110604"></script>
 <script src="js/sleeveOutlineEdit.js?v=2026110604"></script>
 <script src="js/designLineQuickBar.js?v=2026111203"></script>
@@ -763,7 +763,7 @@
 <script src="js/designSleeveZ.js?v=2026110403"></script>
 <script src="js/sleeveZApply.js?v=2026110403"></script>
 <!-- 카라 모양 파생(C1: 셔츠 칼라 스탠드): window.designCollar. bodiceResult → 직선 스탠드 밴드(순수). -->
-<script src="js/designCollar.js?v=2026092520"></script>
+<script src="js/designCollar.js?v=2026111301"></script>
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
 <script src="js/collarPresets.js?v=2026092530"></script>
 <!-- 카라 모양 완료 체크포인트: window.collarCheckpoint. 게이트 + working.collarResult 세션 스냅샷(형상 source=bodice, 소매=순서 게이트). -->
@@ -777,7 +777,7 @@
 <script src="js/init.js?v=2026111105"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
 <script src="js/projectFile.js?v=2026110901"></script>
-<script src="js/ui.js?v=2026111203"></script>
+<script src="js/ui.js?v=2026111301"></script>
 
 </body>
 </html>

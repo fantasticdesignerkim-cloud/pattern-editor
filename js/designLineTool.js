@@ -1813,6 +1813,23 @@
     lines().forEach(l => { if (!l.piece || seen[l.piece] || l.piece === piece || !pickable(l)) return; seen[l.piece] = 1; const d = near(l.piece, pickable).d; if (d < bd) { bd = d; best = l.piece; } });
     return best || piece;
   }
+  // 2026-11-12 김님 «곡선이 이상해 수정하려는데 수정 안 됨»: 칼라 본체 직접 수정 중 눌러도 안 잡히는 선(밴드 전체 · 위 칼라 이음선 · 뒤중심선)은
+  //   편집 대상이 아닌데 아무 말 없이 선택만 풀렸다 → 왜 안 잡히는지 알린다(안내만 · 형상·선택 규칙·잠금 무변경). 해당 없으면 null.
+  function collarLockedHitReason(piece, geo) {
+    if (piece !== "collar") return null;
+    const p = project(), cd = p && p.working && p.working.collarDraft;
+    if (!cd || !cd.body || cd.body.mode !== "manual" || !cd.body.geometry) return null;
+    const lCm = LINE_HIT_PX * pxToCm(), near = segs => segs.length && distToLine(geo, { segments: segs }) < lCm;
+    const part = n => (cd.body.geometry.outline || []).filter(q => q.part === n);
+    if (near(part("attach"))) return "이 선(위 칼라 이음선)은 잠겨 있어 직접 수정할 수 없습니다 — 밴드 윗선과 길이가 같아야 하는 선입니다 · 수정 가능 = 위 칼라 바깥선·칼라 끝(둥근 점)";
+    if (near(part("cb-fold"))) return "뒤중심선(골선)은 고정입니다 · 수정 가능 = 위 칼라 바깥선·칼라 끝(둥근 점)";
+    if (cd.standGeometry && near(cd.standGeometry.outline || [])) return "칼라 밴드는 아직 직접 수정을 지원하지 않습니다(점·핸들 없음) — 밴드 폭·앞 중심 올림 수치로만 바뀝니다(«수치형으로 돌아가기» 뒤 입력) · 지금 수정 가능 = 위 칼라 바깥선·칼라 끝";
+    return null;
+  }
+  function showCollarLockedReason(why) {
+    setNote(why);
+    const el = document.getElementById("designCollarBodyNote"); if (el) el.textContent = why;   // 카라 패널 안내 줄에도(선 도구 안내 줄은 패널 아래쪽이라 안 보일 수 있다)
+  }
   function selectDown(e, piece, geo, only) {
     const rCm = NODE_HIT_PX * pxToCm(), lCm = LINE_HIT_PX * pxToCm();
     if (selectedId) {
@@ -1956,7 +1973,8 @@
         const CP = window.canvasPan;
         if (!selectedId && !editDrag && CP) {
           selectedId = prevSel; setNote(prevNote);
-          const tap = () => { selectedId = null; editDrag = null; setNote(SELECT_NOTE); syncRoleButtons(); syncCutStatus(); rerender(); };
+          const why = selPiece ? collarLockedHitReason(selPiece, geoAt(e, selPiece)) : null;   // 잠긴 칼라 선을 누름 → 이유 안내
+          const tap = () => { selectedId = null; editDrag = null; setNote(SELECT_NOTE); if (why) showCollarLockedReason(why); syncRoleButtons(); syncCutStatus(); rerender(); };
           if (CP.press(e, tap)) { e.stopPropagation(); return; }
           tap(); e.stopPropagation(); return;
         }

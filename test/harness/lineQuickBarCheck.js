@@ -77,7 +77,7 @@ const ret = R.indexOf("return; // 라이브 원형 draw"), syncAt = R.lastIndexO
 ok(syncAt > hitAt && hitAt > 0, "3f: design render 는 선·overlay·hit 을 그린 뒤 막대 sync(그려진 SVG 기준)");
 ok(/afterDraftRender\(\);\s*\n\s*if\(window\.designLineQuickBar\) window\.designLineQuickBar\.sync\(\);/.test(R), "3g: design 밖 render 도 sync(→ 숨김)");
 const ver = f => { const m = new RegExp(f.replace(/\./g, "\\.") + "\\?v=(\\d+)").exec(html); return m ? m[1] : null; };
-ok(ver("designLineQuickBar.js") === "2026111203" && ver("designLineTool.js") === "2026111202" && ver("render.js") === "2026111202" && /css\/style\.css\?v=2026111203/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
+ok(ver("designLineQuickBar.js") === "2026111203" && ver("designLineTool.js") === "2026111204" && ver("render.js") === "2026111202" && /css\/style\.css\?v=2026111205/.test(html), "3h: 캐시 버전(막대·render 2026110602 · 도구 2026110603 — 새 소맷부리 문구 · css 2026110507 — 소형 상태줄)");
 ok(html.indexOf('<script src="js/designLineQuickBar.js') > html.indexOf('<script src="js/designLineTool.js'), "3i: 막대 스크립트는 designLineTool 뒤");
 // 2026-11-08 김님 방향 전환: 자동 길이 보정 UI(길이 맞춤·후보·맞춤 반영·옆선 자석·여유/셔링·기준판) 사용자 노출 없음 — 마크업·막대 호출·설정 패널 모두
 ok(!/lineQuickSeamFit|lineQuickSeamToggle|lineQuickEase|selSeamIntent|inpSeamEase|btnApplySeamIntent|selSeamBasis|chkSeamMagnet|길이 맞춤|맞춤 반영|옆선 자석|셔링/.test(html.replace(/<!--[\s\S]*?-->/g, "")), "3j: 자동 길이 보정 UI 마크업 없음(주석 제외)");

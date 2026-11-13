@@ -772,7 +772,7 @@ const BAND_FAM = "shirt-collar-with-band";
   ok(made.ok && made.draft.presetId === O.id && J(made.draft.construction) === J(O.construction), "29: O draft 에 construction 보존");
   ok(Math.abs(made.draft.measure.baseLineLenCm - (BODICE.necklineLengths.half - 2.5)) < 1e-9
     && Math.abs(made.draft.measure.lowerNeckSeamLenCm - BODICE.necklineLengths.half) < 1e-6, "29: 기초선 = ×+⊘−2.5 · 달림선 = ×+⊘");
-  ok(made.draft.measure.cbTrimCm > 0, "29: ⑭ 뒤 중심 보정이 잘라내는 방향(그린 길이 > 목둘레)");
+  ok(made.draft.measure.cbTrimCm > 0, "29: 이 몸판 치수에서는 ⑭ 가 잘라내는 방향(목둘레가 크면 연장 — designCollarCheck §22)");
 
   PROJECT = project(made.draft);
   const done = CC.complete(PROJECT), again = CC.complete(PROJECT);
@@ -1377,6 +1377,51 @@ const BAND_FAM = "shirt-collar-with-band";
   ok(CP.get("bunka-high-neck-l") === null && CP.get("bunka-high-neck-m") === null, "38: 레코드 없음");
   // 표시 제목은 선택 variant 의 표식·페이지를 따른다
   ok(CP.displayTitle("high-neck", "bunka-high-neck-n").symbol === "n" && CP.displayTitle("high-neck", "bunka-high-neck-n").page === 82, "38: 표시 제목 n·P.82");
+}
+
+// 39. 2026-11-12 «교재 M 기본형으로 초기화» 버튼 제거 — 종류·세부 제도 선택 → «카라 적용» → «본체 적용»이 정상 동선.
+//   · 버튼·배선이 없다 / «수치형으로 돌아가기»(편집 복구)는 그대로 / 정상 동선이 쓰는 값 = 레코드 기본값(stand 3·1·0.5 · body gap 3·4·1.5·6·0)
+//     → §6 이 그 값으로 만든 draft 가 composeDraft 와 같음을 이미 보장한다(숫자·공식 무변경).
+//   · 직접 수정 중 잠긴 칼라 선(밴드·이음선·뒤중심)을 누르면 이유를 안내한다(선 도구 · 안내만).
+{
+  const root = path.join(__dirname, "..", "..");
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8"), ui = fs.readFileSync(path.join(root, "js", "ui.js"), "utf8");
+  const lt = fs.readFileSync(path.join(root, "js", "designLineTool.js"), "utf8");
+  ok(!/id="btnCollarBaseM"/.test(html) && !/btnCollarBaseM/.test(ui) && !/기본형으로 초기화<\/button>/.test(html), "39: 초기화 버튼·배선 없음");
+  ok(/id="btnCollarBodyRevert"[^>]*>수치형으로 돌아가기</.test(html) && /function onCollarBodyRevert\(/.test(ui), "39: 수치형으로 돌아가기 보존");
+  ok(/id="btnApplyCollar"/.test(html) && /id="btnApplyCollarBody"/.test(html) && /id="selCollarFamily"/.test(html) && /id="selCollarPreset"/.test(html), "39: 선택 → 적용 동선 요소");
+  const d = CP.defaults("bunka-shirt-collar-M");
+  ok(J(d.stand) === J({ bandWidthCm: 3, frontRiseCm: 1, frontEndCm: 0.5 }) && d.body.gapCm === 3 && d.body.cbWidthCm === 4 && d.body.frontProjectionCm === 1.5 && d.body.pointDiagonalCm === 6 && d.body.outerBowCm === 0,
+    "39: 정상 동선 초기값 = M 레코드 기본값(무변경)");
+  ok(/\.stand\.frontEndCm/.test(ui) && /pd\.body\.gapCm/.test(ui), "39: 입력 없는 값(앞 끝선·gap)은 레코드 기본값에서");
+  ok(/function collarLockedHitReason\(/.test(lt) && /collarLockedHitReason\(selPiece/.test(lt) && /showCollarLockedReason\(why\)/.test(lt), "39: 잠긴 칼라 선 누름 → 이유 안내 배선");
+  ok(/앱 버전 2026\.11\.12\.2">v2026\.11\.12\.2</.test(html), "39: 화면 버전 v2026.11.12.2");
+}
+
+// 40. 2026-11-12 밴드 곡선 규칙 변경과 저장 호환 — 옛 규칙으로 저장된 밴드는 자동으로 덮어쓰지 않는다.
+//   · ui.js: 저장된 밴드 ≠ 재계산이면 본체는 **저장된 밴드 윗선**에 맞추고(storedBandTopPath) 안내(⚠)만 띄운다. 새 곡선은 «카라 적용»으로만.
+//   · 엔진: computeBody 는 { ok, upperNeckPath } 만으로 그 윗선 길이에 이음선을 맞춘다(저장 윗선 = 뒤중심 → 앞 순서로 되돌린 것).
+//   · 완료본은 그대로(동결) — 재계산 길이가 달라지면 isCurrentCollarChanged 가 «변경됨»으로 정직하게 표시(기존 수명주기).
+{
+  const ui = fs.readFileSync(path.join(__dirname, "..", "..", "js", "ui.js"), "utf8");
+  ok(/function sameCollarOutline\(/.test(ui) && /function storedBandTopPath\(/.test(ui) && /function collarStandOutdated\(/.test(ui)
+    && /stand = \{ ok: true, upperNeckPath: top \}/.test(ui) && /COLLAR_STAND_OUTDATED_NOTE/.test(ui), "40: 옛 밴드 감지·저장 윗선 사용·안내 배선");
+  BODICE = bodice("BH40");
+  // 옛 규칙 꼴의 밴드를 흉내낸다: 끝점은 같고 윗선 곡선의 제어점만 다른 저장본(옛 식은 Ⓐ 쪽에서 더 불룩했다)
+  const cur = DC.computeStand(BODICE, { bandWidthCm: 3, frontRiseCm: 3, frontEndCm: 0.5 });
+  const oldStyle = JSON.parse(J(cur));
+  oldStyle.standGeometry.outline.filter(q => q.part === "top" && q.kind === "cubic").forEach(q => { q.c1.y -= 0.3; q.c2.y -= 0.3; });
+  { let L = 0; oldStyle.standGeometry.outline.filter(q => q.part === "top").forEach(q => { let pr = q.from; for (let i = 1; i <= 4000; i++) { const t = i / 4000, u = 1 - t;
+      const pt = q.kind === "line" ? { x: q.from.x + (q.to.x - q.from.x) * t, y: q.from.y + (q.to.y - q.from.y) * t }
+        : { x: u*u*u*q.from.x + 3*u*u*t*q.c1.x + 3*u*t*t*q.c2.x + t*t*t*q.to.x, y: u*u*u*q.from.y + 3*u*u*t*q.c1.y + 3*u*t*t*q.c2.y + t*t*t*q.to.y };
+      L += Math.hypot(pt.x - pr.x, pt.y - pr.y); pr = pt; } }); oldStyle.upperNeckSegmentLenCm = L; }
+  ok(oldStyle.ok && cur.ok && J(oldStyle.standGeometry.outline) !== J(cur.standGeometry.outline) && Math.abs(oldStyle.upperNeckSegmentLenCm - cur.upperNeckSegmentLenCm) > 1e-3, "40: 옛 규칙 밴드와 새 규칙 밴드는 윗선 길이가 다르다(전제)");
+  const storedTop = oldStyle.standGeometry.outline.filter(q => q.part === "top").slice().reverse().map(q => q.kind === "cubic"
+    ? { kind: "cubic", from: q.to, c1: q.c2, c2: q.c1, to: q.from } : { kind: "line", from: q.to, to: q.from });
+  const bdOld = DC.computeBody({ ok: true, upperNeckPath: storedTop }, CP.defaults("bunka-band-collar-N").body);
+  ok(bdOld.ok && Math.abs(bdOld.attachLenCm - oldStyle.upperNeckSegmentLenCm) < 1e-4 && Math.abs(bdOld.attachLenCm - cur.upperNeckSegmentLenCm) > 1e-3, /* 1e-4 = 이 검사의 독립 조밀 샘플 측정 오차 */ "40: 저장된 윗선에 맞춘 본체 = 그 윗선 길이(화면의 밴드와 정합)");
+  const bdCur = DC.computeBody(cur, CP.defaults("bunka-band-collar-N").body);
+  ok(bdCur.ok && J(bdOld.bodyGeometry) !== J(bdCur.bodyGeometry) && Math.abs(bdOld.bodyGeometry.outline[0].to.x - bdCur.bodyGeometry.outline[0].to.x) < 1e-9, "40: 저장 윗선 본체 ≠ 재계산 밴드 본체(길이가 다름) · 이음 앞끝 Ⓒ 는 같다");
 }
 
 console.log("══════════════════════════════════════════════");
