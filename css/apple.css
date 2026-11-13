@@ -487,3 +487,32 @@ button,input,select{font-family:inherit}
 #btnDesignLine,#btnDesignFinish,#btnDesignSelect{padding-left:3px;padding-right:3px;letter-spacing:-.03em}
 .inspector .insp-body .row[style*="margin-top:8px"]:has(input[type=checkbox]){margin:0!important;padding:6px 0;min-height:40px;background:transparent;box-shadow:inset 0 .5px 0 var(--ax-sep)}
 .inspector .insp-body .row[style*="margin-top:8px"]:has(input[type=checkbox]) label{font-size:13px;font-weight:400;color:var(--ax-text)}
+
+/* ── 맞춤 길이 카드(js/seamMatch.js · 읽기 전용) — 디자인 단계 공통 · 기본 접힘 ── */
+.ax-seam{margin:8px 0 10px;background:var(--ax-group);border-radius:10px;box-shadow:0 0 0 .5px rgba(0,0,0,.06);min-width:0}
+.ax-seam>summary{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;list-style:none;font-size:13px;min-width:0}
+.ax-seam>summary::-webkit-details-marker{display:none}
+.ax-seam>summary::after{content:"›";margin-left:auto;color:var(--ax-text2);font-size:15px;transition:transform .15s}
+.ax-seam[open]>summary::after{transform:rotate(90deg)}
+.ax-seam .sm-title{font-weight:600;color:var(--ax-text);white-space:nowrap}
+.ax-seam .sm-summary{color:var(--ax-text2);font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ax-seam .sm-body{padding:0 12px 8px}
+.ax-seam .sm-group{font-size:11px;font-weight:600;color:var(--ax-text2);padding:8px 0 2px}
+.ax-seam .sm-row{box-shadow:inset 0 -.5px 0 var(--ax-sep)}
+.ax-seam .sm-row>summary{display:block;padding:7px 0;cursor:pointer;list-style:none}
+.ax-seam .sm-row>summary::-webkit-details-marker{display:none}
+.ax-seam .sm-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--ax-text)}
+.ax-seam .sm-name{min-width:0;overflow-wrap:anywhere}
+.ax-seam .sm-head .ax-badge{flex:none;white-space:nowrap}
+.ax-seam .sm-nums{display:flex;flex-wrap:wrap;gap:2px 12px;margin-top:3px;font-size:12px;color:var(--ax-text2);font-variant-numeric:tabular-nums}
+.ax-seam .sm-nums b{color:var(--ax-text);font-weight:600}
+.ax-seam .sm-diff{color:var(--ax-text)}
+.ax-seam .sm-reason{display:block;line-height:1.4;overflow-wrap:anywhere}
+.ax-seam .sm-basis{margin:0 0 8px;padding:6px 8px 6px 22px;background:var(--ax-fill);border-radius:7px;font-size:11px;line-height:1.45;color:var(--ax-text2);overflow-wrap:anywhere}
+.ax-seam .sm-foot{font-size:11px;line-height:1.4;color:var(--ax-text2);padding-top:6px}
+.ax-badge-info{background:rgba(0,122,255,.14);color:#0A60C9}
+.ax-badge-mute{background:rgba(120,120,128,.16);color:#5A5A60}
+.ax-badge-chg{background:rgba(175,82,222,.15);color:#8236B3}
+[data-theme="dark"] .ax-badge-info{background:rgba(10,132,255,.24);color:#64B5FF}
+[data-theme="dark"] .ax-badge-mute{background:rgba(142,142,147,.26);color:#C7C7CC}
+[data-theme="dark"] .ax-badge-chg{background:rgba(191,90,242,.26);color:#DA9BF5}

@@ -197,6 +197,10 @@ const suites = [
   { file: "designLineToolCheck.js",     golden: false },
   // 라이트 테마 UI 레이어 통합 불변식(2026-11-13): 로드 순서·기능 보존·우선순위·저장 키·안내(원문 검사).
   { file: "appleUiCheck.js",            golden: false },
+  // 맞춤 길이 카드(2026-11-13): 읽기 전용 파생 표시 — 권위 재사용·미측정/변경됨·입력 불변.
+  { file: "seamMatchCheck.js",          golden: false },
+  // 맞춤 길이 카드 실제 엔진 통합(2026-11-13): 박시 Ⓐ + 여밈 → 소매 Ⓐ → 카라 M — 카드 수치 = 측정 권위 · 불변 · 변경 시 숨김 · 저장 복원.
+  { file: "seamMatchIntegrationCheck.js", golden: false },
 ];
 
 let anyFail = false;

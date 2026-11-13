@@ -6,7 +6,7 @@
 <title>DOROBO — 문화식 원형 에디터</title>
 <link rel="stylesheet" href="css/style.css?v=2026111205">
 <!-- 라이트 테마 덮어쓰기(apple-light-ui · 2026-11-13 통합): style.css 원문은 그대로, 표시만 바꾼다. -->
-<link rel="stylesheet" href="css/apple.css?v=2026111302">
+<link rel="stylesheet" href="css/apple.css?v=2026111303">
 <!-- 화면 모드(시스템/밝게/어둡게): 첫 그리기 전에 data-theme 을 정해 깜빡임을 막는다. 저장 키 dorobo.ui.theme · 연결은 js/appleChrome.js -->
 <script>try{var t=localStorage.getItem('dorobo.ui.theme');var d=t==='dark'||(t!=='light'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}catch(e){}</script>
 </head>
@@ -17,7 +17,7 @@
     <span class="app-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M5 19c3-1 4.5-13 8-13 2.6 0 3.4 4.6 6 5"/></svg></span>
     <span class="brand">DOROBO</span>
     <!-- 앱 버전 단일 원천: 배포할 때 이 번호만 올린다 (docs/STATUS.md § 앱 버전 표시) -->
-    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.13.1">v2026.11.13.1</span>
+    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.13.2">v2026.11.13.2</span>
     <span class="brand-sub">문화식 원형</span>
   </div>
 
@@ -255,6 +255,12 @@
           <button type="button" class="subtab" data-subtab-btn="sleeve" aria-selected="false" disabled title="몸판 완료 후 활성">소매</button>
           <button type="button" class="subtab" data-subtab-btn="collar" aria-selected="false" disabled title="소매 완료 후 활성">카라</button>
         </div>
+        <!-- 맞춤 길이(읽기 전용 · js/seamMatch.js): 서로 붙는 봉제선의 실제 길이·차이·기준을 몸판/소매/카라 탭 공통으로 본다.
+             형상·완료본·저장 무변경 — 자동 맞춤·완료 차단 없음. 기본은 접힌 요약 한 줄. -->
+        <details class="ax-seam" id="seamMatchCard" hidden>
+          <summary><span class="sm-title">맞춤 길이</span><span class="sm-summary" id="seamMatchSummary" aria-live="polite"></span></summary>
+          <div class="sm-body" id="seamMatchBody"></div>
+        </details>
         <div class="subtab-panel" data-subtab="body">
         <!-- 몸판 라인 카탈로그([패턴학교] P.14–35). 프리셋 = 아래 입력들의 묶음 — 적용하면 입력을 채운다. -->
         <div class="row"><label for="selBodiceFamily">몸판 라인</label><select id="selBodiceFamily"></select></div>
@@ -810,6 +816,8 @@
 <script src="js/appleChrome.js?v=2026111302"></script>
 <!-- 원형 이세 배지·계산 노트 · 원형/디자인 비교(읽기 전용 · UI 전용). -->
 <script src="js/inspectorInsights.js?v=2026111302"></script>
+<!-- 맞춤 길이 카드(읽기 전용 파생 표시 · UI 전용): 기존 측정 권위만 읽는다. -->
+<script src="js/seamMatch.js?v=2026111302"></script>
 
 </body>
 </html>
