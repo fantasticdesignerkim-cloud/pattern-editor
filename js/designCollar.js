@@ -167,8 +167,32 @@
     var d = lerp(a, b, t), e = lerp(b, c, t), f = lerp(d, e, t);
     return { kind: "cubic", from: cp(f), c1: cp(e), c2: cp(c), to: cp(p3) };
   }
-  // 안내 폴리라인 P0 → Pm → P1 을 "완만한 선"으로(시작 접선 = CB 에 직각 = 수평, 그 외 현 방향, 핸들 1/3).
+  // 안내 꺾은선 P0 → Pm → P1 의 **모서리 Pm 을 한 번만 둥글린다**(교재 P.148 ⑫⑬ «완만하게 수정» 그림 · 2026-11-12 김님 승인).
+  //   · 앞 구간 P0→S(S = P0–Pm 의 중점 = 기초선 3등분의 첫 점): P0 에서 CB 에 직각(수평)으로 출발해 안내선 P0→Pm 위를 간다
+  //     (P0→Pm 이 수평이면 직선과 같은 모양 · O 처럼 Ⓐ 를 올린 경우만 수평 출발에서 안내선 방향으로 한 번 휜다).
+  //   · 뒤 구간 S→P1: 꼭짓점 Pm 을 제어점으로 한 2차 곡선(cubic 표현) — S 에서 안내선 P0→Pm 에, P1 에서 안내선 Pm→P1 에 접한다.
+  //     → 곡선은 모서리 **안쪽**을 지나고(기초선 아래로 처지지 않음) 굴곡 방향이 한 번도 바뀌지 않으며, P1(Ⓑ) 에서 ⑦ 안내선 방향이라
+  //       ⑧⑩(안내선에 직각인 앞 중심선)과 직각으로 만난다.
+  //   종전(2026-11-12 이전): Pm 을 **통과**하고 Pm·P1 접선을 전체 현(P0→P1) 방향으로 둔 두 cubic — 기초선 아래 처짐 + S자(변곡 2) + Ⓑ 모서리 비직각.
+  //   ★ 둥글림의 시작 위치(3등분 첫 점)는 그림 판독 + 구현 관례다(교재에 수치 없음). 길이 책임(⑭ 달림선 = ×+⊘ · 뒤 중심 수정)은 호출부가 그대로 진다.
+  //   Ⓐ 를 올린 D 방식(P0→Pm 이 수평이 아님): 뒤 중심 직각(수평) 출발과 안내선 P0→Pm 접선은 역굴곡 없이는 함께 못 지킨다 →
+  //     앞 구간을 «수평선 위 제어점 C0(P0–S 가로 중간) 의 2차 곡선»으로 두고, 뒤 구간 제어점을 «S 의 접선 ∩ 안내선 Pm→P1»로 잡아
+  //     전 구간이 한 방향으로만 휜다. P0→Pm 이 수평이면 C0 가 그 선 위라 앞 구간은 직선, 뒤 구간 제어점은 Pm 그대로다(위 설명과 같은 형상).
   function smoothBandGuide(P0, Pm, P1, part) {
+    var S = mid(P0, Pm), C0 = { x: (P0.x + S.x) / 2, y: P0.y };
+    var t = sub(S, C0), u = sub(P1, Pm), den = t.x * u.y - t.y * u.x, Q = cp(Pm);
+    if (Math.abs(den) > 1e-12) {                       // S + t·a = Pm + u·b
+      var w = sub(Pm, S), a = (w.x * u.y - w.y * u.x) / den, bb = (w.x * t.y - w.y * t.x) / den;
+      if (a > 0 && bb >= -1e-12 && bb < 1) Q = add(S, t, a);   // 안내선 Pm→P1 위(Pm 과 P1 사이)에서 만날 때만. 아니면 꼭짓점 Pm
+    }
+    return [
+      { kind: "cubic", from: cp(P0), c1: lerp(P0, C0, 2 / 3), c2: lerp(S, C0, 2 / 3), to: cp(S), part: part },
+      { kind: "cubic", from: cp(S), c1: lerp(S, Q, 2 / 3), c2: lerp(P1, Q, 2 / 3), to: cp(P1), part: part }
+    ];
+  }
+  // 통과점 Pm 을 **지나는** 완만한 선(시작 접선 = 수평, 그 외 전체 현 방향, 핸들 1/3). 교재 R(P.68) 외곽처럼 «현에서 0.5 처진 통과점»이
+  //   치수인 곳 전용 — 모서리 둥글림(smoothBandGuide)으로 바꾸면 그 통과 치수를 잃는다. (종전 smoothBandGuide 와 같은 식 · 형상 무변경)
+  function smoothThroughGuide(P0, Pm, P1, part) {
     var chord = unit(sub(P1, P0));
     var h1 = lineLen(P0, Pm) * SEAM_HANDLE_FRACTION, h2 = lineLen(Pm, P1) * SEAM_HANDLE_FRACTION;
     return [
@@ -287,14 +311,26 @@
       if (!(K.x > 0) || !(A.x > 0)) return { ok: false, reason: "invalid-band-width" };
     }
 
-    var attachFull = smoothBandGuide(CB0, A, B, "neck-seam");         // ⑬ 달림선
+    // ⑫⑬ 정리 규칙 = 모서리 둥글림(smoothBandGuide). D(P.61) 방식(기초선 감산·Ⓐ 올림 — 교재 O)도 같은 규칙(2026-11-13 김님 «네, 연장으로»).
+    var guideFn = smoothBandGuide;
+    var attachFull = guideFn(CB0, A, B, "neck-seam");         // ⑬ 달림선
     // ⑫ 이음선(밴드 윗선). Q 는 교재 본문대로 **수평 직선**(꺾임선), 그 외는 ⑨ 안내선을 완만하게 정리한다.
-    var topFull = horizontalTop ? [L({ x: 0, y: -W }, Btop, "top")] : smoothBandGuide({ x: 0, y: -W }, K, Btop, "top");
+    var topFull = horizontalTop ? [L({ x: 0, y: -W }, Btop, "top")] : guideFn({ x: 0, y: -W }, K, Btop, "top");
     var drawnLen = sumMeasure(attachFull);
-    if (!(drawnLen >= N - 1e-9)) return { ok: false, reason: "invalid-front-rise" };   // 보정으로 줄일 수 없음
-    var attach = trimFromEnd(attachFull, N);                          // ⑭ 달림선 실측 = ×+⊘ → 뒤 중심 수정
+    // ⑭ 달림선 실측 = ×+⊘ → 뒤 중심 수정. 그린 길이가 길면 잘라내고, **기초선을 미리 뺀 D 방식에서 짧으면 뒤 중심을 수평으로 연장**한다
+    //   (P.61 «제도 후 달림선 치수를 재고, 뒤 중심에서 수정한다» — 둥글림 식에서는 목둘레 ≈ 20.5cm 초과일 때 짧아진다 · 김님 2026-11-13 확정).
+    //   달림선·윗선 둘 다 뒤 중심에서 수평 출발이라 연장분은 같은 수평선 위 직선이다(뒤 중심 직각·밴드 폭 유지). 감산 없는 제도는 항상 그린 길이 ≥ ×+⊘.
+    var attach, top;
+    if (drawnLen >= N - 1e-9) {
+      attach = trimFromEnd(attachFull, N);
+      top = trimAtX(topFull, attach[0].from.x);
+    } else {
+      if (!(reduction > 0)) return { ok: false, reason: "invalid-front-rise" };
+      var ext = N - drawnLen;
+      attach = [L({ x: -ext, y: 0 }, CB0, "neck-seam")].concat(attachFull);
+      top = [L({ x: -ext, y: -W }, { x: 0, y: -W }, "top")].concat(topFull);
+    }
     var cbX = attach[0].from.x;
-    var top = trimAtX(topFull, cbX);
     var cbSeam = cp(attach[0].from), cbTop = cp(top[0].from);
     var Bext = add(B, u, endCm), BextTop = add(Btop, u, endCm);        // ⑪ 앞 끝선
 
@@ -357,14 +393,22 @@
     if (!(K.x > 0) || !(A.x > 0)) return { ok: false, reason: "invalid-collar-width" };
     var Btop = add(BtopGuide, u, -setback);                 // P.60/P.146 앞 윗끝 0.5cm 물림
     var CBtop = { x: 0, y: -W };
-    var attachFull = smoothBandGuide(CB0, A, B, "neck-seam");
-    var outerFull = smoothBandGuide(CBtop, K, Btop, "outer");
+    // 정리 규칙은 computeStand 와 같다(모서리 둥글림 · D 방식 포함).
+    var guideFn = smoothBandGuide;
+    var attachFull = guideFn(CB0, A, B, "neck-seam");
+    var outerFull = guideFn(CBtop, K, Btop, "outer");
     var drawnAttachLen = sumMeasure(attachFull), attach = attachFull, outer = outerFull;
     // C형(P.61): 앞 중심 3cm 올림으로 달림선이 목둘레보다 길어지므로 실측 후 뒤중심에서 수정한다.
     if (fitNeckSeam) {
-      if (drawnAttachLen < N - 1e-9) return { ok: false, reason: "invalid-front-rise" };
-      attach = trimFromEnd(attachFull, N);
-      outer = trimAtX(outerFull, attach[0].from.x);
+      if (drawnAttachLen >= N - 1e-9) {
+        attach = trimFromEnd(attachFull, N);
+        outer = trimAtX(outerFull, attach[0].from.x);
+      } else {   // D 방식(감산)에서 그린 길이가 짧으면 뒤 중심을 수평으로 연장(computeStand ⑭ 와 같은 규칙)
+        if (!(baselineReduction > 0)) return { ok: false, reason: "invalid-front-rise" };
+        var extCb = N - drawnAttachLen;
+        attach = [L({ x: -extCb, y: 0 }, CB0, "neck-seam")].concat(attachFull);
+        outer = [L({ x: -extCb, y: -W }, CBtop, "outer")].concat(outerFull);
+      }
     }
     var cbSeam = cp(attach[0].from), cbOuter = cp(outer[0].from);
     // E형(P.62): B형을 제도한 뒤, 완료된 몸판의 앞중심→앞끝(여밈) 길이만큼
@@ -400,7 +444,7 @@
   // ══ 위 칼라(교재 P.148 step 2·3) ══ 밴드 결과 위에 제도한다. M·N·P 공용.
   //   ①②③ CB 에 직각인 안내선으로 **간격(gapCm)** 과 **뒤 위 칼라 폭(cbWidthCm)** 을 잡는다(밴드 윗선 CB Ⓓ 기준).
   //   ④ Ⓒ(밴드 윗선 앞 끝 = 앞 중심선 위쪽)에서 곧게 올린 안내선 / ⑤ ④와 평행한 안내선(frontProjectionCm 앞)
-  //   ⑥ 이음선 = gap 점 → Ⓒ 자연스러운 곡선(관례: CB 수평 출발 · 현 방향 도착 · 핸들 1/3)
+  //   ⑥ 이음선 = gap 점 → Ⓒ 자연스러운 곡선(관례: CB 수평 출발 · 제어점 = gap 안내선의 1/3·2/3 점 · 한 번만 휨)
   //   ⑦ 앞 위 칼라 폭(pointDiagonalCm) = Ⓒ 에서 ⑤ 안내선까지 → 칼라 끝
   //   ⑧ 외곽선 = 칼라 끝 → CB 폭 점(같은 관례, outerBowCm 은 추가 휨 옵션으로 교재 수치가 아니다)
   //   step 3: **Ⓒ에서 ⒸⒹ(밴드 윗선) 길이와 같아지도록 위칼라 뒤 중심을 수평 이동**(이분 탐색).
@@ -412,7 +456,9 @@
       frontProjectionCm: M_UPPER.frontProjectionCm, pointDiagonalCm: M_UPPER.pointDiagonalCm, outerBowCm: M_UPPER.outerBowCm };
   }
   // 위칼라 이음선 곡률 규칙(파생 규칙 — 새 도메인 치수 아님). 핸들 1/3 은 이 파일의 외곽 휨 곡선과 같은 관례.
-  var UPPER_SEAM_RULE = { startTangent: "horizontal-toward-front", endTangent: "chord", handleFraction: 1 / 3 };
+  //   2026-11-12 김님 승인(밴드 곡선과 같은 묶음): 도착 접선을 «현 방향»에서 «안내선 2/3 점 → Ⓒ 방향»으로 — 종전은 Ⓒ 앞에서 다시 누워
+  //   역굴곡(변곡 1)이 생겼다. 교재 P.148 2-⑥ 그림은 안내선(CB 직각)에 붙어 출발해 한 번만 휘어 Ⓒ 에서 가장 가파르다.
+  var UPPER_SEAM_RULE = { startTangent: "horizontal-toward-front", endTangent: "guide-two-thirds-to-front", handleFraction: 1 / 3 };
   var SEAM_HANDLE_FRACTION = UPPER_SEAM_RULE.handleFraction;
   // 밴드(P.148) 제도법 메타: 페이지·곡선 정리 관례. handleFraction 은 UPPER_SEAM_RULE 과 같은 단일 출처.
   var BAND_METHOD = { page: 148, smoothing: "tangent-continuous-cubic", handleFraction: SEAM_HANDLE_FRACTION, guidePoint: "front-third" };
@@ -448,9 +494,10 @@
     return out;   // target ≥ 전체 길이 → 전체
   }
   // UPPER_SEAM_RULE 로 gap점 G → attach점 A 이음선(단일 cubic).
+  //   제어점 둘 다 gap 안내선(G 를 지나는 수평선 = CB 직각) 위: 가로 거리의 1/3 · 2/3. → G 에서 수평 출발(직선에 가깝게), 한 방향으로만 휘어 Ⓒ 도착.
   function upperSeamCurve(G, A) {
-    var chord = sub(A, G), h = Math.hypot(chord.x, chord.y) * SEAM_HANDLE_FRACTION, dir = unit(chord);
-    return { kind: "cubic", from: cp(G), c1: { x: G.x + h, y: G.y }, c2: { x: A.x - dir.x * h, y: A.y - dir.y * h }, to: cp(A), part: "attach" };
+    var dx = A.x - G.x;
+    return { kind: "cubic", from: cp(G), c1: { x: G.x + dx * SEAM_HANDLE_FRACTION, y: G.y }, c2: { x: G.x + dx * (1 - SEAM_HANDLE_FRACTION), y: G.y }, to: cp(A), part: "attach" };
   }
   // CB 보정: gap 높이 gapY 고정, CB x 만 이동해 이음선 길이 = targetLen. 이음선 길이는 CB x 가 앞(A 쪽)으로 갈수록 준다.
   function solveCbCorrection(gapY, A, targetLen) {
@@ -986,7 +1033,7 @@
     var chord = unit(sub(F, S)), down = { x: -chord.y, y: chord.x };        // 현의 아래쪽(밴드 쪽) 법선
     if (!(down.y > 0)) down = { x: chord.y, y: -chord.x };
     var M = add(mid(S, F), down, bow);                   // ④ 현에서 0.5 처진 통과점
-    var outerFront = smoothBandGuide(S, M, F, "outer");  // 시작 접선 = ② 수평 구간과 나란함
+    var outerFront = smoothThroughGuide(S, M, F, "outer");  // 시작 접선 = ② 수평 구간과 나란함 · M 은 통과 치수(0.5 처짐)
 
     var pick = function (p) { return st.standGeometry.outline.filter(function (s) { return s.part === p; }); };
     var attach = pick("neck-seam").map(function (s) { return cloneSeg(s, "neck-seam"); });

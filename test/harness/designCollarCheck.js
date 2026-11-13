@@ -238,8 +238,11 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   // ★ 교재 목적: "올림이 크면 달림선 오차가 커지므로 미리 뺀다" — 감산·Ⓐ 올림이 둘 다 ⑭ 보정량을 줄인다
   const noOpt = C.computeStand(B, O_STAND);
   const onlyRed = C.computeStand(B, O_STAND, { baselineReductionCm: 2.5, guideRiseCm: 0 });
-  ok(noOpt.ok && onlyRed.ok && noOpt.cbTrimCm > onlyRed.cbTrimCm && onlyRed.cbTrimCm > o.cbTrimCm && o.cbTrimCm > 0,
-    "11: 감산·Ⓐ 올림이 뒤 중심 보정량을 단조 감소(그린 길이 ≥ 목둘레 유지)");
+  // 2026-11-13 기대값 변경(김님 «네, 연장으로»): 종전엔 여기에 `o.cbTrimCm > 0`(항상 잘라냄)이 있었다. 모서리 둥글림 식에서는 이 치수(목둘레 20.996)에서
+  //   그린 달림선이 ×+⊘ 보다 0.05cm 짧아 뒤 중심을 **연장**한다(cbTrim 음수 · 종전 식 +0.9517 → 지금 −0.05). 단조 감소 성질과 ⑭ 길이 책임은 그대로 잠근다.
+  ok(noOpt.ok && onlyRed.ok && noOpt.cbTrimCm > onlyRed.cbTrimCm && onlyRed.cbTrimCm > o.cbTrimCm && noOpt.cbTrimCm > 0
+    && o.cbTrimCm < 0 && o.cbTrimCm > -0.2 && near(o.drawnAttachLenCm - NECK, o.cbTrimCm, 1e-9),
+    "11: 감산·Ⓐ 올림이 뒤 중심 보정량을 단조 감소 · 이 치수의 O 는 소량 연장(" + o.cbTrimCm.toFixed(4) + ")");
   // 방향 판정 근거: Ⓐ 를 **올릴수록** 그린 달림선이 짧아진다(= 교재가 말한 "오차를 줄인다").
   //   내리는 경우는 엔진이 음수 올림을 거부하므로 위 실패 계약으로 대신 잠근다.
   const raise1 = C.computeStand(B, O_STAND, { baselineReductionCm: 2.5, guideRiseCm: 1 });
@@ -257,8 +260,16 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   ok(C.computeStand(B, O_STAND, { baselineReductionCm: -1, guideRiseCm: 2 }).reason === "invalid-construction-guide"
     && C.computeStand(B, O_STAND, { baselineReductionCm: 2.5, guideRiseCm: -1 }).reason === "invalid-construction-guide"
     && C.computeStand(B, O_STAND, { baselineReductionCm: NECK, guideRiseCm: 0 }).reason === "invalid-construction-guide", "11: 감산·올림 범위 밖 거부");
-  // 감산이 과하면 그린 달림선이 목둘레보다 짧아져 ⑭ 보정이 불가능 → 정직하게 거부
-  ok(C.computeStand(B, O_STAND, { baselineReductionCm: 8, guideRiseCm: 2 }).reason === "invalid-front-rise", "11: 보정으로 줄일 수 없으면 거부");
+  // 2026-11-13 기대값 변경: 종전 «감산이 과해 그린 달림선이 짧으면 거부(invalid-front-rise)» → D 방식은 **뒤 중심 수평 연장**으로 ⑭ 를 맞춘다.
+  //   (감산 없는 제도는 그린 길이가 항상 ≥ ×+⊘ 라 이 분기에 오지 않는다 — 엔진은 그 경우의 거부 계약을 그대로 둔다.)
+  {
+    const big = C.computeStand(B, O_STAND, { baselineReductionCm: 8, guideRiseCm: 2 });
+    const seam = big.ok ? parts(big.standGeometry, "neck-seam") : [], ext = big.ok ? -big.cbTrimCm : NaN;
+    ok(big.ok && ext > 0 && near(big.lowerNeckSeamLenCm, NECK, 1e-6) && near(partLen(big.standGeometry, "neck-seam"), NECK, 1e-3), "11: 감산 과다 → 연장으로 달림선 = ×+⊘");
+    ok(big.ok && seam[0].kind === "line" && near(seam[0].from.x, -ext, 1e-9) && near(seam[0].from.y, 0, 1e-12) && near(seam[0].to.x, 0, 1e-12) && near(seam[0].to.y, 0, 1e-12)
+      && near(big.anchors.cbSeam.x, -ext, 1e-9) && near(big.anchors.cbTop.x, -ext, 1e-9) && near(big.anchors.cbTop.y, -3, 1e-12), "11: 연장분 = 뒤 중심 쪽 수평 직선 · 뒤 중심선 수직 · 밴드 폭 3 유지");
+    ok(big.ok && C.validateClosedOutline(big.standGeometry.outline).ok, "11: 연장된 밴드 폐곡선");
+  }
   // M·N·P 는 옵션을 주지 않으므로 형상·실측 불변
   ["M", "N", "P"].forEach(k => {
     const a = C.computeStand(B, BAND[k]), b2 = C.computeStand(B, BAND[k], null);
@@ -1280,6 +1291,70 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
     ok(C.computeShawlCollar(null, JP).reason === "no-bodice"
       && C.computeShawlCollar({ necklineLengths: { back: 8, front: 11 } }, JP).reason === "no-body-neckline",
       "21: 몸판 없음·의미 모서리 없음");
+  }
+}
+
+// 22. 밴드 곡선 = 모서리 한 번 둥글림(교재 P.148 ⑫⑬ 그림 · 2026-11-12 김님 승인 «S자 굴곡 없이 한 번 자연스럽게»)
+//   종전 식(Ⓐ 통과 · 전체 현 방향 접선)은 기초선 아래 처짐 + 변곡 2 + Ⓑ 비직각이었다(M · 목둘레 18.82: 처짐 0.10cm · 끝 기울기 3.1° vs 안내선 9.06°).
+//   의도된 변경: 기본 제도(M·N·P · 단독 스탠드 A·C)의 달림선·윗선 모양 · 뒤 중심 보정량 · 밴드 윗선 길이(→ 위 칼라 이음선 길이)가 달라진다.
+//   불변: ⑭ 달림선 = ×+⊘ · 밴드 폭(뒤중심·앞) · Ⓐ·Ⓑ·앞 윗점 좌표 · 앞 끝선 · 이음선 = 밴드 윗선 길이 정합.
+//   D(P.61) 방식(O · 단독 D)은 종전 식 그대로(blockedBy: 그림 미판독 + 연장 해석 필요 — designCollar.js 주석).
+{
+  const back = 7.6926, front = 11.129, NK = back + front, BD = bodice(back, front, 1.75);
+  const sample = (segs) => { const pts = []; segs.forEach(q => { const n = q.kind === "line" ? 2 : 240; for (let i = 0; i <= n; i++) pts.push(q.kind === "line" ? { x: q.from.x + (q.to.x - q.from.x) * i / n, y: q.from.y + (q.to.y - q.from.y) * i / n } : cubicPt(q, i / n)); }); return pts; };
+  // 굴곡 방향이 바뀐 횟수(외적 부호 변화 · 직선 구간은 0 으로 건너뜀)
+  const turns = (segs) => { const p = sample(segs); let last = 0, n = 0; for (let i = 2; i < p.length; i++) { const a = sub(p[i - 1], p[i - 2]), b = sub(p[i], p[i - 1]); const c = a.x * b.y - a.y * b.x, l = norm(a) * norm(b); if (l < 1e-18) continue; const sg = Math.abs(c / l) < 1e-7 ? 0 : Math.sign(c); if (sg && last && sg !== last) n++; if (sg) last = sg; } return n; };
+  const dirAt = (q, end) => { const v = q.kind === "line" ? sub(q.to, q.from) : (end ? sub(q.to, q.c2) : sub(q.c1, q.from)); const l = norm(v); return { x: v.x / l, y: v.y / l }; };
+  const topCbToFront = (g) => parts(g, "top").slice().reverse().map(q => q.kind === "cubic" ? { kind: "cubic", from: q.to, c1: q.c2, c2: q.c1, to: q.from } : { kind: "line", from: q.to, to: q.from });
+  ["M", "N", "P"].forEach(key => {
+    const st = C.computeStand(BD, BAND[key]), W = BAND[key].bandWidthCm, a = st.anchors, u = a.guideDir;
+    const seam = parts(st.standGeometry, "neck-seam"), top = topCbToFront(st.standGeometry);
+    ok(turns(seam) === 0 && turns(top) === 0, "22-" + key + ": 달림선·윗선 굴곡 방향 변화 0(S자 없음)");
+    ok(sample(seam).every(q => q.y <= 1e-9) && sample(top).every(q => q.y <= -W + 1e-9), "22-" + key + ": 기초선·윗 기준선 아래로 처지지 않음");
+    const s0 = dirAt(seam[0], false), t0 = dirAt(top[0], false);
+    ok(Math.abs(s0.y) < 1e-9 && s0.x > 0 && Math.abs(t0.y) < 1e-9 && t0.x > 0, "22-" + key + ": 뒤 중심에서 직각(수평) 출발 — 보정 후에도");
+    const s1 = dirAt(seam[seam.length - 1], true), t1 = dirAt(top[top.length - 1], true);
+    ok(Math.abs(s1.x * u.y - s1.y * u.x) < 1e-9 && Math.abs(t1.x * u.y - t1.y * u.x) < 1e-9, "22-" + key + ": Ⓑ·앞 윗점에서 ⑦ 안내선 방향으로 도착");
+    const cf = sub(a.cfTop, a.cfSeam);
+    ok(Math.abs(dot(s1, cf)) < 1e-9 && Math.abs(dot(t1, cf)) < 1e-9, "22-" + key + ": 앞 중심선(⑧⑩)과 직각으로 만남");
+    ok(near(st.lowerNeckSeamLenCm, NK, 1e-6) && near(partLen(st.standGeometry, "neck-seam"), NK, 1e-3) && st.cbTrimCm > 0, "22-" + key + ": ⑭ 달림선 = ×+⊘(뒤 중심 잘라냄 " + st.cbTrimCm.toFixed(4) + ")");
+    ok(near(norm(sub(a.cbTop, a.cbSeam)), W, 1e-9) && near(norm(cf), W, 1e-9), "22-" + key + ": 밴드 폭 = 뒤 중심·앞 중심 모두 " + W);
+    // 밴드 중간 폭: 윗선의 각 점에서 달림선까지 최단 거리가 밴드 폭에서 크게 벗어나지 않는다(평행 안내선의 둥글림)
+    const sp = sample(seam), wd = sample(top).map(q => Math.min.apply(null, sp.map(r => Math.hypot(q.x - r.x, q.y - r.y))));
+    ok(Math.min.apply(null, wd) > W - 0.005 && Math.max.apply(null, wd) < W + 0.05,   // 실측 M 3.000~3.00x · N 3.000~3.024 · P 5.000~5.040(모서리에서 0.5mm 이내로 넓어짐 · 좁아지지 않음)
+      "22-" + key + ": 밴드 폭 구간 내내 ≈ " + W + "(" + Math.min.apply(null, wd).toFixed(3) + "~" + Math.max.apply(null, wd).toFixed(3) + ")");
+    // 위 칼라 이음선: 한 번만 휨 · 뒤 중심 수평 출발 · Ⓒ 에서 가장 가파름 · 길이 = 밴드 윗선
+    const bd = C.computeBody(st, UPPER[key]), us = parts(bd.bodyGeometry, "attach"), up = sample(us);
+    const slope = []; for (let i = 1; i < up.length; i++) slope.push((up[i].y - up[i - 1].y) / (up[i].x - up[i - 1].x));
+    ok(bd.ok && us.length === 1 && turns(us) === 0 && Math.abs(dirAt(us[0], false).y) < 1e-12, "22-" + key + ": 이음선 굴곡 방향 변화 0 · 뒤 중심 직각 출발");
+    ok(slope.every((v, i) => i === 0 || v >= slope[i - 1] - 1e-9), "22-" + key + ": 이음선 기울기 단조 — Ⓒ 에서 가장 가파름(역굴곡 없음)");
+    ok(near(bd.attachLenCm, st.upperNeckSegmentLenCm, 1e-6) && near(denseLen(us[0]), st.upperNeckSegmentLenCm, 1e-3), "22-" + key + ": 이음선 길이 = 밴드 윗선 ⒸⒹ");
+    ok(near(us[0].to.x, a.cfTop.x, 1e-9) && near(us[0].to.y, a.cfTop.y, 1e-9), "22-" + key + ": 이음선 앞끝 = Ⓒ");
+  });
+  // 단독 스탠드(A·C 꼴: 감산 없음)도 같은 규칙 · B(올림 0)는 직선 그대로
+  {
+    const sa = C.computeStandaloneStand(BD, { collarWidthCm: 3.5, frontRiseCm: 3, topSetbackCm: 0.5 }, { fitNeckSeam: true });
+    const seam = parts(sa.standalone ? sa.standalone.geometry : sa.geometry || sa.standGeometry, "neck-seam");
+    ok(sa.ok && seam.length > 0 && turns(seam) === 0 && sample(seam).every(q => q.y <= 1e-9), "22: 단독 스탠드(올림 3 · 뒤 중심 수정) 달림선도 한 번만 휨·처짐 없음");
+    const flat = C.computeStandaloneStand(BD, { collarWidthCm: 3.5, frontRiseCm: 0, topSetbackCm: 0.5 }, {});
+    const fs2 = parts(flat.standalone ? flat.standalone.geometry : flat.geometry || flat.standGeometry, "neck-seam");
+    ok(flat.ok && sample(fs2).every(q => Math.abs(q.y) < 1e-12), "22: 올림 0 은 수평 직선 그대로");
+  }
+  // D(P.61) 방식(O)도 같은 둥글림(2026-11-13 김님 «네, 연장으로») — Ⓐ 를 통과하지 않고 한 번만 휜다. 목둘레가 작으면 잘라냄 · 크면(≈20.5 초과) 연장.
+  {
+    const OS = { bandWidthCm: 3, frontRiseCm: 8.5, frontEndCm: 0.5 }, OC = { baselineReductionCm: 2.5, guideRiseCm: 2 };
+    const o = C.computeStand(bodice(8.6087, 12.3874, 1.75), OS, OC), oSmall = C.computeStand(BD, OS, OC);
+    const seam = parts(o.standGeometry, "neck-seam"), top = topCbToFront(o.standGeometry);
+    ok(o.ok && !seam.some(q => near(q.to.x, o.anchors.guideA.x, 1e-6) && near(q.to.y, o.anchors.guideA.y, 1e-6)) && turns(seam) === 0 && turns(top) === 0, "22: O 달림선·윗선도 한 번만 휨(Ⓐ 모서리 안쪽)");
+    ok(o.cbTrimCm < 0 && near(o.lowerNeckSeamLenCm, 8.6087 + 12.3874, 1e-6) && Math.abs(dirAt(seam[0], false).y) < 1e-12 && Math.abs(dirAt(top[0], false).y) < 1e-12
+      && near(o.anchors.cbSeam.x, o.cbTrimCm, 1e-9), "22: O · 목둘레 20.996 = 뒤 중심 연장 " + (-o.cbTrimCm).toFixed(4) + " · 수평 출발 · 달림선 = ×+⊘");
+    ok(oSmall.ok && oSmall.cbTrimCm > 0 && near(oSmall.lowerNeckSeamLenCm, NK, 1e-6) && oSmall.anchors.cbSeam.x > 0, "22: O · 목둘레 18.82 = 잘라냄 " + oSmall.cbTrimCm.toFixed(4) + "(종전 식 0.9517)");
+    const s1 = dirAt(seam[seam.length - 1], true), u = o.anchors.guideDir, cf = sub(o.anchors.cfTop, o.anchors.cfSeam);
+    ok(Math.abs(s1.x * u.y - s1.y * u.x) < 1e-9 && Math.abs(dot(s1, cf)) < 1e-9 && near(norm(cf), 3, 1e-9), "22: O Ⓑ 도착 = 안내선 방향 · 앞 중심선과 직각 · 밴드 폭 3");
+    const sd = C.computeStandaloneStand(bodice(8.6087, 12.3874, 1.75), { collarWidthCm: 3.5, frontRiseCm: 8.5, topSetbackCm: 0.5 }, { fitNeckSeam: true, baselineReductionCm: 2.5, guideRiseCm: 2 });
+    ok(sd.ok && near(sd.measure.attachLenCm, 8.6087 + 12.3874, 1e-6) && sd.measure.cbTrimCm < 0 && turns(parts(sd.geometry, "neck-seam")) === 0, "22: 스탠드 D 도 같은 규칙(연장 " + (sd.ok ? (-sd.measure.cbTrimCm).toFixed(4) : "-") + ")");
+    const m = C.computeStand(BD, BAND.M), ms = parts(m.standGeometry, "neck-seam");
+    ok(!ms.some(q => near(q.to.x, m.anchors.guideA.x, 1e-6) && near(q.to.y, m.anchors.guideA.y, 1e-6)), "22: 기본 제도(M)는 Ⓐ 모서리 안쪽을 지난다(통과하지 않음)");
   }
 }
 

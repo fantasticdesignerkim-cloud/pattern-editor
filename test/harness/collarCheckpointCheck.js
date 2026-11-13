@@ -222,7 +222,8 @@ ok(typeof CC.check === "function" && typeof CC.complete === "function" && Object
   PROJECT.working.collarDraft = mk(null);
   ok(CC.isCurrentCollarChanged(PROJECT) === true, "9: construction 제거 → 카라 변경됨");
   // 감산이 과해 ⑭ 보정이 불가능하면 완료 게이트가 stand-recompute 로 차단
-  const bad = mk(CONS); bad.construction = { baselineReductionCm: 12, guideRiseCm: 2 };
+  //   2026-11-13: 감산 과다(12)는 이제 뒤 중심 연장으로 성립한다 → 재계산이 실제로 불가능한 값(기초선 ≤ 0)으로 같은 게이트를 잠근다.
+  const bad = mk(CONS); bad.construction = { baselineReductionCm: 1000, guideRiseCm: 2 };
   ok(CC.check({ sourceBlock: {}, working: { collarDraft: bad, patternLines: [], collarResult: null } }).fails.indexOf("stand-recompute") >= 0,
     "9: 재계산 불가한 construction → 완료 차단");
 }
