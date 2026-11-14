@@ -546,6 +546,13 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 .ci-size,.ci-note{font-size:12px;color:var(--ax-text2)}
 .ci-ok{font-size:11px;color:var(--ax-green)}
 .ci-bad{font-size:12px;color:var(--ax-orange)}
+.ci-pl{font-size:12px;color:var(--ax-text)}
+.ci-warn{font-size:12px;line-height:1.45;color:var(--ax-orange)}
+.ci-legend{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:11px;color:var(--ax-text2)}
+.ci-legend .lg{display:inline-block;width:18px;height:0;margin-right:4px;vertical-align:middle;border-top:2px solid #1D1D1F}
+.ci-legend .lg-i{white-space:nowrap}
+.ci-legend .lg-cf{border-top:2px dashed #0A5FD0}
+.ci-legend .lg-fold{border-top:2px dashed #B25E09}
 .cut-miss,.cut-info{font-size:12px;line-height:1.45;color:var(--ax-text2);padding:6px 10px;border-radius:8px;background:var(--ax-fill)}
 .cut-miss b{color:var(--ax-text);font-weight:600}
 .cut-source{margin:12px 2px 0;font-size:11px;color:var(--ax-text3);overflow-wrap:anywhere}
@@ -557,6 +564,15 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 #cutCv .cut-mark{fill:none;stroke-width:1.2px;vector-effect:non-scaling-stroke;stroke-dasharray:5 4}
 #cutCv .cut-mark-placket{stroke:var(--ax-orange)}
 #cutCv .cut-mark-cut{stroke:#6E6E73}
+/* 합친 앞판(여밈·컷온 안단): 연장 영역 2칸 + 앞중심선(일점쇄선) + 접는선(긴 점선). 안단 끝선 = 외곽 실선 */
+#cutCv .cut-zone{stroke:none;pointer-events:none}
+#cutCv .cut-zone-overlap{fill:rgba(0,122,255,.13)}
+#cutCv .cut-zone-facing{fill:rgba(178,94,9,.16)}
+#cutCv .cut-mark-cf{stroke:#0A5FD0;stroke-dasharray:9 3 2 3}
+#cutCv .cut-mark-fold{stroke:#B25E09;stroke-dasharray:7 4;stroke-width:1.4px}
+#cutCv .cut-mark-label{fill:rgba(60,60,67,.9);text-anchor:middle;font-family:var(--ax-font);pointer-events:none}
+#cutCv .cut-mark-label-cf{fill:#0A5FD0}
+#cutCv .cut-mark-label-fold{fill:#B25E09}
 #cutCv .cut-piece-label{fill:#1D1D1F;font-weight:600;text-anchor:middle;font-family:var(--ax-font);pointer-events:none}
 #cutCv .cut-piece-size{fill:rgba(60,60,67,.75);text-anchor:middle;font-family:var(--ax-font);pointer-events:none}
 #cutCv .cut-scale path{stroke:#1D1D1F;stroke-width:1.2px;vector-effect:non-scaling-stroke;fill:none}

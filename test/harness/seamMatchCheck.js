@@ -23,7 +23,7 @@ const src = read("js/seamMatch.js"), html = read("index.html"), css = read("css/
   const iTabs = html.indexOf('id="designSubtabs"'), iCard = html.indexOf('id="seamMatchCard"'), iBody = html.indexOf('data-subtab="body"');
   ok(iTabs > 0 && iCard > iTabs && iCard < iBody, "1: 카드는 서브탭 줄과 탭 패널 사이(몸판·소매·카라 공통 위치)");
   ok(/id="seamMatchSummary"/.test(html) && /id="seamMatchBody"/.test(html), "1: 요약·본문 자리");
-  ok(/aria-label="앱 버전 2026\.11\.13\.3">v2026\.11\.13\.3</.test(html), "1: 화면 버전 v2026.11.13.3");
+  ok(/aria-label="앱 버전 2026\.11\.14\.1">v2026\.11\.14\.1</.test(html), "1: 화면 버전 v2026.11.14.1");
   ok(!/localStorage|sessionStorage|indexedDB/.test(src), "1: 저장소 미접근");
   ok(!/\.complete\(|setSideSeamIntent|doReflect|doBoundaryApply|commitCandidate|\.working\.[A-Za-z.]+\s*=[^=]/.test(src), "1: 완료·반영·프로젝트 쓰기 호출 없음");
   ok(!/textContent\s*[^=]*\.match\(|parseFloat\(|querySelector\([^)]*\)\.textContent(?!\s*=)/.test(src.replace(/sum\.textContent = [^;]+;/g, "")), "1: DOM 글자 재파싱 없음");

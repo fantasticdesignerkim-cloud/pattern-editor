@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════
 // cutPrepIntegrationCheck.js — 재단 준비 1단계(js/cutPrep.js) **실제 엔진** 통합(2026-11-13 · stub 없음 · 읽기 전용 파생).
 //   §1 박시 Ⓐ + 여밈 1.2/1.2 → 소매 Ⓐ + 커프스 → 카라 M → Design 완료: 조각 6장(앞·뒤·소매·커프스·밴드·위 칼라) · 시접 전 완성선 ·
-//      종이 위 검사(폐곡선·자기교차·유한) · 실물 치수 = 독립 점열 실측 · 누락(여밈 합성·트임 덧단)은 이유로만 · 원본 별칭 없음 · 동결
+//      종이 위 검사(폐곡선·자기교차·유한) · 실물 치수 = 독립 점열 실측 · 누락(트임 덧단)은 이유로만 · 여밈·안단은 앞판에 합침(cutPlacketIntegrationCheck) · 원본 별칭 없음 · 동결
 //   §2 파생이 아무것도 바꾸지 않음(프로젝트 그래프·완료본 hash 4개 바이트 동일 · 반복 결정론)
 //   §3 완료 전/변경됨 = 조각 없음 + 이유 + 돌아갈 서브탭 · 기존 완료본 보존 · 재완료 → 새 hash 로 갱신
 //   §4 저장 → 빈 세션 열기 → 같은 조각(파일 stage = design · 새 저장 키 없음)
@@ -125,15 +125,15 @@ let TEXT = null, D_DONE = null;
   const pf = d.pieces.find(p => p.id === "front"), pb = d.pieces.find(p => p.id === "back");
   ok(pf.dartLegs === 2 && pb.dartLegs === 2, "1: 앞·뒤 = 열린 다트 입구를 construction 다트 다리 2개로 닫음(디자인 파트 분리와 같은 buildPieceRing)");
   // 실물 치수 = 독립 점열 bbox(다트 다리는 외곽 안쪽이라 bbox 불변)
-  const R = P.working.designResult, srcOf = { front: [R.bodice.front.outline], back: [R.bodice.back.outline], "sleeve-sleeve": [R.sleeve.geometry.outline], cuff: [R.sleeve.cuff.piece.outline], "collar-stand": [R.collar.stand.geometry.outline], "collar-body": [R.collar.body.geometry.outline] };
+  const R = P.working.designResult, srcOf = { front: [R.bodice.front.outline, R.bodice.placket.outline], back: [R.bodice.back.outline], "sleeve-sleeve": [R.sleeve.geometry.outline], cuff: [R.sleeve.cuff.piece.outline], "collar-stand": [R.collar.stand.geometry.outline], "collar-body": [R.collar.body.geometry.outline] };
   ok(d.pieces.every(p => { const b = bboxInd(srcOf[p.id]); return near(p.widthCm, b.w, 0.01) && near(p.heightCm, b.h, 0.01); }),
     "1: 조각 W×H = 완료본 원래 primitive 독립 실측(±0.01cm · 축척 변경 없음) — " + d.pieces.map(p => p.id + " " + p.widthCm.toFixed(2) + "×" + p.heightCm.toFixed(2)).join(" "));
   ok(near(d.pieces.find(p => p.id === "cuff").widthCm, R.sleeve.cuff.piece.size.lengthCm, 1e-6), "1: 커프스 길이 = designCuff 기록(" + R.sleeve.cuff.piece.size.lengthCm + ")");
   ok(d.pieces.every(p => p.source && /^designResult\./.test(p.source)), "1: 조각 출처 = 완료 패키지 경로");
   // 누락 = 이유만(대체 직사각형 없음)
-  ok(d.missing.map(m => m.id).join() === "placket,sleeve-vent" && d.missing.every(m => m.reason.length > 10), "1: 누락 2건(여밈 합성 외곽 · 트임 덧단) = 이유만");
+  ok(d.missing.map(m => m.id).join() === "sleeve-vent" && d.missing.every(m => m.reason.length > 10), "1: 누락 1건(트임 덧단) = 이유만 · 여밈은 앞판에 합쳐짐(2026-11-14)");
   ok(!d.pieces.some(p => /placket|vent/.test(p.id)), "1: 누락 항목을 조각으로 만들지 않음(대체 직사각형 없음)");
-  ok(pf.marks.length === 1 && pf.marks[0].kind === "placket" && d.pieces.filter(p => p.marks && p.marks.length).length === 1, "1: 여밈 영역 = 앞판 위 점선 표시 1개만");
+  ok(pf.marks.map(m => m.kind).join() === "zone-overlap,zone-facing,cf,fold" && d.pieces.filter(p => p.marks && p.marks.length).length === 1 && pf.placket && pf.placket.fold.ok, "1: 여밈·안단 = 앞판에 합친 외곽 + 영역 2칸·앞중심선·접는선 표시(앞판에만 · 상세는 cutPlacketIntegrationCheck)");
   ok(d.pieces.find(p => p.id === "collar-stand").note === "뒤중심 접힘 반쪽(펼치기 전)", "1: 카라 반쪽 = 완료본 symmetry 사실만 적음");
   // 원본 별칭 없음 · 동결
   const srcObjs = allObjs(R); ok(![...allObjs(d.pieces)].some(o => srcObjs.has(o)), "2: 조각 객체가 완료본 객체를 하나도 가리키지 않음(새 복사본)");

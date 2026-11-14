@@ -190,6 +190,87 @@
     "tailored-collar": [["tailored", "테일러드 칼라"]], "shawl-collar": [["shawl", "숄 칼라"]], "stand-collar": [["standalone", "스탠드 칼라"]]
   };
   var SLEEVE_PIECE_LABEL = { back: "뒤 소매", front: "앞 소매", sleeve: "소매", gusset: "덧천(무)" };
+  // ── 앞 여밈·컷온 안단을 앞판과 한 장으로(읽기 전용 · 재단 표시 파생만 · 완료본 무변경) ──
+  //   근거 = designPlacket 의 확정 규칙: 앞중심(CF) ─ +여밈분 → 완성 앞단선·접는선 ─ +안단 폭 → 안단 끝(재단선),
+  //   윗변·아랫변은 목-CF 점·밑단-CF 점에서 수평 연장. 여기서는 그 영역을 **새로 만들지 않고** 완료본의 placket.outline 을 그대로 쓴다:
+  //   앞판 ring 의 앞중심 변(placket 의 공유 경계와 좌표가 같은 것만)을 빼고 placket 의 나머지 세 변으로 바꾼다.
+  //   앞중심 변이 placket 과 안 맞으면(나뉜/바뀐 앞판) 합치지 않고 이유만 돌려준다 — 추측해 잇지 않는다.
+  //   접힘 검산: 접는선에서 안단을 몸판 쪽으로 접었을 때 안단 윗변·아랫변이 그 자리의 실제 외곽(여밈 윗변 또는 목선/밑단)과
+  //   얼마나 어긋나는지 실측한다(안단 ≤ 여밈분이면 여밈 사각형 위라 0). 어긋나도 형상은 확정 규칙 그대로 두고 숫자로만 알린다.
+  var PL_EPS = 1e-6, FOLD_TOL = 0.05;
+  function composePlacket(ring, placket) {
+    var pm = placket && placket.parameters, po = placket && placket.outline;
+    if (!pm || !Array.isArray(po) || po.length !== 4 || !po.every(function (s) { return s && s.kind === "line" && s.from && s.to; })) return { ok: false, reason: "여밈 영역 형식을 읽을 수 없습니다" };
+    var ov = pm.overlapCm, fc = pm.facingWidthCm;
+    if (!(typeof ov === "number" && isFinite(ov) && ov >= 0 && typeof fc === "number" && isFinite(fc) && fc >= 0) || (ov === 0 && fc === 0)) return { ok: false, reason: "여밈·안단 값이 올바르지 않습니다" };
+    if (pm.lengthMode && pm.lengthMode !== "full") return { ok: false, reason: "목~밑단 전체 여밈만 합칩니다" };
+    var cfX = po[0].from.x, topY = po[0].from.y, cutX = po[0].to.x, botY = po[1].to.y, foldX = cfX + ov;
+    if (!allFinite(po) || Math.abs(cutX - (cfX + ov + fc)) > PL_EPS || Math.abs(po[1].from.x - cutX) > PL_EPS || Math.abs(po[2].to.x - cfX) > PL_EPS || Math.abs(po[2].to.y - botY) > PL_EPS || !(botY - topY > PL_EPS))
+      return { ok: false, reason: "여밈 영역이 여밈·안단 값과 맞지 않습니다" };
+    var isCF = function (s) { return s.kind === "line" && Math.abs(s.from.x - cfX) <= PL_EPS && Math.abs(s.to.x - cfX) <= PL_EPS; };
+    var n = ring.length, flags = ring.map(isCF), cnt = flags.filter(Boolean).length;
+    if (!cnt || cnt === n) return { ok: false, reason: "이 앞판에는 여밈을 잡았던 앞중심 변이 없습니다(앞중심이 바뀐 앞판)" };
+    var st = -1; for (var i = 0; i < n; i++) if (flags[i] && !flags[(i + n - 1) % n]) { if (st >= 0) return { ok: false, reason: "앞중심 변이 한 줄로 이어져 있지 않습니다" }; st = i; }
+    var run = [], rest = []; for (var k = 0; k < n; k++) { var sg = ring[(st + k) % n]; (k < cnt ? run : rest).push(sg); }
+    var a = run[0].from, z = run[cnt - 1].to, len = 0; run.forEach(function (s) { len += Math.abs(s.to.y - s.from.y); });
+    var down = a.y < z.y, top = down ? a : z, bot = down ? z : a;
+    if (Math.abs(top.y - topY) > PL_EPS || Math.abs(bot.y - botY) > PL_EPS || Math.abs(len - (botY - topY)) > PL_EPS) return { ok: false, reason: "앞중심 변이 여밈을 잡았던 목~밑단 구간과 다릅니다(여밈 적용 뒤 앞판이 바뀜)" };
+    var over = 0; sample(rest, 24).forEach(function (p) { if (p.x - cfX > over) over = p.x - cfX; });
+    if (over > PL_EPS) return { ok: false, reason: "앞중심보다 바깥으로 나간 외곽이 있어 여밈을 붙일 수 없습니다(" + r4(over) + "cm)" };
+    var d = fc - ov, mirX = cfX + 2 * ov, trimmed = fc > 0 && d > PL_EPS, wa = null, wz = null, segs, facingZone;
+    if (!trimmed) {
+      var c1 = { x: cutX, y: a.y }, c2 = { x: cutX, y: z.y };
+      segs = rest.concat([{ kind: "line", from: pt(a), to: c1 }, { kind: "line", from: pt(c1), to: c2 }, { kind: "line", from: pt(c2), to: pt(z) }]);
+      facingZone = fc > 0 ? rectSegs(foldX, cutX, topY, botY) : null;
+    } else {
+      // 안단 > 여밈분(김님 확정 2026-11-14): 접은 상태에서 목선/밑단에 맞춰 자르고 펼친 모양 = 접는선 기준 반사 복사.
+      //   접힌 안단 중 앞중심 안쪽으로 넘어간 폭 d 만큼, 앞중심 점에서 몸판 외곽을 따라가(정확한 line/cubic 분할) 그 구간을 접는선에 대해 뒤집는다.
+      //   따라가는 구간이 x 로 한 방향이 아니거나(복수 교차) 폭 d 에 닿기 전에 끝나면 정의할 수 없다 → 거부(선을 늘이지 않는다).
+      wa = walkIn(rest.slice().reverse().map(rev), cfX, d); wz = walkIn(rest, cfX, d);
+      if (!wa.ok || !wz.ok) return { ok: false, reason: "안단(" + fc + ")이 여밈분(" + ov + ")보다 넓어 접은 안단을 " + (!wa.ok ? (down ? "목선" : "밑단") : (down ? "밑단" : "목선")) + "에 맞춰 자를 수 없습니다 — " + (!wa.ok ? wa.reason : wz.reason) };
+      var mir = function (q) { return { x: 2 * foldX - q.x, y: q.y }; }, mseg = function (g) { return g.kind === "cubic" ? { kind: "cubic", from: mir(g.from), c1: mir(g.c1), c2: mir(g.c2), to: mir(g.to) } : { kind: "line", from: mir(g.from), to: mir(g.to) }; };
+      var ma = wa.parts.map(mseg), mz = wz.parts.map(mseg), ea = ma[ma.length - 1].to, ez = mz[mz.length - 1].to;
+      if (!((down ? ez.y - ea.y : ea.y - ez.y) > PL_EPS)) return { ok: false, reason: "안단이 너무 넓어 목 쪽과 밑단 쪽 자른 선이 서로 만납니다" };
+      var edge = ma.concat([{ kind: "line", from: pt(ea), to: pt(ez) }], mz.slice().reverse().map(rev));   // (mirX,a.y) → … → (mirX,z.y)
+      var pre = ov > 0 ? [{ kind: "line", from: pt(a), to: { x: mirX, y: a.y } }] : [], post = ov > 0 ? [{ kind: "line", from: { x: mirX, y: z.y }, to: pt(z) }] : [];
+      segs = rest.concat(pre, edge, post);
+      facingZone = [{ kind: "line", from: { x: foldX, y: a.y }, to: { x: mirX, y: a.y } }].concat(edge, [{ kind: "line", from: { x: mirX, y: z.y }, to: { x: foldX, y: z.y } }, { kind: "line", from: { x: foldX, y: z.y }, to: { x: foldX, y: a.y } }]).filter(function (g) { return Math.hypot(g.to.x - g.from.x, g.to.y - g.from.y) > PL_EPS; });
+    }
+    var topW = trimmed ? (down ? wa : wz) : null, botW = trimmed ? (down ? wz : wa) : null;
+    return { ok: true, segs: segs, info: { overlapCm: ov, facingWidthCm: fc, cfX: cfX, foldX: foldX, cutX: cutX, topY: topY, botY: botY, facingZone: facingZone,
+      fold: { applies: fc > 0, ok: true, trimmed: trimmed, insideCm: trimmed ? r4(d) : 0, neckEndY: topW ? r4(topW.end.y) : null, hemEndY: botW ? r4(botW.end.y) : null } } };
+  }
+  // 앞중심 점에서 외곽을 따라 안쪽으로 폭 d 까지: 걸친 선은 정확히 나눈다(line = 비례 · cubic = de Casteljau, t 는 x 이분법).
+  function splitAt(g, t) {
+    if (g.kind === "line") return { kind: "line", from: pt(g.from), to: { x: g.from.x + (g.to.x - g.from.x) * t, y: g.from.y + (g.to.y - g.from.y) * t } };
+    var L = function (p, q) { return { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }; }, p01 = L(g.from, g.c1), p12 = L(g.c1, g.c2), p23 = L(g.c2, g.to), p012 = L(p01, p12), p123 = L(p12, p23);
+    return { kind: "cubic", from: pt(g.from), c1: p01, c2: p012, to: L(p012, p123) };
+  }
+  function xAt(g, t) { return g.kind === "cubic" ? cubicAt(g, t).x : g.from.x + (g.to.x - g.from.x) * t; }
+  function walkIn(chain, cfX, d) {
+    var target = cfX - d, parts = [];
+    for (var i = 0; i < chain.length; i++) {
+      var g = chain[i], prev = xAt(g, 0);
+      for (var k = 1; k <= 64; k++) { var x = xAt(g, k / 64); if (x > prev + 1e-9) return { ok: false, reason: "그 구간의 외곽이 한 방향으로 이어지지 않습니다(접힌 안단과 여러 번 만남)" }; prev = x; }
+      if (g.to.x > target + PL_EPS) { if (Math.hypot(g.to.x - g.from.x, g.to.y - g.from.y) > PL_EPS) parts.push(g); continue; }
+      if (Math.abs(g.to.x - target) <= PL_EPS) { parts.push(g); return { ok: true, parts: parts, end: g.to }; }
+      var lo = 0, hi = 1; for (var n = 0; n < 60; n++) { var m = (lo + hi) / 2; if (xAt(g, m) > target) lo = m; else hi = m; }
+      var part = splitAt(g, (lo + hi) / 2); parts.push(part); return { ok: true, parts: parts, end: part.to };
+    }
+    return { ok: false, reason: "외곽이 그 폭에 닿기 전에 끝납니다" };
+  }
+  function vline(x, y0, y1) { return { kind: "line", from: { x: x, y: y0 }, to: { x: x, y: y1 } }; }
+  function rectSegs(x0, x1, y0, y1) { return [{ kind: "line", from: { x: x0, y: y0 }, to: { x: x1, y: y0 } }, vline(x1, y0, y1), { kind: "line", from: { x: x1, y: y1 }, to: { x: x0, y: y1 } }, vline(x0, y1, y0)]; }
+  // 합친 앞판 위 표시: 연장 영역 2칸(여밈분·안단) + 앞중심선 + 접는선. 안단 끝선은 외곽 자체.
+  function placketMarks(q) {
+    var m = [];
+    if (q.overlapCm > 0) m.push({ kind: "zone-overlap", segs: rectSegs(q.cfX, q.foldX, q.topY, q.botY) });
+    if (q.facingZone) m.push({ kind: "zone-facing", segs: q.facingZone });
+    m.push({ kind: "cf", segs: [vline(q.cfX, q.topY, q.botY)], label: "앞중심 · 단추선" });
+    if (q.overlapCm > 0 && q.facingWidthCm > 0) m.push({ kind: "fold", segs: [vline(q.foldX, q.topY, q.botY)], label: "완성 앞단 · 접는선" });
+    return m;
+  }
+
   function sleeveSym(res) { var o = res && res.origin; return (o && (o.symbol || o.sym)) || null; }
 
   function candidates(R) {
@@ -204,7 +285,8 @@
           { note: "소매와 함께 제도한 파생 몸판" + (a.notes.length ? " · " + a.notes.join(" · ") : ""), construction: a.construction });
       });
       info.push("최종 몸판 = 소매 파생 몸판 — 원래 몸판(bodiceResult) 앞·뒤는 중복이라 조각에 넣지 않았습니다");
-      if (b && b.placket) missing.push({ id: "placket", label: "앞 여밈·컷온 안단", reason: "파생 몸판 위 여밈 자리를 아직 확인하지 않았습니다 — 앞판에 합친 재단 외곽 없음(재단 다음 단계)" });
+      // 소매 Ⓡ~Ⓩ 엔진은 여밈 붙은 몸판을 받지 않는다(bodice-not-a) — 이 조합은 실제 엔진이 만들지 않는 경로라 합성 근거가 없다.
+      if (b && b.placket) missing.push({ id: "placket", label: "앞 여밈·컷온 안단", reason: "소매와 함께 제도한 파생 몸판에는 여밈·안단을 합치지 않습니다 — 디자인 엔진이 만들지 않는 조합이라 확인된 근거가 없음" });
     } else if (b) {
       var yoke = !!(b.frontYoke && b.frontBody && b.backYoke && b.backBody), sYoke = !!(b.shoulderYoke && b.frontBody && b.backBody),
         princess = !!(b.frontCenter && b.frontSide && b.backCenter && b.backSide), peplum = !!(b.frontPeplum || b.backPeplum);
@@ -217,9 +299,11 @@
       else if (peplum) { bp("front", "앞판(허리 위)"); bp("back", "뒤판(허리 위)"); if (b.frontPeplum) bp("frontPeplum", "앞 페플럼"); if (b.backPeplum) bp("backPeplum", "뒤 페플럼"); }
       else { bp("front", "앞판"); bp("back", "뒤판"); }
       if (b.placket) {
-        var onFront = !modes || peplum;
-        missing.push({ id: "placket", label: "앞 여밈·컷온 안단", reason: "여밈 " + b.placket.parameters.overlapCm + " · 안단 " + b.placket.parameters.facingWidthCm + "cm 영역은 있지만 앞판과 한 장으로 합친 재단 외곽은 아직 없습니다(안단 접힘·합성 규칙 = 재단 다음 단계)" + (onFront ? " — 앞판 위에 점선으로만 표시" : "") });
-        if (onFront) out.forEach(function (c) { if (c.id === "front") c.marks = [{ kind: "placket", outline: b.placket.outline }]; });
+        if (!modes) out.forEach(function (c) { if (c.id === "front") c.placket = b.placket; });   // 나뉘지 않은 앞판 한 장 = 합성 대상(buildPieces)
+        else {
+          missing.push({ id: "placket", label: "앞 여밈·컷온 안단", reason: "여밈 " + b.placket.parameters.overlapCm + " · 안단 " + b.placket.parameters.facingWidthCm + "cm — 나뉜 앞판(요크·프린세스·페플럼)은 앞중심이 여러 조각에 걸쳐 있어 아직 한 장으로 합치지 않습니다" + (peplum ? " — 앞판 위에 점선으로만 표시" : "") });
+          if (peplum) out.forEach(function (c) { if (c.id === "front") c.marks = [{ kind: "placket", outline: b.placket.outline }]; });
+        }
       }
     } else missing.push({ id: "bodice", label: "몸판", reason: "완료본에 몸판이 없습니다" });
 
@@ -268,7 +352,7 @@
 
   // ── 조각 확정(정규화·검사·중복 제거) — 순수 ──
   function buildPieces(R) {
-    var cand = candidates(R), pieces = [], seenRef = [], seenHash = {}, excluded = [];
+    var cand = candidates(R), pieces = [], seenRef = [], seenHash = {}, excluded = [], missing = cand.missing.slice();
     cand.pieces.forEach(function (c) {
       if (c.outline && seenRef.indexOf(c.outline) >= 0) { excluded.push({ id: c.id, label: c.label, reason: "같은 외곽을 가리키는 중복 — 한 번만 표시" }); return; }
       if (c.outline) seenRef.push(c.outline);
@@ -278,15 +362,27 @@
       var ring = ringOf(n.segs, c.construction);
       if (!ring.ok) { rec.check = { ok: false, reason: ring.reason }; rec.segs = []; pieces.push(rec); return; }
       n.segs = ring.segs; rec.dartLegs = ring.legs;
+      var marks = (c.marks || []).map(function (m) { var mn = normOutline(m.outline); return mn.ok ? { kind: m.kind, segs: mn.segs } : null; }).filter(Boolean);
+      if (c.placket) {
+        var pc = composePlacket(n.segs, c.placket), pchk = pc.ok ? paperCheck(pc.segs) : null, w0 = measure(n.segs).widthCm;
+        if (pc.ok && pchk.ok) {
+          n.segs = pc.segs; rec.placket = Object.assign({ widthBeforeCm: w0 }, pc.info); rec.label = c.label + "(여밈·안단 포함)";
+          marks = marks.concat(placketMarks(pc.info));
+        } else {
+          var why = pc.ok ? pchk.reason : pc.reason, pn = normOutline(c.placket.outline);
+          missing.push({ id: "placket", label: "앞 여밈·컷온 안단", reason: "앞판과 한 장으로 합치지 못했습니다 — " + why + " · 앞판은 여밈 없는 완성선 그대로" + (pn.ok ? " · 여밈 자리는 점선" : "") });
+          if (pn.ok) marks.push({ kind: "placket", segs: pn.segs });
+        }
+      }
       var h = hashStr(canon(n.segs));
       if (seenHash[h]) { excluded.push({ id: c.id, label: c.label, reason: "«" + seenHash[h] + "»과 같은 형상 — 중복이라 한 번만 표시" }); return; }
       seenHash[h] = c.label;
       rec.segs = n.segs; rec.hash = h; rec.check = paperCheck(n.segs);
       Object.assign(rec, measure(n.segs));
-      rec.marks = (c.marks || []).map(function (m) { var mn = normOutline(m.outline); return mn.ok ? { kind: m.kind, segs: mn.segs } : null; }).filter(Boolean);
+      rec.marks = marks;
       pieces.push(rec);
     });
-    return { pieces: pieces, missing: cand.missing, info: cand.info, excluded: excluded };
+    return { pieces: pieces, missing: missing, info: cand.info, excluded: excluded };
   }
 
   // ── 진입점 ── 매번 새로 파생. 반환은 동결(소비자가 바꿀 수 없다).
@@ -315,7 +411,7 @@
     });
   }
 
-  var model = { ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
+  var model = { composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
 
   // ══ 화면(읽기 전용 오버레이) ══ ─────────────────────────────────────
   var NS = "http://www.w3.org/2000/svg", GAP = 6;
@@ -372,7 +468,13 @@
       var pos = view.layout.pos[p.id]; if (!pos) return;
       var g = el("g", { "class": "cut-piece" + (view.sel === p.id ? " is-sel" : ""), "data-piece": p.id, transform: "translate(" + pos.dx + " " + pos.dy + ")" });
       g.appendChild(el("path", { "class": "cut-piece-outline", d: pathD(p.segs) }));
-      (p.marks || []).forEach(function (m) { g.appendChild(el("path", { "class": "cut-mark cut-mark-" + m.kind, d: pathD(m.segs) })); });
+      (p.marks || []).forEach(function (m) { g.appendChild(el("path", { "class": (m.kind.indexOf("zone-") === 0 ? "cut-zone cut-" : "cut-mark cut-mark-") + m.kind, d: pathD(m.segs) + (m.kind.indexOf("zone-") === 0 ? " Z" : "") })); });
+      (p.marks || []).forEach(function (m, i) {   // 세로 기준선 이름(선 옆 · 세로쓰기 방향 · 서로 높이를 달리해 겹치지 않게)
+        if (!m.label) return; var s0 = m.segs[0], ly = s0.from.y + (s0.to.y - s0.from.y) * (m.kind === "cf" ? 0.3 : 0.62), lx = s0.from.x - 0.22;
+        g.appendChild(el("text", { "class": "cut-mark-label cut-mark-label-" + m.kind, x: lx, y: ly, "font-size": 0.78, transform: "rotate(-90 " + lx + " " + ly + ")" }, m.label));
+      });
+      if (p.placket && p.placket.facingWidthCm > 0) { var ex = p.placket.cutX + 0.75, ey = p.placket.topY + (p.placket.botY - p.placket.topY) * 0.46;
+        g.appendChild(el("text", { "class": "cut-mark-label", x: ex, y: ey, "font-size": 0.78, transform: "rotate(-90 " + ex + " " + ey + ")" }, "안단 끝(외곽)")); }
       var cx = (p.bbox.minX + p.bbox.maxX) / 2, cy = (p.bbox.minY + p.bbox.maxY) / 2, fs = Math.max(1.2, Math.min(2.4, p.widthCm / 9));
       g.appendChild(el("text", { "class": "cut-piece-label", x: cx, y: cy, "font-size": fs }, p.label));
       g.appendChild(el("text", { "class": "cut-piece-size", x: cx, y: cy + fs * 1.15, "font-size": fs * 0.72 }, fmt(p.widthCm) + " × " + fmt(p.heightCm) + " cm"));
@@ -387,6 +489,18 @@
   function li(cls, html) { var e = document.createElement("li"); if (cls) e.className = cls; e.innerHTML = html; return e; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   var GROUP_LABEL = { bodice: "몸판", sleeve: "소매·커프스", collar: "카라" };
+
+  // 합친 앞판 설명: 폭 전후 · 세 기준선 · 접힘 검산(숫자 그대로) · 목둘레 길이와 무관함
+  function placketHtml(p) {
+    var q = p.placket, f = q.fold, c2 = function (v) { return (Math.round(v * 100) / 100).toString(); }, t = "";
+    t += "<span class=\"ci-pl\">여밈 " + c2(q.overlapCm) + " + 안단 " + c2(q.facingWidthCm) + " cm 를 앞중심 밖으로 붙임 · 폭 " + fmt(q.widthBeforeCm) + " → " + fmt(p.widthCm) + " cm</span>";
+    t += "<span class=\"ci-legend\"><span class=\"lg-i\"><i class=\"lg lg-cf\"></i>앞중심(단추선)</span>" + (q.overlapCm > 0 && q.facingWidthCm > 0 ? "<span class=\"lg-i\"><i class=\"lg lg-fold\"></i>완성 앞단 = 접는선</span>" : "") + "<span class=\"lg-i\"><i class=\"lg lg-edge\"></i>" + (q.facingWidthCm > 0 ? "안단 끝 = 외곽" : "완성 앞단 = 외곽") + "</span></span>";
+    if (!f.applies) t += "<span class=\"ci-note\">안단 0 — 접는선 없음(앞단 처리는 이 조각에 없습니다)</span>";
+    else if (!f.trimmed) t += "<span class=\"ci-ok\">접힘 검산: 접는선에서 접으면 안단 윗끝·아랫끝이 목·밑단 모서리와 일치</span>";
+    else t += "<span class=\"ci-ok\">안단이 여밈분보다 " + c2(f.insideCm) + "cm 넓음 → 접은 상태에서 목선·밑단에 맞춰 자른 모양(접는선 기준 반사 복사) · 접으면 몸판 외곽과 일치</span>";
+    t += "<span class=\"ci-note\">여밈 윗변은 목둘레 봉제 길이에 들어가지 않습니다(목둘레는 앞중심까지 — 맞춤 길이 카드 값 그대로)</span>";
+    return t;
+  }
 
   function drawList() {
     var box = $("cutList"), st = $("cutStatus"), msg = $("cutBlocked"), d = view.data; if (!box || !d) return;
@@ -414,7 +528,7 @@
           (p.check.ok ? "<span class=\"ci-size\">" + fmt(p.widthCm) + " × " + fmt(p.heightCm) + " cm · 둘레 " + fmt(p.perimeterCm) + "</span>" +
             "<span class=\"ci-ok\">폐곡선 · 교차 없음</span>"
             : "<span class=\"ci-bad\">표시 보류 — " + esc(p.check.reason) + "</span>") +
-          (p.note ? "<span class=\"ci-note\">" + esc(p.note) + "</span>" : "");
+          (p.note ? "<span class=\"ci-note\">" + esc(p.note) + "</span>" : "") + (p.check.ok && p.placket ? placketHtml(p) : "");
         if (!p.check.ok) btn.disabled = true;
         item.appendChild(btn); box.appendChild(item);
       });

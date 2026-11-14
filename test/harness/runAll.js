@@ -203,6 +203,7 @@ const suites = [
   { file: "seamMatchIntegrationCheck.js", golden: false },
   // 재단 준비 1단계(2026-11-13): Design 완료본 → 읽기 전용 재단 조각(시접 전) · 폐곡선 검사 · 누락 이유 · 무효화 · 저장 복원 · 소매 파생/분리 중복 방지.
   { file: "cutPrepIntegrationCheck.js", golden: false },
+  { file: "cutPlacketIntegrationCheck.js", golden: false },
 ];
 
 let anyFail = false;
