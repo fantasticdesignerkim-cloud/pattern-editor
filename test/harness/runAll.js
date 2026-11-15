@@ -210,6 +210,8 @@ const suites = [
   { file: "cutSeamIntegrationCheck.js", golden: false },
   // 야간 리뷰 #2 ③(2026-11-15): 프로젝트 «열기» 연속 요청 — 마지막 요청만 반영(읽기 완료 순서를 뒤집어 실제 handler 검사)
   { file: "projectOpenRaceCheck.js", golden: false },
+  // 맞춤 표시 1차(2026-11-15): 근거 있는 기본 너치(WL·소매산점·밴드 SNP) · 직각 · 시접 폭 기준 · 위치 불변 · 저장 없음
+  { file: "cutNotchCheck.js", golden: false },
 ];
 
 let anyFail = false;

@@ -526,7 +526,7 @@
       if (straight) { var d0 = { x: es[0].to.x - es[0].from.x, y: es[0].to.y - es[0].from.y }; straight = es.every(function (g) { return Math.abs(d0.x * (g.to.y - g.from.y) - d0.y * (g.to.x - g.from.x)) < 1e-7; }); }
       var foldable = !darts.length && straight && (lab === "cb-fold" || (lab === "center" && rec.group === "bodice" && /^back/.test(rec.id)));
       var name = lab === "center" ? (/^back/.test(rec.id) ? "뒤중심" : "앞중심") : (EDGE_NAME[lab] || lab);
-      var e = { id: id, label: lab, name: name, segs: ix, darts: darts, positional: !!positional, foldCapable: foldable, defaultKind: foldable ? "fold" : "seam", sig: hashStr(canon(es)) };
+      var e = { roots: ix.map(function (k) { return it[k] && it[k].root || null; }), id: id, label: lab, name: name, segs: ix, darts: darts, positional: !!positional, foldCapable: foldable, defaultKind: foldable ? "fold" : "seam", sig: hashStr(canon(es)) };
       if (wholeWhy) { e.whole = true; e.wholeReason = wholeWhy; }
       return e;
     }
@@ -593,14 +593,17 @@
     var SA = W().seamAllowance, sp = readSpec(proj || project()), out = { state: "ready", spec: { state: sp.state, reason: sp.reason || null }, pieces: {}, orphans: [], done: 0, total: 0 };
     if (!d || d.state !== "ready") { out.state = "blocked"; return out; }
     if (!SA) { out.state = "no-module"; return out; }
-    var hit = {};
+    var hit = {}, nsp = readNotchSpec(proj || project()), un = nsp.state === "ok" ? userNotchesOf(d, nsp) : { list: [], orphans: [] };
+    out.notchSpec = { state: nsp.state, reason: nsp.reason || null, split: nsp.split };
+    out.notchOrphans = un.orphans; out.armhole = d.notches ? d.notches.armhole : null;
+    var allNotches = (d.notches ? d.notches.list : []).concat(un.list);
     d.pieces.forEach(function (p) {
       if (!p.check.ok || !p.edges) return;
       out.total++;
       var es = p.edges.map(function (e) { var r = resolveEdge(p, e, sp); if (!r.orphan && sp.edges[edgeKey(p.id, e.id)]) hit[edgeKey(p.id, e.id)] = 1; return Object.assign({ id: e.id, name: e.name, foldCapable: e.foldCapable, whole: !!e.whole, wholeReason: e.wholeReason || null, dartCount: e.darts.length }, r); });
       var res = SA.build({ ring: p.segs, edges: p.edges.map(function (e, k) { return { id: e.id, segs: e.segs, widthCm: es[k].widthCm, darts: e.darts.map(function (x) { return { legs: x.legs, topFirst: x.topFirst }; }) }; }) });
       if (res.ok) out.done++;
-      out.pieces[p.id] = { edges: es, ok: res.ok, points: res.points, edgePaths: res.edgePaths, refusals: res.refusals, darts: res.darts, stats: res.stats };
+      out.pieces[p.id] = { notches: allNotches.filter(function (n) { return n.pieceId === p.id; }).map(function (n) { return Object.assign({}, n, notchLine(p, n, { ok: res.ok, edges: es, edgePaths: res.edgePaths })); }), edges: es, ok: res.ok, points: res.points, edgePaths: res.edgePaths, refusals: res.refusals, darts: res.darts, stats: res.stats };
     });
     Object.keys(sp.edges).forEach(function (k) {
       if (hit[k]) return;
@@ -638,6 +641,285 @@
   }
 
   // ── 진입점 ── 매번 새로 파생. 반환은 동결(소비자가 바꿀 수 없다).
+  // ══ 맞춤 표시(너치) 1차(2026-11-15) ══ 읽기 전용 파생 · 저장 없음 · 형상/시접/완료 hash 무변경
+  //   근거가 확실한 것만 기본으로 만든다(등분·픽셀 추정 없음). 위치 권위 = 완성선 위 경로 위치(변 시작에서 잰 호 길이).
+  //   표시 = 그 점에서 완성선에 직각으로 시접선(재단선)까지([패턴학교] P.164 «바깥쪽으로 내는 치수는 시접 폭이 기준»). 시접 폭을 바꿔도 위치는 그대로.
+  //   · WL: 몸판 옆선·중심선이 허리선에서 나뉘는 점(완료본 경계 root «…» ↔ «…-extension») — [패턴학교] P.164 «각 파트로 분리할 때: WL»
+  //   · 소매산점: 소매 형상의 앞/뒤 분할점(designSleeve.capPrimitives.splitPoint · 소매산 길이 측정과 같은 권위) — P.164 «소매산점»
+  //   · 밴드 SNP: 밴드 달림선 위, 뒤중심에서 몸판 뒤 목둘레 길이(완료본 necklineLengths.back)만큼 — P.164 «칼라의 SNP와 뒤 중심»
+  var NOTCH_JOIN = 1e-6;
+  function segLenOf(g) { if (g.kind !== "cubic") return Math.hypot(g.to.x - g.from.x, g.to.y - g.from.y); var L = 0, p = g.from; for (var k = 1; k <= 200; k++) { var q = cubicAt(g, k / 200); L += Math.hypot(q.x - p.x, q.y - p.y); p = q; } return L; }
+  function edgeChain(p, e) { return e.segs.map(function (i) { return p.segs[i]; }); }
+  function chainLen(ch) { return ch.reduce(function (t, g) { return t + segLenOf(g); }, 0); }
+  // 변 위 호 길이 s 의 점·접선(시작 쪽에서). 곡선은 200 등분 점열로 잰다(측정 해상도 ≤ 0.01cm 수준).
+  function pointAtArc(ch, s) {
+    var acc = 0;
+    for (var i = 0; i < ch.length; i++) {
+      var g = ch[i], L = segLenOf(g);
+      if (s <= acc + L + 1e-9 || i === ch.length - 1) {
+        var r = Math.max(0, Math.min(1, L > 0 ? (s - acc) / L : 0));
+        if (r >= 1 - 1e-12) return { pt: { x: g.to.x, y: g.to.y }, tan: g.kind === "cubic" ? { x: g.to.x - g.c2.x, y: g.to.y - g.c2.y } : { x: g.to.x - g.from.x, y: g.to.y - g.from.y } };
+        if (r <= 1e-12) return { pt: { x: g.from.x, y: g.from.y }, tan: g.kind === "cubic" ? { x: g.c1.x - g.from.x, y: g.c1.y - g.from.y } : { x: g.to.x - g.from.x, y: g.to.y - g.from.y } };
+        if (g.kind !== "cubic") return { pt: { x: g.from.x + (g.to.x - g.from.x) * r, y: g.from.y + (g.to.y - g.from.y) * r }, tan: { x: g.to.x - g.from.x, y: g.to.y - g.from.y } };
+        var a2 = 0, prev = g.from, t = 0;
+        for (var k = 1; k <= 200; k++) { var q = cubicAt(g, k / 200), d = Math.hypot(q.x - prev.x, q.y - prev.y); if (a2 + d >= r * L) { t = (k - 1 + (d > 0 ? (r * L - a2) / d : 0)) / 200; break; } a2 += d; prev = q; t = 1; }
+        var p0 = cubicAt(g, Math.max(0, t - 1e-4)), p1 = cubicAt(g, Math.min(1, t + 1e-4));
+        return { pt: cubicAt(g, t), tan: { x: p1.x - p0.x, y: p1.y - p0.y } };
+      }
+      acc += L;
+    }
+    return null;
+  }
+  // 점이 변 위 어디(호 길이)인지 — 선분 끝점과 정확히 맞는 경우만(맞춤점은 완료본 선의 꼭짓점이어야 한다)
+  function arcAtVertex(ch, q) {
+    var acc = 0;
+    for (var i = 0; i < ch.length; i++) {
+      if (Math.hypot(ch[i].from.x - q.x, ch[i].from.y - q.y) <= NOTCH_JOIN) return acc;
+      acc += segLenOf(ch[i]);
+      if (Math.hypot(ch[i].to.x - q.x, ch[i].to.y - q.y) <= NOTCH_JOIN) return acc;
+    }
+    return null;
+  }
+  // 책 이즈 배분(구간별 비율 · 합 100): 뒤 [아래, 가운데, 위] · 앞 [위, 가운데, 아래] — [패턴학교] P.165 «여유분 줄임의 배분 방법»
+  var EASE_BOOK = Object.freeze({ back: Object.freeze([6, 18, 35]), front: Object.freeze([32, 9, 0]) });
+  // 봉제 경로 = 변의 선 중 다트 다리를 뺀 것(다트를 닫으면 다리는 봉제선에 들어가지 않는다)
+  function sewnChain(p, e) { var legs = {}; (e.darts || []).forEach(function (d) { legs[d.legs[0]] = legs[d.legs[1]] = 1; }); return e.segs.filter(function (i) { return !legs[i]; }).map(function (i) { return p.segs[i]; }); }
+  function notchesOf(R, pieces, split) {
+    var list = [], todo = [], P = function (id) { return pieces.filter(function (x) { return x.id === id && x.check.ok && x.edges; })[0]; };
+    var E = function (p, id) { return p ? p.edges.filter(function (e) { return e.id === id; })[0] : null; };
+    var add = function (p, e, s, o) { var ch = sewnChain(p, e), L = chainLen(ch); list.push(Object.assign({ pieceId: p.id, edgeId: e.id, atCm: s, edgeLenCm: L, sig: e.sig }, o)); };
+    // 변을 위쪽 끝(도안 y 가 작은 쪽)에서 잰 호 길이로 바꾼다 — 옆선의 짝 비교용(겨드랑이 쪽에서 잼)
+    var fromTop = function (p, e, s) { var ch = edgeChain(p, e), L = chainLen(ch), a = ch[0].from, z = ch[ch.length - 1].to; return a.y <= z.y ? s : L - s; };
+    // ① WL — 변 안에서 경계 root 가 «X» → «X-extension» 으로 바뀌는 꼭짓점
+    var wl = {};
+    ["front", "back"].forEach(function (pid) {
+      var p = P(pid); if (!p) return;
+      p.edges.forEach(function (e) {
+        if (!e.roots || (e.label !== "side-seam" && e.label !== "center")) return;
+        var acc = 0;
+        for (var k = 0; k + 1 < e.segs.length; k++) {
+          acc += segLenOf(p.segs[e.segs[k]]);
+          var a = e.roots[k], b = e.roots[k + 1]; if (!a || !b) continue;
+          var ta = a.split("/").pop(), tb = b.split("/").pop();
+          if ((tb === ta + "-extension") || (ta === tb + "-extension")) {
+            var pid2 = e.label === "side-seam" ? "wl-side" : null;
+            add(p, e, acc, { id: pid + "-" + e.id + "-wl", kind: "wl", name: "WL", pairId: pid2, side: pid === "front" ? "앞" : "뒤",
+              basis: "완료본 경계: «" + ta + "» 와 «" + tb + "» 가 나뉘는 점(허리선) — [패턴학교] P.164 «각 파트로 분리할 때: WL»", fromTopCm: r4(fromTop(p, e, acc)) });
+            if (pid2) wl[pid] = list[list.length - 1];
+          }
+        }
+      });
+    });
+    if (P("front") && P("back")) { if (!(wl.front && wl.back)) todo.push({ what: "옆선 WL", why: "앞·뒤 옆선 둘 다에 허리선 나뉨점이 있어야 짝을 지을 수 있습니다(몸판 길이를 늘이지 않으면 옆선 끝 = 허리선 모서리라 표시가 필요 없습니다)" }); }
+    else todo.push({ what: "몸판 WL", why: "나뉘지 않은 앞판·뒤판일 때만 1차 지원(요크·프린세스·페플럼·소매 파생 몸판은 변 이름을 아직 못 읽음)" });
+    if (wl.front && wl.back) { var dd = wl.back.fromTopCm - wl.front.fromTopCm; wl.front.pair = wl.back.pair = { a: "앞 옆선 겨드랑이~WL " + c2s(wl.front.fromTopCm), b: "뒤 옆선 겨드랑이~WL " + c2s(wl.back.fromTopCm), diffCm: r4(dd) }; }
+    var fc = E(P("front"), "center"); if (P("front") && !fc) todo.push({ what: "앞 중심 WL", why: "여밈·안단을 합친 앞판은 앞중심이 외곽이 아니라 앞단(접는선·안단 끝)이 외곽 — 앞단의 WL 위치는 아직 정하지 않음" });
+    // ② 소매산점
+    var sl = P("sleeve-sleeve"), cap = E(sl, "cap"), DS = W().designSleeve;
+    if (sl && cap && DS && typeof DS.capPrimitives === "function") {
+      var pr = null; try { pr = DS.capPrimitives(R.sleeve.geometry); } catch (x) { pr = null; }
+      var s0 = pr ? arcAtVertex(edgeChain(sl, cap), pr.splitPoint) : null, AH = R.bodice && R.bodice.armholeLengths;
+      if (s0 == null) todo.push({ what: "소매산점", why: "소매 형상의 앞/뒤 분할점을 소매산 선 위 꼭짓점에서 찾지 못함" });
+      else add(sl, cap, s0, { id: "sleeve-cap-top", kind: "cap-top", name: "소매산점", pairId: "cap-sp", side: "소매",
+        basis: "소매 형상의 앞/뒤 분할점(designSleeve.capPrimitives · 소매산 길이 측정과 같은 점) — [패턴학교] P.164 «소매산점»",
+        pair: AH && pr ? { a: "몸판 어깨선 끝(SP · 모서리라 몸판에는 표시 안 함)", b: "소매산 뒤 " + c2s(r4(pr.lengths.back)) + " / 앞 " + c2s(r4(pr.lengths.front)) + " · 몸판 진동 뒤 " + c2s(AH.back) + " / 앞 " + c2s(AH.front), diffCm: r4(pr.lengths.total - AH.front - AH.back), diffText: "이세 합계" } : null });
+    } else if (R.sleeve && R.sleeve.geometry) todo.push({ what: "소매산점", why: "소매 Ⓐ(변 이름이 있는 소매)만 1차 지원" });
+    // ③ 밴드 SNP
+    var st = P("collar-stand"), ns = E(st, "neck-seam"), cb = E(st, "cb-fold"), back = R.bodice && R.bodice.necklineLengths && R.bodice.necklineLengths.back;
+    if (st && ns && cb && typeof back === "number") {
+      var ch = edgeChain(st, ns), L = chainLen(ch), cbPts = edgeChain(st, cb), cbEnds = [cbPts[0].from, cbPts[cbPts.length - 1].to];
+      var startAtCB = cbEnds.some(function (q) { return Math.hypot(q.x - ch[0].from.x, q.y - ch[0].from.y) <= NOTCH_JOIN; }), endAtCB = cbEnds.some(function (q) { return Math.hypot(q.x - ch[ch.length - 1].to.x, q.y - ch[ch.length - 1].to.y) <= NOTCH_JOIN; });
+      if (!(startAtCB || endAtCB) || !(back > 0 && back < L)) todo.push({ what: "밴드 SNP", why: "밴드 달림선이 뒤중심에서 시작하지 않거나 뒤 목둘레가 달림선보다 김" });
+      else add(st, ns, startAtCB ? back : L - back, { id: "collar-stand-snp", kind: "snp", name: "SNP", pairId: "neck-snp", side: "밴드",
+        basis: "밴드 달림선 위 뒤중심에서 몸판 뒤 목둘레 길이 " + c2s(back) + "cm (완료본 몸판 necklineLengths) — [패턴학교] P.164 «칼라의 SNP와 뒤 중심»",
+        pair: { a: "몸판 SNP(어깨선과 목둘레 모서리 — 몸판에는 표시 안 함)", b: "밴드 달림선 " + c2s(r4(L)) + " · 몸판 목둘레 반 " + c2s(R.bodice.necklineLengths.half), diffCm: r4(L - R.bodice.necklineLengths.half), diffText: "달림선 − 목둘레" } });
+    } else if (R.collar) todo.push({ what: "밴드 SNP", why: "밴드 + 위 칼라 셔츠 칼라의 달림선·뒤중심 골선이 있을 때만 1차 지원" });
+    if (P("collar-body")) todo.push({ what: "위 칼라 SNP", why: "밴드 윗선 위 SNP 위치의 권위가 없음(목둘레와 길이가 다름) — 추정해 만들지 않음" });
+    // ④ 진동 둘레 · 소매산 너치([패턴학교] P.165 · 김님 확정 2026-11-15 «몸판이 먼저고 그걸 가지고 소매에 적용»)
+    //   몸판(현재 완료 몸판 · 다트를 닫은 봉제 진동 = 다트 다리는 길이에 넣지 않음): 위 = 어깨점(SP)에서 6 · 아래 = 진동 아랫점(옆선 끝)에서 뒤 6.5 / 앞 5.
+    //   소매(위 몸판 위치에서 파생): 위 = 소매산점에서 6 + 그 구간 이즈 · 아래 = 소매 아랫점에서 6.5 + 그 구간 이즈(뒤) / 5 + 그 구간 이즈(앞).
+    //   이즈 = 전체 이즈(소매산 − 몸판 봉제 진동) × 구간 비율 — 구간별 비율(합 100): 뒤 아래 6 · 뒤 가운데 18 · 뒤 위 35 · 앞 위 32 · 앞 가운데 9 · 앞 아래 0.
+    //   각 구간 이즈는 책대로 소수 둘째 자리에서 반올림(0.1 단위). 가운데 구간은 너치를 두지 않으므로 나머지(실제 앞/뒤 이즈 − 위 − 아래)를 그대로 흡수한다.
+    var sp = split || EASE_BOOK, sl2 = P("sleeve-sleeve"), cap2 = E(sl2, "cap"), AH2 = R.bodice && R.bodice.armholeLengths, DS2 = W().designSleeve;
+    var ahWhy = !(P("front") && P("back")) ? "나뉘지 않은 앞판·뒤판일 때만 1차 지원" : !(sl2 && cap2) ? "소매 Ⓐ(변 이름이 있는 소매)만 1차 지원" : !(AH2 && AH2.front > 0 && AH2.back > 0) ? "완료 몸판의 봉제 진동 길이 기록이 없음" : null;
+    var pr2 = null; if (!ahWhy) { try { pr2 = DS2.capPrimitives(R.sleeve.geometry); } catch (x) { pr2 = null; } if (!pr2) ahWhy = "소매산 앞/뒤 분할을 잴 수 없음"; }
+    var ah = { ok: false, split: sp, book: sp === EASE_BOOK };
+    if (!ahWhy) {
+      var sides = {}, bad = null;
+      ["front", "back"].forEach(function (pid) {
+        var p = P(pid), e = E(p, "armhole"); if (!e) { bad = "몸판 진동 변을 찾지 못함"; return; }
+        var ch = sewnChain(p, e), L = chainLen(ch), sh = E(p, "shoulder"), sd = E(p, "side-seam");
+        if (!sh || !sd) { bad = "진동 양 끝(어깨·옆선) 변을 찾지 못함"; return; }
+        var endPt = ch[ch.length - 1].to, startPt = ch[0].from, touch = function (q, ed) { return edgeChain(p, ed).some(function (g) { return Math.hypot(g.from.x - q.x, g.from.y - q.y) <= NOTCH_JOIN || Math.hypot(g.to.x - q.x, g.to.y - q.y) <= NOTCH_JOIN; }); };
+        var spAtEnd = touch(endPt, sh) && touch(startPt, sd), spAtStart = touch(startPt, sh) && touch(endPt, sd);
+        if (!(spAtEnd || spAtStart)) { bad = "진동의 어깨점·진동 아랫점을 정하지 못함"; return; }
+        if (Math.abs(L - AH2[pid]) > 0.02) { bad = (pid === "front" ? "앞" : "뒤") + " 진동 봉제 길이(" + c2s(r4(L)) + ")가 완료 몸판 기록(" + c2s(AH2[pid]) + ")과 다름"; return; }
+        sides[pid] = { p: p, e: e, L: L, spAtEnd: spAtEnd };
+      });
+      if (bad) ahWhy = bad;
+      var capCh = !ahWhy ? edgeChain(sl2, cap2) : null, capL = capCh ? chainLen(capCh) : 0, s0c = capCh ? arcAtVertex(capCh, pr2.splitPoint) : null;
+      if (!ahWhy && s0c == null) ahWhy = "소매산점을 소매산 선 위에서 찾지 못함";
+      if (!ahWhy) {
+        var backFirst = Math.abs(s0c - pr2.lengths.back) < Math.abs(s0c - pr2.lengths.front);   // 소매산 선이 뒤쪽 아랫점에서 시작하는가
+        var BOD = { back: { up: 6, low: 6.5 }, front: { up: 6, low: 5 } };
+        var tot = (pr2.lengths.back + pr2.lengths.front) - (AH2.back + AH2.front), r1 = function (v) { return Math.round(v * 10) / 10; };
+        var eB = { low: r1(tot * sp.back[0] / 100), mid: r1(tot * sp.back[1] / 100), up: r1(tot * sp.back[2] / 100) }, eF = { up: r1(tot * sp.front[0] / 100), mid: r1(tot * sp.front[1] / 100), low: r1(tot * sp.front[2] / 100) };
+        var capLenSide = { back: pr2.lengths.back, front: pr2.lengths.front }, EZ = { back: eB, front: eF };
+        ah = { ok: true, split: sp, book: sp === EASE_BOOK, totalEaseCm: r4(tot), sides: {} };
+        ["back", "front"].forEach(function (k) {
+          var sd = sides[k], kn = k === "back" ? "뒤" : "앞", ez = EZ[k], sideEase = capLenSide[k] - AH2[k], midRest = sideEase - ez.up - ez.low;
+          var bUp = sd.spAtEnd ? sd.L - BOD[k].up : BOD[k].up, bLow = sd.spAtEnd ? BOD[k].low : sd.L - BOD[k].low;
+          // 소매: 소매산점에서 위 너치까지(6 + 이즈) · 소매 아랫점에서 아래 너치까지
+          var sUpFromTop = BOD[k].up + ez.up, sLowFromU = BOD[k].low + ez.low;
+          var sUp = (k === "back") === backFirst ? s0c - sUpFromTop : s0c + sUpFromTop, sLow = (k === "back") === backFirst ? sLowFromU : capL - sLowFromU;
+          var midBody = AH2[k] - BOD[k].up - BOD[k].low, midSleeve = capLenSide[k] - sUpFromTop - sLowFromU;
+          ah.sides[k] = { bodyCm: r4(AH2[k]), capCm: r4(capLenSide[k]), sideEaseCm: r4(sideEase), ease: ez, midEaseCm: r4(midRest), midBodyCm: r4(midBody), midSleeveCm: r4(midSleeve) };
+          if (!(midBody > 0) || !(midSleeve > 0)) { todo.push({ what: kn + " 진동·소매산 너치", why: "너치 사이 가운데 구간이 0 이하(몸판 " + c2s(r4(midBody)) + " · 소매 " + c2s(r4(midSleeve)) + "cm) — 진동이 너무 짧거나 이즈 배분이 맞지 않음" }); return; }
+          var pct = k === "back" ? { up: sp.back[2], low: sp.back[0] } : { up: sp.front[0], low: sp.front[2] };
+          var note = (midRest < -0.005 ? " · 가운데 구간 이즈 " + c2s(r4(midRest)) + "(음수 — 소매가 오그라듦)" : " · 가운데 구간 이즈 " + c2s(r4(midRest)));
+          var src = "[패턴학교] P.165 «진동 둘레·소매산» — 몸판 = 현재 완료 몸판 봉제 진동(다트 닫음) · 소매 = 그 몸판 위치 + 구간 이즈(전체 이즈 " + c2s(r4(tot)) + " × 비율, 0.1 반올림)";
+          add(sd.p, sd.e, bUp, { id: k + "-ah-up", kind: "ah", name: kn + " 진동 위", pairId: k + "-ah-up", side: kn + "판", basis: src, ref: "어깨점(SP)에서 봉제 진동 " + c2s(BOD[k].up),
+            pair: { a: "몸판 SP 에서 " + c2s(BOD[k].up), b: "소매산점에서 " + c2s(BOD[k].up) + " + 이즈 " + c2s(ez.up) + " (" + pct.up + "%) = " + c2s(r4(sUpFromTop)), diffCm: ez.up, diffText: "이즈" } });
+          add(sd.p, sd.e, bLow, { id: k + "-ah-low", kind: "ah", name: kn + " 진동 아래", pairId: k + "-ah-low", side: kn + "판", basis: src, ref: "진동 아랫점(옆선 끝)에서 봉제 진동 " + c2s(BOD[k].low),
+            pair: { a: "몸판 진동 아랫점에서 " + c2s(BOD[k].low), b: "소매 아랫점에서 " + c2s(BOD[k].low) + " + 이즈 " + c2s(ez.low) + " (" + pct.low + "%) = " + c2s(r4(sLowFromU)), diffCm: ez.low, diffText: "이즈" } });
+          add(sl2, cap2, sUp, { id: "sleeve-" + k + "-up", kind: "cap", name: kn + " 소매산 위", pairId: k + "-ah-up", side: "소매", basis: src + note, ref: "소매산점에서 " + c2s(r4(sUpFromTop)) + "(" + kn + "쪽)",
+            pair: { a: "몸판 SP 에서 " + c2s(BOD[k].up), b: "소매산점에서 " + c2s(r4(sUpFromTop)), diffCm: ez.up, diffText: "이즈" } });
+          add(sl2, cap2, sLow, { id: "sleeve-" + k + "-low", kind: "cap", name: kn + " 소매산 아래", pairId: k + "-ah-low", side: "소매", basis: src + note, ref: "소매 아랫점에서 " + c2s(r4(sLowFromU)) + "(" + kn + "쪽)",
+            pair: { a: "몸판 진동 아랫점에서 " + c2s(BOD[k].low), b: "소매 아랫점에서 " + c2s(r4(sLowFromU)), diffCm: ez.low, diffText: "이즈" } });
+        });
+      }
+    }
+    if (ahWhy) todo.push({ what: "진동 둘레·소매산 너치", why: ahWhy });
+    todo.push({ what: "다트 위치 · 개더 끝 · EL · 트임 끝 · 칼라 달림 끝", why: "다트 산 시접 위 표시 방향·개더 구간·EL 권위가 1차에 없음(트임 끝은 소매 위 «가위집» 표시로 대신)" });
+    return { list: list, todo: todo, armhole: ah };
+  }
+  // 표시 선: 완성선 점에서 바깥 법선으로 그 변의 시접선(재단선)까지. 시접 폭 0·시접 미완이면 선 없음 + 사유.
+  function notchLine(p, n, sm) {
+    var e = p.edges.filter(function (x) { return x.id === n.edgeId; })[0], at = e && pointAtArc(sewnChain(p, e), n.atCm);
+    if (!at) return { why: "변을 찾지 못함" };
+    var se = sm.edges.filter(function (x) { return x.id === n.edgeId; })[0], tl = Math.hypot(at.tan.x, at.tan.y);
+    if (!se) return { why: "변 시접 정보 없음" };
+    if (se.widthCm === 0) return { from: at.pt, to: null, why: se.kind === "fold" ? "골선(시접 0) — 재단선 표시 없음" : "시접 0 — 재단선 표시 없음" };
+    var path = sm.edgePaths && sm.edgePaths[n.edgeId]; if (!sm.ok || !path) return { from: at.pt, to: null, why: "이 조각 시접 미완 — 재단선 표시 없음" };
+    var nx = at.tan.y / tl, ny = -at.tan.x / tl, best = null;
+    for (var sgn = -1; sgn <= 1; sgn += 2) for (var i = 0; i + 1 < path.length; i++) {
+      var a = path[i], b = path[i + 1], rx = b.x - a.x, ry = b.y - a.y, dx = nx * sgn, dy = ny * sgn, den = dx * ry - dy * rx; if (Math.abs(den) < 1e-12) continue;
+      var wx = a.x - at.pt.x, wy = a.y - at.pt.y, t = (wx * ry - wy * rx) / den, u = (wx * dy - wy * dx) / den;
+      if (t > 1e-9 && u >= -1e-9 && u <= 1 + 1e-9 && (!best || t < best.t)) best = { t: t, x: at.pt.x + dx * t, y: at.pt.y + dy * t };
+    }
+    if (!best) return { from: at.pt, to: null, why: "직각선이 시접선과 만나지 않음" };
+    return { from: at.pt, to: { x: best.x, y: best.y }, lenCm: r4(best.t) };
+  }
+
+  // ══ 사용자 맞춤 표시 · 이즈 배분 저장(working.cutNotches · 판 1 · 김님 승인 2026-11-15) ══
+  //   { schema:1, easeSplit?: { back:[아래,가운데,위], front:[위,가운데,아래] }, notches: { "u1": { piece, edge, atCm, sig, label, pair? } } }
+  //   · 시접 설정(cutSpec)과 따로 둔다(그쪽 엄격 검증·값 무변경). 완료본·hash 와 무관. 항목이 없으면 기본(책 배분 · 사용자 너치 없음).
+  //   · 엄격 검증: 모르는 키·판·유한하지 않은 값·음수·합 ≠ 100·짝 불일치 = 통째로 «읽을 수 없음»(고쳐 쓰지 않음 · 수정 잠금).
+  //   · atCm = 변 «시작 끝»에서 잰 봉제 경로 거리(다트 다리 제외). 변이 사라지거나 모양(서명)이 바뀌거나 길이를 넘으면 «연결 끊김»으로 보류(삭제·자동 이동 없음).
+  var NOTCH_ID = /^u[1-9][0-9]{0,5}$/;
+  function readNotchSpec(proj) {
+    var s = proj && proj.working ? proj.working.cutNotches : null, none = { state: "none", split: null, notches: {} };
+    if (s == null) return none;
+    var bad = function (r) { return { state: "invalid", reason: r, split: null, notches: {} }; };
+    if (typeof s !== "object" || Array.isArray(s)) return bad("형식이 객체가 아닙니다");
+    var ks = Object.keys(s);
+    if (!ks.every(function (k) { return k === "schema" || k === "easeSplit" || k === "notches"; }) || ks.indexOf("schema") < 0 || ks.indexOf("notches") < 0) return bad("모르는 항목이 있거나 필수 항목이 없습니다");
+    if (s.schema !== 1) return bad("모르는 판(schema " + s.schema + ")입니다");
+    var split = null;
+    if (s.easeSplit !== undefined) { var v = validSplit(s.easeSplit); if (!v.ok) return bad("이즈 배분 — " + v.reason); split = s.easeSplit; }
+    if (!s.notches || typeof s.notches !== "object" || Array.isArray(s.notches)) return bad("맞춤 표시 목록 형식 오류");
+    var ids = Object.keys(s.notches), pairs = {};
+    for (var i = 0; i < ids.length; i++) {
+      var n = s.notches[ids[i]];
+      if (!NOTCH_ID.test(ids[i]) || !n || typeof n !== "object" || Array.isArray(n)) return bad("맞춤 표시 항목 형식 오류(" + ids[i] + ")");
+      if (!Object.keys(n).every(function (k) { return ["piece", "edge", "atCm", "sig", "label", "pair"].indexOf(k) >= 0; })) return bad("맞춤 표시 항목에 모르는 키(" + ids[i] + ")");
+      if (typeof n.piece !== "string" || typeof n.edge !== "string" || typeof n.sig !== "string" || typeof n.label !== "string" || /\|/.test(n.piece + n.edge)) return bad("맞춤 표시 항목의 조각·변·서명 누락(" + ids[i] + ")");
+      if (!(typeof n.atCm === "number" && isFinite(n.atCm) && n.atCm >= 0 && n.atCm <= 500)) return bad("맞춤 표시 위치가 0~500cm 숫자가 아닙니다(" + ids[i] + ")");
+      if (n.pair !== undefined) { if (typeof n.pair !== "string" || !NOTCH_ID.test(n.pair) || n.pair === ids[i]) return bad("짝 지정 오류(" + ids[i] + ")"); pairs[ids[i]] = n.pair; }
+    }
+    var pk = Object.keys(pairs);
+    for (var j = 0; j < pk.length; j++) { var o = pairs[pk[j]]; if (pairs[o] !== pk[j]) return bad("짝이 서로 가리키지 않습니다(" + pk[j] + " → " + o + ")"); if (s.notches[o].piece === s.notches[pk[j]].piece && s.notches[o].edge === s.notches[pk[j]].edge) return bad("같은 변끼리 짝(" + pk[j] + ")"); }
+    return { state: "ok", split: split, notches: s.notches };
+  }
+  function validSplit(sp) {
+    if (!sp || typeof sp !== "object" || Array.isArray(sp) || Object.keys(sp).sort().join(",") !== "back,front") return { ok: false, reason: "back·front 두 항목이어야 합니다" };
+    var all = [];
+    for (var k in { back: 1, front: 1 }) { var a = sp[k]; if (!Array.isArray(a) || a.length !== 3 || !a.every(function (v) { return typeof v === "number" && isFinite(v) && v >= 0 && v <= 100; })) return { ok: false, reason: (k === "back" ? "뒤" : "앞") + " 구간 비율 3개가 0~100 숫자여야 합니다" }; all = all.concat(a); }
+    var sum = all.reduce(function (t, v) { return t + v; }, 0);
+    if (Math.abs(sum - 100) > 1e-9) return { ok: false, reason: "여섯 구간 비율의 합이 100 이어야 합니다(지금 " + (Math.round(sum * 1000) / 1000) + ")" };
+    return { ok: true };
+  }
+  function notchStore(proj) {
+    var sp = readNotchSpec(proj); if (sp.state === "invalid") return { err: "저장된 맞춤 표시 설정을 읽을 수 없어 고치지 않습니다 — " + sp.reason };
+    if (!proj.working.cutNotches) proj.working.cutNotches = { schema: 1, notches: {} };
+    return { s: proj.working.cutNotches };
+  }
+  function findEdge(d, pid, eid) { var p = d.pieces.filter(function (x) { return x.id === pid && x.check.ok && x.edges; })[0], e = p && p.edges.filter(function (x) { return x.id === eid; })[0]; return e ? { p: p, e: e, L: chainLen(sewnChain(p, e)) } : null; }
+  function addNotch(pid, eid, atCm, proj) {
+    proj = proj || project(); var d = derive(proj, true); if (d.state !== "ready") return { ok: false, reason: d.reason };
+    var f = findEdge(d, pid, eid); if (!f) return { ok: false, reason: "이 변을 찾을 수 없습니다" };
+    if (!(typeof atCm === "number" && isFinite(atCm) && atCm >= 0 && atCm <= f.L)) return { ok: false, reason: "위치는 0~" + c2s(r4(f.L)) + "cm 사이 숫자여야 합니다" };
+    var st = notchStore(proj); if (st.err) return { ok: false, reason: st.err };
+    var n = 1; Object.keys(st.s.notches).forEach(function (k) { n = Math.max(n, Number(k.slice(1)) + 1); });
+    var id = "u" + n; st.s.notches[id] = { piece: pid, edge: eid, atCm: r4(atCm), sig: f.e.sig, label: f.p.label + " · " + f.e.name };
+    return { ok: true, id: id };
+  }
+  function moveNotch(id, atCm, proj) {
+    proj = proj || project(); var sp = readNotchSpec(proj); if (sp.state === "invalid") return { ok: false, reason: "저장된 맞춤 표시 설정을 읽을 수 없어 고치지 않습니다 — " + sp.reason };
+    var n = sp.notches[id]; if (!n) return { ok: false, reason: "이 맞춤 표시가 없습니다" };
+    var d = derive(proj, true); if (d.state !== "ready") return { ok: false, reason: d.reason };
+    var f = findEdge(d, n.piece, n.edge); if (!f) return { ok: false, reason: "이 변이 지금 조각에 없습니다(연결 끊김)" };
+    if (!(typeof atCm === "number" && isFinite(atCm) && atCm >= 0 && atCm <= f.L)) return { ok: false, reason: "위치는 0~" + c2s(r4(f.L)) + "cm 사이 숫자여야 합니다" };
+    n.atCm = r4(atCm); n.sig = f.e.sig;   // 사용자가 지금 변 위에서 정했다 = 지금 모양에 다시 연결
+    return { ok: true };
+  }
+  function removeNotch(id, proj) {
+    proj = proj || project(); var sp = readNotchSpec(proj); if (sp.state === "invalid") return { ok: false, reason: "저장된 맞춤 표시 설정을 읽을 수 없어 고치지 않습니다 — " + sp.reason };
+    var n = sp.notches[id]; if (!n) return { ok: false, reason: "이 맞춤 표시가 없습니다" };
+    if (n.pair && sp.notches[n.pair]) delete sp.notches[n.pair].pair;
+    delete sp.notches[id]; return { ok: true };
+  }
+  function pairNotches(a, b, proj) {
+    proj = proj || project(); var sp = readNotchSpec(proj); if (sp.state === "invalid") return { ok: false, reason: "저장된 맞춤 표시 설정을 읽을 수 없어 고치지 않습니다 — " + sp.reason };
+    var A = sp.notches[a]; if (!A) return { ok: false, reason: "이 맞춤 표시가 없습니다" };
+    if (b == null) { if (A.pair && sp.notches[A.pair]) delete sp.notches[A.pair].pair; delete A.pair; return { ok: true }; }
+    var B = sp.notches[b]; if (!B || a === b) return { ok: false, reason: "짝으로 고를 맞춤 표시가 없습니다" };
+    if (A.piece === B.piece && A.edge === B.edge) return { ok: false, reason: "같은 변끼리는 짝이 될 수 없습니다(봉제로 붙는 다른 변을 고르세요)" };
+    [A, B].forEach(function (x) { if (x.pair && sp.notches[x.pair]) delete sp.notches[x.pair].pair; });
+    A.pair = b; B.pair = a; return { ok: true };
+  }
+  function setEaseSplit(split, proj) {
+    proj = proj || project();
+    if (split !== null) { var v = validSplit(split); if (!v.ok) return { ok: false, reason: v.reason }; }
+    var st = notchStore(proj); if (st.err) return { ok: false, reason: st.err };
+    if (split === null) delete st.s.easeSplit; else st.s.easeSplit = { back: split.back.slice(), front: split.front.slice() };
+    return { ok: true };
+  }
+  // 사용자 맞춤 표시 해석(조각·변·서명·길이) → 표시 목록 + 연결 끊김
+  function userNotchesOf(d, sp) {
+    var list = [], orphans = [];
+    Object.keys(sp.notches).sort(function (a, b) { return Number(a.slice(1)) - Number(b.slice(1)); }).forEach(function (id) {
+      var n = sp.notches[id], f = findEdge(d, n.piece, n.edge), why = !f ? (d.pieces.some(function (p) { return p.id === n.piece; }) ? "이 변이 지금 조각에 없습니다" : "이 조각이 지금 재단 조각에 없습니다")
+        : f.e.sig !== n.sig ? "변 모양이 바뀌었습니다 — 위치를 다시 확인하고 «다시 연결»" : n.atCm > f.L + 1e-9 ? "변이 짧아져 위치(" + c2s(n.atCm) + ")가 변 길이(" + c2s(r4(f.L)) + ")를 넘습니다" : null;
+      if (why) { orphans.push({ id: id, label: n.label, atCm: n.atCm, pair: n.pair || null, why: why, canReconnect: !!f && n.atCm <= f.L + 1e-9 }); return; }
+      list.push({ id: id, pieceId: n.piece, edgeId: n.edge, atCm: n.atCm, edgeLenCm: f.L, sig: n.sig, user: true, name: "맞춤 " + id.slice(1), pairId: n.pair || null, side: f.p.label, basis: "사용자 지정(변 시작 끝에서 봉제 경로 " + c2s(n.atCm) + "cm)", ref: "변 시작 끝에서 " + c2s(n.atCm) });
+    });
+    // 짝 설명(서로의 위치를 양 끝에서) — 자동 이즈 판단은 하지 않는다
+    list.forEach(function (n) {
+      if (!n.pairId) return; var o = list.filter(function (x) { return x.id === n.pairId; })[0];
+      n.pair = o ? { a: n.side + " · 시작에서 " + c2s(n.atCm) + " / 끝에서 " + c2s(r4(n.edgeLenCm - n.atCm)), b: o.side + " · 시작에서 " + c2s(o.atCm) + " / 끝에서 " + c2s(r4(o.edgeLenCm - o.atCm)), diffCm: null } : { a: n.side, b: "짝(" + n.pairId + ")이 연결 끊김 상태", diffCm: null };
+    });
+    return { list: list, orphans: orphans };
+  }
+  function reconnectNotch(id, proj) {
+    proj = proj || project(); var sp = readNotchSpec(proj); if (sp.state === "invalid") return { ok: false, reason: "저장된 맞춤 표시 설정을 읽을 수 없어 고치지 않습니다 — " + sp.reason };
+    var n = sp.notches[id]; if (!n) return { ok: false, reason: "이 맞춤 표시가 없습니다" };
+    var d = derive(proj, true); if (d.state !== "ready") return { ok: false, reason: d.reason };
+    var f = findEdge(d, n.piece, n.edge); if (!f) return { ok: false, reason: "이 변이 지금 조각에 없어 다시 연결할 수 없습니다 — 지우거나 다른 변에 새로 추가하세요" };
+    if (n.atCm > f.L + 1e-9) return { ok: false, reason: "위치가 지금 변 길이를 넘어 다시 연결할 수 없습니다" };
+    n.sig = f.e.sig; return { ok: true };
+  }
+
   // 가벼운 상태 확인(조각을 만들지 않는다) — 탭 활성·안내용. derive 와 같은 판정·같은 문구.
   function peek(proj) {
     var d = gate(proj || project());
@@ -647,12 +929,14 @@
     var d = gate(proj || project()); if (!d.latest) return d;
     var latest = d.latest, b = buildPieces(latest, !!withEdges), bad = b.pieces.filter(function (p) { return !p.check.ok; }).length;
     proj = proj || project();
-    return deepFreeze({
+    var out = {
       state: "ready", resultHash: latest.hash, completedAt: latest.completedAt || null,
       sourceBlock: { version: latest.sourceBlock ? latest.sourceBlock.version : null },
       pieces: b.pieces, missing: b.missing, excluded: b.excluded, info: b.info, failedPieces: bad,
       previewPartsIgnored: !!(proj.working && Array.isArray(proj.working.parts) && proj.working.parts.length)
-    });
+    };
+    if (withEdges) { var nsp = readNotchSpec(proj); out.notches = notchesOf(latest, b.pieces, nsp.split); }   // 맞춤 표시는 요청할 때만(기본 derive 출력은 그대로)
+    return deepFreeze(out);
   }
   function gate(proj) {
     var DR = W().designResult;
@@ -672,7 +956,7 @@
     return { latest: latest };
   }
 
-  var model = { peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
+  var model = { readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
 
   // ══ 화면(읽기 전용 오버레이) ══ ─────────────────────────────────────
   var NS = "http://www.w3.org/2000/svg", GAP = 6;
@@ -752,6 +1036,10 @@
       var cx = (p.bbox.minX + p.bbox.maxX) / 2, cy = (p.bbox.minY + p.bbox.maxY) / 2, fs = Math.max(1.2, Math.min(2.4, p.widthCm / 9));
       g.appendChild(el("text", { "class": "cut-piece-label", x: cx, y: cy, "font-size": fs }, p.label));
       g.appendChild(el("text", { "class": "cut-piece-size", x: cx, y: cy + fs * 1.15, "font-size": fs * 0.72 }, fmt(p.widthCm) + " × " + fmt(p.heightCm) + " cm"));
+      if (sm && sm.notches) sm.notches.forEach(function (n) {   // 맞춤 표시: 완성선 점 → 직각으로 재단선까지(시접 0 이면 점만)
+        if (n.to) g.appendChild(el("path", { "class": "cut-notch", "data-notch": n.id, d: "M" + n.from.x + " " + n.from.y + " L" + n.to.x + " " + n.to.y }));
+        else if (n.from) g.appendChild(el("circle", { "class": "cut-notch-dot", "data-notch": n.id, cx: n.from.x, cy: n.from.y, r: 0.25 }));
+      });
       if (sm && p.edges) p.edges.forEach(function (e, k) {   // 변: 골선 표시 · 선택 강조 · 누르는 자리(맨 위)
         var se = sm.edges[k], ed = pathD(e.segs.map(function (ix) { return p.segs[ix]; })), on = view.edge && view.edge.piece === p.id && view.edge.id === e.id;
         if (se.kind === "fold") { g.appendChild(el("path", { "class": "cut-edge-fold", d: ed }));
@@ -807,6 +1095,7 @@
     if (sm.ok) t += "<span class=\"ci-ok\">시접 완료 · " + (ex ? "직접 지정 " + ex + "곳" : "기본값(1cm · 골선 0)") + "</span>";
     else t += "<span class=\"ci-bad\">시접 미완 — " + esc(sm.refusals.map(function (r) { var nm = r.edgeIds.map(function (id) { var e = sm.edges.filter(function (x) { return x.id === id; })[0]; return e ? e.name : id; }).join("·"); return (nm ? nm + ": " : "") + r.reason; }).join(" / ")) + "</span>";
     if (sm.edges.length === 1 && sm.edges[0].whole) t += "<span class=\"ci-note\">" + esc(sm.edges[0].wholeReason) + " — 조각 전체 한 값</span>";
+    if (sm.notches && sm.notches.length) t += "<span class=\"ci-notch\">맞춤 표시 " + sm.notches.length + " — " + esc(sm.notches.map(function (n) { return n.name + (n.to ? "" : "(재단선 없음)"); }).join(" · ")) + "</span>";
     sm.darts.forEach(function (q) { t += "<span class=\"ci-note\">다트 시접: " + (/armhole/.test(q.edgeId) ? "아래(허리) 쪽으로 눕혀" : "중심 쪽 겹이 위로 오게") + " 접은 모양" + (q.legMismatchCm > 0.005 ? " · 다트 두 다리 길이 차 " + c2s(q.legMismatchCm) + "cm 는 고치지 않음(맞춤 = 패턴 확정 단계)" : "") + "</span>"; });
     return t;
   }
@@ -852,6 +1141,17 @@
       sv.orphans.forEach(function (o) { box.appendChild(li("cut-miss", "<b>" + esc(o.label) + "</b> " + (o.kind === "fold" ? "골선" : (o.widthCm != null ? c2s(o.widthCm) + "cm" : "")) + " — " + esc(o.why) + " · 다른 변에 자동으로 옮기지 않았습니다(해당 선을 눌러 다시 지정)")); });
       var ob = li("cut-item", ""), bb = document.createElement("button"); bb.type = "button"; bb.className = "btn"; bb.dataset.act = "clear-orphans"; bb.textContent = "끊긴 설정 지우기"; ob.appendChild(bb); box.appendChild(ob);
     }
+    if (sv && sv.notchSpec && sv.notchSpec.state === "invalid") box.appendChild(li("cut-miss", "<b>저장된 맞춤 표시 설정을 읽을 수 없습니다</b> " + esc(sv.notchSpec.reason) + " — 기본 표시만 보이고 저장된 값은 고치지 않았습니다(수정 잠김)"));
+    if (sv && sv.notchOrphans && sv.notchOrphans.length) {
+      box.appendChild(li("cut-list-h", "연결이 끊긴 맞춤 표시 " + sv.notchOrphans.length + "개"));
+      sv.notchOrphans.forEach(function (o) { var it2 = li("cut-miss", "<b>" + esc(o.label) + " · 맞춤 " + esc(o.id.slice(1)) + "</b> 시작에서 " + c2s(o.atCm) + "cm — " + esc(o.why) + " · 다른 변으로 옮기지 않았습니다 ");
+        if (o.canReconnect) { var rb = document.createElement("button"); rb.type = "button"; rb.className = "btn"; rb.dataset.act = "nrecon"; rb.dataset.id = o.id; rb.textContent = "이 위치로 다시 연결"; it2.appendChild(rb); }
+        var db = document.createElement("button"); db.type = "button"; db.className = "btn"; db.dataset.act = "norph-del"; db.dataset.id = o.id; db.textContent = "지우기"; it2.appendChild(db); box.appendChild(it2); });
+    }
+    if (d.notches && d.notches.todo.length) {
+      box.appendChild(li("cut-list-h", "맞춤 표시 — 아직 만들지 않은 것"));
+      d.notches.todo.forEach(function (t) { box.appendChild(li("cut-miss", "<b>" + esc(t.what) + "</b> " + esc(t.why))); });
+    }
     var notes = d.info.concat(d.excluded.map(function (x) { return x.label + ": " + x.reason; }));
     if (d.previewPartsIgnored) notes.push("디자인 화면의 «파트 분리» 미리보기는 완료 패키지에 없어 재단 조각에 넣지 않았습니다");
     if (notes.length) { box.appendChild(li("cut-list-h", "참고")); notes.forEach(function (t) { box.appendChild(li("cut-info", esc(t))); }); }
@@ -888,7 +1188,63 @@
     if (locked) parts.push("저장된 시접 설정을 읽을 수 없어 수정이 잠겼습니다");
     if (view.cardMsg) parts.push(view.cardMsg);
     $("cutSeamMsg").textContent = parts.join(" · ");
+    var ni = $("cutNotchInfo"), all = (c.sm.notches || []).filter(function (n) { return n.edgeId === e.id; }), defs = all.filter(function (n) { return !n.user; }), users = all.filter(function (n) { return n.user; });
+    var pe = c.piece.edges, k0 = pe.map(function (x) { return x.id; }).indexOf(e.id), endA = pe[(k0 - 1 + pe.length) % pe.length].name, endB = pe[(k0 + 1) % pe.length].name;
+    if (ni) { ni.hidden = !defs.length; ni.textContent = defs.map(function (n) {
+      return "기본 «" + n.name + "» — " + (n.ref || "변 시작에서 " + c2s(n.atCm)) + " (" + "«" + endA + "» 쪽 끝에서 " + c2s(n.atCm) + " / «" + endB + "» 쪽 끝에서 " + c2s(n.edgeLenCm - n.atCm) + ")" + (n.to ? " · 재단선까지 " + c2s(n.lenCm) + "cm" : " · " + n.why) +
+        (n.pair ? " · 짝: " + n.pair.a + " ↔ " + n.pair.b + (n.pair.diffCm != null ? " (" + (n.pair.diffText || "차이") + " " + c2s(n.pair.diffCm) + ")" : "") : " · 짝 없음(위치 표시)") + " · 근거: " + n.basis;
+    }).join("\n"); }
+    var ne = $("cutNotchEdit");
+    if (ne) {
+      var nlock = view.seam.notchSpec.state === "invalid", L = c.sm.edges && (function () { var f = c.piece.edges.filter(function (x) { return x.id === e.id; })[0]; return chainLen(sewnChain(c.piece, f)); })();
+      var others = []; Object.keys(view.seam.pieces).forEach(function (pid) { (view.seam.pieces[pid].notches || []).forEach(function (n) { if (n.user) others.push(n); }); });
+      var h = "<div class=\"cne-head\"><b>사용자 맞춤 표시</b><button type=\"button\" class=\"btn\" data-act=\"nadd\"" + (nlock ? " disabled" : "") + ">＋ 누른 자리에 추가</button></div>";
+      if (nlock) h += "<p class=\"cne-note\">저장된 맞춤 표시 설정을 읽을 수 없어 수정이 잠겼습니다 — " + esc(view.seam.notchSpec.reason) + "</p>";
+      users.forEach(function (n) {
+        var opts = "<option value=\"\">짝 없음</option>" + others.filter(function (o) { return o.id !== n.id && !(o.pieceId === n.pieceId && o.edgeId === n.edgeId); }).map(function (o) { return "<option value=\"" + o.id + "\"" + (n.pairId === o.id ? " selected" : "") + ">" + esc(o.name + " · " + o.side) + "</option>"; }).join("");
+        h += "<div class=\"cne-row\" data-id=\"" + n.id + "\"><b>" + esc(n.name) + "</b><label>«" + esc(endA) + "» 쪽 끝에서 <input type=\"number\" inputmode=\"decimal\" step=\"0.1\" min=\"0\" max=\"" + r4(L) + "\" value=\"" + n.atCm + "\" data-act=\"nmove\"" + (nlock ? " disabled" : "") + "> cm</label>" +
+          "<span class=\"cne-note\">«" + esc(endB) + "» 쪽 끝에서 " + c2s(r4(L - n.atCm)) + " · " + (n.to ? "재단선까지 " + c2s(n.lenCm) : esc(n.why || "")) + "</span>" +
+          "<label>짝 <select data-act=\"npair\"" + (nlock ? " disabled" : "") + ">" + opts + "</select></label><button type=\"button\" class=\"btn\" data-act=\"ndel\"" + (nlock ? " disabled" : "") + ">삭제</button>" +
+          (n.pair ? "<span class=\"cne-note\">짝: " + esc(n.pair.a + " ↔ " + n.pair.b) + " (자동 이즈 판단 없음 — 위치는 각각 직접 지정)</span>" : "") + "</div>";
+      });
+      var A = view.seam.armhole;
+      if (A && A.ok && (e.id === "armhole" || e.id === "cap")) {
+        var sp = A.split, inp = function (key, v, lab) { return "<label>" + lab + " <input type=\"number\" inputmode=\"decimal\" step=\"1\" min=\"0\" max=\"100\" value=\"" + v + "\" data-ek=\"" + key + "\"" + (nlock ? " disabled" : "") + ">%</label>"; };
+        h += "<div class=\"cne-ease\"><b>진동·소매산 이즈 배분(구간별 % · 여섯 칸 합 100)</b> " + (A.book ? "책 기본값" : "사용자 수정값") + " · 전체 이즈 " + c2s(A.totalEaseCm) + "cm<br>" +
+          inp("b0", sp.back[0], "뒤 아래") + inp("b1", sp.back[1], "뒤 가운데") + inp("b2", sp.back[2], "뒤 위") + inp("f0", sp.front[0], "앞 위") + inp("f1", sp.front[1], "앞 가운데") + inp("f2", sp.front[2], "앞 아래") +
+          "<button type=\"button\" class=\"btn\" data-act=\"esave\"" + (nlock ? " disabled" : "") + ">배분 적용</button><button type=\"button\" class=\"btn\" data-act=\"ebook\"" + (nlock || A.book ? " disabled" : "") + ">책 기본값</button>" +
+          "<span class=\"cne-note\">너치는 위·아래에만 둔다 — 가운데 구간은 실제 이즈의 나머지를 흡수(뒤 " + c2s(A.sides.back.midEaseCm) + " · 앞 " + c2s(A.sides.front.midEaseCm) + "cm). 배분을 바꾸면 소매 쪽 너치만 움직이고 몸판 너치·소매 형상·시접선은 그대로.</span></div>";
+      }
+      ne.innerHTML = h; ne.hidden = false;
+    }
     card.dataset.state = why.length || locked ? "warn" : "ok";
+  }
+  // 화면에서 누른 점에 가장 가까운 봉제 경로 위치(호 길이) — 사용자 맞춤 표시를 «누른 자리»에 넣을 때만 쓴다
+  function arcNear(pid, eid, q) {
+    var p = view.data && view.data.pieces.filter(function (x) { return x.id === pid; })[0], e = p && p.edges && p.edges.filter(function (x) { return x.id === eid; })[0]; if (!e) return null;
+    var ch = sewnChain(p, e), acc = 0, best = null;
+    ch.forEach(function (g) { var L = segLenOf(g), N = g.kind === "cubic" ? 200 : 1, prev = g.from, a = acc;
+      for (var k = 1; k <= N; k++) { var cur = g.kind === "cubic" ? cubicAt(g, k / N) : g.to, vx = cur.x - prev.x, vy = cur.y - prev.y, l2 = vx * vx + vy * vy, t = l2 ? Math.max(0, Math.min(1, ((q.x - prev.x) * vx + (q.y - prev.y) * vy) / l2)) : 0, dd = Math.hypot(q.x - prev.x - vx * t, q.y - prev.y - vy * t), sl = Math.sqrt(l2);
+        if (!best || dd < best.d) best = { d: dd, s: a + sl * t }; a += sl; prev = cur; }
+      acc += L; });
+    return best ? Math.max(0, Math.min(acc, best.s)) : null;
+  }
+  function notchAct(t) {
+    var act = t.getAttribute("data-act"), row = t.closest(".cne-row"), id = row && row.getAttribute("data-id"), r = null, c = curEdge(); if (!c) return;
+    if (act === "nadd") {
+      var ca = view.clickAt, at = ca && ca.piece === c.piece.id && ca.edge === c.e.id && ca.at != null ? ca.at : null;
+      if (at == null) { var f = c.piece.edges.filter(function (x) { return x.id === c.e.id; })[0]; at = chainLen(sewnChain(c.piece, f)) / 2; }
+      r = addNotch(c.piece.id, c.e.id, at, view.proj); reseam(r.ok ? "맞춤 표시 추가 — 위치는 아래 칸에서 cm 로 고칠 수 있습니다 · 프로젝트를 저장해야 파일에 남습니다" : "추가 안 됨: " + r.reason); return;
+    }
+    if (act === "ndel") { r = removeNotch(id, view.proj); reseam(r.ok ? "맞춤 표시 삭제됨" : "삭제 안 됨: " + r.reason); return; }
+    if (act === "nmove") { var v = t.value === "" ? NaN : Number(t.value); r = moveNotch(id, v, view.proj); reseam(r.ok ? "위치 바뀜 — 재단선 표시도 다시 그림" : "위치 안 바뀜: " + r.reason); return; }
+    if (act === "npair") { r = pairNotches(id, t.value || null, view.proj); reseam(r.ok ? (t.value ? "짝 연결됨(양쪽 위치는 각각 직접 정한 값)" : "짝 해제됨") : "짝 안 바뀜: " + r.reason); return; }
+    if (act === "ebook") { r = setEaseSplit(null, view.proj); reseam(r.ok ? "이즈 배분 = 책 기본값 — 소매 쪽 너치 다시 계산" : "안 바뀜: " + r.reason); return; }
+    if (act === "esave") {
+      var box = t.closest(".cne-ease"), val = function (k) { var x = box.querySelector("[data-ek=\"" + k + "\"]").value; return x === "" ? NaN : Number(x); };
+      r = setEaseSplit({ back: [val("b0"), val("b1"), val("b2")], front: [val("f0"), val("f1"), val("f2")] }, view.proj);
+      reseam(r.ok ? "이즈 배분 바뀜 — 소매 쪽 너치 위치 = 소매산점/아랫점에서 (몸판 거리 + 새 구간 이즈). 몸판 너치·형상·시접은 그대로" : "배분 안 바뀜: " + r.reason); return;
+    }
   }
   function selectEdge(pid, eid) {
     view.edge = { piece: pid, id: eid }; view.sel = pid; view.cardMsg = "";
@@ -896,7 +1252,7 @@
     syncCard();
   }
   function clearEdge() { if (!view.edge) return; view.edge = null; view.cardMsg = ""; drawCanvas(); syncCard(); }
-  function reseam(msg) { view.seam = seamOf(view.data, view.proj); view.cardMsg = msg || ""; drawList(); drawCanvas(); syncCard(); }
+  function reseam(msg) { var nd = derive(view.proj, true); if (nd.state === "ready" && nd.resultHash === view.data.resultHash) view.data = nd; view.seam = seamOf(view.data, view.proj); view.cardMsg = msg || ""; drawList(); drawCanvas(); syncCard(); }
   function applyEdge() {
     var c = curEdge(); if (!c) return;
     var kind = c.e.foldCapable ? $("cutSeamKind").value : "seam", raw = $("cutSeamWidth").value, w = raw === "" ? NaN : Number(raw);
@@ -926,7 +1282,7 @@
   function closeView() {
     if (!view.open) return;
     view.open = false; view.data = null; view.layout = null; view.proj = null; view.seam = null; view.edge = null;
-    var card = $("cutSeamCard"); if (card) card.hidden = true;
+    var card = $("cutSeamCard"); if (card) card.hidden = true; view.clickAt = null;
     var sec = $("cutView"); if (sec) sec.hidden = true;
     var svg = $("cutCv"); if (svg) while (svg.firstChild) svg.removeChild(svg.firstChild);
     setOpenAttr(false); syncTabs();
@@ -980,9 +1336,16 @@
     var list = $("cutList");
     if (list) list.addEventListener("click", function (e) {
       var o = e.target.closest("[data-act=\"clear-orphans\"]"); if (o) { var cr = clearOrphans(view.proj); reseam(cr.ok ? "" : ""); return; }
+      var nr = e.target.closest("[data-act=\"nrecon\"],[data-act=\"norph-del\"]");
+      if (nr) { var rr = nr.dataset.act === "nrecon" ? reconnectNotch(nr.dataset.id, view.proj) : removeNotch(nr.dataset.id, view.proj); reseam(rr.ok ? "" : rr.reason); return; }
       var b = e.target.closest(".cut-item-btn"); if (b && !b.disabled) { clearEdge(); select(b.dataset.piece); }
     });
     on("btnCutSeamApply", applyEdge);
+    var nedit = $("cutNotchEdit");
+    if (nedit) {
+      nedit.addEventListener("click", function (e) { var b = e.target.closest("button[data-act]"); if (b && !b.disabled) notchAct(b); });
+      nedit.addEventListener("change", function (e) { var t = e.target; if (t.matches && t.matches("[data-act=\"nmove\"],[data-act=\"npair\"]")) notchAct(t); });
+    }
     on("btnCutSeamClose", clearEdge);
     var ksel = $("cutSeamKind"); if (ksel) ksel.addEventListener("change", function () { var wi = $("cutSeamWidth"), card = $("cutSeamCard"), fold = ksel.value === "fold"; wi.disabled = fold; wi.value = fold ? "0" : card.dataset.kept; });
     var win = $("cutSeamWidth"); if (win) win.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applyEdge(); } });
@@ -1022,7 +1385,9 @@
       if (!drag) return;
       if (!drag.moved) {
         var g = e.target.closest && e.target.closest(".cut-piece"), h = e.target.closest && e.target.closest("[data-edge]");
-        if (g && h) selectEdge(g.getAttribute("data-piece"), h.getAttribute("data-edge"));
+        if (g && h) { var pid0 = g.getAttribute("data-piece"), eid0 = h.getAttribute("data-edge"), pos0 = view.layout && view.layout.pos[pid0], cm0 = toCm(e);
+          view.clickAt = pos0 ? { piece: pid0, edge: eid0, at: arcNear(pid0, eid0, { x: cm0.x - pos0.dx, y: cm0.y - pos0.dy }) } : null;
+          selectEdge(pid0, eid0); }
         else { clearEdge(); select(g ? g.getAttribute("data-piece") : view.sel); }
       }
       drag = null;

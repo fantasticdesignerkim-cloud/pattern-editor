@@ -563,6 +563,17 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 #cutCv .cut-piece.is-sel .cut-piece-outline{stroke:var(--ax-accent);stroke-width:2.6px;fill:rgba(0,122,255,.08)}
 #cutCv .cut-seam{fill:rgba(215,0,21,.07);stroke:#D70015;stroke-width:1.2px;vector-effect:non-scaling-stroke;stroke-linejoin:miter}
 #cutCv .cut-seam-part{fill:none;stroke-dasharray:6 3}
+#cutCv .cut-notch{fill:none;stroke:#8E24AA;stroke-width:2px;vector-effect:non-scaling-stroke;stroke-linecap:butt;pointer-events:none}
+#cutCv .cut-notch-dot{fill:#8E24AA;pointer-events:none}
+.cut-item-btn .ci-notch{font-size:12px;color:#8E24AA}
+.cut-seam-card .csc-notch{white-space:pre-line;color:#6A1B9A;max-height:6em;overflow-y:auto}
+.cut-seam-card .csc-notch-edit{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow-y:auto;font-size:12px}
+.cut-seam-card .csc-notch-edit[hidden]{display:none}
+.cne-head,.cne-row,.cne-ease{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.cne-row{padding:6px 8px;border-radius:8px;background:var(--ax-fill)}
+.cne-ease{padding:6px 8px;border-radius:8px;background:rgba(142,36,170,.08)}
+.cne-ease input{width:56px}
+.cne-note{flex:1 1 100%;color:var(--ax-text2);font-size:11.5px}
 #cutCv .cut-edge-fold{fill:none;stroke:#0A5FD0;stroke-width:2.4px;vector-effect:non-scaling-stroke;stroke-dasharray:10 3 2 3;pointer-events:none}
 #cutCv .cut-edge-fold-label{fill:#0A5FD0}
 #cutCv .cut-edge-sel{fill:none;stroke:var(--ax-accent);stroke-width:4px;vector-effect:non-scaling-stroke;stroke-linecap:round;pointer-events:none}
@@ -601,7 +612,8 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 @media (max-width:860px){
   .cut-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(220px,1fr) minmax(0,42%)}
   .cut-side{border-left:0;border-top:.5px solid var(--ax-hair)}
-  .cut-seam-card{left:8px;right:8px;bottom:8px;max-width:none;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+  .cut-seam-card{left:8px;right:8px;bottom:8px;max-width:none;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));max-height:42vh;overflow-y:auto;overscroll-behavior:contain}
+  .cut-seam-card .csc-notch-edit,.cut-seam-card .csc-notch{max-height:none;overflow:visible}
   .cut-seam-card select,.cut-seam-card input,.cut-seam-card .btn{min-height:44px}
   .cut-seam-card .csc-msg{max-height:4.2em;overflow-y:auto}
 }
