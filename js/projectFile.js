@@ -375,6 +375,7 @@
   function reasonText(r, detail) {
     var t = REASON_TEXT[r] || ("열 수 없습니다(" + r + ")");
     if (r === "unfinished" && detail) t += ": " + detail;
+    if (r === "block-schema-unsupported" && detail) t = "지원하지 않는 원형 버전입니다(파일의 원형 v" + detail + " · 이 앱이 여는 원형 v8) — 파일과 현재 작업은 그대로 두었습니다";
     return t;
   }
   function note(msg) { var el = document.getElementById("projectFileNote"); if (el) el.textContent = msg; }
@@ -402,6 +403,9 @@
   }
 
   var _pending = null;   // 검증 통과 · 확인 대기 후보
+  // 열기 요청 번호(2026-11-15 야간 리뷰 #2 ③): 파일 읽기는 비동기라 먼저 고른 파일이 나중에 끝날 수 있다.
+  //   새 열기·취소마다 번호를 올리고, 읽기 완료·실패·확인은 **자기 번호가 최신일 때만** 반영한다(늦게 끝난 옛 요청은 아무것도 건드리지 않는다).
+  var _openReq = 0;
   function showConfirm(on, text) {
     var row = document.getElementById("projectOpenConfirm"); if (row) row.hidden = !on;
     var t = document.getElementById("projectOpenConfirmText"); if (t) t.textContent = on ? text : "";
@@ -413,21 +417,23 @@
   function onOpenFile(input) {
     var f = input && input.files && input.files[0];
     if (!f) return;
+    var tok = ++_openReq;
     _pending = null; showConfirm(false);
     var reset = function () { try { input.value = ""; } catch (e) { /* noop */ } };
     if (f.size > MAX_BYTES) { note("열지 않음 · " + reasonText("too-large")); reset(); return; }
     note("파일 확인 중…");
     f.text().then(function (text) {
+      if (tok !== _openReq) return;   // 그 사이 새 열기·취소가 있었다 → 이 옛 요청은 버린다(상태·안내·입력칸 무변경)
       reset();
       var v = verifyText(text);
       if (!v.ok) { note("열지 않음(현재 작업 그대로) · " + reasonText(v.reason, v.detail)); return; }
       var c = v.candidate, s = c.summary;
       var desc = "B" + s.B + "/W" + s.W + "/BL" + s.BL + " · 원형 v" + s.blockVersion + " · " + statusLine(c.status) + " · 저장 " + (c.savedAt || "?");
       if (!sessionHasWork()) { openCommit(c, desc); return; }
-      _pending = { candidate: c, desc: desc };
+      _pending = { candidate: c, desc: desc, tok: tok };
       showConfirm(true, "현재 디자인 프로젝트·원형 완료본을 이 파일로 바꿉니다(저장하지 않은 현재 작업은 사라집니다 · 필요하면 먼저 «프로젝트 저장»). 파일: " + desc);
       note("확인 대기 · 아직 아무것도 바뀌지 않았습니다");
-    }, function () { reset(); note("열지 않음 · 파일을 읽을 수 없습니다"); });
+    }, function () { if (tok !== _openReq) return; reset(); note("열지 않음 · 파일을 읽을 수 없습니다"); });
   }
   function openCommit(c, desc) {
     var U = ui();
@@ -445,11 +451,11 @@
   }
   function onConfirmOpen() {
     var p = _pending; _pending = null; showConfirm(false);
-    if (!p) return;
+    if (!p || p.tok !== _openReq) return;
     openCommit(p.candidate, p.desc);
   }
   function onCancelOpen() {
-    _pending = null; showConfirm(false);
+    _openReq++; _pending = null; showConfirm(false);   // 읽는 중인 옛 요청도 함께 무효
     note("열기 취소 · 현재 작업 그대로");
   }
   function sync() {
