@@ -3,6 +3,7 @@
 //   §1 순서 = 뒤판 → 앞판 → 소매 · 작은 부속은 아래 줄 · 앞·뒤판 BL 높이 같음(위 끝 맞춤 아님) · 시접 포함 테두리끼리 겹침 없음
 //   §2 골 펼침(뒤판 · 밴드 · 위 칼라): 면적 = 반쪽 × 2 · 골선 대칭 · 폐곡선 · 골선 위 외곽/시접 선 없음(중복 중심 없음) · 원본·완료 hash 불변
 //   §3 골 ↔ 봉제선: 반쪽 표시로 돌아감 · 폭 보존 · 다시 골 = 펼침 · 반사 쪽 변/너치 = 원래 변 id(같은 설정)
+//   §5 선택 위치 드러내기(2026-11-15 · v2026.11.15.5): revealShift 최소 이동·이미 보이면 0·배율 없음 · 호출 지점(선택 1회·카드 변화 1회·수동 이동 뒤 안 함·그리기/끌기 중 안 함)
 //   §4 재단 수량(working.cutQty 판 1): master 기본값 · 골/봉제선에 따른 기본 · 수정·거부 · 엄격 검증 · 저장 → 열기 · 구파일 기본값 · 시접/너치 설정 무변경
 //   node test/harness/cutLayoutCheck.js
 // ══════════════════════════════════════════════
@@ -232,6 +233,33 @@ let M = model(S, P);
     return q.state === "invalid" && model(S4, P4).Q.pieces.back.qty === 1 && !x.ok && J(P4.working.cutQty) === J(w); }), "4: 구조가 틀린 수량 항목 7종 = 읽지 않음(기본값 표시) · 수정 잠금 · 값 그대로");
   { const S5 = makeSession(), v5 = S5.PF.verifyText(oldText); S5.PF.commitCandidate(v5.candidate); const P5 = S5.P(); P5.working.cutQty = { schema: 1, pieces: JSON.parse('{"__proto__":2}') };
     let res = null; try { res = S5.PF.buildFileText(AT); } catch (e) { res = { thrown: e && e.reason }; } ok(!(res && res.text) && /forbidden-key/.test(J(res)), "4: 금지 키가 든 수량 = 기존 저장 정책이 거부"); }
+}
+
+// ══ §5 선택 위치 드러내기 — 하단 카드가 누른 자리를 가리면 최소 이동(화면 px · 배율 불변) ══
+{
+  const RS = S.CUT.revealShift, V = { left: 0, top: 100, right: 700, bottom: 500 };   // 가시 영역 = 캔버스 ∩ 창 − 카드 위쪽
+  const z = r => r.dx === 0 && r.dy === 0;
+  ok(z(RS(null, { x: 300, y: 300 }, V, 8)) && z(RS(null, { x: 8, y: 108 }, V, 8)) && z(RS(null, { x: 692, y: 492 }, V, 8)), "5: 누른 점이 이미 보이면 이동 0(가장자리 포함)");
+  ok(z(RS({ left: -400, top: 50, right: 900, bottom: 700 }, { x: 300, y: 300 }, V, 8)), "5: 변 bbox 가 화면보다 커도 누른 점이 보이면 이동 0(필요 없는 이동 없음)");
+  const a = RS(null, { x: 120, y: 560 }, V, 8);   // 카드 밑에 가린 점
+  ok(a.dx === 0 && a.dy === 492 - 560 - 22, "5: 카드에 가린 점 = 위로만, 점 둘레 22px 가 카드 위 8px 안쪽에 들 만큼만 " + J(a));
+  ok(560 + a.dy + 22 <= 492 && 560 + a.dy + 22 > 491, "5: 이동 뒤 점 상자 아래 끝 = 가시 영역 아래 경계(그 이상 옮기지 않음 = 최소)");
+  const b = RS(null, { x: -30, y: 300 }, V, 8); ok(b.dx === 8 + 30 + 22 && b.dy === 0, "5: 왼쪽 밖 = 오른쪽으로만 " + J(b));
+  ok(z(RS({ left: 10, top: 120, right: 200, bottom: 400 }, null, V, 8)), "5: 점 없이 변 bbox 가 다 보이면 0");
+  const c = RS({ left: 10, top: 450, right: 200, bottom: 560 }, null, V, 8); ok(c.dx === 0 && c.dy === 492 - 560, "5: 점 없이 변 bbox 가 가리면 bbox 아래 끝만 맞춤 " + J(c));
+  ok(z(RS(null, { x: 100, y: 600 }, { left: 0, top: 100, right: 700, bottom: 110 }, 8)), "5: 가시 영역이 여백보다 작으면 움직이지 않음(카드 자체 스크롤에 맡김)");
+  ok(!("w" in a) && !("k" in a) && Object.keys(a).sort().join() === "dx,dy,fits", "5: 결과에 배율 없음(이동만)");
+  // 호출 지점(제품 소스): 선택 직후 1회 · 카드 내용 변화 1회 · 수동 이동(끌기·핀치·휠·확대·맞춤) 뒤엔 안 함 · 그리기·끌기 중엔 부르지 않음
+  const SRCC = fs.readFileSync(path.join(ROOT, "js", "cutPrep.js"), "utf8"), body = (from, to) => { const i = SRCC.indexOf(from), j = SRCC.indexOf(to, i + from.length); return i >= 0 && j > i ? SRCC.slice(i, j) : ""; };
+  ok(/syncCard\(\); revealSel\(\);/.test(body("  function selectEdge(", "  // 선택한 변(")) || /syncCard\(\); revealSel\(\);/.test(body("  function selectEdge(", "\n  }\n")), "5: 변 선택 = 카드 연 뒤 1회 드러내기");
+  ok(/view\.manual = false/.test(body("  function selectEdge(", "\n  }\n")), "5: 새 선택마다 수동 이동 표시를 지움");
+  ok(/!view\.manual\) revealSel\(\)/.test(body("  function cardChanged(", "\n")) && /cardChanged\(\); \}/.test(body("  function reseam(", "\n")), "5: 카드 내용 변화(시접·너치·이즈) = 사용자가 안 옮겼을 때만 1회");
+  ok(!/revealSel|cardChanged/.test(body("  function drawCanvas(", "\n  function ")) && !/revealSel|cardChanged/.test(body("svg.addEventListener(\"pointermove\"", "var end = ")), "5: 그리기·끌기 중에는 부르지 않음(따라다니지 않음)");
+  const marks = ["drag.moved = true; view.manual = true", "view.manual = true; view.cam = { x: ax", "view.manual = true; var p = toCm(e); zoom(", "view.manual = true; fit();", "view.manual = true; zoom(1 / 1.25)", "view.manual = true; zoom(1.25)"];
+  ok(marks.every(m => SRCC.indexOf(m) >= 0), "5: 끌기·핀치·휠·맞춤·확대/축소 = 수동 이동으로 표시(그 뒤 자동 보정 안 함)");
+  ok(/data-mirrored"\) === "1"\) !== !!ca\.mirrored/.test(SRCC) && /cm: cm0, mirrored: mir0/.test(SRCC), "5: 골 반사 쪽을 눌렀으면 반사 쪽 점·경로를 기준으로 드러냄");
+  ok(/sh\.dx \* c\.w \/ r\.width/.test(SRCC) && /w: c\.w, h: c\.h \}; applyCam\(\)/.test(body("  function revealSel(", "\n  }\n")), "5: 화면 이동만 · 배율(w·h) 그대로");
+  ok(hashes(P) === H0 && J(S.CUT.derive(P, true).pieces) === PIECES0, "5: 원본 조각·완료 hash 불변");
 }
 
 console.log("cutLayoutCheck: " + PASS + " passed, " + FAIL + " failed");

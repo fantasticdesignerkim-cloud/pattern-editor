@@ -1112,7 +1112,19 @@
     return { latest: latest };
   }
 
-  var model = { clickArc: clickArc, displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
+  // 선택 위치 드러내기(2026-11-15): 화면 px 기준. 가시 영역 vis(캔버스 ∩ 창 − 카드) 안에 «선택 위치»가 들도록 필요한 최소 이동(px)만 돌려준다.
+  //   pt(실제로 누른 점 · 골 반사 쪽이면 반사 쪽 점)가 있으면 그것이 기준: 이미 보이면 {0,0}, 가려졌으면 그 점 둘레 ±22px 가 보일 만큼만.
+  //   pt 가 없으면 변 bbox(box) 기준 — 이미 다 보이면 {0,0}, 가시 영역보다 크면 위·왼쪽을 맞춘다. 배율은 다루지 않는다(호출자는 이동만).
+  function revealShift(box, pt, vis, margin) {
+    var m = margin == null ? 8 : margin;
+    if (!vis || !(vis.bottom - vis.top > 2 * m) || !(vis.right - vis.left > 2 * m)) return { dx: 0, dy: 0, fits: false };
+    var V = { left: vis.left + m, top: vis.top + m, right: vis.right - m, bottom: vis.bottom - m }, R = 22;
+    var T = pt ? (pt.x >= V.left && pt.x <= V.right && pt.y >= V.top && pt.y <= V.bottom ? null : { left: pt.x - R, top: pt.y - R, right: pt.x + R, bottom: pt.y + R }) : box;
+    if (!T) return { dx: 0, dy: 0, fits: true };
+    var ax = function (lo, hi, a, b) { if (b - a > hi - lo) return lo - a; if (a < lo) return lo - a; if (b > hi) return hi - b; return 0; };
+    return { dx: ax(V.left, V.right, T.left, T.right), dy: ax(V.top, V.bottom, T.top, T.bottom), fits: T.right - T.left <= V.right - V.left && T.bottom - T.top <= V.bottom - V.top };
+  }
+  var model = { revealShift: revealShift, clickArc: clickArc,displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
 
   // ══ 화면(읽기 전용 오버레이) ══ ─────────────────────────────────────
   var NS = "http://www.w3.org/2000/svg", GAP = 6;
@@ -1398,18 +1410,41 @@
     }
   }
   function selectEdge(pid, eid) {
-    view.edge = { piece: pid, id: eid }; view.sel = pid; view.cardMsg = "";
+    view.edge = { piece: pid, id: eid }; view.sel = pid; view.cardMsg = ""; view.manual = false;
     drawCanvas(); var box = $("cutList"); if (box) box.querySelectorAll(".cut-item-btn").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.piece === view.sel)); });
-    syncCard();
+    syncCard(); revealSel();
   }
+  // 선택한 변(골 반사 쪽을 눌렀으면 그 반사 쪽)이 하단 카드에 가리면 화면을 최소한으로 옮긴다 — 배율 그대로, 이미 보이면 이동 0.
+  //   부르는 곳: 변 선택 직후 1회 · 카드 크기가 바뀔 때(사용자가 그 뒤 끌기·핀치·휠·확대 버튼·맞춤을 하지 않았을 때만) 1회.
+  //   매 그리기·끌기 중에는 부르지 않는다(따라다니지 않음).
+  function revealSel() {
+    var svg = $("cutCv"), card = $("cutSeamCard"), ed = view.edge, c = view.cam; if (!svg || !card || card.hidden || !ed || !c || !svg.getBoundingClientRect) return null;
+    var r = svg.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0)) return null;
+    var vis = { left: Math.max(r.left, 0), top: Math.max(r.top, 0), right: Math.min(r.right, window.innerWidth || r.right), bottom: Math.min(r.bottom, window.innerHeight || r.bottom) };
+    var cr = card.getBoundingClientRect();
+    if (cr.height > 0 && cr.left < vis.right && cr.right > vis.left && cr.top < vis.bottom && cr.bottom > vis.top) vis.bottom = Math.min(vis.bottom, cr.top);
+    var ca = view.clickAt && view.clickAt.piece === ed.piece && view.clickAt.edge === ed.id && view.clickAt.cm ? view.clickAt : null, box = null;
+    svg.querySelectorAll(".cut-piece[data-piece=\"" + ed.piece + "\"] .cut-edge-hit[data-edge=\"" + ed.id + "\"]").forEach(function (h) {
+      if (ca && (h.getAttribute("data-mirrored") === "1") !== !!ca.mirrored) return;   // 누른 쪽(원래/반사)만
+      var b = h.getBoundingClientRect(); if (!(b.width > 0 || b.height > 0)) return;
+      box = box ? { left: Math.min(box.left, b.left), top: Math.min(box.top, b.top), right: Math.max(box.right, b.right), bottom: Math.max(box.bottom, b.bottom) } : { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+    });
+    var pt = ca ? { x: r.left + (ca.cm.x - c.x) / c.w * r.width, y: r.top + (ca.cm.y - c.y) / c.h * r.height } : null;
+    var sh = revealShift(box, pt, vis, 8);
+    if (sh.dx || sh.dy) { view.cam = { x: c.x - sh.dx * c.w / r.width, y: c.y - sh.dy * c.h / r.height, w: c.w, h: c.h }; applyCam(); }
+    view.lastReveal = { dx: sh.dx, dy: sh.dy, fits: sh.fits, n: (view.lastReveal ? view.lastReveal.n : 0) + (sh.dx || sh.dy ? 1 : 0) };
+    return sh;
+  }
+  // 카드 내용이 바뀐 직후(시접 적용·너치 추가/이동/삭제·이즈 배분) 1회 — 사용자가 선택 뒤 직접 옮겼으면 하지 않는다.
+  function cardChanged() { if (view.open && view.edge && !view.manual) revealSel(); }
   function clearEdge() { if (!view.edge) return; view.edge = null; view.cardMsg = ""; drawCanvas(); syncCard(); }
   function refreshDisp() { if (view.data && view.data.state === "ready") { view.disp = displayOf(view.data, view.seam); view.qty = qtyOf(view.data, view.disp, view.proj); } }
-  function reseam(msg) { var nd = derive(view.proj, true); if (nd.state === "ready" && nd.resultHash === view.data.resultHash) view.data = nd; view.seam = seamOf(view.data, view.proj); refreshDisp(); view.cardMsg = msg || ""; drawList(); drawCanvas(); syncCard(); }
+  function reseam(msg) { var nd = derive(view.proj, true); if (nd.state === "ready" && nd.resultHash === view.data.resultHash) view.data = nd; view.seam = seamOf(view.data, view.proj); refreshDisp(); view.cardMsg = msg || ""; drawList(); drawCanvas(); syncCard(); cardChanged(); }
   function applyEdge() {
     var c = curEdge(); if (!c) return;
     var kind = c.e.foldCapable ? $("cutSeamKind").value : "seam", raw = $("cutSeamWidth").value, w = raw === "" ? NaN : Number(raw);
     var r = setEdge(view.edge.piece, view.edge.id, { kind: kind, widthCm: w }, view.proj);
-    if (!r.ok) { view.cardMsg = "적용 안 됨: " + r.reason; syncCard(); return; }
+    if (!r.ok) { view.cardMsg = "적용 안 됨: " + r.reason; syncCard(); cardChanged(); return; }
     reseam("적용됨 — 프로젝트 파일을 저장해야 파일에 남습니다");
   }
   function setOpenAttr(on) { if (on) document.documentElement.setAttribute("data-cut-view", "open"); else document.documentElement.removeAttribute("data-cut-view"); }
@@ -1482,9 +1517,9 @@
     var on = function (id, fn) { var e = $(id); if (e) e.addEventListener("click", fn); };
     on("btnCutBack", function () { returnTo(null); });
     on("btnCutReturnTo", function () { returnTo(view.data && view.data.returnTab); });
-    on("btnCutFit", fit);
-    on("btnCutZoomIn", function () { zoom(1 / 1.25); });
-    on("btnCutZoomOut", function () { zoom(1.25); });
+    on("btnCutFit", function () { view.manual = true; fit(); });
+    on("btnCutZoomIn", function () { view.manual = true; zoom(1 / 1.25); });
+    on("btnCutZoomOut", function () { view.manual = true; zoom(1.25); });
     var list = $("cutList");
     if (list) list.addEventListener("click", function (e) {
       var o = e.target.closest("[data-act=\"clear-orphans\"]"); if (o) { var cr = clearOrphans(view.proj); reseam(cr.ok ? "" : ""); return; }
@@ -1528,13 +1563,13 @@
         var rr = svg.getBoundingClientRect(), c0 = pinch.cam, dn = Math.max(1, Math.hypot(t[0].x - t[1].x, t[0].y - t[1].y)), cx = (t[0].x + t[1].x) / 2, cy = (t[0].y + t[1].y) / 2;
         var nw = Math.min(Math.max(c0.w * pinch.d / dn, 8), 2000), k = nw / c0.w, nh = c0.h * k;
         var ax = c0.x + (pinch.cx - rr.left) / rr.width * c0.w, ay = c0.y + (pinch.cy - rr.top) / rr.height * c0.h;
-        view.cam = { x: ax - (cx - rr.left) / rr.width * nw, y: ay - (cy - rr.top) / rr.height * nh, w: nw, h: nh }; applyCam();
+        view.manual = true; view.cam = { x: ax - (cx - rr.left) / rr.width * nw, y: ay - (cy - rr.top) / rr.height * nh, w: nw, h: nh }; applyCam();
         return;
       }
       if (!drag || e.pointerId !== drag.id) return;
       var r = svg.getBoundingClientRect(), dx = (e.clientX - drag.x) / r.width * drag.cam.w, dy = (e.clientY - drag.y) / r.height * drag.cam.h;
       if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 4) return;
-      if (!drag.moved) { drag.moved = true; try { svg.setPointerCapture(e.pointerId); } catch (x) { /* 무시 */ } }
+      if (!drag.moved) { drag.moved = true; view.manual = true; try { svg.setPointerCapture(e.pointerId); } catch (x) { /* 무시 */ } }
       view.cam = { x: drag.cam.x - dx, y: drag.cam.y - dy, w: drag.cam.w, h: drag.cam.h }; applyCam();
     });
     var end = function (e) {
@@ -1544,7 +1579,8 @@
         var g = e.target.closest && e.target.closest(".cut-piece"), h = e.target.closest && e.target.closest("[data-edge]");
         if (g && h) { var pid0 = g.getAttribute("data-piece"), eid0 = h.getAttribute("data-edge"), pos0 = view.layout && view.layout.pos[pid0], cm0 = toCm(e);
           var q0 = pos0 ? { x: cm0.x - pos0.dx, y: cm0.y - pos0.dy } : null, pc0 = view.data && view.data.pieces.filter(function (x) { return x.id === pid0; })[0];
-          view.clickAt = q0 && pc0 ? { piece: pid0, edge: eid0, at: clickArc(pc0, view.disp && view.disp[pid0], eid0, q0, h.getAttribute("data-mirrored") === "1") } : null;
+          var mir0 = h.getAttribute("data-mirrored") === "1";
+          view.clickAt = q0 && pc0 ? { piece: pid0, edge: eid0, at: clickArc(pc0, view.disp && view.disp[pid0], eid0, q0, mir0), cm: cm0, mirrored: mir0 } : null;
           selectEdge(pid0, eid0); }
         else { clearEdge(); select(g ? g.getAttribute("data-piece") : view.sel); }
       }
@@ -1560,8 +1596,11 @@
       if (!Object.keys(pts).length) { pinch = null; drag = null; }
     };
     window.addEventListener("pointerup", lift, true); window.addEventListener("pointercancel", lift, true);
-    svg.addEventListener("wheel", function (e) { if (!view.cam) return; e.preventDefault(); var p = toCm(e); zoom(e.deltaY > 0 ? 1.12 : 1 / 1.12, p.x, p.y); }, { passive: false });
+    svg.addEventListener("wheel", function (e) { if (!view.cam) return; e.preventDefault(); view.manual = true; var p = toCm(e); zoom(e.deltaY > 0 ? 1.12 : 1 / 1.12, p.x, p.y); }, { passive: false });
     window.addEventListener("resize", function () { if (view.open) fit(); });
+    // 카드 높이가 바뀌면(너치 추가·더보기·안내 문구) 가려졌을 때만 한 번 보정 — 사용자가 직접 옮겼으면 건드리지 않는다.
+    var cardEl = $("cutSeamCard");
+    if (cardEl && typeof ResizeObserver !== "undefined") { var lastH = -1; new ResizeObserver(function () { var hh = cardEl.hidden ? 0 : cardEl.getBoundingClientRect().height; if (Math.abs(hh - lastH) < 1) return; lastH = hh; cardChanged(); }).observe(cardEl); }
     document.addEventListener("keydown", function (e) { if (view.open && e.key === "Escape") { if (view.edge) clearEdge(); else returnTo(null); } });
     var sig = $("designResultCheckNote");
     if (sig && typeof MutationObserver !== "undefined") new MutationObserver(schedule).observe(sig, { childList: true, characterData: true, subtree: true });
@@ -1573,7 +1612,7 @@
     isOpen: function () { return view.open; },
     open: function () { return typeof document !== "undefined" && document.querySelector ? openView() : false; },
     close: function () { if (typeof document !== "undefined" && document.querySelector) closeView(); },
-    viewState: function () { return { open: view.open, sel: view.sel, edge: view.edge ? view.edge.piece + "|" + view.edge.id : null, seam: view.seam ? view.seam.done + "/" + view.seam.total : null, state: view.data && view.data.state, resultHash: view.data && view.data.resultHash, pieces: view.data && view.data.pieces ? view.data.pieces.map(function (p) { return p.id; }) : [] }; }
+    viewState: function () { return { manual: !!view.manual, lastReveal: view.lastReveal || null, cam: view.cam ? Object.assign({}, view.cam) : null, open: view.open, sel: view.sel, edge: view.edge ? view.edge.piece + "|" + view.edge.id : null, seam: view.seam ? view.seam.done + "/" + view.seam.total : null, state: view.data && view.data.state, resultHash: view.data && view.data.resultHash, pieces: view.data && view.data.pieces ? view.data.pieces.map(function (p) { return p.id; }) : [] }; }
   }));
 
   if (typeof document !== "undefined" && document.querySelector && document.addEventListener) {
