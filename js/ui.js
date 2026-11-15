@@ -4188,17 +4188,39 @@
     return [pendingDartScales, pendingFlare, pendingNeckTuck, pendingNeckGatherBand, pendingNeckGather, pendingFlareSlash, pendingWaistSeam,
       pendingPeplumCut, pendingPeplumFlare, pendingYokeSeam, pendingYokeGather, pendingPrincess, pendingDartExtra].some(v => v !== undefined);
   }
-  function bodyInputsUnapplied(project) {
-    if (!project || bodyPanelProject !== project) return false;   // 이 project 로 채운 적 없는 입력칸은 판정하지 않는다
-    const cb = committedBody(project), cn = committedNeckline(project), cp = committedPlacket(project);
-    const val = id => { const el = document.getElementById(id); return el ? String(el.value) : null; };
-    const differs = (id, v) => { const x = val(id); return x !== null && x !== (v == null ? "" : fmtL(v)); };
-    return differs("inpBodyBustEase", cb.E) || differs("inpBodyHemExtension", cb.L) || differs("inpBodyWaistOffset", cb.W)
-      || differs("inpBodyHemOffset", cb.H) || differs("inpBodySideCurve", cb.Cv) || differs("inpBodyWaistDartTotal", cb.Dt) || differs("inpBodyWaistTarget", cb.Wt)
-      || currentNeckType() !== cn.type
-      || differs("inpNeckWidth", cn.W) || differs("inpNeckFrontDepth", cn.F) || differs("inpNeckBackDepth", cn.B) || differs("inpNeckCurveAmount", cn.CA)
-      || differs("inpNeckVDepth", cn.VD) || differs("inpNeckSquareWidth", cn.SW) || differs("inpNeckCornerRadius", cn.CR)
-      || differs("inpPlacketOverlap", cp.overlap) || differs("inpPlacketFacing", cp.facing);
+  // 입력칸 ↔ 적용값 비교(2026-11-15 수정): 문자열이 아니라 **같은 유한 숫자인지**로 본다.
+  //   예전엔 el.value 문자열을 fmtL(적용값)(0.1 반올림 문자열)과 비교해 «1.20»·«1.0»(= 1.2·1) 이나 1.25 적용(→ «1.3» 과 비교)을
+  //   «적용 안 한 값»으로 잘못 막았다(재단 진입·프로젝트 열기 차단). 이제:
+  //   · 칸이 빈 값 ↔ 적용값 없음(null) = 같음 · 빈 값 ↔ 숫자 / 숫자 ↔ 없음 = 다름
+  //   · 칸이 숫자로 읽히지 않음(NaN·무한) = 다름(그대로 막는다)
+  //   · 칸 숫자 = 적용값, 또는 = 화면이 적용값으로 채우는 0.1 반올림 값(fmtL) = 같음(화면이 채운 값을 거짓 미적용으로 보지 않는다)
+  //   반환 = 다른 칸 목록(칸 이름 · 칸 값 · 적용값 · 눌러야 할 버튼). 숨김 칸도 같은 규칙(현재 프로젝트 값과 비교 — 열 때 다시 채워진다).
+  const BODY_INPUT_FIELDS = [
+    ["inpBodyBustEase", "품·여유량", "E", "body"], ["inpBodyHemExtension", "엉덩이 길이", "L", "body"], ["inpBodyWaistOffset", "허리 옆선 이동", "W", "body"],
+    ["inpBodyHemOffset", "밑단 옆선 이동", "H", "body"], ["inpBodySideCurve", "옆선 곡선화", "Cv", "body"], ["inpBodyWaistDartTotal", "허리 다트량", "Dt", "body"], ["inpBodyWaistTarget", "목표 완성 허리", "Wt", "body"],
+    ["inpNeckWidth", "목너비", "W", "neck"], ["inpNeckFrontDepth", "앞목 깊이", "F", "neck"], ["inpNeckBackDepth", "뒤목 깊이", "B", "neck"], ["inpNeckCurveAmount", "곡선 정도", "CA", "neck"],
+    ["inpNeckVDepth", "V끝점 깊이", "VD", "neck"], ["inpNeckSquareWidth", "가로폭", "SW", "neck"], ["inpNeckCornerRadius", "모서리 둥글기", "CR", "neck"],
+    ["inpPlacketOverlap", "여밈분", "overlap", "placket"], ["inpPlacketFacing", "안단 폭", "facing", "placket"]
+  ];
+  function inputMatchesCommitted(raw, v) {
+    const t = String(raw).trim(), none = (v == null);
+    if (t === "") return none;
+    const x = Number(t);
+    if (!Number.isFinite(x)) return false;
+    if (none || typeof v !== "number" || !Number.isFinite(v)) return false;
+    return Math.abs(x - v) <= 1e-9 || Math.abs(x - Number(fmtL(v))) <= 1e-9;
+  }
+  function bodyInputsUnappliedList(project) {
+    if (!project || bodyPanelProject !== project) return [];   // 이 project 로 채운 적 없는 입력칸은 판정하지 않는다
+    const src = { body: committedBody(project), neck: committedNeckline(project), placket: committedPlacket(project) }, out = [];
+    BODY_INPUT_FIELDS.forEach(f => {
+      const el = document.getElementById(f[0]); if (!el) return;
+      const v = src[f[3]][f[2]];
+      if (!inputMatchesCommitted(el.value, v)) out.push({ id: f[0], label: f[1], shown: String(el.value), applied: v == null ? null : v, button: f[3] === "placket" ? "«여밈 적용»" : "몸판 탭 «적용»" });
+    });
+    const cn = src.neck;
+    if (currentNeckType() !== cn.type) out.push({ id: "necklineCards", label: "네크라인 형태", shown: String(currentNeckType()), applied: cn.type, button: "몸판 탭 «적용»" });
+    return out;
   }
   function projectUnfinished() {
     const out = [];
@@ -4208,7 +4230,8 @@
     if (DLT && DLT.getSeamFitPreview && DLT.getSeamFitPreview()) out.push("옆선 길이 맞춤 미리보기를 적용하거나 취소하세요");
     if (pendingPresetSet()) out.push("선택한 라인이 아직 몸판 «적용» 전입니다");
     const dw = window.designWorkflow, p = dw && dw.current();
-    if (bodyInputsUnapplied(p)) out.push("몸판 수치·네크라인·여밈 입력칸에 «적용»하지 않은 값이 있습니다");
+    const un = bodyInputsUnappliedList(p);
+    if (un.length) out.push("몸판 수치·네크라인·여밈 입력칸에 «적용»하지 않은 값이 있습니다 — " + un.map(u => u.label + " 칸 «" + (u.shown === "" ? "빈칸" : u.shown) + "» · 적용값 " + (u.applied == null ? "없음" : (typeof u.applied === "number" ? String(Math.round(u.applied * 100) / 100) : u.applied)) + " (" + u.button + ")").join(" / "));
     return out;
   }
 

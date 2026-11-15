@@ -364,6 +364,7 @@ button,input,select{font-family:inherit}
 [data-theme="dark"] .canvas-toolbar,[data-theme="dark"] .zoom-pill,[data-theme="dark"] .context-host:has(> [data-panel]:not([hidden])){background:rgba(44,44,46,.94)}
 [data-theme="dark"] .row input[type=number]:focus{background:#1C1C1E}
 [data-theme="dark"] .inspector :is(input[type=number],input[type=text],select){color:var(--ax-text)}
+[data-theme="dark"] .inspector .cds-list dd{color:var(--ax-text)}   /* 2026-11-15: 상태 없는 값이 문서 기본 검정을 물려받아 다크에서 안 보이던 것 */
 /* 어둡게: 상태 글자색(초록/빨강/주황)·배지·부제 회색을 어두운 바탕용 밝은 톤으로 */
 [data-theme="dark"] .inspector :is(#designCutStatus,#designBoundaryStatus,#designSideLenNote,#designGirthNote)[data-ok="1"],
 [data-theme="dark"] .inspector .cds-list dd[data-status="match"]{color:#30D158}

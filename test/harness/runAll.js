@@ -212,6 +212,8 @@ const suites = [
   { file: "projectOpenRaceCheck.js", golden: false },
   // 맞춤 표시 1차(2026-11-15): 근거 있는 기본 너치(WL·소매산점·밴드 SNP) · 직각 · 시접 폭 기준 · 위치 불변 · 저장 없음
   { file: "cutNotchCheck.js", golden: false },
+  // 사용자 신고(2026-11-15 v2026.11.15.2): 같은 숫자의 표현 차이(1.20·1.0·1.25)를 «적용 안 한 값»으로 막던 재단·열기 차단 — 숫자 비교 · 칸별 안내
+  { file: "bodyInputsPendingCheck.js", golden: false },
 ];
 
 let anyFail = false;
