@@ -214,6 +214,8 @@ const suites = [
   { file: "cutNotchCheck.js", golden: false },
   // 사용자 신고(2026-11-15 v2026.11.15.2): 같은 숫자의 표현 차이(1.20·1.0·1.25)를 «적용 안 한 값»으로 막던 재단·열기 차단 — 숫자 비교 · 칸별 안내
   { file: "bodyInputsPendingCheck.js", golden: false },
+  // 재단 화면(2026-11-15): 뒤→앞→소매 배치 · BL 정렬 · 골 펼침(면적·대칭·중복 중심 없음) · 골↔봉제선 · 재단 수량 저장
+  { file: "cutLayoutCheck.js", golden: false },
 ];
 
 let anyFail = false;
