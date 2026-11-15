@@ -31,7 +31,7 @@ const SLEEVE_EXTRA = (() => { const fs0 = require("fs"), p0 = require("path"), o
   return out; })();
 const FILES = ["blockWorkflow.js", "designProject.js", "sideSeamMagnet.js", "designLineTool.js", "sleeveSplit.js", "sleeveOutlineEdit.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designYokeSeam.js", "designPrincess.js",
   "designPlacket.js", "designBodice.js", "bodicePresets.js", "designLayout.js", "designRenderer.js", "bodiceCheckpoint.js", "peplumAnnotation.js", "designSleeve.js", "sleeveMeasure.js", "sleeveCheckpoint.js", "sleevePresets.js",
-  "designSleeveA.js", "designCuff.js", "sleeveAApply.js", "sleeveAnnotation.js", "designCollar.js", "collarPresets.js", "collarCheckpoint.js", "designResult.js", "projectFile.js", "seamMatch.js", "cutPrep.js"].concat(SLEEVE_EXTRA);
+  "designSleeveA.js", "designCuff.js", "sleeveAApply.js", "sleeveAnnotation.js", "designCollar.js", "collarPresets.js", "collarCheckpoint.js", "designResult.js", "projectFile.js", "seamMatch.js", "seamAllowance.js", "cutPrep.js"].concat(SLEEVE_EXTRA);
 const SRC = {}; FILES.forEach(f => { SRC[f] = fs.readFileSync(path.join(ROOT, "js", f), "utf8"); });
 
 function makeSession() {
@@ -117,8 +117,8 @@ let TEXT = null, D_DONE = null;
   ok(d !== d2 && d.pieces[0].segs !== d2.pieces[0].segs, "2: 매번 새로 파생(캐시된 옛 조각을 돌려주지 않음)");
   D_DONE = J(d);
   ok(d.state === "ready" && d.resultHash === P.working.designResult.hash, "1: ready · 출처 = 현재 designResult.hash");
-  ok(ids(d) === "front,back,sleeve-sleeve,cuff,collar-stand,collar-body", "1: 조각 6장 = 앞판·뒤판·소매·커프스·밴드·위 칼라 (" + ids(d) + ")");
-  ok(d.pieces.every(p => p.check.ok) && d.failedPieces === 0, "1: 6장 전부 종이 위 검사 통과(폐곡선·자기교차 없음·유한·면적)");
+  ok(ids(d) === "front,back,sleeve-sleeve,cuff,vent-placket,vent-bias,collar-stand,collar-body", "1: 조각 8장 = 앞판·뒤판·소매·커프스·트임 덧단·트임 바이어스·밴드·위 칼라 (" + ids(d) + ")");
+  ok(d.pieces.every(p => p.check.ok) && d.failedPieces === 0, "1: 8장 전부 종이 위 검사 통과(폐곡선·자기교차 없음·유한·면적)");
   ok(d.pieces.every(p => { const a = p.segs[0].from, z = p.segs[p.segs.length - 1].to; return Math.hypot(a.x - z.x, a.y - z.y) <= 1e-4 && p.segs.every((s, i) => i === 0 || Math.hypot(s.from.x - p.segs[i - 1].to.x, s.from.y - p.segs[i - 1].to.y) <= 1e-4); }),
     "1: 조각 외곽 = 한 바퀴 연속 ring(독립 확인)");
   ok(d.pieces.every(p => p.segs.every(s => ["from", "to", "c1", "c2"].every(k => !s[k] || (isFinite(s[k].x) && isFinite(s[k].y))))), "1: 좌표 전부 유한");
@@ -126,14 +126,14 @@ let TEXT = null, D_DONE = null;
   ok(pf.dartLegs === 2 && pb.dartLegs === 2, "1: 앞·뒤 = 열린 다트 입구를 construction 다트 다리 2개로 닫음(디자인 파트 분리와 같은 buildPieceRing)");
   // 실물 치수 = 독립 점열 bbox(다트 다리는 외곽 안쪽이라 bbox 불변)
   const R = P.working.designResult, srcOf = { front: [R.bodice.front.outline, R.bodice.placket.outline], back: [R.bodice.back.outline], "sleeve-sleeve": [R.sleeve.geometry.outline], cuff: [R.sleeve.cuff.piece.outline], "collar-stand": [R.collar.stand.geometry.outline], "collar-body": [R.collar.body.geometry.outline] };
-  ok(d.pieces.every(p => { const b = bboxInd(srcOf[p.id]); return near(p.widthCm, b.w, 0.01) && near(p.heightCm, b.h, 0.01); }),
+  ok(d.pieces.filter(p => srcOf[p.id]).length === 6 && d.pieces.filter(p => srcOf[p.id]).every(p => { const b = bboxInd(srcOf[p.id]); return near(p.widthCm, b.w, 0.01) && near(p.heightCm, b.h, 0.01); }),
     "1: 조각 W×H = 완료본 원래 primitive 독립 실측(±0.01cm · 축척 변경 없음) — " + d.pieces.map(p => p.id + " " + p.widthCm.toFixed(2) + "×" + p.heightCm.toFixed(2)).join(" "));
   ok(near(d.pieces.find(p => p.id === "cuff").widthCm, R.sleeve.cuff.piece.size.lengthCm, 1e-6), "1: 커프스 길이 = designCuff 기록(" + R.sleeve.cuff.piece.size.lengthCm + ")");
   ok(d.pieces.every(p => p.source && /^designResult\./.test(p.source)), "1: 조각 출처 = 완료 패키지 경로");
   // 누락 = 이유만(대체 직사각형 없음)
-  ok(d.missing.map(m => m.id).join() === "sleeve-vent" && d.missing.every(m => m.reason.length > 10), "1: 누락 1건(트임 덧단) = 이유만 · 여밈은 앞판에 합쳐짐(2026-11-14)");
-  ok(!d.pieces.some(p => /placket|vent/.test(p.id)), "1: 누락 항목을 조각으로 만들지 않음(대체 직사각형 없음)");
-  ok(pf.marks.map(m => m.kind).join() === "zone-overlap,zone-facing,cf,fold" && d.pieces.filter(p => p.marks && p.marks.length).length === 1 && pf.placket && pf.placket.fold.ok, "1: 여밈·안단 = 앞판에 합친 외곽 + 영역 2칸·앞중심선·접는선 표시(앞판에만 · 상세는 cutPlacketIntegrationCheck)");
+  ok(d.missing.length === 0, "1: 누락 0 — 여밈은 앞판에 합쳐지고 트임 덧단·바이어스는 재단 조각으로 나옴(2026-11-14 · 상세는 cutVentIntegrationCheck)");
+  ok(!d.pieces.some(p => /^placket/.test(p.id)), "1: 여밈 전용 조각(대체 직사각형) 없음");
+  ok(pf.marks.map(m => m.kind).join() === "zone-overlap,zone-facing,cf,fold" && d.pieces.filter(p => p.marks && p.marks.length).map(p => p.id).join() === "front,sleeve-sleeve,vent-placket,vent-bias" && pf.placket && pf.placket.fold.ok, "1: 여밈·안단 = 앞판에 합친 외곽 + 영역 2칸·앞중심선·접는선 표시(앞판에만 · 상세는 cutPlacketIntegrationCheck)");
   ok(d.pieces.find(p => p.id === "collar-stand").note === "뒤중심 접힘 반쪽(펼치기 전)", "1: 카라 반쪽 = 완료본 symmetry 사실만 적음");
   // 원본 별칭 없음 · 동결
   const srcObjs = allObjs(R); ok(![...allObjs(d.pieces)].some(o => srcObjs.has(o)), "2: 조각 객체가 완료본 객체를 하나도 가리키지 않음(새 복사본)");
@@ -153,7 +153,7 @@ let TEXT = null, D_DONE = null;
   ok(S.BC.complete(P).ok && S.W.sleeveAApply.apply(P, { sleeveLengthCm: 52, cuff: S.DCF.defaults() }).ok && completeChain(S, P), "3: 몸판·소매·카라·Design 재완료");
   const dY = S.CUT.derive(P);
   ok(dY.state === "ready" && dY.resultHash !== oldHash && dY.resultHash === P.working.designResult.hash, "3: 재완료 → 새 hash 로 갱신");
-  ok(dY.missing.map(m => m.id).join() === "sleeve-vent" && !dY.pieces[0].marks.length, "3: 여밈이 없으니 여밈 누락·점선도 없음");
+  ok(dY.missing.length === 0 && !dY.pieces[0].marks.length, "3: 여밈이 없으니 여밈 누락·점선도 없음");
 }
 
 // ══ §4 저장 → 빈 세션 열기 ══
@@ -233,7 +233,11 @@ for (const sym of ["T", "U"]) {
   ok(bs.pieces.filter(p => p.group === "bodice").length === 2 && bs.excluded.some(x => x.id === "frontPeplum" && /중복/.test(x.reason)), "6: 같은 외곽 참조 = 한 번만(중복 제외 기록)");
   const sameShape = Object.assign({}, R, { bodice: Object.assign({}, R.bodice, { backPeplum: JSON.parse(J(F)) }) });
   const bh = S.CUT.buildPieces(sameShape);
-  ok(bh.excluded.some(x => x.id === "backPeplum" && /같은 형상/.test(x.reason)), "6: 같은 형상(복제본) = 한 번만");
+  // 야간 리뷰 #1(2026-11-15): 형상이 같아도 다른 조각이면 빼지 않는다(용도 다른 같은 모양 조각이 조용히 사라지면 안 됨) — 사실만 참고로 적는다
+  ok(!bh.excluded.some(x => x.id === "backPeplum") && bh.pieces.some(x => x.id === "backPeplum" && x.check.ok) && bh.pieces.filter(x => x.hash === bh.pieces.find(y => y.id === "backPeplum").hash).length === 2 && bh.info.some(t => /형상이 같지만 서로 다른 조각/.test(t)),
+    "6: 같은 형상(복제본)이라도 다른 조각 = 둘 다 표시 + 참고 문구(삭제 없음)");
+  // 가벼운 상태 확인(peek) = derive 와 같은 판정 · 조각을 만들지 않음
+  { const pk = S.CUT.peek(P), dv = S.CUT.derive(P); ok(pk.state === dv.state && pk.resultHash === dv.resultHash && !("pieces" in pk) && Object.isFrozen(pk), "6: peek = derive 와 같은 상태·완료본 번호 · 조각 없음"); }
   const odd = Object.assign({}, R, { collar: { type: "no-such-collar" } });
   const co = S.CUT.candidates(odd);
   ok(!co.pieces.some(c => c.group === "collar") && co.missing.some(m => m.id === "collar" && /no-such-collar/.test(m.reason)), "6: 모르는 카라 종류 = 조각 없이 이유");

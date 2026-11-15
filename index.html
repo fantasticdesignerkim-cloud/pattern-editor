@@ -6,7 +6,7 @@
 <title>DOROBO — 문화식 원형 에디터</title>
 <link rel="stylesheet" href="css/style.css?v=2026111304">
 <!-- 라이트 테마 덮어쓰기(apple-light-ui · 2026-11-13 통합): style.css 원문은 그대로, 표시만 바꾼다. -->
-<link rel="stylesheet" href="css/apple.css?v=2026111401">
+<link rel="stylesheet" href="css/apple.css?v=2026111502">
 <!-- 화면 모드(시스템/밝게/어둡게): 첫 그리기 전에 data-theme 을 정해 깜빡임을 막는다. 저장 키 dorobo.ui.theme · 연결은 js/appleChrome.js -->
 <script>try{var t=localStorage.getItem('dorobo.ui.theme');var d=t==='dark'||(t!=='light'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}catch(e){}</script>
 </head>
@@ -17,14 +17,14 @@
     <span class="app-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M5 19c3-1 4.5-13 8-13 2.6 0 3.4 4.6 6 5"/></svg></span>
     <span class="brand">DOROBO</span>
     <!-- 앱 버전 단일 원천: 배포할 때 이 번호만 올린다 (docs/STATUS.md § 앱 버전 표시) -->
-    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.14.1">v2026.11.14.1</span>
+    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.15.1">v2026.11.15.1</span>
     <span class="brand-sub">문화식 원형</span>
   </div>
 
   <nav class="stage-bar" aria-label="작업 단계" role="tablist">
     <button type="button" class="stage" role="tab" data-stage="draft"  aria-selected="true"  title="원형">원형</button>
     <button type="button" class="stage" role="tab" data-stage="design" aria-selected="false" disabled aria-disabled="true" title="원형 완료 후 디자인 시작 준비">디자인</button>
-    <button type="button" class="stage" role="tab" id="stageCut" aria-selected="false" aria-controls="cutView" disabled aria-disabled="true" title="Design 형상 완료 후 재단 준비(시접 전)">재단</button>
+    <button type="button" class="stage" role="tab" id="stageCut" aria-selected="false" aria-controls="cutView" disabled aria-disabled="true" title="Design 형상 완료 후 재단 준비">재단</button>
     <button type="button" class="stage" disabled aria-disabled="true" title="준비 중">출력</button>
   </nav>
 
@@ -671,10 +671,11 @@
   </aside>
 
   <!-- 재단 준비 1단계(js/cutPrep.js · 읽기 전용 오버레이): uiState.stage 는 "design" 그대로. Design 완료본의 조각을
-       시접 전 완성선 그대로(실물 치수) 보여 준다. 시접·너치·식서·재단 수량·배치·출력 없음. 저장하지 않는다. -->
+       완성선 그대로(실물 치수) 보여 주고, 변별 시접(js/seamAllowance.js)을 따로 그린다. 시접 설정만 working.cutSpec 에 저장.
+       너치·식서·재단 수량·배치·출력 없음. -->
   <section class="cut-view" id="cutView" aria-label="재단 준비" hidden>
     <div class="cut-head">
-      <div class="cut-title"><b>재단 준비</b><span class="cut-sub">시접 전 · 완성선(봉제선) 그대로 · 실물 치수</span></div>
+      <div class="cut-title"><b>재단 준비</b><span class="cut-sub">검은 선 = 완성선 · 붉은 선 = 시접 · 선을 누르면 시접 폭</span></div>
       <span class="cut-status" id="cutStatus" aria-live="polite"></span>
       <div class="cut-actions">
         <button type="button" class="btn" id="btnCutZoomOut" aria-label="축소">−</button>
@@ -684,7 +685,7 @@
       </div>
     </div>
     <div class="cut-body">
-      <svg id="cutCv" class="cut-canvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="재단 조각(시접 전)"></svg>
+      <svg id="cutCv" class="cut-canvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="재단 조각(완성선과 시접)"></svg>
       <div class="cut-side">
         <div class="cut-blocked" id="cutBlocked" hidden>
           <p id="cutBlockedText"></p>
@@ -693,6 +694,19 @@
         <ul class="cut-list" id="cutList" aria-label="재단 조각 목록"></ul>
         <p class="cut-source" id="cutSource"></p>
       </div>
+    </div>
+    <!-- 시접 카드(선을 누르면 하단 고정) — 값은 «적용»을 눌러야 working.cutSpec 에 쓰인다 -->
+    <div class="cut-seam-card" id="cutSeamCard" role="group" aria-label="선택한 변의 시접" hidden>
+      <b class="csc-name" id="cutSeamName"></b>
+      <label class="csc-field" id="cutSeamKindWrap">종류
+        <select id="cutSeamKind"><option value="fold">골선(시접 0)</option><option value="seam">봉제선(시접 있음)</option></select>
+      </label>
+      <label class="csc-field">폭
+        <input id="cutSeamWidth" type="number" inputmode="decimal" min="0" max="10" step="0.1"> cm
+      </label>
+      <button type="button" class="btn action-primary" id="btnCutSeamApply">적용</button>
+      <button type="button" class="btn csc-close" id="btnCutSeamClose" aria-label="시접 카드 닫기">닫기</button>
+      <p class="csc-msg" id="cutSeamMsg" aria-live="polite"></p>
     </div>
   </section>
 </div>
@@ -838,7 +852,7 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026111105"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/projectFile.js?v=2026110901"></script>
+<script src="js/projectFile.js?v=2026111404"></script>
 <script src="js/ui.js?v=2026111303"></script>
 <!-- 라이트 테마 크롬(UI 전용): 확대 알약 · 폰 하단 시트 · 화면 모드. 기존 전역 함수만 호출. -->
 <script src="js/appleChrome.js?v=2026111302"></script>
@@ -847,7 +861,8 @@
 <!-- 맞춤 길이 카드(읽기 전용 파생 표시 · UI 전용): 기존 측정 권위만 읽는다. -->
 <script src="js/seamMatch.js?v=2026111302"></script>
 <!-- 재단 준비 1단계(읽기 전용 파생 · UI 전용): designResult 권위만 읽는다. 저장 형식·stage 무변경. -->
-<script src="js/cutPrep.js?v=2026111402"></script>
+<script src="js/seamAllowance.js?v=2026111404"></script>
+<script src="js/cutPrep.js?v=2026111502"></script>
 
 </body>
 </html>

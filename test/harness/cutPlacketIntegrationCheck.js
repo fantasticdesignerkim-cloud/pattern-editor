@@ -27,7 +27,7 @@ const SLEEVE_EXTRA = (() => { const fs0 = require("fs"), p0 = require("path"), o
   return out; })();
 const FILES = ["blockWorkflow.js", "designProject.js", "sideSeamMagnet.js", "designLineTool.js", "sleeveSplit.js", "sleeveOutlineEdit.js", "designFlare.js", "designJoin.js", "designWaistSeam.js", "designYokeSeam.js", "designPrincess.js",
   "designPlacket.js", "designBodice.js", "bodicePresets.js", "designLayout.js", "designRenderer.js", "bodiceCheckpoint.js", "peplumAnnotation.js", "designSleeve.js", "sleeveMeasure.js", "sleeveCheckpoint.js", "sleevePresets.js",
-  "designSleeveA.js", "designCuff.js", "sleeveAApply.js", "sleeveAnnotation.js", "designCollar.js", "collarPresets.js", "collarCheckpoint.js", "designResult.js", "projectFile.js", "seamMatch.js", "cutPrep.js"].concat(SLEEVE_EXTRA);
+  "designSleeveA.js", "designCuff.js", "sleeveAApply.js", "sleeveAnnotation.js", "designCollar.js", "collarPresets.js", "collarCheckpoint.js", "designResult.js", "projectFile.js", "seamMatch.js", "seamAllowance.js", "cutPrep.js"].concat(SLEEVE_EXTRA);
 const SRC = {}; FILES.forEach(f => { SRC[f] = fs.readFileSync(path.join(ROOT, "js", f), "utf8"); });
 
 function makeSession() {
@@ -133,8 +133,10 @@ function build(curve, ov, fc) {
 const N0 = build(false, 0, 0), NC = build(true, 0, 0);
 {
   ok(N0.ok && N0.d.state === "ready" && N0.front.label === "앞판" && !N0.front.placket && !N0.front.marks.length && !N0.d.missing.some(m => m.id === "placket"), "1: 여밈 없음 = 앞판 그대로(합성·표시·누락 없음)");
-  const sha = crypto.createHash("sha256").update(J(N0.d.pieces)).digest("hex").slice(0, 16);
-  ok(sha === "f25330fbe974e137", "1: 여밈 없는 6조각 = 합성 도입 전(HEAD 33669e6) 지문과 바이트 동일 (" + sha + ")");
+  // 2026-11-14 트임 덧단·바이어스 조각 추가 뒤: 그 두 조각과 소매 위 트임 표시를 빼면 나머지 6조각은 종전 지문 그대로여야 한다.
+  const base6 = N0.d.pieces.filter(p => !/^vent-/.test(p.id)).map(p => Object.assign({}, p, { marks: p.marks.filter(m => !/^vent-/.test(m.kind)) }));
+  const sha = crypto.createHash("sha256").update(J(base6)).digest("hex").slice(0, 16);
+  ok(sha === "f25330fbe974e137" && N0.d.pieces.length === 8, "1: 여밈 없는 6조각 = 합성 도입 전(HEAD 33669e6) 지문과 바이트 동일 — 트임 2조각·소매 위 트임 표시 제외 (" + sha + ")");
   ok(N0.front.segs.filter(isCF).length === 2, "1: 여밈 없는 앞판 외곽에는 앞중심 변이 그대로 있다");
 }
 
@@ -142,7 +144,7 @@ const N0 = build(false, 0, 0), NC = build(true, 0, 0);
 {
   const r = build(false, 1.2, 1.2), f = r.front, R = r.P.working.designResult, b = R.bodice, q = f.placket;
   ok(r.ok && r.d.state === "ready" && r.unchanged, "2: ready · 파생 뒤 프로젝트 그래프·완료본 hash 4개 바이트 동일");
-  ok(ids(r.d) === "front,back,sleeve-sleeve,cuff,collar-stand,collar-body" && new Set(r.d.pieces.map(p => p.hash)).size === 6 && !r.d.pieces.some(p => /placket/.test(p.id)), "2: 조각 6장 · 중복 0 · 여밈 전용 조각(사각형) 없음 (" + ids(r.d) + ")");
+  ok(ids(r.d) === "front,back,sleeve-sleeve,cuff,vent-placket,vent-bias,collar-stand,collar-body" && new Set(r.d.pieces.map(p => p.hash)).size === 8 && !r.d.pieces.some(p => /^placket/.test(p.id)), "2: 조각 8장(트임 덧단·바이어스 포함) · 중복 0 · 여밈 전용 조각(사각형) 없음 (" + ids(r.d) + ")");
   ok(!r.d.missing.some(m => m.id === "placket") && r.d.failedPieces === 0, "2: 여밈은 더 이상 누락 아님 · 검사 실패 0");
   ok(f.label === "앞판(여밈·안단 포함)" && f.check.ok && ringOK(f.segs) && f.segs.every(s => ["from", "to", "c1", "c2"].every(k => !s[k] || (isFinite(s[k].x) && isFinite(s[k].y)))), "2: 앞판 = 닫힌 단일 외곽(연속·유한·자기교차 없음)");
   const a = stat(N0.front.segs), z = stat(f.segs), H = q.botY - q.topY;
@@ -205,7 +207,7 @@ const N0 = build(false, 0, 0), NC = build(true, 0, 0);
     const d2 = S2.CUT.derive(S2.P());
     ok(v.ok && J(d2.pieces) === J(gc.d.pieces) && !/facingZone|insideCm/.test(text), "4: 넓은 안단 — 저장 → 빈 세션 열기 뒤 조각 바이트 동일 · 파일에 재단 파생 값 없음");
   }
-  ok([c, e, g, gc, z, z0].every(x => x.unchanged && ids(x.d) === "front,back,sleeve-sleeve,cuff,collar-stand,collar-body" && !x.d.missing.some(m => m.id === "placket")), "4: 여섯 조합 모두 6장 · 완료본 무변경");
+  ok([c, e, g, gc, z, z0].every(x => x.unchanged && ids(x.d) === "front,back,sleeve-sleeve,cuff,vent-placket,vent-bias,collar-stand,collar-body" && !x.d.missing.some(m => m.id === "placket")), "4: 여섯 조합 모두 8장 · 완료본 무변경");
   const S0 = makeSession(); start(S0);
   ok(setPlacket(S0, 0, 0).reason === "no-placket" && setPlacket(S0, -1, 1).reason === "invalid-overlap", "4: 0/0 = 여밈 없음 · 음수 거부(디자인 쪽 기존 허용 범위 그대로)");
 }
@@ -267,6 +269,40 @@ const N0 = build(false, 0, 0), NC = build(true, 0, 0);
   const exact = CP(ring, mk(1.5, 3)), again = CP(ring, mk(1.5, 3));
   ok(exact.ok && J(exact) === J(again) && J(ring) === J(N0.front.segs), "8: 넓은 안단 합성 = 결정론 · 입력 불변");
   ok(CP(ring, { parameters: { overlapCm: 0, facingWidthCm: 0 }, outline: pl.outline }).ok === false && CP(ring, null).ok === false, "8: 0/0 · 빈 여밈 = 거부");
+}
+
+// ══ §R 야간 리뷰 #2 회귀(2026-11-15) ══ 순수 함수 · 합성 외곽
+//   ① 단조 검사는 실제로 반사 복사에 쓰는 구간(앞중심 → 폭 d 에 처음 닿는 점)만 본다  ② 접힘 검산 = 완성 외곽을 독립적으로 접어 잰 실측(고정 ok 아님)
+{
+  const C0 = makeSession().CUT, Ln = (a, b) => ({ kind: "line", from: { x: a[0], y: a[1] }, to: { x: b[0], y: b[1] } }), Cb = (a, b, c, d) => ({ kind: "cubic", from: { x: a[0], y: a[1] }, c1: { x: b[0], y: b[1] }, c2: { x: c[0], y: c[1] }, to: { x: d[0], y: d[1] } });
+  const plk = (ov, fc) => ({ parameters: { overlapCm: ov, facingWidthCm: fc, lengthMode: "full" }, outline: [Ln([10, 0], [10 + ov + fc, 0]), Ln([10 + ov + fc, 0], [10 + ov + fc, 20]), Ln([10 + ov + fc, 20], [10, 20]), Ln([10, 20], [10, 0])] });
+  const ringOf2 = neck => [Ln([10, 0], [10, 20]), Ln([10, 20], [0, 20]), Ln([0, 20], [0, 3])].concat(neck);
+  // (가) 목선 곡선이 폭 d(=1) 에 닿은 **뒤에서** 되돌아오는 정상 곡선: x 10 → 8.3 → 8.6
+  const backAfter = ringOf2([Ln([0, 3], [8.6, 1.5]), Cb([8.6, 1.5], [8, 1.5], [8, 0], [10, 0])]);
+  const a = C0.composePlacket(backAfter, plk(1, 2));
+  ok(a.ok && a.info.fold.trimmed && near(a.info.fold.insideCm, 1, 1e-9), "R①: 쓰는 구간 뒤에서만 되돌아오는 목선 = 합성 통과(예전엔 곡선 전체를 봐서 거부) (" + (a.reason || "ok") + ")");
+  const used = a.ok ? a.segs.filter(g => g.kind === "cubic" && Math.max(g.from.x, g.to.x) > 12 - 1e-6) : [];
+  ok(a.ok && used.length === 1 && near(Math.max(used[0].from.x, used[0].to.x), 13, 1e-6) && near(Math.min(used[0].from.x, used[0].to.x), 12, 1e-9), "R①: 반사 복사한 곡선 = 앞중심~폭 1 구간만(x 12~13)");
+  // (나) 쓰는 구간 **안에서** 되돌아가는 곡선(x 10 → 9.59 → 9.82 → 8): 폭 1 에 닿기 전에 역행 → 거부
+  const backInside = ringOf2([Ln([0, 3], [8, 1.5]), Cb([8, 1.5], [11.5, 1.2], [8.6, 0.2], [10, 0])]);
+  const b = C0.composePlacket(backInside, plk(1, 2));
+  ok(!b.ok && /한 방향으로 이어지지/.test(b.reason), "R①: 쓰는 구간 안의 역행(접힌 안단과 여러 번 만남) = 거부 (" + b.reason + ")");
+  // (다) 폭에 닿기 전에 외곽이 끝남 = 거부(선을 늘이지 않음)
+  const short = [Ln([10, 0], [10, 20]), Ln([10, 20], [9.5, 20]), Ln([9.5, 20], [9.5, 0]), Ln([9.5, 0], [10, 0])];
+  const c = C0.composePlacket(short, plk(0.2, 1.5));
+  ok(!c.ok, "R①: 폭에 닿기 전에 한 방향이 끝나는 외곽 = 거부 (" + c.reason + ")");
+  // ② 실측: 정상 합성은 편차가 숫자로 나오고(고정 true 아님), 일부러 어긋난 외곽은 «미검증/불일치»
+  ok(a.ok && a.info.fold.ok === true && typeof a.info.fold.maxDevCm === "number" && a.info.fold.maxDevCm < 0.01 && a.info.fold.checked > 20 && a.info.fold.reason === null, "R②: 접힘 = 완성 외곽을 접어 잰 실측(최대 편차 " + (a.ok && a.info.fold.maxDevCm) + "cm · " + (a.ok && a.info.fold.checked) + "점)");
+  const sq = C0.composePlacket(ringOf2([Ln([0, 3], [10, 0])]), plk(1.2, 1.2));
+  ok(sq.ok && sq.info.fold.ok && !sq.info.fold.trimmed && sq.info.fold.maxDevCm < 1e-9 && sq.info.fold.checked > 10, "R②: 안단 = 여밈분(사각) = 편차 0 실측");
+  const bent = sq.segs.map(g => JSON.parse(J(g))), top = bent.find(g => g.kind === "line" && Math.abs(g.from.y) < 1e-9 && Math.abs(g.to.y) < 1e-9 && Math.max(g.from.x, g.to.x) > 12);
+  const nxt = bent.find(g => g !== top && Math.abs(g.from.x - 12.4) < 1e-9 && Math.abs(g.from.y) < 1e-9); top.to.y = -0.4; nxt.from.y = -0.4;   // 안단 윗끝을 0.4 들어 올린 틀린 외곽
+  const fm = C0.foldMeasure(bent, 11.2);
+  ok(top && nxt && fm.ok === false && fm.maxDevCm > 0.3 && /벗어납니다/.test(fm.reason), "R②: 안단 윗끝이 어긋난 외곽 = 일치 아님 + 실측 편차(" + fm.maxDevCm + "cm) — 녹색 표시 불가");
+  const none = C0.foldMeasure(ringOf2([Ln([0, 3], [10, 0])]), 11.2);
+  ok(none.ok === false && none.maxDevCm === null && none.checked === 0 && /안단이 없습니다/.test(none.reason), "R②: 잴 것이 없으면 «미검증»(ok 아님)");
+  const noFacing = C0.composePlacket(ringOf2([Ln([0, 3], [10, 0])]), plk(1.2, 0));
+  ok(noFacing.ok && noFacing.info.fold.applies === false && noFacing.info.fold.ok === false, "R②: 안단 0 = 접힘 해당 없음(일치로 표시하지 않음)");
 }
 
 console.log("cutPlacketIntegrationCheck: " + PASS + " passed, " + FAIL + " failed");

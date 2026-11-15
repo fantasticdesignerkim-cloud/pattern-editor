@@ -204,6 +204,12 @@ const suites = [
   // 재단 준비 1단계(2026-11-13): Design 완료본 → 읽기 전용 재단 조각(시접 전) · 폐곡선 검사 · 누락 이유 · 무효화 · 저장 복원 · 소매 파생/분리 중복 방지.
   { file: "cutPrepIntegrationCheck.js", golden: false },
   { file: "cutPlacketIntegrationCheck.js", golden: false },
+  { file: "cutVentIntegrationCheck.js", golden: false },
+  // 시접(2026-11-14): 순수 기하(평행 이동·모서리 교점·오목·다트 접기 복원·거부) + 실제 8조각·설정 소유권(working.cutSpec)·저장 복원
+  { file: "seamAllowanceCheck.js", golden: false },
+  { file: "cutSeamIntegrationCheck.js", golden: false },
+  // 야간 리뷰 #2 ③(2026-11-15): 프로젝트 «열기» 연속 요청 — 마지막 요청만 반영(읽기 완료 순서를 뒤집어 실제 handler 검사)
+  { file: "projectOpenRaceCheck.js", golden: false },
 ];
 
 let anyFail = false;

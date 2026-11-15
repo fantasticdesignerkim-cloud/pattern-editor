@@ -561,9 +561,29 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 .cut-blocked[hidden]{display:none}
 #cutCv .cut-piece-outline{fill:rgba(255,255,255,.72);stroke:#1D1D1F;stroke-width:1.4px;vector-effect:non-scaling-stroke;stroke-linejoin:round}
 #cutCv .cut-piece.is-sel .cut-piece-outline{stroke:var(--ax-accent);stroke-width:2.6px;fill:rgba(0,122,255,.08)}
+#cutCv .cut-seam{fill:rgba(215,0,21,.07);stroke:#D70015;stroke-width:1.2px;vector-effect:non-scaling-stroke;stroke-linejoin:miter}
+#cutCv .cut-seam-part{fill:none;stroke-dasharray:6 3}
+#cutCv .cut-edge-fold{fill:none;stroke:#0A5FD0;stroke-width:2.4px;vector-effect:non-scaling-stroke;stroke-dasharray:10 3 2 3;pointer-events:none}
+#cutCv .cut-edge-fold-label{fill:#0A5FD0}
+#cutCv .cut-edge-sel{fill:none;stroke:var(--ax-accent);stroke-width:4px;vector-effect:non-scaling-stroke;stroke-linecap:round;pointer-events:none}
+#cutCv .cut-edge-hit{fill:none;stroke:transparent;stroke-width:18px;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
+.cut-seam-card{position:absolute;left:16px;bottom:16px;right:340px;max-width:560px;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border-radius:14px;
+  background:var(--ax-inspector);border:.5px solid var(--ax-hair);box-shadow:0 6px 24px rgba(0,0,0,.16);font-size:13px}
+.cut-seam-card[hidden]{display:none}
+.cut-seam-card .csc-name{flex:1 1 100%;font-size:14px;font-weight:600}
+.cut-seam-card .csc-field{display:flex;align-items:center;gap:6px;color:var(--ax-text2)}
+.cut-seam-card .csc-field[hidden]{display:none}
+.cut-seam-card select,.cut-seam-card input{min-height:36px;font-size:16px;border-radius:8px;border:.5px solid var(--ax-hair);background:var(--ax-fill);color:var(--ax-text);padding:0 8px}
+.cut-seam-card input{width:76px;text-align:right}
+.cut-seam-card .btn{min-height:36px;width:auto;flex:0 0 auto;margin:0;padding:0 14px}
+.cut-seam-card .csc-msg{flex:1 1 100%;margin:0;font-size:12px;line-height:1.4;color:var(--ax-text2)}
+.cut-seam-card[data-state="warn"] .csc-msg{color:var(--ax-orange)}
 #cutCv .cut-mark{fill:none;stroke-width:1.2px;vector-effect:non-scaling-stroke;stroke-dasharray:5 4}
 #cutCv .cut-mark-placket{stroke:var(--ax-orange)}
 #cutCv .cut-mark-cut{stroke:#6E6E73}
+#cutCv .cut-mark-vent-placket{stroke:#B25E09;stroke-dasharray:3 3}
+#cutCv .cut-mark-vent-slit{stroke:#D70015;stroke-dasharray:none;stroke-width:1.6px}
+#cutCv .cut-mark-label-vent-slit{fill:#D70015}
 /* 합친 앞판(여밈·컷온 안단): 연장 영역 2칸 + 앞중심선(일점쇄선) + 접는선(긴 점선). 안단 끝선 = 외곽 실선 */
 #cutCv .cut-zone{stroke:none;pointer-events:none}
 #cutCv .cut-zone-overlap{fill:rgba(0,122,255,.13)}
@@ -581,6 +601,9 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 @media (max-width:860px){
   .cut-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(220px,1fr) minmax(0,42%)}
   .cut-side{border-left:0;border-top:.5px solid var(--ax-hair)}
+  .cut-seam-card{left:8px;right:8px;bottom:8px;max-width:none;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+  .cut-seam-card select,.cut-seam-card input,.cut-seam-card .btn{min-height:44px}
+  .cut-seam-card .csc-msg{max-height:4.2em;overflow-y:auto}
 }
 @media (max-width:615px){
   .cut-head{padding:8px 16px;gap:6px 8px}
