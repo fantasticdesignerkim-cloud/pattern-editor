@@ -2,7 +2,7 @@
 // js/cutPrep.js — 재단 준비 1단계(2026-11-13 김님 승인 «순서대로 작업 이어가자»).
 //
 // 무엇: 유효한 Design 완료본(designResult)에서 **읽기 전용으로** 재단 조각 목록·외곽을 파생해 보여 준다.
-//   ★ 시접 전이다 — 그리는 선은 완성선(봉제선) 그대로다. 시접·너치·식서·재단 수량·배치 최적화·출력은 아직 없다.
+//   ★ (처음 단계 기록) 시접 전 — 완성선(봉제선) 그대로. 이후 시접·너치·수량·식서가 차례로 붙었다(아래 각 절). 배치 최적화·출력은 아직 없다.
 //
 // 계약(저장·엔진 무변경):
 //   · 권위 = designResult(.latest · .check · .isCurrentDesignChanged · .finalBodiceOf). 새 판정 원리·새 차단 없음
@@ -1076,6 +1076,152 @@
     return { ok: true };
   }
 
+  // ══ 식서(올 방향) 표시 — working.cutGrain 판 1 (2026-11-16 master 승인) ══
+  //   근거: [패턴학교] P.169 «시접 포함 패턴의 완성 예»(셔츠) — 뒤·앞 = 중심선과 평행 · 소매 = 소매 중심선과 평행 · 위 칼라·칼라 밴드·커프스 = 길이 방향 ·
+  //         덧단 = 길이 방향. 트임 바이어스 = 45°(P.91 «바이어스»). 그 밖 조각(요크·프린세스·두 장 소매 등)은 근거 미확인 → 기본 없음(직접 지정).
+  //   각도 = 조각 좌표의 가로축 기준(가로 0° · 세로 90° · 0 ≤ 각도 < 180). 위치 = 화살표 가운데(조각 좌표 cm). 길이는 저장하지 않는다 —
+  //   가운데에서 양쪽으로 «처음 만나는 외곽»까지만 재서 여백을 두고 그리므로 오목한 조각에서도 조각 밖으로 나가지 않는다. 골을 펼친 조각에도 하나만.
+  //   사용자가 고친 값만 저장. 엄격 검증(모르는 키·판·범위 밖 = 읽지 않음 · 잠금). 원본 조각·완료 hash·시접·너치·수량 무변경.
+  var GRAIN_CAP_CM = 10, GRAIN_MARGIN_CM = 0.5, GRAIN_SIDE_CM = 0.3, GRAIN_MIN_CM = 1.2, GRAIN_P169 = "[패턴학교] P.169 완성 예";
+  var GRAIN_AT_CACHE = {};
+  function normAngle(a) { a = ((a % 180) + 180) % 180; a = Math.round(a * 1e4) / 1e4; return a >= 180 ? 0 : a; }
+  function angleOfDir(dx, dy) { return normAngle(Math.atan2(dy, dx) * 180 / Math.PI); }
+  // 조각 서명 = 원본 완성 외곽(p.segs)만. 시접 폭·수량·골 펼침(표시)은 들어가지 않는다 → 그것만 바뀌면 서명은 그대로.
+  //   식서 각도·자리는 형상에 딸린 값이라, 저장할 때의 서명과 지금 서명이 다르면 그 설정은 «보류»(적용 안 함 · 지우지 않음).
+  var GRAIN_SIG = /^n\d{1,4}-[0-9a-f]{1,8}-[0-9a-f]{1,8}$/;
+  function grainSig(p) {
+    var r3 = function (v) { var x = Math.round(v * 1e3); return x === 0 ? 0 : x; }, pt = function (q) { return r3(q.x) + "," + r3(q.y); }, segs = p.segs || [];
+    var t = segs.map(function (g) { return g.kind === "cubic" ? "C" + pt(g.from) + ";" + pt(g.c1) + ";" + pt(g.c2) + ";" + pt(g.to) : "L" + pt(g.from) + ";" + pt(g.to); }).join("|");
+    var h2 = 5381; for (var i = 0; i < t.length; i++) h2 = ((h2 * 33) ^ t.charCodeAt(i)) | 0;
+    return "n" + segs.length + "-" + hashStr(t) + "-" + (h2 >>> 0).toString(16);
+  }
+  function readGrain(proj) {
+    var s = proj && proj.working ? proj.working.cutGrain : null;
+    if (s == null) return { state: "none", pieces: {} };
+    var bad = function (r) { return { state: "invalid", reason: r, pieces: {} }; }, num = function (v) { return typeof v === "number" && Number.isFinite(v); };
+    if (typeof s !== "object" || Array.isArray(s) || Object.keys(s).sort().join(",") !== "pieces,schema") return bad("형식 오류(schema·pieces 만 허용)");
+    if (s.schema !== 1) return bad("모르는 판(schema " + s.schema + ")");
+    if (!s.pieces || typeof s.pieces !== "object" || Array.isArray(s.pieces)) return bad("조각 목록 형식 오류");
+    var ks = Object.keys(s.pieces);
+    for (var i = 0; i < ks.length; i++) {
+      var k = ks[i], v = s.pieces[k]; if (!QTY_ID.test(k)) return bad("조각 id 형식 오류(" + k + ")");
+      if (!v || typeof v !== "object" || Array.isArray(v)) return bad("식서 항목 형식 오류(" + k + ")");
+      var vk = Object.keys(v); if (vk.length < 2 || vk.some(function (x) { return x !== "angleDeg" && x !== "at" && x !== "sig"; })) return bad("식서 항목은 sig 와 angleDeg·at 만 허용(" + k + ")");
+      if (!(typeof v.sig === "string" && GRAIN_SIG.test(v.sig))) return bad("조각 서명(sig) 없음·형식 오류(" + k + ")");
+      if ("angleDeg" in v && !(num(v.angleDeg) && v.angleDeg >= 0 && v.angleDeg < 180)) return bad("각도는 0 이상 180 미만(" + k + ")");
+      if ("at" in v && !(v.at && typeof v.at === "object" && !Array.isArray(v.at) && Object.keys(v.at).sort().join(",") === "x,y" && num(v.at.x) && num(v.at.y) && Math.abs(v.at.x) <= 10000 && Math.abs(v.at.y) <= 10000)) return bad("위치는 x·y 숫자(" + k + ")");
+    }
+    return { state: "ok", pieces: s.pieces };
+  }
+  function edgeDir(p, e) { var a = p.segs[e.segs[0]].from, b = p.segs[e.segs[e.segs.length - 1]].to; return { dx: b.x - a.x, dy: b.y - a.y }; }
+  function defaultGrain(p) {
+    var id = p.id, E = function (re) { return (p.edges || []).filter(function (e) { return re.test(e.id); })[0]; }, no = function (w) { return { angleDeg: null, why: w }; };
+    if (id === "front" || id === "back") return { angleDeg: 90, basis: "앞·뒤 중심선과 평행 — " + GRAIN_P169 };
+    if (id === "sleeve-sleeve") return { angleDeg: 90, basis: "소매 중심선과 평행 — " + GRAIN_P169 };
+    if (id === "cuff") { var ce = E(/^attach-edge$/); if (!ce) return no("커프스 달림선을 찾지 못함"); var cd = edgeDir(p, ce); return { angleDeg: angleOfDir(cd.dx, cd.dy), basis: "커프스 길이 방향 — " + GRAIN_P169 }; }
+    if (id === "collar-stand" || id === "collar-body") { var cb = E(/^cb(-|$)/); if (!cb) return no("뒤중심선을 찾지 못함"); var d = edgeDir(p, cb); if (Math.hypot(d.dx, d.dy) < 1e-6) return no("뒤중심선 길이 0");
+      return { angleDeg: angleOfDir(-d.dy, d.dx), basis: "뒤중심과 직각(길이 방향) — " + GRAIN_P169 }; }
+    if (id === "vent-placket" || id === "vent-bias") { var fm = (p.marks || []).filter(function (m) { return m.kind === "fold"; })[0], g = fm && fm.segs && fm.segs[0]; if (!g) return no("접는선을 찾지 못함");
+      var fa = angleOfDir(g.to.x - g.from.x, g.to.y - g.from.y);
+      return id === "vent-placket" ? { angleDeg: fa, basis: "덧단 길이 방향 — " + GRAIN_P169 } : { angleDeg: normAngle(fa - 45), basis: "바이어스 — 길이 방향에서 45°(P.91)" }; }
+    return no("교재 근거를 아직 확인하지 못한 조각 — 각도를 직접 지정");
+  }
+  function polyOf(segs) { var o = sample(segs, 24); return o; }
+  function inPolyPt(q, poly) { var c = false; for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) { var a = poly[i], b = poly[j]; if ((a.y > q.y) !== (b.y > q.y) && q.x < (b.x - a.x) * (q.y - a.y) / (b.y - a.y) + a.x) c = !c; } return c; }
+  // 가운데 c 에서 각도 방향 양쪽으로 «처음 만나는 외곽»까지의 구간 안에서만 그린다 → 조각 밖을 지나지 않는다.
+  function grainLine(poly, c, angleDeg) {
+    if (!poly || poly.length < 3 || !inPolyPt(c, poly)) return { ok: false, why: "가운데가 조각 밖" };
+    var th = angleDeg * Math.PI / 180, ux = Math.cos(th), uy = Math.sin(th), tn = -Infinity, tp = Infinity;
+    for (var i = 0; i < poly.length; i++) {
+      var a = poly[i], b = poly[(i + 1) % poly.length], ex = b.x - a.x, ey = b.y - a.y, den = ux * ey - uy * ex; if (Math.abs(den) < 1e-12) continue;
+      var t = ((a.x - c.x) * ey - (a.y - c.y) * ex) / den, w = ((a.x - c.x) * uy - (a.y - c.y) * ux) / den; if (w < -1e-9 || w > 1 + 1e-9) continue;
+      if (t < 0 && t > tn) tn = t; if (t >= 0 && t < tp) tp = t;
+    }
+    if (!Number.isFinite(tn) || !Number.isFinite(tp)) return { ok: false, why: "외곽을 만나지 못함" };
+    var half = Math.min(-tn - GRAIN_MARGIN_CM, tp - GRAIN_MARGIN_CM, GRAIN_CAP_CM / 2);
+    if (half * 2 < GRAIN_MIN_CM) return { ok: false, why: "이 자리·각도에서는 화살표가 조각 안에 들어가지 않음" };
+    for (var k = -2; k <= 2; k++) if (clearOf({ x: c.x + ux * half * k / 2, y: c.y + uy * half * k / 2 }, poly) < GRAIN_SIDE_CM) return { ok: false, why: "외곽에 너무 붙음(화살촉이 밖으로 나감)" };
+    return { ok: true, from: { x: c.x - ux * half, y: c.y - uy * half }, to: { x: c.x + ux * half, y: c.y + uy * half }, lenCm: half * 2, roomCm: tp - tn };
+  }
+  function clearOf(q, poly) { var m = Infinity; for (var i = 0; i < poly.length; i++) { var a = poly[i], b = poly[(i + 1) % poly.length], vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy, t = l2 ? Math.max(0, Math.min(1, ((q.x - a.x) * vx + (q.y - a.y) * vy) / l2)) : 0, dd = Math.hypot(q.x - a.x - vx * t, q.y - a.y - vy * t); if (dd < m) m = dd; } return m; }
+  function clearOpen(q, pts) { var m = Infinity; for (var i = 0; i + 1 < pts.length; i += 2) { var a = pts[i], b = pts[i + 1], vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy, t = l2 ? Math.max(0, Math.min(1, ((q.x - a.x) * vx + (q.y - a.y) * vy) / l2)) : 0, dd = Math.hypot(q.x - a.x - vx * t, q.y - a.y - vy * t); if (dd < m) m = dd; } return m; }
+  // 기본 자리: 원래(반쪽) 조각 안의 격자점 가운데 — 화살표가 길게 들어가고 · 외곽에서 떨어지고 · 조각 이름 글자와 겹치지 않는 곳. 펼친 조각도 원래 쪽에 하나.
+  function defaultGrainAt(halfPoly, dispPoly, angleDeg, labelBox, markPts) {
+    var b = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }; halfPoly.forEach(function (q) { b.minX = Math.min(b.minX, q.x); b.maxX = Math.max(b.maxX, q.x); b.minY = Math.min(b.minY, q.y); b.maxY = Math.max(b.maxY, q.y); });
+    var N = 24, best = null, mx = (b.minX + b.maxX) / 2, my = (b.minY + b.maxY) / 2;
+    for (var i = 1; i < N; i++) for (var j = 1; j < N; j++) {
+      var c = { x: b.minX + (b.maxX - b.minX) * i / N, y: b.minY + (b.maxY - b.minY) * j / N }; if (!inPolyPt(c, halfPoly)) continue;
+      var g = grainLine(dispPoly, c, angleDeg); if (!g.ok) continue;
+      var hit = labelBox && Math.max(g.from.x, g.to.x) >= labelBox.x0 && Math.min(g.from.x, g.to.x) <= labelBox.x1 && Math.max(g.from.y, g.to.y) >= labelBox.y0 && Math.min(g.from.y, g.to.y) <= labelBox.y1;
+      var onMark = markPts && markPts.length > 1 && clearOpen(c, markPts) < 0.5;   // 접는선·앞중심선 위에 겹쳐 놓지 않는다
+      var sc = g.lenCm + 1.5 * Math.min(clearOf(c, dispPoly), 3) - (hit ? 4 : 0) - (onMark ? 3 : 0) - 0.02 * Math.hypot(c.x - mx, c.y - my);
+      if (!best || sc > best.sc + 1e-9) best = { sc: sc, c: c };
+    }
+    return best ? { x: r4(best.c.x), y: r4(best.c.y) } : null;
+  }
+  // d = derive(proj, true) · disp = displayOf(d, m)
+  function grainOf(d, disp, proj) {
+    var q = readGrain(proj), out = { state: q.state, reason: q.reason || null, pieces: {}, stale: [], held: [] };
+    (d.pieces || []).forEach(function (p) {
+      if (!p.check.ok || !disp[p.id]) return;
+      var r = disp[p.id], saved = q.pieces[p.id] || null, sig = grainSig(p), held = !!saved && saved.sig !== sig, mine = saved && !held ? saved : {}, def = defaultGrain(p), ang = "angleDeg" in mine ? mine.angleDeg : def.angleDeg;
+      var o = { held: held, heldAngleDeg: held && "angleDeg" in saved ? saved.angleDeg : null, heldAt: held && saved.at ? { x: saved.at.x, y: saved.at.y } : null, tempDefault: held && ang != null,
+        heldWhy: held ? "조각 외곽이 이 식서를 정할 때와 달라짐" : null, ok: false, angleDeg: ang, defAngleDeg: def.angleDeg, basis: def.basis || null, why: def.why || null, explicitAngle: "angleDeg" in mine, explicitAt: "at" in mine, atStale: false, unfolded: !!r.unfolded };
+      out.pieces[p.id] = o; if (held) out.held.push(p.id);
+      if (ang == null) { o.why = def.why; return; }
+      var dispPoly = polyOf(r.outline), halfPoly = r.unfolded ? polyOf(p.segs) : dispPoly, g = null;
+      if (mine.at) { g = grainLine(dispPoly, mine.at, ang); if (g.ok) o.at = { x: mine.at.x, y: mine.at.y }; else { o.atStale = true; g = null; } }
+      if (!g) {
+        var bb = r.bbox, cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2, fs = Math.max(1.2, Math.min(2.4, (bb.maxX - bb.minX) / 9)), hw = (String(p.label).length + 3) * fs * 0.5;
+        var mk = []; (p.marks || []).forEach(function (m0) { if (/^zone-/.test(m0.kind)) return; m0.segs.forEach(function (sg) { if (sg.kind === "line") mk.push(sg.from, sg.to); }); });
+        if (r.fold) r.fold.segs.forEach(function (sg) { mk.push(sg.from, sg.to); });
+        var ck = [d.resultHash, sig, p.id, r.unfolded ? r.foldEdge : "-", ang, r4(bb.minX), r4(bb.maxX), r4(bb.minY), r4(bb.maxY)].join("|"), at;   // 기본 자리 찾기는 무겁다 → 같은 모양·각도면 다시 찾지 않는다
+        if (ck in GRAIN_AT_CACHE) at = GRAIN_AT_CACHE[ck];
+        else { at = defaultGrainAt(halfPoly, dispPoly, ang, { x0: cx - hw, x1: cx + hw, y0: cy - fs * 0.9, y1: cy + fs * 1.3 }, mk); if (Object.keys(GRAIN_AT_CACHE).length > 300) GRAIN_AT_CACHE = {}; GRAIN_AT_CACHE[ck] = at; }
+        if (!at) { o.why = "이 각도로는 화살표가 조각 안에 들어갈 자리가 없음"; return; }
+        g = grainLine(dispPoly, at, ang); o.at = at;
+      }
+      o.ok = true; o.from = g.from; o.to = g.to; o.lenCm = g.lenCm; o.why = null;
+    });
+    Object.keys(q.pieces).forEach(function (k) { if (!out.pieces[k]) out.stale.push(k); });
+    return out;
+  }
+  // patch = { angleDeg: 숫자 | null(기본으로) , at: {x,y} | null(기본 자리로) } — 적은 것만 바꾼다. 조각 밖·들어가지 않는 자리는 거부(저장 안 함).
+  function setGrain(pid, patch, proj) {
+    proj = proj || project(); var q = readGrain(proj); if (q.state === "invalid") return { ok: false, reason: "저장된 식서 설정을 읽을 수 없어 고치지 않습니다 — " + q.reason };
+    var d = derive(proj, true); if (d.state !== "ready") return { ok: false, reason: d.reason };
+    var p = d.pieces.filter(function (x) { return x.id === pid && x.check.ok; })[0]; if (!p) return { ok: false, reason: "이 조각이 없습니다" };
+    if (!patch || typeof patch !== "object") return { ok: false, reason: "바꿀 값이 없습니다" };
+    var sig = grainSig(p), saved = q.pieces[pid] || null, wasHeld = !!saved && saved.sig !== sig, cur = saved && !wasHeld ? saved : {}, next = {}, num = function (v) { return typeof v === "number" && Number.isFinite(v); };
+    if ("angleDeg" in cur) next.angleDeg = cur.angleDeg; if ("at" in cur) next.at = { x: cur.at.x, y: cur.at.y };
+    if ("angleDeg" in patch) { if (patch.angleDeg === null) delete next.angleDeg; else if (!num(patch.angleDeg) || patch.angleDeg < 0 || patch.angleDeg > 180) return { ok: false, reason: "각도는 0~180 사이 숫자로 적어 주세요(가로 0 · 세로 90)" }; else next.angleDeg = normAngle(patch.angleDeg); }
+    if ("at" in patch) { if (patch.at === null) delete next.at; else if (!patch.at || !num(patch.at.x) || !num(patch.at.y)) return { ok: false, reason: "위치 값이 숫자가 아닙니다" }; else next.at = { x: r4(patch.at.x), y: r4(patch.at.y) }; }
+    var disp = displayOf(d, seamOf(d, proj))[pid], ang = "angleDeg" in next ? next.angleDeg : defaultGrain(p).angleDeg;
+    if (ang == null && next.at) return { ok: false, reason: "먼저 각도를 정해 주세요(이 조각은 기본 방향이 없습니다)" };
+    if (ang != null && disp) {
+      var poly = polyOf(disp.outline);
+      if (next.at) { var g = grainLine(poly, next.at, ang); if (!g.ok) return { ok: false, reason: "그 자리에는 둘 수 없습니다 — " + g.why }; }
+      else if (!defaultGrainAt(disp.unfolded ? polyOf(p.segs) : poly, poly, ang, null)) return { ok: false, reason: "이 각도로는 화살표가 조각 안에 들어갈 자리가 없습니다" };
+    }
+    if (!proj.working.cutGrain) proj.working.cutGrain = { schema: 1, pieces: {} };
+    if (Object.keys(next).length) { var ent = { sig: sig }; if ("angleDeg" in next) ent.angleDeg = next.angleDeg; if ("at" in next) ent.at = next.at; proj.working.cutGrain.pieces[pid] = ent; } else delete proj.working.cutGrain.pieces[pid];
+    return { ok: true, replacedHeld: wasHeld };   // 보류 중에 사용자가 직접 고치면 그 값이 지금 외곽에 대한 새 설정이 된다(예전 값은 이어 쓰지 않음)
+  }
+  // 보류된 설정을 지금 외곽에 다시 연결(사용자가 누를 때만). 지금 외곽에 들어가지 않으면 거부 — 저장값은 그대로 둔다.
+  function relinkGrain(pid, proj) {
+    proj = proj || project(); var q = readGrain(proj); if (q.state === "invalid") return { ok: false, reason: "저장된 식서 설정을 읽을 수 없어 고치지 않습니다 — " + q.reason };
+    var d = derive(proj, true); if (d.state !== "ready") return { ok: false, reason: d.reason };
+    var p = d.pieces.filter(function (x) { return x.id === pid && x.check.ok; })[0]; if (!p) return { ok: false, reason: "이 조각이 없습니다" };
+    var saved = q.pieces[pid], sig = grainSig(p); if (!saved || saved.sig === sig) return { ok: false, reason: "보류된 식서 설정이 없습니다" };
+    var ang = "angleDeg" in saved ? saved.angleDeg : defaultGrain(p).angleDeg, disp = displayOf(d, seamOf(d, proj))[pid];
+    if (ang == null) return { ok: false, reason: "이 조각은 기본 방향이 없어 자리만으로는 다시 쓸 수 없습니다 — 각도를 적어 주세요" };
+    if (!disp) return { ok: false, reason: "이 조각을 표시할 수 없습니다" };
+    var poly = polyOf(disp.outline);
+    if (saved.at) { var g = grainLine(poly, saved.at, ang); if (!g.ok) return { ok: false, reason: "예전 자리가 지금 조각 모양에는 들어가지 않습니다(" + g.why + ") — 각도를 다시 적거나 «기본값»을 눌러 주세요" }; }
+    else if (!defaultGrainAt(disp.unfolded ? polyOf(p.segs) : poly, poly, ang, null)) return { ok: false, reason: "예전 각도로는 지금 조각 안에 화살표가 들어갈 자리가 없습니다" };
+    saved.sig = sig; return { ok: true };
+  }
+
   // 가벼운 상태 확인(조각을 만들지 않는다) — 탭 활성·안내용. derive 와 같은 판정·같은 문구.
   function peek(proj) {
     var d = gate(proj || project());
@@ -1124,7 +1270,7 @@
     var ax = function (lo, hi, a, b) { if (b - a > hi - lo) return lo - a; if (a < lo) return lo - a; if (b > hi) return hi - b; return 0; };
     return { dx: ax(V.left, V.right, T.left, T.right), dy: ax(V.top, V.bottom, T.top, T.bottom), fits: T.right - T.left <= V.right - V.left && T.bottom - T.top <= V.bottom - V.top };
   }
-  var model = { revealShift: revealShift, clickArc: clickArc,displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
+  var model = { readGrain: readGrain, grainOf: grainOf, setGrain: setGrain, relinkGrain: relinkGrain, grainSig: grainSig, defaultGrain: defaultGrain, grainLine: grainLine, revealShift: revealShift, clickArc: clickArc,displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
 
   // ══ 화면(읽기 전용 오버레이) ══ ─────────────────────────────────────
   var NS = "http://www.w3.org/2000/svg", GAP = 6;
@@ -1176,6 +1322,7 @@
     var D = view.disp = displayOf(d, view.seam);
     view.layout = layoutOf(d.pieces, D);
     var Q = view.qty = qtyOf(d, D, view.proj);
+    view.grain = grainOf(d, D, view.proj);
     view.layout.order.forEach(function (pid) {
       var p = d.pieces.filter(function (x) { return x.id === pid; })[0], r = D[pid], pos = view.layout.pos[pid]; if (!p || !r || !pos) return;
       var g = el("g", { "class": "cut-piece" + (view.sel === p.id ? " is-sel" : "") + (r.unfolded ? " is-unfolded" : ""), "data-piece": p.id, transform: "translate(" + pos.dx + " " + pos.dy + ")" });
@@ -1197,6 +1344,13 @@
         if (n.to) g.appendChild(el("path", { "class": "cut-notch", "data-notch": n.id, d: "M" + n.from.x + " " + n.from.y + " L" + n.to.x + " " + n.to.y }));
         else if (n.from) g.appendChild(el("circle", { "class": "cut-notch-dot", "data-notch": n.id, cx: n.from.x, cy: n.from.y, r: 0.25 }));
       });
+      var gr = view.grain && view.grain.pieces[pid];
+      if (gr && gr.ok) {   // 식서: 양끝 화살표 하나(펼친 조각에도 하나) · 끌어서 옮김
+        var gg = el("g", { "class": "cut-grain" + (gr.explicitAngle || gr.explicitAt ? " is-explicit" : "") + (gr.held ? " is-held" : ""), "data-grain": pid });
+        gg.appendChild(el("path", { "class": "cut-grain-line", d: grainD(gr.from, gr.to) }));
+        gg.appendChild(el("path", { "class": "cut-grain-hit", d: "M" + gr.from.x + " " + gr.from.y + " L" + gr.to.x + " " + gr.to.y }));
+        g.appendChild(gg);
+      }
       var sm = view.seam && view.seam.pieces[p.id];
       r.edges.forEach(function (e) {   // 변: 골선 표시 · 선택 강조 · 누르는 자리(반사 쪽도 같은 변 id → 같은 설정)
         var se = sm && sm.edges.filter(function (x) { return x.id === e.id; })[0], on = view.edge && view.edge.piece === p.id && view.edge.id === e.id;
@@ -1219,6 +1373,18 @@
     sizeLabels();
   }
 
+  // 식서 화살표 경로: 가운데 선 + 양 끝 화살촉(조각 좌표 cm)
+  function grainD(a, b) {
+    var L = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / L, uy = (b.y - a.y) / L, h = Math.min(0.8, L * 0.25), w = h * 0.35;   // 화살촉 반폭 ≤ 0.28 < 옆 여백 0.3
+    var head = function (t, sx) { return "M" + (t.x - sx * ux * h - uy * w) + " " + (t.y - sx * uy * h + ux * w) + " L" + t.x + " " + t.y + " L" + (t.x - sx * ux * h + uy * w) + " " + (t.y - sx * uy * h - ux * w); };
+    return "M" + a.x + " " + a.y + " L" + b.x + " " + b.y + " " + head(b, 1) + " " + head(a, -1);
+  }
+  function grainMsg(r, okMsg) { var t = r.ok ? okMsg : "식서 안 바뀜: " + r.reason; reseam(t); setNote("식서: " + t); }
+  function grainAngle(pid, v) {
+    var r = setGrain(pid, { angleDeg: v }, view.proj), moved = false;
+    if (!r.ok && v !== null && typeof v === "number" && Number.isFinite(v) && view.grain && view.grain.pieces[pid] && view.grain.pieces[pid].explicitAt) { var r2 = setGrain(pid, { angleDeg: v, at: null }, view.proj); if (r2.ok) { r = r2; moved = true; } }
+    grainMsg(r, "식서 각도 바뀜" + (r.replacedHeld ? " — 보류 중이던 예전 설정은 이 값으로 바뀜" : "") + (moved ? " — 옮겨 둔 자리에는 이 각도로 들어가지 않아 기본 자리로 옮김" : "") + " · 프로젝트를 저장해야 파일에 남습니다");
+  }
   function li(cls, html) { var e = document.createElement("li"); if (cls) e.className = cls; e.innerHTML = html; return e; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   var GROUP_LABEL = { bodice: "몸판", sleeve: "소매·커프스", collar: "카라" };
@@ -1246,7 +1412,7 @@
     } else {
       t += "<span class=\"ci-pl\">완성 폭 " + c2s(q.finishedWidthCm) + " 을 접어 감싸는 한 장 · 펼친 폭 " + c2s(q.openWidthCm) + " × 가위집 길이 " + c2s(q.lengthCm) + " cm</span>";
       t += "<span class=\"ci-legend\"><span class=\"lg-i\"><i class=\"lg lg-fold\"></i>접는선</span><span class=\"lg-i\"><i class=\"lg lg-edge\"></i>외곽 = 완성선</span></span>";
-      t += "<span class=\"ci-note\">바이어스 방향으로 재단(식서 표시는 다음 단계) · 소매 한 쪽당 1장</span>";
+      t += "<span class=\"ci-note\">바이어스 방향으로 재단(식서 45°) · 소매 한 쪽당 1장</span>";
     }
     return t;
   }
@@ -1297,6 +1463,18 @@
             "<span class=\"ci-qty-how\">" + esc(qq.how || "") + (qq.explicit ? " · 직접 지정(기본 " + (qq.def == null ? "없음" : qq.def) + ")" : qq.def == null ? " · 기본값 없음 — 직접 입력" : " · 기본값") + "</span>" +
             (qq.explicit ? "<button type=\"button\" class=\"btn ci-qty-reset\" data-qty-reset=\"" + esc(p.id) + "\">기본값</button>" : "");
           item.appendChild(qd);
+        }
+        var gq = view.grain && view.grain.pieces[p.id];
+        if (gq) {   // 식서(올 방향) — 각도는 여기서, 자리는 화면의 화살표를 끌어서
+          var glock = view.grain.state === "invalid" ? " disabled" : "", gd = document.createElement("div"); gd.className = "ci-qty ci-grain";
+          var gheld = gq.held ? "보류 — " + gq.heldWhy + " · 저장해 둔 식서(" + (gq.heldAngleDeg == null ? "" : "각도 " + gq.heldAngleDeg + "°") + (gq.heldAngleDeg != null && gq.heldAt ? " · " : "") + (gq.heldAt ? "옮긴 자리" : "") + ")는 적용하지 않고 남겨 둠 · " + (gq.tempDefault ? "지금 화살표는 임시 기본 방향 · " : "") : "";
+          var gst = gheld + (gq.angleDeg == null ? "방향 미정 — " + (gq.why || "직접 지정") : !gq.ok ? "표시 안 됨 — " + (gq.why || "") : (gq.explicitAngle ? "직접 지정(기본 " + (gq.defAngleDeg == null ? "없음" : gq.defAngleDeg + "°") + ")" : "기본값 · " + (gq.basis || "")) + (gq.explicitAt ? " · 자리 옮김" : "") + (gq.atStale ? " · 옮겨 둔 자리가 지금 모양 밖이라 기본 자리에 표시" : "") + (gq.unfolded ? " · 펼친 한 장에 하나" : ""));
+          gd.innerHTML = "<label>식서 <input type=\"number\" inputmode=\"decimal\" min=\"0\" max=\"180\" step=\"1\" data-grain-angle=\"" + esc(p.id) + "\" value=\"" + (gq.angleDeg == null ? "" : gq.angleDeg) + "\"" + glock + "> °</label>" +
+            "<button type=\"button\" class=\"btn\" data-grain-set=\"90\" data-pid=\"" + esc(p.id) + "\"" + glock + ">세로</button><button type=\"button\" class=\"btn\" data-grain-set=\"0\" data-pid=\"" + esc(p.id) + "\"" + glock + ">가로</button><button type=\"button\" class=\"btn\" data-grain-set=\"45\" data-pid=\"" + esc(p.id) + "\"" + glock + ">바이어스</button>" +
+            (gq.held ? "<button type=\"button\" class=\"btn\" data-grain-relink=\"" + esc(p.id) + "\"" + glock + ">이전 설정 다시 쓰기</button>" : "") +
+            (gq.held || gq.explicitAngle || gq.explicitAt ? "<button type=\"button\" class=\"btn ci-qty-reset\" data-grain-reset=\"" + esc(p.id) + "\"" + glock + ">기본값</button>" : "") +
+            "<span class=\"ci-qty-how\">" + esc(gst) + (gq.ok ? " · 자리는 화면의 화살표를 끌어 옮김" : "") + "</span>";
+          item.appendChild(gd);
         }
         box.appendChild(item);
       });
@@ -1438,7 +1616,7 @@
   // 카드 내용이 바뀐 직후(시접 적용·너치 추가/이동/삭제·이즈 배분) 1회 — 사용자가 선택 뒤 직접 옮겼으면 하지 않는다.
   function cardChanged() { if (view.open && view.edge && !view.manual) revealSel(); }
   function clearEdge() { if (!view.edge) return; view.edge = null; view.cardMsg = ""; drawCanvas(); syncCard(); }
-  function refreshDisp() { if (view.data && view.data.state === "ready") { view.disp = displayOf(view.data, view.seam); view.qty = qtyOf(view.data, view.disp, view.proj); } }
+  function refreshDisp() { if (view.data && view.data.state === "ready") { view.disp = displayOf(view.data, view.seam); view.qty = qtyOf(view.data, view.disp, view.proj); view.grain = grainOf(view.data, view.disp, view.proj); } }
   function reseam(msg) { var nd = derive(view.proj, true); if (nd.state === "ready" && nd.resultHash === view.data.resultHash) view.data = nd; view.seam = seamOf(view.data, view.proj); refreshDisp(); view.cardMsg = msg || ""; drawList(); drawCanvas(); syncCard(); cardChanged(); }
   function applyEdge() {
     var c = curEdge(); if (!c) return;
@@ -1524,13 +1702,17 @@
     if (list) list.addEventListener("click", function (e) {
       var o = e.target.closest("[data-act=\"clear-orphans\"]"); if (o) { var cr = clearOrphans(view.proj); reseam(cr.ok ? "" : ""); return; }
       var qr = e.target.closest("[data-qty-reset]"); if (qr) { var rq = setQty(qr.getAttribute("data-qty-reset"), null, view.proj); reseam(rq.ok ? "재단 수량 = 기본값" : rq.reason); return; }
+      var gs = e.target.closest("[data-grain-set]"); if (gs && !gs.disabled) { grainAngle(gs.getAttribute("data-pid"), Number(gs.getAttribute("data-grain-set"))); return; }
+      var gl0 = e.target.closest("[data-grain-relink]"); if (gl0 && !gl0.disabled) { grainMsg(relinkGrain(gl0.getAttribute("data-grain-relink"), view.proj), "보류한 식서를 지금 조각에 다시 연결 · 프로젝트를 저장해야 파일에 남습니다"); return; }
+      var gx = e.target.closest("[data-grain-reset]"); if (gx && !gx.disabled) { grainMsg(setGrain(gx.getAttribute("data-grain-reset"), { angleDeg: null, at: null }, view.proj), "식서 = 기본값"); return; }
       if (e.target.closest(".ci-qty")) return;   // 수량 칸을 누른 것은 조각 선택이 아님
       var nr = e.target.closest("[data-act=\"nrecon\"],[data-act=\"norph-del\"]");
       if (nr) { var rr = nr.dataset.act === "nrecon" ? reconnectNotch(nr.dataset.id, view.proj) : removeNotch(nr.dataset.id, view.proj); reseam(rr.ok ? "" : rr.reason); return; }
       var b = e.target.closest(".cut-item-btn"); if (b && !b.disabled) { clearEdge(); select(b.dataset.piece); }
     });
     on("btnCutSeamApply", applyEdge);
-    if (list) list.addEventListener("change", function (e) { var t = e.target; if (!t.matches || !t.matches("input[data-qty]")) return;
+    if (list) list.addEventListener("change", function (e) { var t = e.target; if (t.matches && t.matches("input[data-grain-angle]")) { grainAngle(t.getAttribute("data-grain-angle"), t.value.trim() === "" ? null : Number(t.value)); return; }
+      if (!t.matches || !t.matches("input[data-qty]")) return;
       var v = t.value.trim() === "" ? NaN : Number(t.value), r = setQty(t.getAttribute("data-qty"), v, view.proj); reseam(r.ok ? "재단 수량 바뀜 — 프로젝트를 저장해야 파일에 남습니다" : "수량 안 바뀜: " + r.reason);
       if (!r.ok) setNote("재단 수량: " + r.reason); });
     var nedit = $("cutNotchEdit");
@@ -1546,14 +1728,16 @@
     var toCm = function (e) { var r = svg.getBoundingClientRect(), c = view.cam; return { x: c.x + (e.clientX - r.left) / r.width * c.w, y: c.y + (e.clientY - r.top) / r.height * c.h }; };
     // 두 손가락(2026-11-15): 가운데가 움직이면 이동, 벌리면 확대 — 시작할 때 두 손가락 가운데 아래 있던 실물 점이 계속 가운데 아래에 있도록.
     //   두 번째 손가락이 닿으면 한 손가락 끌기·누르기는 취소한다(선택이 잘못 눌리지 않게). 캔버스는 touch-action:none 이라 브라우저 확대는 일어나지 않는다.
-    var pts = {}, pinch = null;
+    var pts = {}, pinch = null, gdrag = null;   // gdrag = 식서 화살표 끌기(화면 이동 아님)
     var two = function () { var k = Object.keys(pts); return k.length === 2 ? [pts[k[0]], pts[k[1]]] : null; };
     svg.addEventListener("pointerdown", function (e) {
       if (!view.cam) return;
       pts[e.pointerId] = { x: e.clientX, y: e.clientY };
       var t = two();
-      if (t) { drag = null; pinch = { d: Math.max(1, Math.hypot(t[0].x - t[1].x, t[0].y - t[1].y)), cx: (t[0].x + t[1].x) / 2, cy: (t[0].y + t[1].y) / 2, cam: Object.assign({}, view.cam) }; return; }
+      if (t) { if (gdrag) { gdrag = null; drawCanvas(); } drag = null; pinch = { d: Math.max(1, Math.hypot(t[0].x - t[1].x, t[0].y - t[1].y)), cx: (t[0].x + t[1].x) / 2, cy: (t[0].y + t[1].y) / 2, cam: Object.assign({}, view.cam) }; return; }
       if (Object.keys(pts).length > 2) { drag = null; pinch = null; return; }
+      var gh = e.target.closest && e.target.closest(".cut-grain-hit"), gpid = gh && gh.parentNode.getAttribute("data-grain"), gcur = gpid && view.grain && view.grain.state !== "invalid" && view.grain.pieces[gpid];
+      if (gcur && gcur.ok && view.disp && view.disp[gpid]) { drag = null; gdrag = { pid: gpid, x: e.clientX, y: e.clientY, id: e.pointerId, at0: gcur.at, at: null, ang: gcur.angleDeg, poly: polyOf(view.disp[gpid].outline), node: gh.parentNode, moved: false }; return; }
       drag = { x: e.clientX, y: e.clientY, cam: Object.assign({}, view.cam), moved: false, id: e.pointerId };
     });
     svg.addEventListener("pointermove", function (e) {
@@ -1566,6 +1750,14 @@
         view.manual = true; view.cam = { x: ax - (cx - rr.left) / rr.width * nw, y: ay - (cy - rr.top) / rr.height * nh, w: nw, h: nh }; applyCam();
         return;
       }
+      if (gdrag && e.pointerId === gdrag.id) {   // 조각 안에 들어가는 자리로만 따라온다(밖으로는 그리지 않음)
+        var gr0 = svg.getBoundingClientRect(), gc = view.cam;
+        if (!gdrag.moved && Math.hypot(e.clientX - gdrag.x, e.clientY - gdrag.y) < 4) return;
+        if (!gdrag.moved) { gdrag.moved = true; try { svg.setPointerCapture(e.pointerId); } catch (x) { /* 무시 */ } }
+        var nat = { x: gdrag.at0.x + (e.clientX - gdrag.x) / gr0.width * gc.w, y: gdrag.at0.y + (e.clientY - gdrag.y) / gr0.height * gc.h }, gl = grainLine(gdrag.poly, nat, gdrag.ang);
+        if (gl.ok) { gdrag.at = nat; var ps = gdrag.node.querySelectorAll("path"); ps[0].setAttribute("d", grainD(gl.from, gl.to)); ps[1].setAttribute("d", "M" + gl.from.x + " " + gl.from.y + " L" + gl.to.x + " " + gl.to.y); }
+        return;
+      }
       if (!drag || e.pointerId !== drag.id) return;
       var r = svg.getBoundingClientRect(), dx = (e.clientX - drag.x) / r.width * drag.cam.w, dy = (e.clientY - drag.y) / r.height * drag.cam.h;
       if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 4) return;
@@ -1573,7 +1765,10 @@
       view.cam = { x: drag.cam.x - dx, y: drag.cam.y - dy, w: drag.cam.w, h: drag.cam.h }; applyCam();
     });
     var end = function (e) {
-      delete pts[e.pointerId]; if (pinch) { pinch = null; drag = null; return; }
+      delete pts[e.pointerId]; if (pinch) { pinch = null; drag = null; gdrag = null; return; }
+      if (gdrag) { var gd0 = gdrag; gdrag = null; if (e.pointerId !== gd0.id) return;
+        if (gd0.moved && gd0.at) { var gsr = setGrain(gd0.pid, { at: gd0.at }, view.proj); grainMsg(gsr, "식서 자리 옮김" + (gsr.replacedHeld ? " — 보류 중이던 예전 설정은 이 값으로 바뀜" : "") + " · 프로젝트를 저장해야 파일에 남습니다"); } else if (gd0.moved) drawCanvas(); else { clearEdge(); select(gd0.pid); }
+        return; }
       if (!drag) return;
       if (!drag.moved) {
         var g = e.target.closest && e.target.closest(".cut-piece"), h = e.target.closest && e.target.closest("[data-edge]");
@@ -1586,13 +1781,14 @@
       }
       drag = null;
     };
-    svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", function (e) { delete pts[e.pointerId]; pinch = null; drag = null; });
+    svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", function (e) { delete pts[e.pointerId]; pinch = null; drag = null; if (gdrag) { gdrag = null; drawCanvas(); } });
     // 캔버스 밖에서 손가락을 떼면 캔버스는 pointerup 을 못 받는다 → 그 손가락이 «눌린 채» 남아 다음 핀치·탭이 먹히지 않는다(2026-11-15 실측 재현).
     //   화면 어디서 떼든 받아 정리한다. 캔버스 안에서 뗀 것은 위 end 가 처리하므로 건드리지 않는다.
     var lift = function (e) {
       if (!pts[e.pointerId] || (e.target && svg.contains(e.target))) return;
       delete pts[e.pointerId];
       if (drag && drag.id === e.pointerId) drag = null;
+      if (gdrag && gdrag.id === e.pointerId) { gdrag = null; drawCanvas(); }
       if (!Object.keys(pts).length) { pinch = null; drag = null; }
     };
     window.addEventListener("pointerup", lift, true); window.addEventListener("pointercancel", lift, true);
