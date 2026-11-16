@@ -635,3 +635,26 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
   .cut-side{padding:8px 16px 14px}
 }
 [data-theme="dark"] .cut-view{background:var(--ax-inspector)}
+/* 재단 — 실물 크기 인쇄 사전 점검 창(js/cutPrint.js) */
+.cut-print{position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:12px;background:rgba(0,0,0,.38)}
+.cut-print[hidden]{display:none}
+.cut-print-card{display:flex;flex-direction:column;width:min(640px,100%);max-height:100%;background:var(--ax-inspector,#fff);color:var(--ax-text,#1d1d1f);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.3);overflow:hidden}
+.cut-print-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--ax-line,rgba(0,0,0,.12));font-size:15px}
+.cut-print-body{padding:12px 14px 14px;overflow:auto;-webkit-overflow-scrolling:touch;font-size:13px;line-height:1.5}
+.cut-print .btn{flex:0 0 auto;width:auto;white-space:nowrap}
+.cut-print-head b{flex:1 1 auto;min-width:0}
+.cut-print-sum{margin-bottom:8px}
+.cut-print-block{padding:10px 12px;border-radius:10px;background:rgba(200,40,30,.1);color:#B3261E;margin-bottom:8px}
+.cut-print-block ul,.cut-print-notes,.cut-print-how{margin:4px 0 0;padding-left:18px}
+.cut-print-opts{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:6px 0}
+.cut-print-opts input{width:64px;min-height:32px;font:inherit;padding:2px 6px;border:1px solid var(--ax-line,rgba(0,0,0,.2));border-radius:8px;background:transparent;color:inherit}
+.cut-print-msg{color:#8A3B00;margin:4px 0}
+.cut-print-h{font-weight:600;margin:10px 0 4px}
+.cut-print .is-warn{color:#8A3B00}
+.cut-print-table{border-collapse:collapse;width:100%;font-size:12.5px}
+.cut-print-table th,.cut-print-table td{border-bottom:1px solid var(--ax-line,rgba(0,0,0,.12));padding:4px 6px;text-align:left;vertical-align:top}
+.cut-print-foot{margin-top:8px;opacity:.75;font-size:12px}
+.cut-print-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+[data-theme="dark"] .cut-print .is-warn,[data-theme="dark"] .cut-print-msg{color:#FFB37A}
+[data-theme="dark"] .cut-print-block{color:#FF8A80}
+@media (max-width:640px){.cut-print{padding:0;align-items:flex-end}.cut-print-card{border-radius:14px 14px 0 0;max-height:92%}.cut-print .btn{min-height:44px}.cut-print-opts input{min-height:44px;font-size:16px}}

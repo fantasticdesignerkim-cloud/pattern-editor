@@ -217,6 +217,7 @@ const suites = [
   // 재단 화면(2026-11-15): 뒤→앞→소매 배치 · BL 정렬 · 골 펼침(면적·대칭·중복 중심 없음) · 골↔봉제선 · 재단 수량 저장
   { file: "cutLayoutCheck.js", golden: false },
   { file: "cutGrainCheck.js", golden: false },
+  { file: "cutPrintCheck.js", golden: false },
 ];
 
 let anyFail = false;
