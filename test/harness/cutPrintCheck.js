@@ -283,9 +283,9 @@ let B;
 // ══ §7 화면 · 문구 ══
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), SRC0 = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8"), css = fs.readFileSync(path.join(ROOT, "css", "apple.css"), "utf8");
-  ok(/id="btnCutPrint"[^>]*>실물 인쇄</.test(html) && /js\/cutPrint\.js\?v=2026111602/.test(html) && html.indexOf("js/cutPrint.js") > html.indexOf("js/cutPrep.js"), "7: 재단 화면에 «실물 인쇄» 단추 · cutPrint.js 는 cutPrep.js 다음에 불러옴");
+  ok(/id="btnCutPrint"[^>]*>인쇄·DXF</.test(html) && /js\/cutPrint\.js\?v=2026111603/.test(html) && html.indexOf("js/cutPrint.js") > html.indexOf("js/cutPrep.js"), "7: 재단 화면에 «실물 인쇄» 단추 · cutPrint.js 는 cutPrep.js 다음에 불러옴");
   ok(!/PDF ?다운로드|PDF ?내려받기|PDF 저장 단추/.test(SRC0 + html) && /인쇄 창 열기/.test(SRC0) && /파일을 바로 내려받는 것이 아닙니다/.test(SRC0) && /PDF로 저장/.test(SRC0) && /100%\(실제 크기\)/.test(SRC0), "7: «PDF 다운로드»라고 쓰지 않음 · «인쇄 창 열기» + 시스템 인쇄 창에서 «PDF로 저장» 동선 안내");
-  ok(/disabled aria-disabled=\\"true\\" title=/.test(SRC0) && /지금은 인쇄할 수 없습니다/.test(SRC0) && /@media screen\{#cutPrintRoot\{display:none!important\}\}/.test(SRC0) && /body>\*:not\(#cutPrintRoot\)\{display:none!important\}/.test(SRC0), "7: 막힌 상태 = 단추 disabled + 이유 · 인쇄 내용은 화면에는 숨기고 인쇄할 때만 보임");
+  ok(/disabled aria-disabled=\\"true\\" title=/.test(SRC0) && /지금은 인쇄·DXF 저장을 할 수 없습니다/.test(SRC0) && /@media screen\{#cutPrintRoot\{display:none!important\}\}/.test(SRC0) && /body>\*:not\(#cutPrintRoot\)\{display:none!important\}/.test(SRC0), "7: 막힌 상태 = 단추 disabled + 이유 · 인쇄 내용은 화면에는 숨기고 인쇄할 때만 보임");
   ok(/\.cut-print-card\{/.test(css) && /@media \(max-width:640px\)\{[^@]*\.cut-print \.btn\{min-height:44px\}/.test(css), "7: 사전 점검 창 스타일 · 폰에서 단추 44px");
 }
 

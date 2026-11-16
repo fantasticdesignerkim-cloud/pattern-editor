@@ -325,6 +325,9 @@
       if (k === "close") closePanel();
       else if (k === "reset") { ui.opts = { marginMm: DEF.marginMm, overlapMm: DEF.overlapMm }; ui.msg = "여백·겹침 = 기본값"; renderPanel(); }
       else if (k === "print") doPrint();
+      else if ((k === "dxf" || k === "dxf-aama") && W().cutDxf) { var now = new Date(), pad = function (v) { return (v < 10 ? "0" : "") + v; };
+        var r = W().cutDxf.download(null, { version: versionNow(), createdAt: now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate()) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes()) }, k === "dxf-aama" ? { format: "aama" } : null);
+        ui.msg = r.ok ? "DXF 파일 내려받기를 시작했습니다 — " + r.fileName + " (브라우저의 다운로드 폴더)" + (r.notes && r.notes.length ? " · " + r.notes.join(" · ") : "") : "DXF 저장 안 함: " + r.reason; renderPanel(); }
     });
     p.addEventListener("change", function (e) {
       var t = e.target; if (!t.matches || !t.matches("input[data-cp-opt]")) return;
@@ -341,7 +344,7 @@
     ui.last = b.ok ? { pages: b.tiles.length, cols: b.cols, rows: b.rows, blank: b.blank, resultHash: b.resultHash } : null;
     var QK = { user: "직접 지정", "default": "기본값", none: "미정" }, GK = { user: "직접 지정", "default": "교재 기본", held: "보류", none: "미정", unfit: "표시 못함" };
     if (!b.ok) {
-      o.push("<div class=\"cut-print-block\" role=\"alert\"><b>지금은 인쇄할 수 없습니다</b> — 아래 문제를 먼저 풀어야 합니다(미완성 패턴을 완성본처럼 내보내지 않습니다).<ul>" + (pre.blockers || []).map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul></div>");
+      o.push("<div class=\"cut-print-block\" role=\"alert\"><b>지금은 인쇄·DXF 저장을 할 수 없습니다</b> — 아래 문제를 먼저 풀어야 합니다(미완성 패턴을 완성본처럼 내보내지 않습니다).<ul>" + (pre.blockers || []).map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul></div>");
     } else {
       o.push("<div class=\"cut-print-sum\">전체 " + fmt(b.sheet.wCm) + " × " + fmt(b.sheet.hCm) + " cm · A4 세로 <b>" + b.tiles.length + "장</b> + 안내 1장 (세로 " + b.rows + "행 × 가로 " + b.cols + "열 · 빈 칸 " + b.blank + "장 제외) · 실물 크기 1:1 · 한 장 = 안내 띠 " + b.opts.bandMm + "mm + 패턴 영역 " + n4(b.opts.winWmm) + " × " + n4(b.opts.winHmm) + "mm</div>");
     }
@@ -362,6 +365,10 @@
       "<li>인쇄 뒤 안내 쪽의 큰 <b>검척선</b>(가로·세로 100mm)을 자로 재어 확인합니다. 각 장 위쪽 띠에도 가로 10cm 검척선이 있습니다.</li></ol>" +
       "<div class=\"cut-print-foot\">이 기기 안에서만 만들며 패턴을 밖으로 보내지 않습니다. 원본 도형·저장값은 바뀌지 않습니다.</div>");
     o.push("<div class=\"cut-print-actions\"><button type=\"button\" class=\"btn action-primary\" data-cp=\"print\"" + (b.ok ? "" : " disabled aria-disabled=\"true\" title=\"" + esc((pre.blockers || [])[0] || "인쇄할 수 없음") + "\"") + ">인쇄 창 열기</button><button type=\"button\" class=\"btn\" data-cp=\"close\">닫기</button></div>");
+    if (W().cutDxf) o.push("<div class=\"cut-print-h\">DXF 파일(CAD 용)</div><div class=\"cut-print-foot\">같은 사전 점검을 통과한 재단 결과를 <b>파일로 내려받습니다</b>(인쇄 창과 별개 · 여백·겹침 값과 무관). 일반 DXF R12 · 단위 mm · 1:1 · 조각마다 재단선·완성선은 닫힌 선 · 레이어 CUT / FINISHED / FOLD / NOTCH / GRAIN / GRAIN_HELD / INTERNAL / TEXT. " +
+      "곡선은 0.01mm 이내 오차의 짧은 직선으로 나눕니다. AAMA/ASTM 규격 파일이 아니며, 특정 CAD 에서 열리는지는 아직 확인하지 않았습니다. 원형 탭의 «DXF 다운로드»(원형 도안)와는 다른 파일입니다.</div>" +
+      "<div class=\"cut-print-actions\"><button type=\"button\" class=\"btn\" data-cp=\"dxf\"" + (b.ok ? "" : " disabled aria-disabled=\"true\" title=\"" + esc((pre.blockers || [])[0] || "내보낼 수 없음") + "\"") + ">DXF 파일 저장</button><button type=\"button\" class=\"btn\" data-cp=\"dxf-aama\"" + (b.ok ? "" : " disabled aria-disabled=\"true\"") + ">DXF 저장(AAMA 구조)</button></div>" +
+      "<div class=\"cut-print-foot\">«AAMA 구조» = 어패럴 CAD 교환용 구조를 따른 파일(조각마다 블록 하나 · 숫자 레이어 1 재단선 / 2·3 점 / 4 너치 / 6 대칭선 / 7 식서 / 8 안쪽 선 / 14 봉제선 · Piece Name·Quantity·Units 글자). 규격 인증을 받은 것이 아니고 CLO 등에서 열리는지는 아직 확인하지 못했습니다. 식서 보류 조각은 식서선을 넣지 않습니다.</div>");
     body.innerHTML = o.join("");
   }
   function openPanel() { var p = panel(); if (!p) return false; ui.msg = ""; renderPanel(); p.hidden = false; return true; }
