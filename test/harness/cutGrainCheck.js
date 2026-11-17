@@ -260,6 +260,23 @@ const lineOK = (g, poly, minClear) => { let okk = true, mc = Infinity; for (let 
   ok(/data-grain-relink/.test(SRC5) && /임시 기본 방향/.test(SRC5) && /is-held/.test(SRC5) && /\.cut-grain\.is-held/.test(CSS5), "5: 화면 = 보류 이유 · 임시 기본 표지 · «이전 설정 다시 쓰기»·«기본값» 버튼 · 보류 화살표 구분 표시");
 }
 
+// ══ §6 각도 칸 빈칸·잘못된 값 = 설정 그대로(2026-11-17 야간 리뷰 · 재현: 빈칸 Tab/Enter 가 직접 지정 30° 와 보류 설정을 지웠다) ══
+{
+  const src = fs.readFileSync(path.join(ROOT, "js", "cutPrep.js"), "utf8"), h = (src.match(/if \(t\.matches && t\.matches\("input\[data-grain-angle\]"\)\) \{[\s\S]*?grainAngle\(gpid, gv, t\); return; \}/) || [""])[0];
+  ok(h && /t\.validity && t\.validity\.badInput\) \{ grainInputError\(t, gpid, "숫자로 읽을 수 없습니다"\); return; \}/.test(h) && /graw === ""\) \{ grainInputError\(t, gpid, "각도 칸이 비어 있습니다"\); return; \}/.test(h) && /!Number\.isFinite\(gv\)\) \{ grainInputError/.test(h) && !/null/.test(h),
+    "6: 각도 칸 처리 = 빈칸·숫자 아님은 setGrain 을 부르지 않고 이유만(빈칸을 null(기본 복귀)로 넘기지 않음)");
+  const ge = (src.match(/function grainInputError\([\s\S]*?\n  \}\n/) || [""])[0];
+  ok(ge && !/setGrain|reseam|cutGrain|delete /.test(ge) && /aria-invalid/.test(ge) && /«기본값»을 누르세요/.test(ge) && /보류해 둔 저장 설정은 그대로 남고/.test(ge), "6: 이유 표시 함수 = 저장값·다시 그리기를 건드리지 않음(칸 글자 그대로 · 고쳐 쓸 수 있음) · 지금 쓰는 값 안내 · 기본 복귀는 «기본값» 단추만");
+  ok(/if \(!r\.ok && input\) return grainInputError\(input, pid, r\.reason\);/.test(src), "6: 범위 밖·안 들어가는 각도도 칸을 지우지 않고 이유만(저장값 그대로)");
+  // 모델: 0° 는 유효 · 빈칸에 해당하는 값으로는 아무것도 바꾸지 않는다(칸 처리에서 막힘) · «기본값»(null)만 지움
+  const r0 = buildP(), S0 = r0.S, P0 = r0.P, h0 = J([P0.working.bodiceResult, P0.working.designResult].map(x => x && x.hash));
+  ok(S0.CUT.setGrain("front", { angleDeg: 0 }, P0).ok && P0.working.cutGrain.pieces.front.angleDeg === 0, "6: 0° = 유효한 각도(가로) — 저장됨(빈칸과 구별)");
+  const keep = J(P0.working.cutGrain);
+  ["", "abc", NaN, Infinity, 200, -1].forEach(v => { const n = typeof v === "string" ? (v.trim() === "" ? undefined : Number(v)) : v; if (n === undefined || !Number.isFinite(n)) return; S0.CUT.setGrain("front", { angleDeg: n }, P0); });
+  ok(J(P0.working.cutGrain) === keep, "6: 범위 밖 숫자(200 · −1)는 setGrain 이 거부 — 저장값 그대로");
+  ok(S0.CUT.setGrain("front", { angleDeg: null, at: null }, P0).ok && !P0.working.cutGrain.pieces.front && J([P0.working.bodiceResult, P0.working.designResult].map(x => x && x.hash)) === h0, "6: «기본값»(명시적 null)만 항목을 지움 · 완료 hash 그대로");
+}
+
 console.log("cutGrainCheck: " + PASS + " passed, " + FAIL + " failed");
 fails.forEach(f => console.log("  FAIL " + f));
 process.exit(FAIL ? 1 : 0);

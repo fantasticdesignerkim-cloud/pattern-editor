@@ -564,6 +564,8 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 #cutCv .cut-piece.is-sel .cut-piece-outline{stroke:var(--ax-accent);stroke-width:2.6px;fill:rgba(0,122,255,.08)}
 #cutCv .cut-seam{fill:rgba(215,0,21,.07);stroke:#D70015;stroke-width:1.2px;vector-effect:non-scaling-stroke;stroke-linejoin:miter}
 #cutCv .cut-seam-part{fill:none;stroke-dasharray:6 3}
+.ci-grain .ci-grain-err{flex:1 1 100%;color:#B3261E;font-size:12px}
+.ci-grain input[aria-invalid="true"]{border-color:#B3261E;box-shadow:0 0 0 1px #B3261E}
 #cutCv .cut-trued{fill:none;stroke:#0A6B3D;stroke-width:1.1px;vector-effect:non-scaling-stroke;stroke-linejoin:miter;pointer-events:none}
 .ci-dart label{display:flex;flex-direction:column;gap:4px}
 .ci-dart select{width:100%;max-width:100%;min-width:0;min-height:32px;font-size:12px}

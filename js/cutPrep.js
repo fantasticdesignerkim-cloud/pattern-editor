@@ -1492,10 +1492,25 @@
     return "M" + a.x + " " + a.y + " L" + b.x + " " + b.y + " " + head(b, 1) + " " + head(a, -1);
   }
   function grainMsg(r, okMsg) { var t = r.ok ? okMsg : "식서 안 바뀜: " + r.reason; reseam(t); setNote("식서: " + t); }
-  function grainAngle(pid, v) {
+  // 각도 칸에서 고칠 수 없는 값(빈칸 · 숫자 아님 · 범위 밖 · 그 각도로 안 들어감) = 저장 설정·자리·hash 를 건드리지 않고 칸 옆에 이유를 적는다.
+  //   칸에 친 글자는 그대로 둔다(고쳐 쓸 수 있게) — 저장·화면·인쇄·DXF 는 지금 값을 계속 쓴다는 것을 함께 적는다. 기본으로 돌리기는 «기본값» 단추만.
+  function grainInputError(input, pid, reason) {
+    var gq = view.grain && view.grain.pieces[pid], tail = " 고쳐 쓰거나, 기본으로 돌리려면 «기본값»을 누르세요";
+    var now = !gq ? "저장 설정은 그대로입니다." : gq.held ? "보류해 둔 저장 설정은 그대로 남고, 화면·인쇄·DXF 는 지금처럼 " + (gq.tempDefault && gq.angleDeg != null ? "임시 기본 " + gq.angleDeg + "°(점선)" : "화살표 없이") + " 씁니다."
+      : gq.angleDeg == null ? "저장 설정은 그대로이고 방향은 계속 미정입니다." : "저장·화면·인쇄·DXF 는 지금 값 " + gq.angleDeg + "°(" + (gq.explicitAngle ? "직접 지정" : "기본값") + ")를 그대로 씁니다.";
+    var msg = "식서 안 바뀜: " + reason + " — " + now + tail;
+    if (input) { input.setAttribute("aria-invalid", "true"); var row = input.closest(".ci-grain"), sp = row && row.querySelector(".ci-grain-err");
+      if (row && !sp) { sp = document.createElement("span"); sp.className = "ci-grain-err"; sp.setAttribute("role", "alert"); row.appendChild(sp); }
+      if (sp) sp.textContent = msg; }
+    setNote("식서: " + msg);
+    return { ok: false, reason: reason };
+  }
+  function grainAngle(pid, v, input) {
     var r = setGrain(pid, { angleDeg: v }, view.proj), moved = false;
     if (!r.ok && v !== null && typeof v === "number" && Number.isFinite(v) && view.grain && view.grain.pieces[pid] && view.grain.pieces[pid].explicitAt) { var r2 = setGrain(pid, { angleDeg: v, at: null }, view.proj); if (r2.ok) { r = r2; moved = true; } }
+    if (!r.ok && input) return grainInputError(input, pid, r.reason);   // 칸에서 친 값이 안 맞으면 칸을 그대로 두고 이유만(다시 그려 지우지 않음)
     grainMsg(r, "식서 각도 바뀜" + (r.replacedHeld ? " — 보류 중이던 예전 설정은 이 값으로 바뀜" : "") + (moved ? " — 옮겨 둔 자리에는 이 각도로 들어가지 않아 기본 자리로 옮김" : "") + " · 프로젝트를 저장해야 파일에 남습니다");
+    return r;
   }
   function li(cls, html) { var e = document.createElement("li"); if (cls) e.className = cls; e.innerHTML = html; return e; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
@@ -1871,7 +1886,12 @@
     if (list) list.addEventListener("change", function (e) { var t = e.target;
       if (t.matches && t.matches("select[data-dart-mode]")) { var dr = setDartMode(t.getAttribute("data-dart-mode"), t.getAttribute("data-dart-id"), t.value, view.proj);
         reseam(dr.ok ? "다트 입구 정리 방식 바뀜" + (dr.wasLegacyProject && dr.pinned ? " — 다른 다트 " + dr.pinned + "개는 예전 방식으로 고정" : "") + " · 프로젝트를 저장해야 파일에 남습니다" : "안 바뀜: " + dr.reason); if (!dr.ok) setNote("다트 정리: " + dr.reason); return; }
-      if (t.matches && t.matches("input[data-grain-angle]")) { grainAngle(t.getAttribute("data-grain-angle"), t.value.trim() === "" ? null : Number(t.value)); return; }
+      if (t.matches && t.matches("input[data-grain-angle]")) {   // 빈칸·숫자 아님 = 기본 복귀가 아니다(예전엔 빈칸이 저장 설정·보류 설정을 지웠다 — 야간 리뷰 재현 2026-11-17)
+        var gpid = t.getAttribute("data-grain-angle"), graw = String(t.value).trim(), gv = Number(graw);
+        if (t.validity && t.validity.badInput) { grainInputError(t, gpid, "숫자로 읽을 수 없습니다"); return; }
+        if (graw === "") { grainInputError(t, gpid, "각도 칸이 비어 있습니다"); return; }
+        if (!Number.isFinite(gv)) { grainInputError(t, gpid, "숫자로 읽을 수 없습니다"); return; }
+        grainAngle(gpid, gv, t); return; }
       if (!t.matches || !t.matches("input[data-qty]")) return;
       var v = t.value.trim() === "" ? NaN : Number(t.value), r = setQty(t.getAttribute("data-qty"), v, view.proj); reseam(r.ok ? "재단 수량 바뀜 — 프로젝트를 저장해야 파일에 남습니다" : "수량 안 바뀜: " + r.reason);
       if (!r.ok) setNote("재단 수량: " + r.reason); });
