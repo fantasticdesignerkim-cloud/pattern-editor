@@ -1366,7 +1366,21 @@
     var ax = function (lo, hi, a, b) { if (b - a > hi - lo) return lo - a; if (a < lo) return lo - a; if (b > hi) return hi - b; return 0; };
     return { dx: ax(V.left, V.right, T.left, T.right), dy: ax(V.top, V.bottom, T.top, T.bottom), fits: T.right - T.left <= V.right - V.left && T.bottom - T.top <= V.bottom - V.top };
   }
-  var model = { readDart: readDart, dartsOf: dartsOf, setDartMode: setDartMode, DART_MODES: DART_MODES, DART_MODE_LABEL: DART_MODE_LABEL, readGrain: readGrain, grainOf: grainOf, setGrain: setGrain, relinkGrain: relinkGrain, grainSig: grainSig, defaultGrain: defaultGrain, grainLine: grainLine, revealShift: revealShift, clickArc: clickArc,displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
+  // 선택 조각 보기(2026-11-17 master 승인) — 순수. box = 조각 테두리(시트 cm · 시접·골 펼침·보류 표시 포함) · rect = 캔버스 화면 사각형(px) ·
+  //   vis = 실제로 보이는 곳(px · 화면 ∩ 하단 카드 위). 조각이 vis 안에 여백 padPx 를 두고 들어가게 하는 카메라(캔버스 비율 그대로).
+  //   최대 확대 = 캔버스 폭이 minWcm 보다 좁아지지 않음(작은 부속도 선·식서를 잡을 만큼만). 보이는 곳이 너무 좁으면 이유를 돌려준다.
+  function pieceCam(box, rect, vis, opt) {
+    opt = opt || {}; var pad = opt.padPx == null ? 16 : opt.padPx, minW = opt.minWcm == null ? 8 : opt.minWcm;
+    if (!box || !(box.maxX > box.minX) || !(box.maxY > box.minY)) return { why: "조각 테두리를 알 수 없습니다" };
+    if (!rect || !(rect.width > 0 && rect.height > 0)) return { why: "작업 영역 크기를 알 수 없습니다" };
+    var vw = vis.right - vis.left - 2 * pad, vh = vis.bottom - vis.top - 2 * pad;
+    if (!(vw > 40 && vh > 40)) return { why: "보이는 작업 영역이 너무 좁습니다(아래 카드를 닫거나 화면을 키우세요)" };
+    var bw = box.maxX - box.minX, bh = box.maxY - box.minY, s = Math.max(bw / vw, bh / vh), limited = false;
+    if (s * rect.width < minW) { s = minW / rect.width; limited = true; }
+    var cx = (box.minX + box.maxX) / 2, cy = (box.minY + box.maxY) / 2, vcx = (vis.left + vis.right) / 2 - rect.left, vcy = (vis.top + vis.bottom) / 2 - rect.top;
+    return { cam: { x: cx - vcx * s, y: cy - vcy * s, w: s * rect.width, h: s * rect.height }, cmPerPx: s, limited: limited };
+  }
+  var model = { pieceCam: pieceCam, readDart: readDart, dartsOf: dartsOf, setDartMode: setDartMode, DART_MODES: DART_MODES, DART_MODE_LABEL: DART_MODE_LABEL, readGrain: readGrain, grainOf: grainOf, setGrain: setGrain, relinkGrain: relinkGrain, grainSig: grainSig, defaultGrain: defaultGrain, grainLine: grainLine, revealShift: revealShift, clickArc: clickArc,displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
 
   // ══ 화면(읽기 전용 오버레이) ══ ─────────────────────────────────────
   var NS = "http://www.w3.org/2000/svg", GAP = 6;
@@ -1551,6 +1565,7 @@
     }
     if (msg) msg.hidden = true;
     if (st) { st.textContent = d.failedPieces ? "검사 실패 " + d.failedPieces + "개" : "조각 " + d.pieces.length + "개" + (view.seam && view.seam.state === "ready" ? " · 시접 " + view.seam.done + "/" + view.seam.total : ""); st.dataset.state = d.failedPieces || (view.seam && view.seam.done < view.seam.total) ? "warn" : "ok"; }
+    if (st) view.baseStatus = st.textContent;
     ["bodice", "sleeve", "collar"].forEach(function (gk) {
       var ps = orderOf(d.pieces.filter(function (p) { return p.group === gk; })); if (!ps.length) return;
       var h = document.createElement("li"); h.className = "cut-list-h"; h.textContent = GROUP_LABEL[gk]; box.appendChild(h);
@@ -1625,6 +1640,7 @@
     if (svg) svg.querySelectorAll(".cut-piece").forEach(function (g) { g.classList.toggle("is-sel", g.getAttribute("data-piece") === view.sel); });
     var box = $("cutList");
     if (box) box.querySelectorAll(".cut-item-btn").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.piece === view.sel)); });
+    syncFitSel();
   }
 
   function curEdge() {
@@ -1699,7 +1715,38 @@
   function selectEdge(pid, eid) {
     view.edge = { piece: pid, id: eid }; view.sel = pid; view.cardMsg = ""; view.manual = false;
     drawCanvas(); var box = $("cutList"); if (box) box.querySelectorAll(".cut-item-btn").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.piece === view.sel)); });
-    syncCard(); revealSel();
+    syncFitSel(); syncCard(); revealSel();
+  }
+  // ── 선택 조각 보기 · 전체 보기로 돌아가기(누를 때만 · 자동으로 따라 움직이지 않음) ──
+  function visArea() {
+    var svg = $("cutCv"); if (!svg || !svg.getBoundingClientRect) return null;
+    var r = svg.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0)) return null;
+    var vis = { left: Math.max(r.left, 0), top: Math.max(r.top, 0), right: Math.min(r.right, window.innerWidth || r.right), bottom: Math.min(r.bottom, window.innerHeight || r.bottom) };
+    var card = $("cutSeamCard"); if (card && !card.hidden) { var cr = card.getBoundingClientRect(); if (cr.height > 0 && cr.left < vis.right && cr.right > vis.left && cr.top < vis.bottom && cr.bottom > vis.top) vis.bottom = Math.min(vis.bottom, cr.top); }
+    return { rect: r, vis: vis };
+  }
+  function selBox(pid) {
+    var r = view.disp && view.disp[pid], pos = view.layout && view.layout.pos[pid]; if (!r || !r.bbox || !pos) return null;
+    var b = { minX: r.bbox.minX + pos.dx, minY: r.bbox.minY + pos.dy, maxX: r.bbox.maxX + pos.dx, maxY: r.bbox.maxY + pos.dy };
+    (r.heldNotches || []).forEach(function (n) { b.minX = Math.min(b.minX, n.at.x + pos.dx - 0.4); b.maxX = Math.max(b.maxX, n.at.x + pos.dx + 0.4); b.minY = Math.min(b.minY, n.at.y + pos.dy - 0.4); b.maxY = Math.max(b.maxY, n.at.y + pos.dy + 0.4); });
+    return b;
+  }
+  function syncFitSel() {
+    var b = $("btnCutFitSel"); if (!b) return;
+    var d = view.data, p = view.sel && d && d.pieces ? d.pieces.filter(function (x) { return x.id === view.sel; })[0] : null, why = !view.sel ? "목록이나 화면에서 조각을 먼저 고르세요" : !p ? "고른 조각이 지금 없습니다" : !p.check.ok ? "«" + p.label + "» 외곽 검사 실패 — 화면에 그릴 수 없어 확대할 수 없습니다" : null;
+    b.disabled = !!why; if (why) b.setAttribute("aria-disabled", "true"); else b.removeAttribute("aria-disabled");
+    b.title = why || "«" + p.label + "»을(를) 작업 영역에 맞춰 크게 봅니다 — 돌아가려면 «전체 보기»";
+    b.setAttribute("aria-label", why ? "조각 보기(" + why + ")" : "«" + p.label + "» 조각 보기");
+  }
+  function fitSel() {
+    var d = view.data, p = view.sel && d && d.pieces ? d.pieces.filter(function (x) { return x.id === view.sel; })[0] : null;
+    if (!p) { view.fitMsg = "조각을 먼저 고르세요"; return { ok: false, reason: view.fitMsg }; }
+    if (!p.check.ok) { view.fitMsg = "«" + p.label + "» 외곽 검사 실패 — 확대할 수 없습니다"; return { ok: false, reason: view.fitMsg }; }
+    var a = visArea(), box = selBox(p.id); if (!a || !box) { view.fitMsg = "작업 영역을 아직 그리지 않았습니다"; return { ok: false, reason: view.fitMsg }; }
+    var r = pieceCam(box, a.rect, a.vis, { padPx: 16, minWcm: 8 }); if (r.why) { view.fitMsg = r.why; return { ok: false, reason: r.why }; }
+    view.cam = r.cam; view.manual = true; applyCam(); view.fitMsg = "«" + p.label + "» 보기" + (r.limited ? "(최대 확대)" : "") + " — 돌아가려면 «전체 보기»";
+    var st = $("cutStatus"); if (st) st.textContent = view.fitMsg;
+    return { ok: true, piece: p.id, limited: r.limited, cmPerPx: r.cmPerPx };
   }
   // 선택한 변(골 반사 쪽을 눌렀으면 그 반사 쪽)이 하단 카드에 가리면 화면을 최소한으로 옮긴다 — 배율 그대로, 이미 보이면 이동 0.
   //   부르는 곳: 변 선택 직후 1회 · 카드 크기가 바뀔 때(사용자가 그 뒤 끌기·핀치·휠·확대 버튼·맞춤을 하지 않았을 때만) 1회.
@@ -1726,7 +1773,7 @@
   function cardChanged() { if (view.open && view.edge && !view.manual) revealSel(); }
   function clearEdge() { if (!view.edge) return; view.edge = null; view.cardMsg = ""; drawCanvas(); syncCard(); }
   function refreshDisp() { if (view.data && view.data.state === "ready") { view.disp = displayOf(view.data, view.seam); view.qty = qtyOf(view.data, view.disp, view.proj); view.grain = grainOf(view.data, view.disp, view.proj); } }
-  function reseam(msg) { var nd = derive(view.proj, true); if (nd.state === "ready" && nd.resultHash === view.data.resultHash) view.data = nd; view.seam = seamOf(view.data, view.proj); refreshDisp(); view.cardMsg = msg || ""; drawList(); drawCanvas(); syncCard(); cardChanged(); }
+  function reseam(msg) { var nd = derive(view.proj, true); if (nd.state === "ready" && nd.resultHash === view.data.resultHash) view.data = nd; view.seam = seamOf(view.data, view.proj); refreshDisp(); view.cardMsg = msg || ""; drawList(); drawCanvas(); syncCard(); syncFitSel(); cardChanged(); }
   function applyEdge() {
     var c = curEdge(); if (!c) return;
     var kind = c.e.foldCapable ? $("cutSeamKind").value : "seam", raw = $("cutSeamWidth").value, w = raw === "" ? NaN : Number(raw);
@@ -1750,7 +1797,7 @@
     view.open = true; view.proj = project(); view.data = d; view.notice = ""; view.sel = null; view.edge = null; view.cardMsg = ""; view.seam = seamOf(d, view.proj);
     var sec = $("cutView"); if (sec) sec.hidden = false;
     setOpenAttr(true); syncTabs();
-    refreshDisp(); drawList(); drawCanvas(); fit(); syncCard(); schedule();   // 안내 문구도 지금 상태로(이전 «다시 열어 닫음» 문구를 남기지 않음)
+    refreshDisp(); drawList(); drawCanvas(); fit(); syncCard(); syncFitSel(); schedule();   // 안내 문구도 지금 상태로(이전 «다시 열어 닫음» 문구를 남기지 않음)
     return true;
   }
   function closeView() {
@@ -1792,7 +1839,7 @@
       var cur = view.data;
       if (!d || d.state !== "ready" || !cur || cur.resultHash !== d.resultHash) {
         view.data = (d && d.state === "ready") ? derive(p, true) : d; view.sel = null; view.edge = null; view.cardMsg = ""; view.seam = (d && d.state === "ready") ? seamOf(view.data, p) : null;
-        refreshDisp(); drawList(); drawCanvas(); syncCard(); if (d && d.state === "ready") fit(); }
+        refreshDisp(); drawList(); drawCanvas(); syncCard(); syncFitSel(); if (d && d.state === "ready") fit(); }
     }
     syncTabs();
   }
@@ -1804,7 +1851,8 @@
     var on = function (id, fn) { var e = $(id); if (e) e.addEventListener("click", fn); };
     on("btnCutBack", function () { returnTo(null); });
     on("btnCutReturnTo", function () { returnTo(view.data && view.data.returnTab); });
-    on("btnCutFit", function () { view.manual = true; fit(); });
+    on("btnCutFit", function () { view.manual = true; fit(); var st = $("cutStatus"); if (st && view.fitMsg && view.baseStatus != null) st.textContent = view.baseStatus; view.fitMsg = ""; });
+    on("btnCutFitSel", function () { var r = fitSel(); if (!r.ok) { var st = $("cutStatus"); if (st) st.textContent = r.reason; } });
     on("btnCutZoomIn", function () { view.manual = true; zoom(1 / 1.25); });
     on("btnCutZoomOut", function () { view.manual = true; zoom(1.25); });
     var list = $("cutList");

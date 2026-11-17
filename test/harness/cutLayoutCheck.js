@@ -3,6 +3,7 @@
 //   §1 순서 = 뒤판 → 앞판 → 소매 · 작은 부속은 아래 줄 · 앞·뒤판 BL 높이 같음(위 끝 맞춤 아님) · 시접 포함 테두리끼리 겹침 없음
 //   §2 골 펼침(뒤판 · 밴드 · 위 칼라): 면적 = 반쪽 × 2 · 골선 대칭 · 폐곡선 · 골선 위 외곽/시접 선 없음(중복 중심 없음) · 원본·완료 hash 불변
 //   §3 골 ↔ 봉제선: 반쪽 표시로 돌아감 · 폭 보존 · 다시 골 = 펼침 · 반사 쪽 변/너치 = 원래 변 id(같은 설정)
+//   §6 선택 조각 보기(pieceCam · 누를 때만 · 375/390/1024 · 카드 · 최대 확대 · 불변)
 //   §5 선택 위치 드러내기(2026-11-15 · v2026.11.15.5): revealShift 최소 이동·이미 보이면 0·배율 없음 · 호출 지점(선택 1회·카드 변화 1회·수동 이동 뒤 안 함·그리기/끌기 중 안 함)
 //   §4 재단 수량(working.cutQty 판 1): master 기본값 · 골/봉제선에 따른 기본 · 수정·거부 · 엄격 검증 · 저장 → 열기 · 구파일 기본값 · 시접/너치 설정 무변경
 //   node test/harness/cutLayoutCheck.js
@@ -260,6 +261,36 @@ let M = model(S, P);
   ok(/data-mirrored"\) === "1"\) !== !!ca\.mirrored/.test(SRCC) && /cm: cm0, mirrored: mir0/.test(SRCC), "5: 골 반사 쪽을 눌렀으면 반사 쪽 점·경로를 기준으로 드러냄");
   ok(/sh\.dx \* c\.w \/ r\.width/.test(SRCC) && /w: c\.w, h: c\.h \}; applyCam\(\)/.test(body("  function revealSel(", "\n  }\n")), "5: 화면 이동만 · 배율(w·h) 그대로");
   ok(hashes(P) === H0 && J(S.CUT.derive(P, true).pieces) === PIECES0, "5: 원본 조각·완료 hash 불변");
+}
+
+// ══ §6 선택 조각 보기(2026-11-17) — 순수 pieceCam · 누를 때만 · 원본·설정·hash 불변 ══
+{
+  const PC = S.CUT.pieceCam, d6 = S.CUT.derive(P, true), m6 = S.CUT.seam(d6, P), D6 = S.CUT.displayOf(d6, m6), L6 = S.CUT.layoutOf(d6.pieces, D6), w0 = J(P.working), h0 = hashes(P);
+  const boxOf = pid => { const b = D6[pid].bbox, q = L6.pos[pid]; return { minX: b.minX + q.dx, minY: b.minY + q.dy, maxX: b.maxX + q.dx, maxY: b.maxY + q.dy }; };
+  // 화면 → 시트(캔버스 비율 그대로): sx = cam.x + (px - rect.left) * cam.w / rect.width
+  const toScr = (cam, rect, x, y) => ({ x: rect.left + (x - cam.x) / cam.w * rect.width, y: rect.top + (y - cam.y) / cam.h * rect.height });
+  const screens = [["1024", { left: 0, top: 96, width: 704, height: 672 }, 300], ["390", { left: 0, top: 140, width: 390, height: 406 }, 180], ["375", { left: 0, top: 150, width: 375, height: 390 }, 170]];
+  let bad = [], limitedSmall = 0, n = 0;
+  screens.forEach(([nm, rect, cardH]) => [false, true].forEach(card => d6.pieces.filter(p => p.check.ok).forEach(p => {
+    const vis = { left: rect.left, top: rect.top, right: rect.left + rect.width, bottom: rect.top + rect.height - (card ? cardH : 0) }, b = boxOf(p.id), r = PC(b, rect, vis, { padPx: 16, minWcm: 8 }); n++;
+    if (r.why) { bad.push(nm + ":" + p.id + ":" + r.why); return; }
+    const a = toScr(r.cam, rect, b.minX, b.minY), z = toScr(r.cam, rect, b.maxX, b.maxY), ratio = r.cam.w / r.cam.h - rect.width / rect.height;
+    const inside = a.x >= vis.left + 16 - 1e-6 && a.y >= vis.top + 16 - 1e-6 && z.x <= vis.right - 16 + 1e-6 && z.y <= vis.bottom - 16 + 1e-6;
+    const tight = r.limited || Math.abs((z.x - a.x) - (vis.right - vis.left - 32)) < 1e-6 || Math.abs((z.y - a.y) - (vis.bottom - vis.top - 32)) < 1e-6;
+    if (r.limited) limitedSmall++;
+    if (!inside || !tight || Math.abs(ratio) > 1e-9 || r.cam.w < 8 - 1e-9) bad.push(nm + ":" + p.id + ":" + J({ inside, tight, ratio, w: r.cam.w }));
+  })));
+  ok(n === 3 * 2 * d6.pieces.filter(p => p.check.ok).length && bad.length === 0, "6: 조각 보기 — 1024 · 390 · 375 × 카드 없음/있음 × 조각 " + d6.pieces.length + "개 = " + n + "경우: 조각 테두리(시접·골 펼침 포함)가 보이는 곳(카드 위) 안에 여백 16px 로 꽉 차게 · 캔버스 비율 그대로 · 최대 확대 한도(폭 8cm) 지킴 " + J(bad.slice(0, 2)));
+  const small = ["vent-bias", "vent-placket", "cuff", "collar-stand"].map(id => { const r = PC(boxOf(id), screens[1][1], { left: 0, top: 140, right: 390, bottom: 546 }, { padPx: 16, minWcm: 8 }); return [id, +(1 / r.cmPerPx / 10).toFixed(2)]; });
+  const allPxMm = 390 / ((L6.width + 16) * 10), tiny = PC({ minX: 10, minY: 10, maxX: 11, maxY: 11 }, screens[1][1], { left: 0, top: 140, right: 390, bottom: 546 }, { padPx: 16, minWcm: 8 });
+  ok(small.every(x => x[1] > allPxMm * 2.5) && tiny.limited && Math.abs(tiny.cam.w - 8) < 1e-9, "6: 폰(390) 작은 부속 화면 배율(px/mm) " + J(small) + " — 전체 보기 " + allPxMm.toFixed(2) + " 보다 3~13배 · 1cm 조각은 최대 확대 한도(폭 8cm = " + (390 / 80).toFixed(2) + "px/mm)에서 멈춤");
+  ok(PC(null, screens[0][1], { left: 0, top: 0, right: 10, bottom: 10 }).why && PC(boxOf("cuff"), screens[1][1], { left: 0, top: 140, right: 390, bottom: 190 }).why && /너무 좁습니다/.test(PC(boxOf("cuff"), screens[1][1], { left: 0, top: 140, right: 390, bottom: 190 }).why), "6: 테두리 없음 · 보이는 곳이 너무 좁음(큰 카드) = 이유를 돌려주고 카메라를 바꾸지 않음");
+  ok(J(P.working) === w0 && hashes(P) === h0 && J(S.CUT.derive(P, true).pieces) === PIECES0, "6: 계산은 읽기만 — 원본 조각·배치·설정·완료 hash 그대로");
+  const src = SRC["cutPrep.js"], html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+  ok(/id="btnCutFitSel" disabled aria-disabled="true"[^>]*>조각 보기</.test(html) && html.indexOf('id="btnCutFitSel"') > html.indexOf('id="btnCutFit"') && /on\("btnCutFitSel", function \(\) \{ var r = fitSel\(\);/.test(src) && (src.match(/fitSel\(\)/g) || []).length === 2,
+    "6: «조각 보기» 단추(처음엔 꺼짐) · 누를 때만 확대(fitSel 은 단추에서만 부름 — 목록·화면 선택은 화면을 움직이지 않음)");
+  ok(/«전체 보기»/.test(src) && /외곽 검사 실패 — 화면에 그릴 수 없어 확대할 수 없습니다/.test(src) && /목록이나 화면에서 조각을 먼저 고르세요/.test(src) && /function syncFitSel/.test(src) && /syncFitSel\(\);\n  \}/.test(src), "6: 선택 없음 · 검사 실패 = 단추 꺼짐 + 이유(제목·이름) · 선택이 바뀌면 단추 상태 갱신");
+  ok(/초록 = 다트 접어 정리한 완성 외곽/.test(html) && /주황 점선 원 = 보류 너치/.test(html) && /검은 선 = 완성선\(다트 긴 V 포함\)/.test(html), "6: 범례(머리 글) = 완성선·긴 V / 정리 외곽 / 시접(재단선) / 너치 / 보류 너치 구별");
 }
 
 console.log("cutLayoutCheck: " + PASS + " passed, " + FAIL + " failed");

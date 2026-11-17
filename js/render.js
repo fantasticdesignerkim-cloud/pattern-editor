@@ -1001,7 +1001,7 @@ function render(){
   //   payload(a,b / d,e,f)를 대신 쓴다 — base 를 중복 그리지 않는다. 미적용 side 는 base 그대로(c 는 다트가 아니라 그리지 않는다).
   const darts_ = buildGen0WaistDarts(f, p, dr);
   const waistCarry_ = {};
-  [dartMoveState?.appliedFront?.waistDarts, dartMoveState?.appliedBack?.waistDarts].forEach(pl => {
+  [liveAppliedFront()?.waistDarts, liveAppliedBack()?.waistDarts].forEach(pl => {   // 지금 몸판과 같은 적용 결과만(출처 서명 · dartMove.js)
     if (pl) Object.keys(pl).forEach(k => { darts_[k] = pl[k].dart; waistCarry_[k] = pl[k].attach; });
   });
   darts_._carry = waistCarry_;
@@ -1019,6 +1019,7 @@ function render(){
   // isMeasureDirty: 치수 변경 후 패턴 생성 버튼을 아직 안 눌렀으면 소매 패턴 그리지 않음
   if(showSleeve && !isMeasureDirty) drawSleeve(svg,f,p,dr,B,W,BL,showBase,showDart,showDep,showPattern,showDim);
   if(typeof drawDartMoveOverlay === 'function') drawDartMoveOverlay(svg, p);
+  if(typeof syncDartStaleNotice === 'function') syncDartStaleNotice();   // 몸판이 바뀌어 쓰지 않는 다트 결과 안내
   applyLayerVisibility();
   updateStatusBar(f,p,dr,B,W,BL);
   // 소매 offset 을 실측 봉제선 outline 기준으로 맞춘다(재렌더 없이 그룹 transform 만 보정).
@@ -1178,7 +1179,7 @@ function drawPatternLines(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,sho
 
   // ── 다트이동 적용 결과: 앞판/뒤판 패턴선 대체 ──
   const hasDartMoveApplied = typeof dartMoveState !== 'undefined'
-    && (dartMoveState.appliedFront != null || dartMoveState.appliedBack != null);
+    && (liveAppliedFront() != null || liveAppliedBack() != null);
   if(hasDartMoveApplied){
     drawDartMoveApplied(svg, p, f, B);
   }
@@ -1306,15 +1307,15 @@ function drawDartMoveApplied(svg, p, f, B){
     svg.appendChild(g);
   }
 
-  renderApp(dartMoveState.appliedFront, _DC_F);
-  renderApp(dartMoveState.appliedBack,  _DC_B);
+  renderApp(liveAppliedFront(), _DC_F);   // 몸판이 바뀐 옛 결과는 그리지 않는다(값은 남김 · 안내는 syncDartStaleNotice)
+  renderApp(liveAppliedBack(),  _DC_B);
 }
 
 function drawFrontNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv){
   const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG
   // 다트이동 적용 시 앞판 원본선 전부 skip (앞목/앞어깨/가슴다트 포함)
   const hasDartMoveApplied_FN = typeof dartMoveState !== 'undefined'
-    && dartMoveState.appliedFront != null;
+    && liveAppliedFront() != null;
   if(hasDartMoveApplied_FN) return;
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
 
@@ -1432,7 +1433,7 @@ function drawFrontArmhole(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
   const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG
   // 다트이동 적용 시 앞진동선 원본은 그리지 않는다 (rotatedPts로 대체됨)
   const hasDartMoveApplied_FA = typeof dartMoveState !== 'undefined'
-    && dartMoveState.appliedFront != null;
+    && liveAppliedFront() != null;
   if(hasDartMoveApplied_FA) return;
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
     // ── 앞진동선: G → GG → FSP (뒤진동선과 연결) ──
@@ -1492,7 +1493,7 @@ function drawBackNeck(svg,f,p,dr,B,W,BL,showPattern,showDep,gPat,cv){
   const _DC_B = DEBUG_COLORS ? DBG_BACK : null; // DEBUG
   // 뒤판 다트이동 적용 시 원본 뒤목선 skip (drawDartMoveApplied가 back-neckline 담당)
   const hasBackDartMoveApplied = typeof dartMoveState !== 'undefined'
-    && dartMoveState.appliedBack != null;
+    && liveAppliedBack() != null;
   if(hasBackDartMoveApplied) return;
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
     gPat.appendChild(Ln(p.A,  bSNP, "dep"));
@@ -1550,7 +1551,7 @@ function drawBackShoulder(svg,f,p,dr,B,W,BL,showPattern,showDep,showDim,gPat,cv)
   const _DC_B = DEBUG_COLORS ? DBG_BACK : null; // DEBUG
   // 뒤판 다트이동 적용 시 원본 어깨선 skip
   const hasDartMoveApplied_B = typeof dartMoveState !== 'undefined'
-    && dartMoveState.appliedBack != null;
+    && liveAppliedBack() != null;
   if(hasDartMoveApplied_B) return;
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
 
@@ -1592,8 +1593,8 @@ function drawArmhole(svg,f,p,dr,darts_,B,W,BL,showPattern,showDep,gPat,cv){
   const _DC_F = DEBUG_COLORS ? DBG_FRONT : null; // DEBUG front
   const _DC_B = DEBUG_COLORS ? DBG_BACK  : null; // DEBUG back
   const {nTR,nTL,nBR,nBL,deg22,FSP,GG,deg18,bSNP,bND,bSP,shDx,shDy,dartCenter,dartEnd_,eOnSh,fAux,cAux}=cv;
-  const isFrontApplied = typeof dartMoveState !== 'undefined' && dartMoveState.appliedFront != null;
-  const isBackApplied  = typeof dartMoveState !== 'undefined' && dartMoveState.appliedBack  != null;
+  const isFrontApplied = typeof dartMoveState !== 'undefined' && liveAppliedFront() != null;
+  const isBackApplied  = typeof dartMoveState !== 'undefined' && liveAppliedBack()  != null;
     {
       const perpX = Math.sin(deg18), perpY = -Math.cos(deg18);
       // 5개 앵커점 (고정 2 + 조절 3)

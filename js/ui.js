@@ -288,6 +288,7 @@
     if (note) {
       note.textContent =
         reason === "measure-dirty" ? "패턴을 다시 생성한 뒤 완료하세요"
+        : reason === "dart-stale" ? "다트 이동 결과가 지금 몸판과 맞지 않습니다 — 그때 몸판으로 되돌리거나 «리셋» 뒤 다시 적용하고 완료하세요"
         : (reason === "dart-busy" || reason === "edit-busy") ? "현재 작업을 종료한 뒤 완료하세요"
         : "완료할 수 없습니다 · 원형을 다시 생성해 주세요";
     }

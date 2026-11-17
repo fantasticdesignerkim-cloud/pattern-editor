@@ -2086,14 +2086,65 @@ const dartMoveState = {
 // 다트 입구 = cutPoint / rotatedCutPoint, 꼭지점 = pivot
 // 폐곡선: pivot → cutA → segsA → endA → bridge → endB → reversed(segsB) → cutB → pivot
 // ── 타겟 외곽선 공급 ─────────────────────────────
+// ── 적용 결과의 출처 추적(2026-11-17 · 야간 리뷰 재현 확인) ──
+// 적용 결과(bakedSegments)는 그때의 몸판(치수 B·W·BL + 몸판 곡선 핸들)에서 만든 형상이다. 그 몸판이 바뀐 뒤에도
+// 옛 결과를 그대로 그리거나 다음 절개의 바탕으로 쓰면, 다음 이동의 pivot(BP/E)은 새 치수에서 계산돼 두 기준이 섞인다
+// (실측: B 83→86 생성 뒤 옛 앞판이 그대로 남고 다음 pivot 이 1.34cm 어긋남 · W 64→66 은 옛 앞판이 원형 완료본에 그대로 들어감).
+// → 적용 때 «출처 서명» = 그때 치수(B·W·BL) + 다트 총량(inpDart) + 1세대 외곽(buildFront/BackOutline) 좌표 + 원형 다트 수치의 해시 를 저장한다.
+//   지금 1세대 외곽 서명과 다르면(또는 서명이 없는 옛 값이면) 그 결과는 **쓰지 않는다**: 그리지 않고 · 다음 절개를 막고 · 원형 완료를 막는다.
+//   값은 지우지 않는다(«리셋»만 지운다). 몸판을 그때와 같게 되돌리면(서명이 같아지면) 다시 쓴다. 다트 기하 엔진(split/회전/bake/normalize/예산)은 그대로.
+function _dartSrcHash(str) { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); }
+const _dartSrcMemo = { key: null, val: null };
+function dartSourceNow() {
+  const B = n("inpB"), W = n("inpW"), BL = n("inpBL");
+  if (!B || !W || !BL) return null;
+  // 원형 공식이 읽는 현재 입력 = B·W·BL + 다트 총량(inpDart · 원형 공식이 직접 읽음 — 허리 다트 a~f 와 옆선 허리점이 여기서 나온다).
+  //   소매 길이·소매단둘레·소매산 보정 등 몸판과 무관한 값은 넣지 않는다(바꿔도 그대로 씀).
+  const Dart = n("inpDart") || 12.5;
+  const st = (typeof state !== "undefined" && state) ? state : {};
+  const key = [B, W, BL, Dart, JSON.stringify(st.armH || null), JSON.stringify(st.fArmH || null), JSON.stringify(st.bNeckH || null), JSON.stringify(st.fNeckH || null)].join("|");
+  if (_dartSrcMemo.key === key) return _dartSrcMemo.val;
+  const d = createDraft(B, W, BL), r6 = v => (typeof v === "number" ? Math.round(v * 1e6) / 1e6 : v);
+  // 치수 자체도 넣는다 — 1세대 외곽은 W 와 무관할 수 있지만 허리 다트(waistDarts payload)는 W 에서 나온다(실측: W 만 바꾸면 외곽 좌표는 같음)
+  const sig = side => _dartSrcHash(JSON.stringify([B, W, BL, Dart, side === "front" ? buildFrontOutline(d.pts, d.formula, B) : buildBackOutline(d.pts, d.formula, B), d.darts || null], (k, v) => r6(v)));
+  const val = { B: B, W: W, BL: BL, Dart: Dart, front: sig("front"), back: sig("back") };
+  _dartSrcMemo.key = key; _dartSrcMemo.val = val;
+  return val;
+}
+// side 의 적용 결과 상태: none(적용 없음) · live(지금 몸판과 같음) · stale(몸판이 바뀜) · unsigned(출처 서명 없는 옛 값 — 같다고 추정하지 않음)
+function dartAppliedStatus(side) {
+  const a = side === "front" ? dartMoveState.appliedFront : dartMoveState.appliedBack;
+  if (!a) return { state: "none" };
+  if (!a.src || typeof a.src.sig !== "string") return { state: "unsigned", applied: a };
+  const now = dartSourceNow();
+  if (!now) return { state: "stale", applied: a, src: a.src, now: null };
+  return { state: now[side] === a.src.sig ? "live" : "stale", applied: a, src: a.src, now: now };
+}
+function liveApplied(side) { const st = dartAppliedStatus(side); return st.state === "live" ? st.applied : null; }
+function liveAppliedFront() { return liveApplied("front"); }
+function liveAppliedBack() { return liveApplied("back"); }
+function dartStaleReason(side) {
+  const st = dartAppliedStatus(side), label = side === "front" ? "앞판" : "뒤판";
+  if (st.state === "unsigned") return label + " 다트 이동 결과에 만든 때의 몸판 정보가 없어 지금 몸판과 같은지 알 수 없습니다 — 쓰지 않습니다(지우지 않음). 새로 하려면 «리셋» 뒤 다시 적용하세요";
+  if (st.state !== "stale") return null;
+  const s = st.src, w = st.now, dims = s ? "B " + s.B + " · W " + s.W + " · BL " + s.BL + (s.Dart != null ? " · 다트 총량 " + s.Dart : "") : "?";
+  const changed = w && s && (w.B !== s.B || w.W !== s.W || w.BL !== s.BL) ? "치수가 바뀌었습니다(지금 B " + w.B + " · W " + w.W + " · BL " + w.BL + ")"
+    : w && s && s.Dart != null && w.Dart !== s.Dart ? "다트 총량이 바뀌었습니다(지금 " + w.Dart + ")" : "몸판 곡선이 바뀌었습니다";
+  return label + " 다트 이동 결과는 " + dims + "(그때의 곡선)에서 만든 것인데 " + changed + " — 섞이지 않게 쓰지 않습니다(그리지·이어 자르지·완료하지 않음 · 지우지 않음). 그때 몸판으로 되돌리면 다시 쓰고, 새로 하려면 «리셋» 뒤 다시 적용하세요";
+}
+function syncDartStaleNotice() {
+  const msgs = ["front", "back"].map(dartStaleReason).filter(Boolean), idle = document.querySelector("[data-dart-idle]");
+  if (idle) { if (!idle.dataset.baseText) idle.dataset.baseText = idle.textContent; idle.textContent = msgs.length ? msgs.join(" / ") : idle.dataset.baseText; idle.classList.toggle("is-warn", msgs.length > 0); }
+}
+
 function getFrontTargetOutline(p, f, B) {
-  const baked = dartMoveState.appliedFront?.bakedSegments;
+  const baked = liveAppliedFront()?.bakedSegments;
   if (Array.isArray(baked) && baked.length > 0) return baked;
   return buildFrontOutline(p, f, B);
 }
 
 function getBackTargetOutline(p, f, B) {
-  const baked = dartMoveState.appliedBack?.bakedSegments;
+  const baked = liveAppliedBack()?.bakedSegments;
   if (Array.isArray(baked) && baked.length > 0) return baked;
   return buildBackOutline(p, f, B);
 }
@@ -2175,6 +2226,8 @@ function startDartMove() {
 
 // 앞판 / 뒤판 선택
 function selectDartSide(side) {
+  const _stale = dartStaleReason(side);
+  if (_stale) { setHint(_stale); render(); return; }   // 바뀐 몸판 위에 옛 결과를 이어 자르지 않는다(혼용 차단)
   dartMoveState.side          = side;
   dartMoveState.mode          = "selectCut";
   dartMoveState.cutPoint      = null;
@@ -2413,6 +2466,8 @@ function applyDartMove() {
   // P0.3b: gen-0 허리다트 payload carry — 이 side 의 최신 carried payload(없으면 gen-0 원천)를 이번 split 의
   //   조각 소유권과 커밋 각도로 변환한다. 과거 cutPoint/angle 로 복원하지 않고 payload 자체가 누적된다.
   const _prevApplied = side === "front" ? dartMoveState.appliedFront : dartMoveState.appliedBack;
+  if (_prevApplied && dartAppliedStatus(side).state !== "live") { setHint(dartStaleReason(side) || "이전 결과가 지금 몸판과 맞지 않습니다"); return; }
+  const _src = _prevApplied ? _prevApplied.src : (() => { const nw = dartSourceNow(); return nw ? { B: nw.B, W: nw.W, BL: nw.BL, Dart: nw.Dart, sig: nw[side] } : null; })();
   let _waistSrc = _prevApplied && _prevApplied.waistDarts;
   if (!_waistSrc) { const _dd = createDraft(n("inpB"), n("inpW"), n("inpBL")); _waistSrc = gen0WaistDartPayload(side, _dd.formula, _dd.pts, _dd.darts); }
   const waistDarts = carryWaistDartPayload(_waistSrc, _cleanFixed, _cleanRotate, pivot, _ev.angleRad);
@@ -2428,14 +2483,14 @@ function applyDartMove() {
 
   if (side === "front") {
     dartMoveState.appliedFront = {
-      side: "front", bakedSegments, waistDarts,
+      side: "front", bakedSegments, waistDarts, src: _src,
       cutPoint: { ...dartMoveState.cutPoint },
       pivot:    { ...pivot },
       angle:    dartMoveState.userAngle,
     };
   } else {
     dartMoveState.appliedBack = {
-      side: "back", bakedSegments, waistDarts,
+      side: "back", bakedSegments, waistDarts, src: _src,
       cutPoint: { ...dartMoveState.cutPoint },
       pivot:    { ...pivot },
       angle:    dartMoveState.userAngle,

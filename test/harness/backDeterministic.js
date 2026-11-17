@@ -159,6 +159,8 @@ section("2+5. 오래된 다트 재이동 (전수조사 + 보존 검증)");
       // ── source −θ / new +θ 보존: 재겨냥 가능한 조합 중 대표 몇 개에 대해
       //    A/B 각각, 중간각 여러 개로 실제 적용해 보존을 확인한다.
       const baselineBaked = JSON.parse(JSON.stringify(r1.bakedSegments));
+      // 기준선의 출처 서명(dartMove.js · 2026-11-17) — 아래에서 기준선으로 «되돌릴» 때 함께 넣어야 실제 앱처럼 «지금 몸판과 같은 결과»로 쓰인다(서명 없으면 쓰지 않음)
+      const baselineSrc = JSON.parse(JSON.stringify((engine.dartMoveState.appliedBack || {}).src || null));
 
       const byVia = { A: reachableCombos.find(c => c.via === "A"), B: reachableCombos.find(c => c.via === "B") };
       for (const via of ["A", "B"]) {
@@ -166,7 +168,7 @@ section("2+5. 오래된 다트 재이동 (전수조사 + 보존 검증)");
         if (!combo) { console.log(`  (via=${via} 조합 없음 — 스킵)`); continue; }
         for (const pct of [0.10, 0.25, 0.50, 0.75, 0.90, 1.00]) {
           // 매 시행 전 2다트 기준선으로 복원 (독립 시행 보장)
-          engine.dartMoveState.appliedBack = { side: "back", bakedSegments: JSON.parse(JSON.stringify(baselineBaked)), pivot: { ...pivot }, angle: 0, cutPoint: { ...pivot } };
+          engine.dartMoveState.appliedBack = { side: "back", bakedSegments: JSON.parse(JSON.stringify(baselineBaked)), src: baselineSrc, pivot: { ...pivot }, angle: 0, cutPoint: { ...pivot } };
           engine.dartMoveState.mode = "idle"; engine.dartMoveState.side = null; engine.dartMoveState.cutPoint = null;
 
           const d3 = engine.createDraft(B, W, BL);

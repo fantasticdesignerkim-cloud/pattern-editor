@@ -6,7 +6,7 @@
 <title>DOROBO — 문화식 원형 에디터</title>
 <link rel="stylesheet" href="css/style.css?v=2026111304">
 <!-- 라이트 테마 덮어쓰기(apple-light-ui · 2026-11-13 통합): style.css 원문은 그대로, 표시만 바꾼다. -->
-<link rel="stylesheet" href="css/apple.css?v=2026111604">
+<link rel="stylesheet" href="css/apple.css?v=2026111701">
 <!-- 화면 모드(시스템/밝게/어둡게): 첫 그리기 전에 data-theme 을 정해 깜빡임을 막는다. 저장 키 dorobo.ui.theme · 연결은 js/appleChrome.js -->
 <script>try{var t=localStorage.getItem('dorobo.ui.theme');var d=t==='dark'||(t!=='light'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}catch(e){}</script>
 </head>
@@ -17,7 +17,7 @@
     <span class="app-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M5 19c3-1 4.5-13 8-13 2.6 0 3.4 4.6 6 5"/></svg></span>
     <span class="brand">DOROBO</span>
     <!-- 앱 버전 단일 원천: 배포할 때 이 번호만 올린다 (docs/STATUS.md § 앱 버전 표시) -->
-    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.16.4">v2026.11.16.4</span>
+    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.17.1">v2026.11.17.1</span>
     <span class="brand-sub">문화식 원형</span>
   </div>
 
@@ -675,11 +675,12 @@
        너치·식서·재단 수량·배치·출력 없음. -->
   <section class="cut-view" id="cutView" aria-label="재단 준비" hidden>
     <div class="cut-head">
-      <div class="cut-title"><b>재단 준비</b><span class="cut-sub">검은 선 = 완성선 · 붉은 선 = 시접 · 보라 = 맞춤 표시 · 선을 누르면 시접 폭</span></div>
+      <div class="cut-title"><b>재단 준비</b><span class="cut-sub">검은 선 = 완성선(다트 긴 V 포함) · 초록 = 다트 접어 정리한 완성 외곽 · 붉은 선 = 시접(재단선) · 보라 = 맞춤 표시 · 주황 점선 원 = 보류 너치 · 선을 누르면 시접 폭</span></div>
       <span class="cut-status" id="cutStatus" aria-live="polite"></span>
       <div class="cut-actions">
         <button type="button" class="btn" id="btnCutZoomOut" aria-label="축소">−</button>
         <button type="button" class="btn" id="btnCutFit">전체 보기</button>
+        <button type="button" class="btn" id="btnCutFitSel" disabled aria-disabled="true" title="목록이나 화면에서 조각을 먼저 고르세요">조각 보기</button>
         <button type="button" class="btn" id="btnCutZoomIn" aria-label="확대">+</button>
         <button type="button" class="btn" id="btnCutPrint" title="사전 점검 뒤 ① 실물 크기(1:1) A4 이어 붙이기 인쇄 창을 열거나(PDF 는 인쇄 창에서 «PDF로 저장») ② 재단 결과 DXF 파일을 저장합니다">인쇄·DXF</button>
         <button type="button" class="btn action-primary" id="btnCutBack">디자인으로</button>
@@ -723,7 +724,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026111201"></script>
-<script src="js/render.js?v=2026111304"></script>
+<script src="js/render.js?v=2026111702"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026111201"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -733,13 +734,13 @@
 <!-- 테스트 전용 read-only 곡선 fixture. 서비스 시작 전 이 줄과 js/testSeed.js 를 삭제한다.
      storage.js 이후(자동 복원·전역 함수 정의 뒤)·init.js 이전(generatePattern 전) 배치. -->
 <script src="js/testSeed.js?v=2026072306"></script>
-<script src="js/dartMove.js?v=2026092401"></script>
+<script src="js/dartMove.js?v=2026111702"></script>
 <!-- 블록마스터(원형) 데이터 캡처 1단계: captureBlockSnapshot() 만 공개. -->
 <script src="js/blockMaster.js?v=2026092501"></script>
 <!-- 원형 완료 수명주기(세션 메모리): window.blockWorkflow. UI 는 아직 연결하지 않는다. -->
-<script src="js/blockWorkflow.js?v=2026110901"></script>
+<script src="js/blockWorkflow.js?v=2026111702"></script>
 <!-- 디자인 프로젝트 D1(세션 데이터): window.designWorkflow. UI·renderer·design 활성화 없음. -->
-<script src="js/designProject.js?v=2026111604"></script>
+<script src="js/designProject.js?v=2026111701"></script>
 <!-- 디자인 geometry renderer D2(builder만): window.designRenderer. render.js hook·append 없음. -->
 <script src="js/designRenderer.js?v=2026100303"></script>
 <!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
@@ -856,7 +857,7 @@
 <script src="js/init.js?v=2026111105"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
 <script src="js/projectFile.js?v=2026111404"></script>
-<script src="js/ui.js?v=2026111501"></script>
+<script src="js/ui.js?v=2026111702"></script>
 <!-- 라이트 테마 크롬(UI 전용): 확대 알약 · 폰 하단 시트 · 화면 모드. 기존 전역 함수만 호출. -->
 <script src="js/appleChrome.js?v=2026111302"></script>
 <!-- 원형 이세 배지·계산 노트 · 원형/디자인 비교(읽기 전용 · UI 전용). -->
@@ -864,10 +865,10 @@
 <!-- 맞춤 길이 카드(읽기 전용 파생 표시 · UI 전용): 기존 측정 권위만 읽는다. -->
 <script src="js/seamMatch.js?v=2026111302"></script>
 <!-- 재단 준비 1단계(읽기 전용 파생 · UI 전용): designResult 권위만 읽는다. 저장 형식·stage 무변경. -->
-<script src="js/seamAllowance.js?v=2026111604"></script>
-<script src="js/cutPrep.js?v=2026111604"></script>
-<script src="js/cutPrint.js?v=2026111604"></script>
-<script src="js/cutDxf.js?v=2026111604"></script>
+<script src="js/seamAllowance.js?v=2026111701"></script>
+<script src="js/cutPrep.js?v=2026111701"></script>
+<script src="js/cutPrint.js?v=2026111701"></script>
+<script src="js/cutDxf.js?v=2026111701"></script>
 
 </body>
 </html>

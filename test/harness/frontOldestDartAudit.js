@@ -47,6 +47,8 @@ const baseRes = applyRecipe(baseEngine, "front", dims, { type: "front-waist", ar
 if (baseRes.status !== "applied") { console.error("baseline 생성 실패:", baseRes.status); process.exit(1); }
 const pivot = baseRes.pivot;
 const baselineBaked = JSON.parse(JSON.stringify(baseRes.bakedSegments));
+// 기준선의 출처 서명(dartMove.js · 2026-11-17) — 아래에서 기준선으로 «되돌릴» 때 함께 넣어야 실제 앱처럼 «지금 몸판과 같은 결과»로 쓰인다(서명 없으면 쓰지 않음)
+const baselineSrc = JSON.parse(JSON.stringify((baseEngine.dartMoveState.appliedFront || {}).src || null));
 const baseNotches = listOpenNotches(baseEngine, baselineBaked, pivot);
 const baseApertures = baseNotches.map(n => angleOf(n, pivot));
 const oldestApertureRad = Math.max(...baseApertures);
@@ -126,7 +128,7 @@ section("Layer 2: 대표 조합 실제 적용 + source−θ/new+θ 보존");
   const moveFraction = 0.5;
   reps.forEach((combo, ri) => {
     // baseline으로 리셋
-    baseEngine.dartMoveState.appliedFront = { side: "front", bakedSegments: JSON.parse(JSON.stringify(baselineBaked)), pivot: { ...pivot }, angle: 0, cutPoint: { ...pivot } };
+    baseEngine.dartMoveState.appliedFront = { side: "front", bakedSegments: JSON.parse(JSON.stringify(baselineBaked)), src: baselineSrc, pivot: { ...pivot }, angle: 0, cutPoint: { ...pivot } };
     baseEngine.dartMoveState.mode = "idle"; baseEngine.dartMoveState.side = null; baseEngine.dartMoveState.cutPoint = null;
 
     const ctx = moveContext(baseEngine, "front", dims);

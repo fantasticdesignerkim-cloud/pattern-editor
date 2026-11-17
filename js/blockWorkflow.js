@@ -94,6 +94,8 @@
     // 순서: ①isMeasureDirty 검사 → ②dirty면 throw → ③capture → ④canonicalize →
     //       ⑤최신 canonicalString 비교 → ⑥deepFreeze → ⑦_records.push(유일 commit).
     if (measurementsDirty()) fail("measure-dirty");   // ①② dirty gate (capture 전 — 최우선)
+    // 몸판이 바뀐 뒤 남은 다트 이동 결과(dartMove.js 출처 서명이 다르거나 없음)는 완료본에 넣지 않는다 — 옛 형상과 새 치수가 섞인 완료본 방지
+    if (typeof dartAppliedStatus === "function" && ["front", "back"].some(function (sd) { var st = dartAppliedStatus(sd).state; return st === "stale" || st === "unsigned"; })) fail("dart-stale");
     const snapshot = currentSnapshot();               // ③ 캡처 (throw → 무변화)
     const canonicalString = canonicalize(snapshot);   // ④ NaN/Inf → 무변화
     const canonicalHash = hash32(canonicalString);
