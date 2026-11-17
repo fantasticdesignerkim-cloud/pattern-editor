@@ -45,6 +45,7 @@
     if (m.notchSpec && m.notchSpec.state === "invalid") out.blockers.push("저장된 맞춤 표시 설정을 읽을 수 없습니다 — " + m.notchSpec.reason);
     if (Q.state === "invalid") out.blockers.push("저장된 재단 수량 설정을 읽을 수 없습니다 — " + Q.reason);
     if (G.state === "invalid") out.blockers.push("저장된 식서 설정을 읽을 수 없습니다 — " + G.reason);
+    if (m.dartSpec && m.dartSpec.state === "invalid") out.blockers.push("저장된 다트 정리 설정을 읽을 수 없습니다 — " + m.dartSpec.reason);
     (d.missing || []).forEach(function (x) { out.blockers.push("미완성 — " + x.label + ": " + x.reason); });
     var shown = 0;
     d.pieces.forEach(function (p) {
@@ -53,6 +54,7 @@
       if (!sm || !sm.ok || !r || !r.seam) { out.blockers.push("«" + p.label + "» 시접선 미완 — 재단선을 닫지 못했습니다"); return; }
       if (r.seamWhy) { out.blockers.push("«" + p.label + "» 펼친 시접선 문제 — " + r.seamWhy); return; }
       shown++;
+      (sm.notches || []).filter(function (n) { return n.held; }).forEach(function (n) { out.attention.push("«" + p.label + "» 맞춤 «" + n.name + "» 보류 — 다트 입구 정리로 그 자리 완성선이 바뀜(어긋남 " + n.heldDevCm + "cm · 기울기 " + n.heldDevDeg + "°) · 인쇄·DXF 에서 뺍니다(위치를 옮기지 않음 · 저장값 그대로)"); });
       if (r.foldWhy) out.warnings.push("«" + p.label + "» 골선을 펼치지 못해 반쪽으로 인쇄합니다(골선 표시) — " + r.foldWhy);
       var q = Q.pieces[p.id] || {}, g = G.pieces[p.id] || {};
       var row = { id: p.id, label: p.label, unfolded: !!r.unfolded,
@@ -114,6 +116,7 @@
     o.push("<g class=\"cp-piece\" data-piece=\"" + esc(p.id) + "\" transform=\"translate(" + n4(pos.dx) + " " + n4(pos.dy) + ")\">");
     o.push("<path class=\"cp-cut\" d=\"" + polyD(r.seam) + "\"/>");
     o.push("<path class=\"cp-fin\" d=\"" + pathD(r.outline) + " Z\"/>");
+    if (r.trued) o.push("<path class=\"cp-fin cp-trued\" d=\"" + pathD(r.trued) + " Z\"/>");   // 접어 정리한 완성 외곽(다트 긴 V 는 위 완성선에 그대로)
     var cut = r.seam.map(T); shapes.push({ pts: cut, bb: bbOf(cut) });
     var fo = sample(r.outline, 24).map(T); shapes.push({ pts: fo, bb: bbOf(fo) });
     r.marks.forEach(function (mk) {

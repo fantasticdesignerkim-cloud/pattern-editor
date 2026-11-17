@@ -564,6 +564,10 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 #cutCv .cut-piece.is-sel .cut-piece-outline{stroke:var(--ax-accent);stroke-width:2.6px;fill:rgba(0,122,255,.08)}
 #cutCv .cut-seam{fill:rgba(215,0,21,.07);stroke:#D70015;stroke-width:1.2px;vector-effect:non-scaling-stroke;stroke-linejoin:miter}
 #cutCv .cut-seam-part{fill:none;stroke-dasharray:6 3}
+#cutCv .cut-trued{fill:none;stroke:#0A6B3D;stroke-width:1.1px;vector-effect:non-scaling-stroke;stroke-linejoin:miter;pointer-events:none}
+.ci-dart label{display:flex;flex-direction:column;gap:4px}
+.ci-dart select{width:100%;max-width:100%;min-width:0;min-height:32px;font-size:12px}
+@media (max-width:640px){.ci-dart select{min-height:44px;width:100%}}
 #cutCv .cut-edge-fold.is-inner{stroke-width:1.6px;stroke-dasharray:6 3 1.5 3}
 .cut-item .ci-qty{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:4px 10px 0;font-size:12px;color:var(--ax-text2)}
 .cut-item .ci-qty input{width:52px;min-height:30px;font-size:15px;text-align:right;border-radius:8px;border:.5px solid var(--ax-hair);background:var(--ax-fill);color:var(--ax-text);padding:0 6px}
@@ -575,6 +579,7 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 #cutCv .cut-grain-hit{fill:none;stroke:transparent;stroke-width:22px;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:grab}
 #cutCv .cut-notch{fill:none;stroke:#8E24AA;stroke-width:2px;vector-effect:non-scaling-stroke;stroke-linecap:butt;pointer-events:none}
 #cutCv .cut-notch-dot{fill:#8E24AA;pointer-events:none}
+#cutCv .cut-notch-held{fill:none;stroke:#C25E00;stroke-width:1.5px;stroke-dasharray:3 2;vector-effect:non-scaling-stroke}
 .cut-item-btn .ci-notch{font-size:12px;color:#8E24AA}
 .cut-seam-card .csc-notch{white-space:pre-line;color:#6A1B9A;max-height:6em;overflow-y:auto}
 .cut-seam-card .csc-notch-edit{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow-y:auto;font-size:12px}

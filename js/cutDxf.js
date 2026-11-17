@@ -4,7 +4,7 @@
 //   재단 파생 모델(cutPrep derive → seam → displayOf → layoutOf → qtyOf → grainOf)만 읽는다. 사전 점검 = cutPrint.preflight 한 벌(규칙을 복사하지 않음).
 //   형식(결정 기록): ASCII DXF R12(AC1009) — 가장 넓게 읽히는 판. 단위 mm · 1:1 · Y 위쪽이 +(화면 y 를 뒤집음) · 왼쪽 아래 = (0,0).
 //     곡선 = 직선 조각으로 나눈 POLYLINE(R12 에는 SPLINE 이 없다) · 현 오차 ≤ 0.01mm · 좌표 소수 4자리(0.0001mm).
-//     재단선·완성선 = 닫힌 POLYLINE(70=1). 레이어: CUT · FINISHED · FOLD · NOTCH · GRAIN · GRAIN_HELD · INTERNAL · TEXT.
+//     재단선·완성선 = 닫힌 POLYLINE(70=1). 레이어: CUT · FINISHED · FINISHED_TRUED(접어 정리한 완성 외곽 — 있을 때만) · FOLD · NOTCH · GRAIN · GRAIN_HELD · INTERNAL · TEXT.
 //     단위 표시: $INSUNITS=4(mm) · $MEASUREMENT=1(미터법) — R12 정식 머리 변수는 아니라 읽는 쪽이 무시할 수 있다(그때는 «단위 없음 = mm»로 연다).
 //   AAMA/ASTM 재단 DXF 규격이 아니다(블록·규격 레이어 번호를 쓰지 않음) — 일반 DXF.
 //   골 펼친 조각 = 한 장 · 수량만큼 복제하지 않음 · 원본·hash·저장값을 바꾸지 않음 · 전송 없음(이 기기에서 파일 저장만).
@@ -13,7 +13,7 @@
   "use strict";
   function W() { return (typeof window !== "undefined") ? window : {}; }
   var TOL_CM = 0.001;   // 곡선을 직선으로 나눌 때 현 오차 한계 = 0.01mm
-  var LAYERS = [["CUT", 7, "CONTINUOUS", "재단선(시접 포함)"], ["FINISHED", 5, "CONTINUOUS", "완성선"], ["FOLD", 3, "DASHED", "골선"], ["NOTCH", 1, "CONTINUOUS", "너치(맞춤 표시)"],
+  var LAYERS = [["CUT", 7, "CONTINUOUS", "재단선(시접 포함)"], ["FINISHED", 5, "CONTINUOUS", "완성선(다트 봉제선 = 열린 다트 V 포함)"], ["FINISHED_TRUED", 6, "CONTINUOUS", "접어 정리한 완성 외곽(다트 입구 산)"], ["FOLD", 3, "DASHED", "골선"], ["NOTCH", 1, "CONTINUOUS", "너치(맞춤 표시)"],
     ["GRAIN", 4, "CONTINUOUS", "식서"], ["GRAIN_HELD", 8, "DASHED", "식서 보류 — 임시 기본 방향"], ["INTERNAL", 9, "DASHED", "안쪽 기준선"], ["TEXT", 2, "CONTINUOUS", "조각 이름·수량·식서 상태"]];
   function f4(v) { var s = (Math.round(v * 1e4) / 1e4).toFixed(4); return s === "-0.0000" ? "0.0000" : s; }
   // ASCII 만 쓴다: 한글 등은 DXF 유니코드 표기 \U+XXXX 로(읽는 쪽이 이 표기를 모르면 그대로 보인다 — 그래서 ASCII 조각 id 줄을 따로 둔다)
@@ -67,6 +67,7 @@
       var p = it.p, r = it.r, pos = it.pos, row = it.row, g = it.g;
       poly("CUT", closedRing(r.seam), pos, true);
       var fin = chains(r.outline); fin.forEach(function (c, i) { poly("FINISHED", fin.length === 1 ? closedRing(c) : c, pos, fin.length === 1); });
+      if (r.trued) { var tr0 = chains(r.trued); tr0.forEach(function (c) { poly("FINISHED_TRUED", tr0.length === 1 ? closedRing(c) : c, pos, tr0.length === 1); }); }
       (r.marks || []).forEach(function (mk) { var zone = mk.kind.indexOf("zone-") === 0; chains(mk.segs).forEach(function (c) { if (c.length === 2 && !zone) line("INTERNAL", c[0], c[1], pos); else poly("INTERNAL", zone ? closedRing(c) : c, pos, zone); }); });
       var foldN = 0;
       (r.edges || []).forEach(function (e) { var se = (it.sm.edges || []).filter(function (x) { return x.id === e.id; })[0]; if (!se || se.kind !== "fold") return;
@@ -136,6 +137,8 @@
       cut.forEach(function (q, i) { var a = cut[(i + n - 1) % n], b = cut[(i + 1) % n], t = Math.abs(Math.atan2(b.y - q.y, b.x - q.x) - Math.atan2(q.y - a.y, q.x - a.x)) * 180 / Math.PI; if (t > 180) t = 360 - t;
         if (t > TURN_DEG) { turn++; point("2", q); } else { curve++; point("3", q); } });
       var fin = chains(r.outline); fin.forEach(function (ch) { poly("14", fin.length === 1 ? closedRing(ch) : ch, fin.length === 1); });
+      // 접어 정리한 완성 외곽도 레이어 14 의 닫힌 선으로(master 확정: 다트 봉제선과 정리 외곽 둘 다 필요 — 한쪽을 중복으로 지우지 않는다)
+      if (r.trued) { var tr1 = chains(r.trued); tr1.forEach(function (ch) { poly("14", tr1.length === 1 ? closedRing(ch) : ch, tr1.length === 1); }); }
       (r.marks || []).forEach(function (mk) { var zone = mk.kind.indexOf("zone-") === 0; chains(mk.segs).forEach(function (ch) { if (ch.length === 2 && !zone) line("8", ch[0], ch[1]); else poly("8", zone ? closedRing(ch) : ch, zone); }); });
       var foldN = 0;
       (r.edges || []).forEach(function (e) { var se = (it.sm.edges || []).filter(function (x) { return x.id === e.id; })[0]; if (!se || se.kind !== "fold") return;

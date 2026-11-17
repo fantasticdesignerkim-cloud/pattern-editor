@@ -4,6 +4,8 @@
 //   · 직선 = 정확한 평행 이동. 곡선 = 정확한 법선 위 점을 잇는 점열(현 오차 ≤ TOL_CM — **엔지니어 검증 기준이지 교재 공식이 아니다**).
 //   · 모서리 = 이웃 두 시접선의 연장 교점(miter). 너무 뾰족하면(MITER_LIMIT) 거부. 오목 모서리 = 두 시접선의 교차점에서 자름.
 //   · 열린 다트 = 접기(위 겹 쪽으로 다트 분량을 눕힘) → 접힌 봉제선에 시접 → 펼침(반사·회전 복원). 접는 방향이 없으면 거부.
+//   · 다트에 method 가 있으면(2026-11-16 master 확정 — 지원 대상 한정) 먼저 «접어 정리한 완성 외곽»을 만든다(trueDart): 다트 두 다리 자리에 산 두 변이 들어간 닫힌 선.
+//     그 선의 바깥이 시접선이다(산 꼭짓점 = 보통 모서리 이음). 원래 완성선(열린 다트 V)은 입력 그대로 남는다 — 호출한 쪽이 두 역할을 따로 들고 간다.
 //   · 곡률 반경 < 폭 · 자기교차 · 맞닿음 · 다른 변 침범 = **몰래 잘라내지 않고 거부**(사유를 돌려준다).
 // ══════════════════════════════════════════════
 (function () {
@@ -146,9 +148,46 @@
       foldedKinkDeg: Math.acos(Math.max(-1, Math.min(1, dot(tEndT, tUf)))) * 180 / Math.PI, legMismatchCm: Math.abs(dist(mouthT, apex) - dist(mouthU, apex)) } };
   }
 
+  // ── 접어 정리한 완성 외곽(다트 한 개) — 순수 기하. 관측값·상수 없음 ──
+  //   접기: 아래 겹 쪽을 다트 각만큼 돌려 두 다리를 맞붙인다. 접힌 다트 분량 두 겹은 위 겹 쪽 다리선 ~ 접힌 중심선(다리선에서 반 각) 사이에 눕는다.
+  //   "extend-lower" (이번 앞판 진동 다트): 접은 채, 아래 겹 변의 선을 입구를 지나 곧게 이어 긋는다(입구에서의 접선). 그 선이 접힌 중심선과 만나는 점을 펼치면 산 꼭짓점. 입구 두 점은 그대로.
+  //   "chord" (이번 뒤판 어깨 다트 · 양옆 변이 직선일 때만): 접은 채, 양옆 변의 먼 끝점(목옆점 ~ 어깨끝)을 직선으로 잇는다. 그 직선이 다리선과 만나는 점 = 새 입구점, 접힌 중심선과 만나는 점을 펼치면 산 꼭짓점.
+  //   펼침: 위 겹 쪽 반 = 다리선에 대해 반사 · 아래 겹 쪽 반 = 되돌려 회전 → 산 꼭짓점은 다트 중심선 위, 두 변 길이가 같다.
+  function trueDart(segP, segQ, mA, apex, mB, topFirst, method) {
+    var mT = topFirst ? mA : mB, mU = topFirst ? mB : mA, dT = unit(sub(mT, apex)), dU = unit(sub(mU, apex));
+    if (!dT || !dU) return { code: "dart-shape", reason: "다트 다리 길이가 0 입니다" };
+    var th = Math.atan2(cross(dU, dT), dot(dU, dT));
+    if (Math.abs(th) < 1e-6 || Math.abs(th) > Math.PI / 2) return { code: "dart-shape", reason: "다트 각이 0 이거나 90°를 넘어 접을 수 없습니다" };
+    var fwd = function (p) { return add(apex, rot(sub(p, apex), th)); }, back = function (p) { return add(apex, rot(sub(p, apex), -th)); };
+    var refl = function (p) { var v = sub(p, apex), k = dot(v, dT); return add(apex, sub(mul(dT, 2 * k), v)); };
+    var dC = rot(dT, th / 2), nT = mT, peak, kink;
+    if (method === "extend-lower") {
+      var tU = topFirst ? tangentAt(segQ, 0) : (tangentAt(segP, 1) ? mul(tangentAt(segP, 1), -1) : null), tT = topFirst ? (tangentAt(segP, 1) ? mul(tangentAt(segP, 1), -1) : null) : tangentAt(segQ, 0);
+      if (!tU || !tT) return { code: "dart-true", reason: "다트 입구에서 변의 방향을 정할 수 없습니다" };
+      var dir = mul(rot(tU, th), -1), x = lineX(mT, dir, apex, dC);   // 아래 겹 변(접힌 위치)의 선을 입구 너머로 연장
+      if (!x || x.s <= 1e-9 || x.u <= 1e-9) return { code: "dart-true", reason: "아래 겹 변의 연장선이 접힌 다트 분량 위를 지나지 않습니다" };
+      peak = refl(x.pt); kink = Math.acos(Math.max(-1, Math.min(1, dot(tT, dir)))) * 180 / Math.PI;
+    } else if (method === "chord") {
+      if (segP.kind !== "line" || segQ.kind !== "line") return { code: "dart-true", reason: "양옆 변이 직선이 아니어서 «끝점을 직선으로 잇기»를 쓸 수 없습니다" };
+      var eT = topFirst ? segP.from : segQ.to, eU = topFirst ? segQ.to : segP.from, eUf = fwd(eU), dv = unit(sub(eUf, eT));
+      if (!dv) return { code: "dart-true", reason: "양옆 변의 끝점이 겹칩니다" };
+      var span = dist(eT, eUf), xT = lineX(eT, dv, apex, dT), xC = lineX(eT, dv, apex, dC);
+      if (!xT || !xC || xT.u <= 1e-9 || xC.u <= 1e-9 || xT.s <= 1e-9 || xT.s >= span - 1e-9 || xC.s <= 1e-9 || xC.s >= span - 1e-9) return { code: "dart-true", reason: "끝점을 이은 직선이 다트 다리선·접힌 다트 분량을 지나지 않습니다" };
+      nT = xT.pt; peak = refl(xC.pt);
+      kink = Math.acos(Math.max(-1, Math.min(1, dot(unit(sub(mT, eT)), unit(sub(eUf, mT)))))) * 180 / Math.PI;
+    } else return { code: "dart-true", reason: "알 수 없는 다트 정리 방식입니다" };
+    // 연장 방식은 입구 두 점을 그대로 둔다(두 다리 길이가 조금 달라도 닫힌 선 유지)
+    var nU = method === "chord" ? back(nT) : mU, nA = topFirst ? nT : nU, nB = topFirst ? nU : nT, mid = mul(add(mA, mB), 0.5), ax = unit(sub(mid, apex));
+    var P2 = method === "chord" ? { kind: "line", from: V(segP.from.x, segP.from.y), to: V(nA.x, nA.y) } : segP, Q2 = method === "chord" ? { kind: "line", from: V(nB.x, nB.y), to: V(segQ.to.x, segQ.to.y) } : segQ;
+    return { segP: P2, segQ: Q2, capA: { kind: "line", from: V(nA.x, nA.y), to: V(peak.x, peak.y) }, capB: { kind: "line", from: V(peak.x, peak.y), to: V(nB.x, nB.y) },
+      info: { method: method, topFirst: topFirst, apex: V(apex.x, apex.y), mouthA: V(mA.x, mA.y), mouthB: V(mB.x, mB.y), newMouthA: nA, newMouthB: nB, peak: peak, angleDeg: Math.abs(th) * 180 / Math.PI, foldedKinkDeg: kink,
+        peakOutCm: ax ? dot(sub(peak, mid), ax) : 0, mouthShiftCm: Math.max(dist(nA, mA), dist(nB, mB)), capSideCm: dist(nA, peak), legMismatchCm: Math.abs(dist(mA, apex) - dist(mB, apex)) } };
+  }
+
   function refuse(list, edgeIds, r) { list.push({ edgeIds: edgeIds, code: r.code, reason: r.reason }); }
 
-  // input = { ring:[seg…], edges:[{ id, segs:[ring index…], widthCm, darts:[{ legs:[i,j], topFirst:true|false|null }] }] }
+  // input = { ring:[seg…], edges:[{ id, segs:[ring index…], widthCm, darts:[{ legs:[i,j], topFirst:true|false|null, method?:"extend-lower"|"chord" }] }] }
+  //   method 가 있는 다트 → out.trued = { ring:[seg…](다리 두 개 자리에 산 두 변 · 같은 길이·같은 순서), darts:[정보…] } 를 만들고 그 선에 시접을 붙인다.
   function build(input) {
     var ring = input && input.ring, edges = input && input.edges, out = { ok: false, points: null, edgePaths: {}, refusals: [], darts: [], stats: {} };
     if (!Array.isArray(ring) || ring.length < 2 || !ring.every(validSeg)) { refuse(out.refusals, [], { code: "input", reason: "완성선을 읽을 수 없습니다" }); return out; }
@@ -168,11 +207,25 @@
     });
     for (i = 0; i < n && !bad; i++) if (!owner[i]) bad = "변에 속하지 않은 선이 있습니다";
     if (bad) { refuse(out.refusals, [], { code: "input", reason: bad }); return out; }
+    // 접어 정리(method 있는 다트): 다리 두 선 → 산 두 변(보통 선). 입력 ring 은 바꾸지 않는다(복사본에 쓴다).
+    var pre = [], truedList = [], src = ring; ring = ring.slice();
+    for (i = 0; i < n; i++) {
+      if (role[i] !== "legA" || !dartOf[i] || !dartOf[i].method) continue;
+      var td = dartOf[i], tj = (i + 1) % n, tp = (i + n - 1) % n, tq = (i + 2) % n, te = owner[i];
+      if (role[tp] !== "run" || role[tq] !== "run" || owner[tp] !== te || owner[tq] !== te) { pre.push([[te.id], { code: "dart-shape", reason: "다트 양옆이 같은 변이 아닙니다" }]); continue; }
+      if (td.topFirst !== true && td.topFirst !== false) { pre.push([[te.id], { code: "dart-direction", reason: "이 다트는 어느 쪽 겹이 위로 오는지(접는 방향)가 정해지지 않았습니다" }]); continue; }
+      var tr = trueDart(ring[tp], ring[tq], src[i].from, src[i].to, src[tj].to, td.topFirst, td.method);
+      if (tr.code) { pre.push([[te.id], tr]); continue; }
+      ring[tp] = tr.segP; ring[i] = tr.capA; ring[tj] = tr.capB; ring[tq] = tr.segQ; role[i] = role[tj] = "run"; dartOf[i] = null;
+      truedList.push(Object.assign({ edgeId: te.id, legs: [i, tj] }, tr.info));
+    }
+    if (truedList.length) out.trued = { ring: ring.slice(), darts: truedList };
 
     var fin = ring.map(function (s) { return flat(s, 48); }), all = []; fin.forEach(function (f) { for (var k = 0; k + 1 < f.length; k++) all.push(f[k]); });
     var sg = signedArea(all) > 0 ? 1 : -1;
     var off = new Array(n), failed = {}, minRadius = Infinity, maxMiter = 0, minAngle = 180;
     var fail = function (ids, r) { refuse(out.refusals, ids, r); ids.forEach(function (id) { failed[id] = true; }); };
+    pre.forEach(function (x) { fail(x[0], x[1]); });
     for (i = 0; i < n; i++) {
       if (role[i] !== "run") continue;
       var e = owner[i], o = offsetSeg(ring[i], e.widthCm, sg);
@@ -259,7 +312,7 @@
     return out;
   }
 
-  var api = Object.freeze({ build: build, TOL_CM: TOL_CM, MITER_LIMIT: MITER_LIMIT, MAX_WIDTH_CM: MAX_WIDTH_CM });
+  var api = Object.freeze({ build: build, trueDart: trueDart, TOL_CM: TOL_CM, MITER_LIMIT: MITER_LIMIT, MAX_WIDTH_CM: MAX_WIDTH_CM });
   if (typeof window !== "undefined") window.seamAllowance = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })();

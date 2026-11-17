@@ -196,8 +196,8 @@ const order = EX.m.L.order;
 {
   ok(X.evenPairs && X.eof && J(X.sections) === J(["HEADER", "TABLES", "BLOCKS", "ENTITIES"]) && /^[\x20-\x7e\r\n]*$/.test(B.dxf) && !/[^\r]\n/.test(B.dxf) && /\r\n0\r\nEOF\r\n$/.test(B.dxf), "1: 코드/값 쌍 짝수 · HEADER→TABLES→BLOCKS→ENTITIES→EOF · 전부 ASCII · 줄 끝 CRLF");
   ok(X.header.$ACADVER[1] === "AC1009" && X.header.$INSUNITS[70] === "4" && X.header.$MEASUREMENT[70] === "1" && X.header.$LUNITS[70] === "2", "1: 판 R12(AC1009) · 단위 표시 $INSUNITS=4(mm) · $MEASUREMENT=1(미터법)");
-  const names = ["CUT", "FINISHED", "FOLD", "NOTCH", "GRAIN", "GRAIN_HELD", "INTERNAL", "TEXT"];
-  ok(names.every(n => X.layers[n] && X.layers[n][62] && X.ltypes.indexOf(X.layers[n][6]) >= 0) && X.layers["0"] && X.ents.every(e => names.indexOf(e.layer) >= 0) && J(DX(S).LAYERS.map(l => l.name)) === J(names), "1: 이름 있는 레이어 8개가 표에 있고(색·선 종류 정의됨) 모든 도형이 그 레이어 중 하나");
+  const names = ["CUT", "FINISHED", "FINISHED_TRUED", "FOLD", "NOTCH", "GRAIN", "GRAIN_HELD", "INTERNAL", "TEXT"];
+  ok(names.every(n => X.layers[n] && X.layers[n][62] && X.ltypes.indexOf(X.layers[n][6]) >= 0) && X.layers["0"] && X.ents.every(e => names.indexOf(e.layer) >= 0) && J(DX(S).LAYERS.map(l => l.name)) === J(names), "1: 이름 있는 레이어 9개가 표에 있고(색·선 종류 정의됨) 모든 도형이 그 레이어 중 하나");
   const cut = by("POLYLINE", "CUT"), all = [].concat(...cut.map(e => e.pts)), e = bb(all);
   ok(near(e.x0, 0, 1e-4) && near(e.y0, 0, 1e-4) && near(e.x1, parseFloat(X.header.$EXTMAX[10]), 1e-4) && near(e.y1, parseFloat(X.header.$EXTMAX[20]), 1e-4) && near(e.x1, EX.wMm, 1e-3) && near(e.y1, EX.hMm, 1e-3) && near(B.stats.widthMm, EX.wMm, 1e-9),
     "1: 왼쪽 아래 = (0,0) · $EXTMAX = 실제 재단선 범위 = 화면 모델 범위 × 10 (" + e.x1.toFixed(2) + " × " + e.y1.toFixed(2) + " mm)");
@@ -315,7 +315,7 @@ const order = EX.m.L.order;
 // ══ §5 화면 · 옛 원형 DXF 동선 보존 ══
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), st = fs.readFileSync(path.join(ROOT, "js", "storage.js"), "utf8"), pr = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8");
-  ok(/js\/cutDxf\.js\?v=2026111603/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
+  ok(/js\/cutDxf\.js\?v=2026111604/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
   ok(/onclick="exportDXF\(\)">DXF 다운로드</.test(html) && /function exportDXF\(\)\{/.test(st) && !/cutDxf/.test(st), "5: 원형 단계의 «DXF 다운로드»(exportDXF) 동선은 그대로 — 재단 DXF 와 별개");
   ok(/data-cp=\\"dxf\\"/.test(pr) && /DXF 파일 저장/.test(pr) && /AAMA\/ASTM 규격 파일이 아니며/.test(pr) && /아직 확인하지 않았습니다/.test(pr) && /disabled aria-disabled/.test(pr), "5: 사전 점검 창에 «DXF 파일 저장» · 규격·호환을 과장하지 않는 문구 · 막히면 disabled");
 }
@@ -350,7 +350,7 @@ const order = EX.m.L.order;
     c1[0].pts.forEach((p2, i2) => { maxV = Math.max(maxV, Math.hypot(p2.x - s2[i2].x, p2.y - s2[i2].y)); });
     const p23 = L("2").concat(L("3")); nPts += p23.length; turnAll += L("2").length; curveAll += L("3").length;
     if (p23.length !== s2.length || !p23.every(e => e.type === "POINT" && s2.some(v => Math.hypot(v.x - pt(e).x, v.y - pt(e).y) < 2e-4)) || L("2").length < 3) bad.push(pid + ":points");
-    const sew = L("14").filter(e => e.type === "POLYLINE"), truth = dense(rr.outline).map(T); if (sew.length !== 1 || sew[0].c[70] !== "1") bad.push(pid + ":sew"); else for (let i2 = 0; i2 < truth.length; i2 += 9) maxCh = Math.max(maxCh, dClosed(truth[i2], sew[0].pts));
+    const sew = L("14").filter(e => e.type === "POLYLINE"), truth = dense(rr.outline).map(T); if (sew.length !== (rr.trued ? 2 : 1) || !sew.every(e => e.c[70] === "1")) bad.push(pid + ":sew");   // 정리 외곽이 있는 조각 = 닫힌 선 2개(긴 V · 정리 외곽) else for (let i2 = 0; i2 < truth.length; i2 += 9) maxCh = Math.max(maxCh, dClosed(truth[i2], sew[0].pts));
     const gl = L("7"); if (!(gl.length === 1 && gl[0].type === "LINE" && Math.hypot(pt(gl[0]).x - T(g.from).x, pt(gl[0]).y - T(g.from).y) < 2e-4 && Math.hypot(parseFloat(gl[0].c[11]) - T(g.to).x, parseFloat(gl[0].c[21]) - T(g.to).y) < 2e-4)) bad.push(pid + ":grain");
     const nl = rr.notches.filter(n => n.to), n4 = L("4"); nNotch += n4.length;
     if (n4.length !== nl.length || !n4.every(e => e.type === "POINT" && nl.some(n => { const a = T(n.from), b2 = T(n.to), len = Math.hypot(a.x - b2.x, a.y - b2.y); return (Math.hypot(pt(e).x - a.x, pt(e).y - a.y) < 2e-4 || Math.hypot(pt(e).x - b2.x, pt(e).y - b2.y) < 2e-4) && Math.abs(parseFloat(e.c[39]) - len) < 2e-4; }))) bad.push(pid + ":notch");

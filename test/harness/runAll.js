@@ -219,6 +219,7 @@ const suites = [
   { file: "cutGrainCheck.js", golden: false },
   { file: "cutPrintCheck.js", golden: false },
   { file: "cutDxfCheck.js", golden: false },
+  { file: "cutDartTrueCheck.js", golden: false },
 ];
 
 let anyFail = false;

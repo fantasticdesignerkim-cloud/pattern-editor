@@ -67,6 +67,7 @@ function start(S) {
   P.working.geometry = Object.assign({}, S.DB.computeGeometry(P.referenceGeometry, { body }), { sleeve: P.working.geometry.sleeve });
   P.working.designOutline = null; P.working.frontPlacket = null;
   S.DLy.ensureLayout(P);
+  delete P.working.cutDart;   // 이 검사는 «예전 방식»(2026-11-15 · 그대로 본뜸 · 앞 진동 다트 아래로)을 본다 = cutDart 없는 이전 프로젝트의 경로. 새 정리 방식은 cutDartTrueCheck 가 본다.
   return P;
 }
 function setCollarM(S) { const P = S.P(), plan = S.CP.composeDraft("bunka-shirt-collar-M", S.BC.latest(P), S.DC); if (plan.ok) { P.working.collarDraft = plan.draft; P.working.collarResult = null; } return plan; }

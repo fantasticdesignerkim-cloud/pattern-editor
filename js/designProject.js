@@ -108,6 +108,8 @@
       working: {
         geometry: deepClone(completed.snapshot.geometry),             // 몸판 계산 결과(mutable, 재계산 시 교체)
         parameters: {},
+        // 재단 — 다트 입구 정리 판(cutPrep readDart). 이 값이 있는 프로젝트 = 새 정리 방식이 기본. 없는 프로젝트(이전에 만든·저장한 것) = 예전 방식 그대로.
+        cutDart: { schema: 1, darts: {} },
         // 사용자가 그린 디자인 선(세션 전용). geometry 와 **책임 분리** — 엉덩이 길이 적용이
         // working.geometry 를 통째 교체해도(computeGeometry 결과) 그린 선은 사라지지 않는다.
         // 각 항목 { id, piece, segments:[{kind:"line",from,to}] }, 좌표는 형상 cm(offset 역변환).
