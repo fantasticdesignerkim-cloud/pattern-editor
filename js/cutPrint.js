@@ -194,7 +194,11 @@
       R + "svg.cp-page{display:block;width:" + op.pageWmm + "mm;height:" + op.pageHmm + "mm}" +
       R + ".cp-guide{font-size:9.5pt;line-height:1.4}" + R + ".cp-guide h1{font-size:15pt;margin:0 0 2mm}" + R + ".cp-guide h2{font-size:10.5pt;margin:2.5mm 0 1mm}" +
       R + ".cp-guide ol," + R + ".cp-guide ul{margin:0;padding-left:5mm}" + R + ".cp-guide table{border-collapse:collapse;font-size:8.5pt}" +
-      R + ".cp-guide td," + R + ".cp-guide th{border:0.2mm solid #888;padding:0.5mm 1.5mm;text-align:left}" + R + ".cp-guide .cp-warn{color:#8a3b00}" + R + ".cp-guide .cp-row{display:flex;gap:5mm;align-items:flex-start}";
+      R + ".cp-guide td," + R + ".cp-guide th{border:0.2mm solid #888;padding:0.5mm 1.5mm;text-align:left}" + R + ".cp-guide .cp-warn{color:#8a3b00}" + R + ".cp-guide{max-width:100%;overflow-wrap:anywhere}" +
+      // 안내 쪽은 쪽 폭(210 − 2·여백) 안에 든다: 검척선(114mm · 실물 그대로 · 줄이지 않음)과 배치도가 한 줄에 안 들어가면 배치도가 아래로 내려간다.
+      //   한 줄이라도 쪽 폭을 넘으면 브라우저가 문서 전체를 줄여 인쇄해 패턴 쪽까지 1:1 이 깨진다(실측: 여백 12mm → 98.6% · 20mm → 90% · 30mm → 79%).
+      R + ".cp-guide .cp-row{display:flex;flex-wrap:wrap;gap:5mm;align-items:flex-start}" + R + ".cp-guide .cp-row>div{break-inside:avoid;page-break-inside:avoid;max-width:100%}" +
+      R + ".cp-guide svg.cp-overview{max-width:100%;height:auto}" + R + ".cp-guide table{max-width:100%}" + R + ".cp-guide tr{break-inside:avoid;page-break-inside:avoid}";
   }
   // 선 굵기·색 = 실물 기준(단위 cm): 재단선 0.5mm · 완성선 0.25mm · 골선 0.35mm · 너치·식서 0.35mm.
   //   <use> 로 비춰 그린 도형에는 바깥 조상 선택자가 닿지 않는다(실측: 스타일이 빠져 검게 채워짐) → 스타일시트가 아니라 요소 속성으로 직접 적는다.
@@ -276,7 +280,7 @@
     var gt = []; for (var k = 1; k < 10; k++) { if (k === 5) continue; gt.push("M" + n4(0.6 + k) + " 0.6 L" + n4(0.6 + k) + " 0.72 M0.6 " + n4(0.6 + k) + " L0.72 " + n4(0.6 + k)); }
     o.push("<div class=\"cp-row\"><div><h2>검척선(100mm) — 자로 재어 확인</h2><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"114mm\" height=\"110mm\" viewBox=\"0 0 11.4 11\"><path class=\"cp-gauge-big\" d=\"" + gaugeD(0.6, 0.6) + "\"/><path class=\"cp-gauge\" d=\"" + gt.join(" ") + "\"/>" + txt("cp-tl", 0.45, 0.4, 0.26, "0") + txt("cp-tl", 5.45, 0.4, 0.26, "50") + txt("cp-tl", 10.3, 0.4, 0.26, "100mm") + txt("cp-tl", 0.05, 5.7, 0.26, "50") + txt("cp-tl", 0.0, 10.95, 0.26, "100") + txt("cp-tl", 4.0, 1.3, 0.34, "가로 100mm") + txt("cp-tl", 1.0, 5.7, 0.34, "세로 100mm") + "</svg></div>");
     var GW = Math.max(S.wCm, (b.cols - 1) * op.stepX + op.winW), GH = Math.max(S.hCm, (b.rows - 1) * op.stepY + op.winH), sc = Math.min(70 / (GW * 10), 100 / (GH * 10)), gw = GW * 10 * sc, gh = GH * 10 * sc, gfs = Math.min(op.stepX, op.stepY) * 0.32;
-    o.push("<div><h2>전체 배치(축소 안내도 — 치수 아님)</h2><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + n4(gw) + "mm\" height=\"" + n4(gh) + "mm\" viewBox=\"" + n4(S.x0 - 0.1) + " " + n4(S.y0 - 0.1) + " " + n4(GW + 0.2) + " " + n4(GH + 0.2) + "\"><use href=\"#cpSheet\"/>");
+    o.push("<div><h2>전체 배치(축소 안내도 — 치수 아님)</h2><svg class=\"cp-overview\" xmlns=\"http://www.w3.org/2000/svg\" width=\"" + n4(gw) + "mm\" height=\"" + n4(gh) + "mm\" viewBox=\"" + n4(S.x0 - 0.1) + " " + n4(S.y0 - 0.1) + " " + n4(GW + 0.2) + " " + n4(GH + 0.2) + "\"><use href=\"#cpSheet\"/>");
     b.tiles.forEach(function (t) { o.push("<rect class=\"cp-grid\" x=\"" + n4(t.x0) + "\" y=\"" + n4(t.y0) + "\" width=\"" + n4(op.stepX) + "\" height=\"" + n4(op.stepY) + "\"/>" + txt("cp-gridn", t.x0 + op.stepX / 2, t.y0 + op.stepY / 2 + gfs * 0.35, gfs, String(t.page), " text-anchor=\"middle\"")); });
     o.push("</svg><div>숫자 = 쪽 번호(왼쪽 위부터 행 순서)</div></div></div>");
     o.push("<h2>사전 점검 — 조각 · 수량 · 식서</h2><table><tr><th>조각</th><th>재단 수량</th><th>식서</th><th>비고</th></tr>");
@@ -305,10 +309,15 @@
   var model = { DEFAULTS: DEF, LIMITS: LIM, GAUGE_COLOR: GAUGE, optsOf: optsOf, preflight: preflight, build: build, buildHtml: buildHtml };
 
   // ══ 화면: 사전 점검 창 + 시스템 인쇄 ══
-  var ui = { opts: { marginMm: DEF.marginMm, overlapMm: DEF.overlapMm }, msg: "", last: null };
+  var ui = { opts: { marginMm: DEF.marginMm, overlapMm: DEF.overlapMm }, msg: "", last: null, printing: false, sawPrintMedia: false };
+  // 인쇄 수명(2026-11-17 야간 리뷰): 인쇄용 내용은 «인쇄 창 열기»를 누른 그 인쇄 한 번에만 문서에 둔다.
+  //   ui.printing = 그 인쇄가 진행 중. 인쇄가 끝나면(afterprint · 또는 인쇄 미디어가 끝남) 바로 걷는다 — 취소·닫기도 같은 이벤트로 끝난다.
+  //   print() 가 바로 돌아오는 브라우저(Safari 등)에서는 돌아왔다고 걷지 않는다(그때는 아직 인쇄 창이 내용을 읽는 중일 수 있다).
+  //   그 뒤 사용자가 Cmd/Ctrl+P 로 앱을 인쇄하면(ui.printing 아님) 남은 내용이 있어도 beforeprint 에서 걷어 앱 화면이 인쇄된다.
   function $(id) { return document.getElementById(id); }
   function versionNow() { var v = $("appVersion"); return v ? String(v.textContent || "").trim() : ""; }
   function unmount() { var r = $("cutPrintRoot"); if (r && r.parentNode) r.parentNode.removeChild(r); }
+  function endPrint() { if (!ui.printing) return; ui.printing = false; ui.sawPrintMedia = false; unmount(); }
   function mount(b) {
     unmount();
     var root = document.createElement("div"); root.id = "cutPrintRoot"; root.setAttribute("aria-hidden", "true");
@@ -375,14 +384,14 @@
     body.innerHTML = o.join("");
   }
   function openPanel() { var p = panel(); if (!p) return false; ui.msg = ""; renderPanel(); p.hidden = false; return true; }
-  function closePanel() { var p = $("cutPrintPanel"); if (p) p.hidden = true; unmount(); }
+  function closePanel() { var p = $("cutPrintPanel"); if (p) p.hidden = true; ui.printing = false; ui.sawPrintMedia = false; unmount(); }
   function doPrint() {
     var now = new Date(), pad = function (v) { return (v < 10 ? "0" : "") + v; };
     var b = build(null, ui.opts, { version: versionNow(), createdAt: now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate()) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes()) });
     if (!b.ok) { ui.msg = "인쇄 안 함: " + b.reason; renderPanel(); return { ok: false, reason: b.reason }; }
-    mount(b);
+    mount(b); ui.printing = true; ui.sawPrintMedia = false;   // 새 인쇄마다 지금 사전 점검으로 새로 만든 내용
     ui.msg = "인쇄 창을 열었습니다 — 대상·배율(100%)을 확인하세요"; renderPanel();
-    try { W().print(); } catch (e) { ui.msg = "이 브라우저에서 인쇄 창을 열지 못했습니다"; renderPanel(); return { ok: false, reason: "print-failed" }; }
+    try { W().print(); } catch (e) { endPrint(); ui.msg = "이 브라우저에서 인쇄 창을 열지 못했습니다"; renderPanel(); return { ok: false, reason: "print-failed" }; }
     return { ok: true, pages: b.tiles.length };
   }
   function bind() {
@@ -390,10 +399,17 @@
     btn.addEventListener("click", function () { openPanel(); });
     var back = $("btnCutBack"); if (back) back.addEventListener("click", function () { closePanel(); });
     // 인쇄 창이 이 창(사전 점검)에서 열린 것이 아니면 패턴 인쇄용 내용을 남겨 두지 않는다(앱 화면을 인쇄할 때 섞이지 않게)
-    if (W().addEventListener) W().addEventListener("beforeprint", function () { var p = $("cutPrintPanel"), cv = $("cutView"); if (!p || p.hidden || !cv || cv.hidden) unmount(); });
+    if (W().addEventListener) {
+      // 앱 인쇄(Cmd/Ctrl+P · 메뉴)와 «인쇄 창 열기»를 구별: 진행 중인 실물 인쇄가 아니면 남은 인쇄용 내용을 걷는다(앱 화면이 인쇄된다).
+      W().addEventListener("beforeprint", function () { var p = $("cutPrintPanel"), cv = $("cutView"); if (!ui.printing || !p || p.hidden || !cv || cv.hidden) { ui.printing = false; unmount(); } });
+      W().addEventListener("afterprint", function () { endPrint(); });   // 인쇄·PDF 저장·취소·창 닫기 모두 여기로 끝난다
+    }
+    // afterprint 를 보내지 않는 브라우저 대비: 인쇄 미디어가 켜졌다가 꺼지면 끝난 것으로 본다(켜진 적이 없으면 걷지 않음 — 조기 제거 금지)
+    var mq = W().matchMedia ? W().matchMedia("print") : null, onMq = function (ev) { if (!ui.printing) return; if (ev.matches) ui.sawPrintMedia = true; else if (ui.sawPrintMedia) endPrint(); };
+    if (mq) { if (mq.addEventListener) mq.addEventListener("change", onMq); else if (mq.addListener) mq.addListener(onMq); }
   }
   W().cutPrint = Object.freeze(Object.assign({}, model, { openPanel: function () { return openPanel(); }, closePanel: function () { closePanel(); }, print: function () { return doPrint(); },
-    panelState: function () { var p = $("cutPrintPanel"); return { open: !!p && !p.hidden, opts: Object.assign({}, ui.opts), msg: ui.msg, last: ui.last, mounted: !!$("cutPrintRoot") }; } }));
+    panelState: function () { var p = $("cutPrintPanel"); return { open: !!p && !p.hidden, opts: Object.assign({}, ui.opts), msg: ui.msg, last: ui.last, mounted: !!$("cutPrintRoot"), printing: ui.printing }; } }));
   if (typeof document !== "undefined" && document.querySelector && document.addEventListener) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind); else bind();
   }

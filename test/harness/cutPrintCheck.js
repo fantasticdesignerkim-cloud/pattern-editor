@@ -283,10 +283,26 @@ let B;
 // ══ §7 화면 · 문구 ══
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), SRC0 = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8"), css = fs.readFileSync(path.join(ROOT, "css", "apple.css"), "utf8");
-  ok(/id="btnCutPrint"[^>]*>인쇄·DXF</.test(html) && /js\/cutPrint\.js\?v=2026111701/.test(html) && html.indexOf("js/cutPrint.js") > html.indexOf("js/cutPrep.js"), "7: 재단 화면에 «실물 인쇄» 단추 · cutPrint.js 는 cutPrep.js 다음에 불러옴");
+  ok(/id="btnCutPrint"[^>]*>인쇄·DXF</.test(html) && /js\/cutPrint\.js\?v=2026111705/.test(html) && html.indexOf("js/cutPrint.js") > html.indexOf("js/cutPrep.js"), "7: 재단 화면에 «실물 인쇄» 단추 · cutPrint.js 는 cutPrep.js 다음에 불러옴");
   ok(!/PDF ?다운로드|PDF ?내려받기|PDF 저장 단추/.test(SRC0 + html) && /인쇄 창 열기/.test(SRC0) && /파일을 바로 내려받는 것이 아닙니다/.test(SRC0) && /PDF로 저장/.test(SRC0) && /100%\(실제 크기\)/.test(SRC0), "7: «PDF 다운로드»라고 쓰지 않음 · «인쇄 창 열기» + 시스템 인쇄 창에서 «PDF로 저장» 동선 안내");
   ok(/disabled aria-disabled=\\"true\\" title=/.test(SRC0) && /지금은 인쇄·DXF 저장을 할 수 없습니다/.test(SRC0) && /@media screen\{#cutPrintRoot\{display:none!important\}\}/.test(SRC0) && /body>\*:not\(#cutPrintRoot\)\{display:none!important\}/.test(SRC0), "7: 막힌 상태 = 단추 disabled + 이유 · 인쇄 내용은 화면에는 숨기고 인쇄할 때만 보임");
   ok(/\.cut-print-card\{/.test(css) && /@media \(max-width:640px\)\{[^@]*\.cut-print \.btn\{min-height:44px\}/.test(css), "7: 사전 점검 창 스타일 · 폰에서 단추 44px");
+}
+
+// ══ §8 야간 리뷰 2건(2026-11-17): 안내 쪽 폭 · 인쇄 수명 ══
+{
+  const src = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8"), B8 = PR(S).build(P, { marginMm: 30, overlapMm: 10 }, META);
+  ok(/\.cp-guide \.cp-row\{display:flex;flex-wrap:wrap;gap:5mm;align-items:flex-start\}/.test(B8.css) && /\.cp-guide \.cp-row>div\{break-inside:avoid;page-break-inside:avoid;max-width:100%\}/.test(B8.css) && /\.cp-guide svg\.cp-overview\{max-width:100%;height:auto\}/.test(B8.css) && /\.cp-guide tr\{break-inside:avoid/.test(B8.css),
+    "8: 안내 쪽 = 검척선·배치도 줄이 쪽 폭을 넘으면 배치도가 아래로(줄바꿈) · 덩어리·표 줄은 쪽 사이에서 쪼개지지 않음 · 배치도만 줄일 수 있음");
+  const g8 = B8.body.split("cp-pg")[0];
+  ok(/<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="114mm" height="110mm" viewBox="0 0 11\.4 11">/.test(g8) && !/<svg class="cp-overview"[^>]*width="114mm"/.test(g8) && !/max-width[^}]*cp-gauge/.test(B8.css) && /<svg class="cp-overview"/.test(g8), "8: 큰 검척선 = 114mm 고정(줄이지 않음 · max-width 없음) · 배치도만 cp-overview(줄일 수 있음)");
+  [3, 10, 12, 20, 30].forEach(m => { const o = PR(S).optsOf({ marginMm: m, overlapMm: 10 }); ok(o.ok && o.pageWmm >= 114 + 1e-9, "8: 여백 " + m + "mm — 쪽 폭 " + o.pageWmm + "mm ≥ 검척선 114mm(검척선은 늘 한 줄에 실물 그대로 들어간다)"); });
+  ok(/function endPrint\(\) \{ if \(!ui\.printing\) return; ui\.printing = false; ui\.sawPrintMedia = false; unmount\(\); \}/.test(src) && /addEventListener\("afterprint", function \(\) \{ endPrint\(\); \}\)/.test(src), "8: 인쇄가 끝나면(afterprint — 인쇄·PDF 저장·취소·닫기) 인쇄용 내용을 걷음");
+  ok(/addEventListener\("beforeprint", function \(\) \{ var p = \$\("cutPrintPanel"\), cv = \$\("cutView"\); if \(!ui\.printing \|\| !p \|\| p\.hidden \|\| !cv \|\| cv\.hidden\) \{ ui\.printing = false; unmount\(\); \} \}\)/.test(src), "8: 실물 인쇄 진행 중이 아니면(앱 Cmd/Ctrl+P) beforeprint 에서 남은 내용을 걷음 — 앱 화면이 인쇄됨");
+  const dp = (src.match(/function doPrint\(\) \{[\s\S]*?\n  \}\n/) || [""])[0];
+  ok(/var b = build\(null, ui\.opts/.test(dp) && /mount\(b\); ui\.printing = true;/.test(dp) && /catch \(e\) \{ endPrint\(\);/.test(dp) && !/W\(\)\.print\(\);[^\n]*unmount/.test(dp) && !/W\(\)\.print\(\);\s*\n\s*unmount/.test(dp), "8: 인쇄마다 지금 사전 점검으로 새로 만듦 · print() 가 바로 돌아와도 걷지 않음(Safari) · 던지면 걷음");
+  ok(/matchMedia\("print"\)/.test(src) && /if \(ev\.matches\) ui\.sawPrintMedia = true; else if \(ui\.sawPrintMedia\) endPrint\(\);/.test(src), "8: afterprint 가 없는 브라우저 대비 = 인쇄 미디어가 켜졌다 꺼질 때만 걷음(켜진 적 없으면 걷지 않음)");
+  ok(/function closePanel\(\) \{[^}]*ui\.printing = false;[^}]*unmount\(\); \}/.test(src), "8: 창 닫기 = 걷음");
 }
 
 console.log("cutPrintCheck: " + PASS + " passed, " + FAIL + " failed");
