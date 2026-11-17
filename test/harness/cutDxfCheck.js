@@ -2,6 +2,7 @@
 // cutDxfCheck.js — 재단 결과 DXF 내보내기(js/cutDxf.js · 2026-11-16 master 승인 · 실제 엔진 + 독립 DXF 파서)
 //   §1 형식(R12 · mm · 레이어 표 · ASCII · CRLF) · §2 독립 파서로 다시 읽어 치수·폐곡선·곡선 오차·너치·식서·골·수량 대조
 //   §3 막는 경우 = cutPrint 사전 점검과 같은 목록 · 식서 보류 · §4 원본·hash·저장 불변 · 같은 입력 = 같은 파일 · §5 화면·옛 원형 DXF 동선 보존
+//   §7 골 ↔ 봉제선 전환 · 펼친 가운데 선 = INTERNAL(인쇄·AAMA 와 같은 뜻) · FOLD = 실제 반쪽 골 재단만
 //   §6 AAMA/ASTM 구조(조각마다 블록 · 숫자 레이어 · 조각/스타일 글자 · 너치 점) — 구조 검사일 뿐 규격 인증·CAD 호환 검증이 아니다
 //   CUTDXF_OUT=<폴더> 를 주면 실제 DXF 파일을 그 폴더에 쓴다(저장소 밖).
 //   node test/harness/cutDxfCheck.js
@@ -228,7 +229,7 @@ const order = EX.m.L.order;
   // 닫힘·자기 교차 없음(재단선)
   ok(cut.every(e => crossCount(e.pts) === 0), "2: 재단선 8개 모두 자기 교차 0(닫힌 단순 다각형)");
   // 너치
-  const nl = by("LINE", "NOTCH"), nc = by("CIRCLE", "NOTCH"), foldPts = X.ents.filter(e => e.layer === "FOLD").map(e => e.type === "LINE" ? [{ x: e.x, y: e.y }, { x: e.x2, y: e.y2 }] : e.pts), dFold = q => Math.min(...foldPts.map(fp => dPts(q, fp))); let nExp = 0, nBad = 0, nFar = 0, nOnFold = 0;
+  const nl = by("LINE", "NOTCH"), nc = by("CIRCLE", "NOTCH"), foldPts = X.ents.filter(e => e.layer === "FOLD" || e.layer === "INTERNAL").map(e => e.type === "LINE" ? [{ x: e.x, y: e.y }, { x: e.x2, y: e.y2 }] : e.pts), dFold = q => Math.min(...foldPts.map(fp => dPts(q, fp))); let nExp = 0, nBad = 0, nFar = 0, nOnFold = 0;
   order.forEach((pid, k) => { const T = EX.T(pid); EX.m.D[pid].notches.forEach(n => { nExp++; const a = T(n.from);
     if (n.to) { const b2 = T(n.to); if (!nl.some(e => Math.hypot(e.x - a.x, e.y - a.y) < 2e-4 && Math.hypot(e.x2 - b2.x, e.y2 - b2.y) < 2e-4)) nBad++; }
     else if (!nc.some(e => Math.hypot(e.x - a.x, e.y - a.y) < 2e-4)) nBad++;
@@ -244,8 +245,10 @@ const order = EX.m.L.order;
   ok(gExp === order.length && gl.length === gExp * 5 && gBad === 0 && by("LINE", "GRAIN_HELD").length === 0, "2: 식서 " + gExp + "개(조각마다 하나 · 가운데 선 + 화살촉 4선) · 끝점·각도 일치 · 보류 없음");
   // 골: 펼친 조각 한 장 + 가운데 골선
   const fo = by("LINE", "FOLD").concat(by("POLYLINE", "FOLD")), unf = order.filter(pid => EX.m.D[pid].unfolded), bk = order.indexOf("back"), half = PIECE(EX.m.d, "back"), cb = bb(cut[bk].pts), fbk = bb(fin[bk].pts);
-  ok(unf.length >= 3 && fo.length === unf.length && fbk.x1 - fbk.x0 > half.widthCm * 20 - 0.1 && foldPts.some(fp => fp.every(q => Math.abs(q.x - (fbk.x0 + fbk.x1) / 2) < 0.01 && inBB(q, cb, 0.01))),
-    "2: 골 펼친 조각 " + unf.length + "개(" + unf.join("·") + ") = 한 장씩 · 골선 " + fo.length + "개 · 뒤판 완성 폭 " + (fbk.x1 - fbk.x0).toFixed(1) + "mm = 반쪽 " + (half.widthCm * 10).toFixed(1) + " × 2 · 골선이 한가운데");
+  // 펼친 한 장의 가운데 선 = INTERNAL(자르지 않음) — 화면 모델의 골 변(r.fold)과 좌표가 같은 선이 INTERNAL 에 하나씩
+  const centre = unf.map(pid => { const T = EX.T(pid), f = EX.m.D[pid].fold.segs, a = T(f[0].from), z = T(f[f.length - 1].to); return X.ents.filter(e => e.layer === "INTERNAL" && (e.type === "LINE" ? (Math.hypot(e.x - a.x, e.y - a.y) < 2e-4 && Math.hypot(e.x2 - z.x, e.y2 - z.y) < 2e-4) : (e.pts && Math.hypot(e.pts[0].x - a.x, e.pts[0].y - a.y) < 2e-4 && Math.hypot(e.pts[e.pts.length - 1].x - z.x, e.pts[e.pts.length - 1].y - z.y) < 2e-4))).length; });
+  ok(unf.length >= 3 && fo.length === 0 && centre.every(c => c === 1) && fbk.x1 - fbk.x0 > half.widthCm * 20 - 0.1 && foldPts.some(fp => fp.every(q => Math.abs(q.x - (fbk.x0 + fbk.x1) / 2) < 0.01 && inBB(q, cb, 0.01))),
+    "2: 골 펼친 조각 " + unf.length + "개(" + unf.join("·") + ") = 한 장씩 · 가운데 선은 INTERNAL(자르지 않음 · 인쇄·AAMA 와 같은 뜻) 하나씩 · FOLD 0 · 뒤판 완성 폭 " + (fbk.x1 - fbk.x0).toFixed(1) + "mm = 반쪽 " + (half.widthCm * 10).toFixed(1) + " × 2 · 가운데 선이 한가운데");
   // 글자: 조각마다 ASCII id · 한글 이름 · 수량 · 식서 상태
   const tx = by("TEXT", "TEXT"), txt = tx.map(e => e.text);
   ok(order.every((pid, k) => { const p = PIECE(EX.m.d, pid), q = EX.m.Q.pieces[pid], inside = tx.filter(e => inBB(e, bb(cut[k].pts), 0.01)).map(e => e.text);
@@ -315,7 +318,7 @@ const order = EX.m.L.order;
 // ══ §5 화면 · 옛 원형 DXF 동선 보존 ══
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), st = fs.readFileSync(path.join(ROOT, "js", "storage.js"), "utf8"), pr = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8");
-  ok(/js\/cutDxf\.js\?v=2026111701/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
+  ok(/js\/cutDxf\.js\?v=2026111704/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
   ok(/onclick="exportDXF\(\)">DXF 다운로드</.test(html) && /function exportDXF\(\)\{/.test(st) && !/cutDxf/.test(st), "5: 원형 단계의 «DXF 다운로드»(exportDXF) 동선은 그대로 — 재단 DXF 와 별개");
   ok(/data-cp=\\"dxf\\"/.test(pr) && /DXF 파일 저장/.test(pr) && /AAMA\/ASTM 규격 파일이 아니며/.test(pr) && /아직 확인하지 않았습니다/.test(pr) && /disabled aria-disabled/.test(pr), "5: 사전 점검 창에 «DXF 파일 저장» · 규격·호환을 과장하지 않는 문구 · 막히면 disabled");
 }
@@ -371,6 +374,38 @@ const order = EX.m.L.order;
   const pr6 = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8");
   ok(/data-cp=\\"dxf-aama\\"/.test(pr6) && /DXF 저장\(AAMA 구조\)/.test(pr6) && /규격 인증을 받은 것이 아니고/.test(pr6) && /아직 확인하지 못했습니다/.test(pr6), "6: 화면 = «DXF 저장(AAMA 구조)» 단추 · 인증·호환을 주장하지 않는 문구");
   if (process.env.CUTDXF_OUT) fs.writeFileSync(path.join(process.env.CUTDXF_OUT, A.fileName), A.dxf);
+}
+
+// ══ §7 골 ↔ 봉제선 전환 · 가운데 선 분류(2026-11-17 야간 리뷰: 펼친 한 장의 가운데 선이 일반 DXF 에서만 FOLD 로 나가 «접어 재단»으로 읽힐 수 있었다) ══
+{
+  const r7 = buildP(), S7 = r7.S, P7 = r7.P, h7 = hashes(P7);
+  const ents = (dxf, layer) => parseDxf(dxf).ents.filter(e => e.layer === layer);
+  const g0 = DX(S7).build(P7, META), a0 = DX(S7).build(P7, META, { format: "aama" }), E0 = expect(S7, P7);
+  const centreOf = (E, pid) => { const T = E.T(pid), f = E.m.D[pid].fold.segs; return [T(f[0].from), T(f[f.length - 1].to)]; };
+  const hasLine = (list, a, z) => list.some(e => e.type === "LINE" ? (Math.hypot(e.x - a.x, e.y - a.y) < 2e-4 && Math.hypot(e.x2 - z.x, e.y2 - z.y) < 2e-4) : (e.pts && Math.hypot(e.pts[0].x - a.x, e.pts[0].y - a.y) < 2e-4 && Math.hypot(e.pts[e.pts.length - 1].x - z.x, e.pts[e.pts.length - 1].y - z.y) < 2e-4));
+  const unf0 = ["back", "collar-stand", "collar-body"].filter(pid => E0.m.D[pid].unfolded);
+  ok(unf0.length === 3 && ents(g0.dxf, "FOLD").length === 0 && unf0.every(pid => { const c = centreOf(E0, pid); return hasLine(ents(g0.dxf, "INTERNAL"), c[0], c[1]); }), "7: 펼친 뒤판·밴드·위 칼라 — 일반 DXF 가운데 선 = INTERNAL(자르지 않음) · FOLD 0");
+  // AAMA 와 같은 뜻: 같은 좌표의 선이 AAMA 블록의 레이어 8 에 있다(블록 좌표 = 일반과 같은 시트 좌표)
+  const ab = a0.dxf, l8 = []; ab.split("\r\n0\r\nLINE\r\n").slice(1).forEach(x => { const m = /^8\r\n(\d+)\r\n10\r\n(-?[\d.]+)\r\n20\r\n(-?[\d.]+)\r\n30\r\n[^\r]*\r\n11\r\n(-?[\d.]+)\r\n21\r\n(-?[\d.]+)/.exec(x); if (m && m[1] === "8") l8.push({ type: "LINE", x: +m[2], y: +m[3], x2: +m[4], y2: +m[5] }); });
+  ab.split("\r\n0\r\nPOLYLINE\r\n").slice(1).forEach(x => { if (!/^8\r\n8\r\n/.test(x)) return; const body = x.split("\r\n0\r\nSEQEND")[0]; const pts = body.split("\r\n0\r\nVERTEX\r\n").slice(1).map(v => { const m = /10\r\n(-?[\d.]+)\r\n20\r\n(-?[\d.]+)/.exec(v); return { x: +m[1], y: +m[2] }; }); if (pts.length) l8.push({ type: "POLYLINE", pts }); });
+  ok(unf0.every(pid => { const c = centreOf(E0, pid); return hasLine(l8, c[0], c[1]); }) && !/\r\n8\r\n6\r\n10\r\n/.test(ab), "7: AAMA 도 같은 선을 레이어 8(안쪽 선) · 대칭선(6) 없음 — 두 형식 뜻 일치");
+  const pr = S7.W.cutPrint.build(P7, null, META);
+  ok((pr.sheetSvg.match(/골\(펼친 중심 — 자르지 않음\)/g) || []).length === 3, "7: 인쇄도 같은 세 선을 «골(펼친 중심 — 자르지 않음)»");
+  const nonInternal = dxf => parseDxf(dxf).ents.filter(e => e.layer !== "INTERNAL" && e.layer !== "FOLD").map(e => J([e.type, e.layer, e.x, e.y, e.x2, e.y2, e.text, (e.pts || []).length]));
+  // 뒤중심을 봉제선으로 → 뒤판은 반쪽(펼침 없음) · 가운데 선 없음 · FOLD 없음(골이 아니다)
+  ok(S7.CUT.setEdge("back", "center", { kind: "seam", widthCm: 1 }, P7).ok, "7: 뒤중심 → 봉제선");
+  const g1 = DX(S7).build(P7, META), E1 = expect(S7, P7), t1 = parseDxf(g1.dxf).ents.filter(e => e.type === "TEXT").map(e => e.text);
+  ok(!E1.m.D.back.unfolded && ents(g1.dxf, "FOLD").length === 0 && !hasLine(ents(g1.dxf, "INTERNAL"), ...centreOf(E0, "back")) && t1.filter(x => /FOLD OPENED/.test(x)).length === 2 && !t1.some(x => /CUT ON FOLD/.test(x)),
+    "7: 뒤판 봉제선 = 반쪽 · 가운데 선·FOLD 없음 · «FOLD OPENED» 는 밴드·위 칼라만");
+  ok(S7.CUT.setEdge("back", "center", { kind: "fold" }, P7).ok, "7: 다시 골");
+  const g2 = DX(S7).build(P7, META);
+  ok(g2.dxf === g0.dxf && hashes(P7) === h7, "7: 다시 골 = 처음과 같은 파일(바이트 동일) · 완료 hash 그대로");
+  // 커프스·트임의 접는 선은 원래대로 INTERNAL(조각 표시선) — 가운데 선과 별개로 남는다
+  const inner = ["cuff", "vent-placket", "vent-bias"].map(pid => { const T = E0.T(pid); return (E0.m.D[pid].marks || []).filter(mk => !mk.mirrored).length; });
+  ok(ents(g0.dxf, "INTERNAL").length >= unf0.length + inner.reduce((a, b) => a + b, 0), "7: 커프스·트임 안쪽 표시선(" + inner.join("·") + ")도 INTERNAL 에 그대로");
+  const src = fs.readFileSync(path.join(ROOT, "js", "cutDxf.js"), "utf8");
+  ok(/var fl = r\.unfolded \? "INTERNAL" : "FOLD";/.test(src), "7: FOLD 는 펼치지 못한 반쪽 조각의 실제 골선에만(소스)");
+  ok(J(nonInternal(g0.dxf).length) === J(nonInternal(g2.dxf).length), "7: 가운데 선 말고는 도형·글자 수 그대로");
 }
 
 console.log("cutDxfCheck: " + PASS + " passed, " + FAIL + " failed");

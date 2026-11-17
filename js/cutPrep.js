@@ -1496,7 +1496,7 @@
   //   칸에 친 글자는 그대로 둔다(고쳐 쓸 수 있게) — 저장·화면·인쇄·DXF 는 지금 값을 계속 쓴다는 것을 함께 적는다. 기본으로 돌리기는 «기본값» 단추만.
   function grainInputError(input, pid, reason) {
     var gq = view.grain && view.grain.pieces[pid], tail = " 고쳐 쓰거나, 기본으로 돌리려면 «기본값»을 누르세요";
-    var now = !gq ? "저장 설정은 그대로입니다." : gq.held ? "보류해 둔 저장 설정은 그대로 남고, 화면·인쇄·DXF 는 지금처럼 " + (gq.tempDefault && gq.angleDeg != null ? "임시 기본 " + gq.angleDeg + "°(점선)" : "화살표 없이") + " 씁니다."
+    var now = !gq ? "저장 설정은 그대로입니다." : gq.held ? "보류해 둔 저장 설정은 그대로 남습니다. 화면·인쇄·일반 DXF 는 지금처럼 " + (gq.tempDefault && gq.angleDeg != null ? "임시 기본 " + gq.angleDeg + "°(점선 · 일반 DXF 는 GRAIN_HELD 레이어)" : "식서선 없이") + " 쓰고, AAMA DXF 는 식서선을 넣지 않습니다(글자 GRAIN HELD)."
       : gq.angleDeg == null ? "저장 설정은 그대로이고 방향은 계속 미정입니다." : "저장·화면·인쇄·DXF 는 지금 값 " + gq.angleDeg + "°(" + (gq.explicitAngle ? "직접 지정" : "기본값") + ")를 그대로 씁니다.";
     var msg = "식서 안 바뀜: " + reason + " — " + now + tail;
     if (input) { input.setAttribute("aria-invalid", "true"); var row = input.closest(".ci-grain"), sp = row && row.querySelector(".ci-grain-err");

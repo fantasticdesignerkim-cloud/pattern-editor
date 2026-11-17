@@ -266,7 +266,7 @@ const lineOK = (g, poly, minClear) => { let okk = true, mc = Infinity; for (let 
   ok(h && /t\.validity && t\.validity\.badInput\) \{ grainInputError\(t, gpid, "숫자로 읽을 수 없습니다"\); return; \}/.test(h) && /graw === ""\) \{ grainInputError\(t, gpid, "각도 칸이 비어 있습니다"\); return; \}/.test(h) && /!Number\.isFinite\(gv\)\) \{ grainInputError/.test(h) && !/null/.test(h),
     "6: 각도 칸 처리 = 빈칸·숫자 아님은 setGrain 을 부르지 않고 이유만(빈칸을 null(기본 복귀)로 넘기지 않음)");
   const ge = (src.match(/function grainInputError\([\s\S]*?\n  \}\n/) || [""])[0];
-  ok(ge && !/setGrain|reseam|cutGrain|delete /.test(ge) && /aria-invalid/.test(ge) && /«기본값»을 누르세요/.test(ge) && /보류해 둔 저장 설정은 그대로 남고/.test(ge), "6: 이유 표시 함수 = 저장값·다시 그리기를 건드리지 않음(칸 글자 그대로 · 고쳐 쓸 수 있음) · 지금 쓰는 값 안내 · 기본 복귀는 «기본값» 단추만");
+  ok(ge && !/setGrain|reseam|cutGrain|delete /.test(ge) && /aria-invalid/.test(ge) && /«기본값»을 누르세요/.test(ge) && /보류해 둔 저장 설정은 그대로 남습니다/.test(ge) && /일반 DXF 는 GRAIN_HELD 레이어/.test(ge) && /AAMA DXF 는 식서선을 넣지 않습니다/.test(ge), "6: 이유 표시 함수 = 저장값·다시 그리기를 건드리지 않음(칸 글자 그대로 · 고쳐 쓸 수 있음) · 지금 쓰는 값 안내(보류 = 일반 DXF 임시 점선 GRAIN_HELD / AAMA 식서선 없음 구별) · 기본 복귀는 «기본값» 단추만");
   ok(/if \(!r\.ok && input\) return grainInputError\(input, pid, r\.reason\);/.test(src), "6: 범위 밖·안 들어가는 각도도 칸을 지우지 않고 이유만(저장값 그대로)");
   // 모델: 0° 는 유효 · 빈칸에 해당하는 값으로는 아무것도 바꾸지 않는다(칸 처리에서 막힘) · «기본값»(null)만 지움
   const r0 = buildP(), S0 = r0.S, P0 = r0.P, h0 = J([P0.working.bodiceResult, P0.working.designResult].map(x => x && x.hash));

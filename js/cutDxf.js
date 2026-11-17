@@ -13,8 +13,8 @@
   "use strict";
   function W() { return (typeof window !== "undefined") ? window : {}; }
   var TOL_CM = 0.001;   // 곡선을 직선으로 나눌 때 현 오차 한계 = 0.01mm
-  var LAYERS = [["CUT", 7, "CONTINUOUS", "재단선(시접 포함)"], ["FINISHED", 5, "CONTINUOUS", "완성선(다트 봉제선 = 열린 다트 V 포함)"], ["FINISHED_TRUED", 6, "CONTINUOUS", "접어 정리한 완성 외곽(다트 입구 산)"], ["FOLD", 3, "DASHED", "골선"], ["NOTCH", 1, "CONTINUOUS", "너치(맞춤 표시)"],
-    ["GRAIN", 4, "CONTINUOUS", "식서"], ["GRAIN_HELD", 8, "DASHED", "식서 보류 — 임시 기본 방향"], ["INTERNAL", 9, "DASHED", "안쪽 기준선"], ["TEXT", 2, "CONTINUOUS", "조각 이름·수량·식서 상태"]];
+  var LAYERS = [["CUT", 7, "CONTINUOUS", "재단선(시접 포함)"], ["FINISHED", 5, "CONTINUOUS", "완성선(다트 봉제선 = 열린 다트 V 포함)"], ["FINISHED_TRUED", 6, "CONTINUOUS", "접어 정리한 완성 외곽(다트 입구 산)"], ["FOLD", 3, "DASHED", "골선 — 반쪽 조각을 원단을 접어 재단(펼친 한 장의 가운데 선은 INTERNAL)"], ["NOTCH", 1, "CONTINUOUS", "너치(맞춤 표시)"],
+    ["GRAIN", 4, "CONTINUOUS", "식서"], ["GRAIN_HELD", 8, "DASHED", "식서 보류 — 임시 기본 방향"], ["INTERNAL", 9, "DASHED", "안쪽 기준선·자르지 않는 선(펼친 가운데 선 · 커프스·트임 접는 선 포함)"], ["TEXT", 2, "CONTINUOUS", "조각 이름·수량·식서 상태"]];
   function f4(v) { var s = (Math.round(v * 1e4) / 1e4).toFixed(4); return s === "-0.0000" ? "0.0000" : s; }
   // ASCII 만 쓴다: 한글 등은 DXF 유니코드 표기 \U+XXXX 로(읽는 쪽이 이 표기를 모르면 그대로 보인다 — 그래서 ASCII 조각 id 줄을 따로 둔다)
   function asc(s) { var o = ""; s = String(s == null ? "" : s); for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); o += (c >= 32 && c < 127) ? s.charAt(i) : c < 32 ? " " : "\\U+" + ("0000" + c.toString(16).toUpperCase()).slice(-4); } return o; }
@@ -71,7 +71,10 @@
       (r.marks || []).forEach(function (mk) { var zone = mk.kind.indexOf("zone-") === 0; chains(mk.segs).forEach(function (c) { if (c.length === 2 && !zone) line("INTERNAL", c[0], c[1], pos); else poly("INTERNAL", zone ? closedRing(c) : c, pos, zone); }); });
       var foldN = 0;
       (r.edges || []).forEach(function (e) { var se = (it.sm.edges || []).filter(function (x) { return x.id === e.id; })[0]; if (!se || se.kind !== "fold") return;
-        chains(e.parts[0]).forEach(function (c) { foldN++; if (c.length === 2) line("FOLD", c[0], c[1], pos); else poly("FOLD", c, pos, false); }); });
+        // 펼친 한 장의 가운데 선 = 자르지 않는 참고선(INTERNAL · 인쇄 «골(펼친 중심 — 자르지 않음)» · AAMA 레이어 8 과 같은 뜻).
+        //   FOLD = 반쪽 그대로 원단을 접어 재단해야 하는 실제 골선만(펼치지 못한 조각 · 글자 «CUT ON FOLD»). 2026-11-17 야간 리뷰.
+        var fl = r.unfolded ? "INTERNAL" : "FOLD";
+        chains(e.parts[0]).forEach(function (c) { foldN++; if (c.length === 2) line(fl, c[0], c[1], pos); else poly(fl, c, pos, false); }); });
       (r.notches || []).forEach(function (n) {
         if (n.to) line("NOTCH", n.from, n.to, pos);
         else if (n.from) add("NOTCH", ["0", "CIRCLE", "8", "NOTCH", "10", X(n.from, pos), "20", Y(n.from, pos), "30", "0.0", "40", f4(1.2)]);
