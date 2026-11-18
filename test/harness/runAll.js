@@ -6,7 +6,7 @@
 // 골든 시나리오(front*/multidart/oldest)는 --update를 그대로 전달받는다.
 // backDeterministic/backRandomStress는 골든이 없으므로 --update를 무시한다.
 // ══════════════════════════════════════════════
-const { execFileSync } = require("child_process");
+const { spawnSync } = require("child_process");
 const path = require("path");
 
 const passThrough = process.argv.slice(2); // 예: --update "reason"
@@ -225,19 +225,25 @@ const suites = [
   { file: "cutDartTrueCheck.js", golden: false },
 ];
 
+const tailLines = (buf, n) => (buf || "").toString().trim().split("\n").slice(-n).join("\n");
+
 let anyFail = false;
 for (const s of suites) {
   const args = [path.join(__dirname, s.file), ...(s.args || []), ...(s.golden ? passThrough : [])];
   process.stdout.write(`\n### ${s.file} ###\n`);
-  try {
-    const out = execFileSync("node", args, { encoding: "utf8" });
-    const tail = out.trim().split("\n").slice(-2).join("\n");
-    process.stdout.write(tail + "\n");
-  } catch (e) {
-    anyFail = true;
-    const out = (e.stdout || "").toString().trim().split("\n").slice(-8).join("\n");
-    process.stdout.write(out + "\n[FAILED]\n");
+  // spawnSync: 실행 오류(ENOENT·버퍼 초과)·시그널·종료 코드를 예외 없이 그대로 받는다.
+  const r = spawnSync(process.execPath, args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  if (!r.error && r.status === 0 && !r.signal) {
+    process.stdout.write(tailLines(r.stdout, 2) + "\n");
+    continue;
   }
+  anyFail = true;
+  const out = tailLines(r.stdout, 40), err = tailLines(r.stderr, 40);
+  process.stdout.write(
+    `[FAILED] ${s.file} · exit=${r.status} · signal=${r.signal} · error=${r.error ? r.error.message : "none"}\n` +
+    (out ? `--- stdout (마지막 40줄) ---\n${out}\n` : "") +
+    (err ? `--- stderr (마지막 40줄) ---\n${err}\n` : "") +
+    (!out && !err ? "(stdout/stderr 출력 없음)\n" : ""));
 }
 
 console.log(`\n══════════════════════════════════════════════`);
