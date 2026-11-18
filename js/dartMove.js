@@ -3015,7 +3015,7 @@ function initDartMoveClickHandler() {
   svg.addEventListener("pointermove", e => {
     if (!_dartDrag || e.pointerId !== _dartDrag.id || !dartMoveState.dragging) return;
     if (!_dartDrag.moved && Math.hypot(e.clientX - _dartDrag.x0, e.clientY - _dartDrag.y0) > 2) _dartDrag.moved = true;
-    dartRotateTo(e);
+    dartQueueRotate(e);   // 프레임당 최신 이동 1개만 처리(2026-11-18 성능) — 계산·기하는 dartRotateTo 그대로
   });
   svg.addEventListener("pointerup", e => { if (_dartDrag && e.pointerId === _dartDrag.id) dartEndDrag(e, "up"); });
   svg.addEventListener("pointercancel", e => { if (_dartDrag && e.pointerId === _dartDrag.id) dartEndDrag(e, "cancel"); });
@@ -3023,6 +3023,7 @@ function initDartMoveClickHandler() {
   window.addEventListener("blur", () => { if (_dartDrag) dartEndDrag(null, "blur"); });
   if (window.canvasPan && window.canvasPan.onMultiTouch) window.canvasPan.onMultiTouch(() => {   // 두 손가락 = 화면 핀치 — 회전에 섞지 않는다
     if (!_dartDrag) return;
+    dartDropRotate(_dartDrag);
     dartMoveState.userAngle = _dartDrag.angle0; dartMoveState.evaluation = _dartDrag.eval0;
     dartEndDrag(null, "multi");
   });
@@ -3068,30 +3069,27 @@ function initDartMoveClickHandler() {
     if (dartMoveState.side === "back") {
       const segsH = getBackTargetOutline(dh.pts, dh.formula, B);
       const hr = findCutPointBack({ x: mx, y: my }, segsH, dh.pts, dh.formula, B);
-      if (hr && !hr.blocked) {
-        dartMoveState.hoverPoint    = hr.point;
-        dartMoveState.hoverSegIndex = hr.segIndex;
-      } else {
-        dartMoveState.hoverPoint    = null;
-        dartMoveState.hoverSegIndex = -1;
-      }
-      render();
+      if (dartSetHover(hr)) render();
       return;
     }
 
     const segsH = getFrontTargetOutline(dh.pts, dh.formula, B);
     const hr = findCutPoint({ x: mx, y: my }, segsH, dh.pts);
 
-    if (hr && !hr.blocked) {
-      dartMoveState.hoverPoint    = hr.point;
-      dartMoveState.hoverSegIndex = hr.segIndex;
-    } else {
-      dartMoveState.hoverPoint    = null;
-      dartMoveState.hoverSegIndex = -1;
-    }
-    render();
+    if (dartSetHover(hr)) render();
   });
 
+}
+
+// hover 후보 갱신 — 후보(점·선분)가 이전과 같으면 false(화면도 같으니 다시 그리지 않는다)
+function dartSetHover(hr) {
+  const ok = hr && !hr.blocked;
+  const pt = ok ? hr.point : null, si = ok ? hr.segIndex : -1;
+  const o = dartMoveState.hoverPoint;
+  const same = si === dartMoveState.hoverSegIndex && ((!pt && !o) || (pt && o && pt.x === o.x && pt.y === o.y));
+  if (same) return false;
+  dartMoveState.hoverPoint = pt; dartMoveState.hoverSegIndex = si;
+  return true;
 }
 
 // 손잡이 끌기 한 걸음: 포인터 방향각 − 절개점 방향각 = 요청각 → ④ 로 확정(예전 mousemove 본문 그대로)
@@ -3134,9 +3132,32 @@ function dartRotateTo(e) {
     render();
 }
 let _dartDrag = null;          // { id, type, x0, y0, moved, angle0, eval0 } — 지금 손잡이를 잡은 포인터 하나
+// 프레임당 최신 이동 하나: 이동은 좌표만 보관하고 rAF 한 번에 dartRotateTo. 예약은 그 drag 객체에 묶여 있어
+// 끝난 뒤(다른 drag·적용·초기화)에는 실행돼도 아무것도 하지 않는다.
+function dartQueueRotate(e) {
+  const d = _dartDrag; if (!d) return;
+  d.pending = { clientX: e.clientX, clientY: e.clientY };
+  if (d.raf) return;
+  d.raf = requestAnimationFrame(() => {
+    d.raf = 0;
+    if (_dartDrag !== d || !dartMoveState.dragging) { d.pending = null; return; }
+    dartFlushRotate(d);
+  });
+}
+function dartFlushRotate(d) {
+  const m = d.pending; d.pending = null;
+  if (m && _dartDrag === d && dartMoveState.dragging) dartRotateTo(m);
+}
+function dartDropRotate(d) {
+  if (d.raf) { try { cancelAnimationFrame(d.raf); } catch (_) { /* 무시 */ } d.raf = 0; }
+  d.pending = null;
+}
 let _dartGestureClick = null;  // { x, y, until } — 그 동작 뒤에 따라오는 클릭 한 번만 삼킨다
 function dartEndDrag(e, why) {
   const d = _dartDrag; if (!d) return;
+  // 대기 중인 마지막 이동: 두 번째 손가락(multi)이면 버리고(호출부가 시작 각도로 복원) · 그 밖의 끝(up·cancel·lost·blur)은 예전처럼 마지막 이동까지 반영
+  if (why !== "multi" && d.pending && dartMoveState.dragging) dartFlushRotate(d);
+  dartDropRotate(d);
   _dartDrag = null;
   try { if (svg.hasPointerCapture && svg.hasPointerCapture(d.id)) svg.releasePointerCapture(d.id); } catch (_) { /* 무시 */ }
   if (!dartMoveState.dragging) return;

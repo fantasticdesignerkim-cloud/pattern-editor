@@ -25,7 +25,10 @@ function setup() {
   const document = { getElementById: id => id === "cv" ? svgEl : (id in inputs ? (els[id] = els[id] || el({ value: String(inputs[id]) })) : (els[id] = els[id] || el())), createElementNS: (_n, t) => el({ tagName: t }), createElement: t => el({ tagName: t }), querySelector: () => null, querySelectorAll: () => [], addEventListener() {} };
   const st = { renders: 0, now: 1000 };
   const sb = { document, window: win, console: { log() {}, warn() {}, error() {} }, DEBUG_DART_MOVE: false, DEBUG_COLORS: false, setTimeout, clearTimeout, Math, JSON, Object, Array, Map, Set, Infinity, NaN,
-    Date: { now: () => st.now }, render() { st.renders++; } };
+    Date: { now: () => st.now }, render() { st.renders++; },
+    // 프레임 묶음(2026-11-18): 손잡이 이동은 프레임당 한 번 처리된다 — 브라우저 rAF 대신 손으로 넘기는 큐(st.frame())
+    requestAnimationFrame: f => { st.raf.push(f); return st.raf.length; }, cancelAnimationFrame: id => { st.raf[id - 1] = null; } };
+  st.raf = []; st.frame = () => { const q = st.raf.splice(0); q.forEach(f => f && f(16)); };
   sb.globalThis = sb; win.isDesignStageActive = () => false;
   vm.createContext(sb);
   // TLC_CANVASPAN / TLC_DARTMOVE = 다른 판 파일로 같은 검사를 돌려 «고치기 전엔 실패»를 확인할 때만(기본 = 지금 파일)
@@ -73,7 +76,7 @@ function rotTarget(T, frac) {   // 손잡이를 피벗 둘레로 최대각 × fr
   const g = rotTarget(T, 0.5);
   T.down(1, g.handle.x, g.handle.y, T.handleT);
   ok(ds.dragging && T.cap.has(1), "1: 손가락 하나로 손잡이 잡음 = 끌기 시작 · 캔버스가 그 포인터를 잡음(capture)");
-  T.dispatch("pointermove", T.P(1, g.to.x, g.to.y));
+  T.dispatch("pointermove", T.P(1, g.to.x, g.to.y)); T.st.frame();   // 다음 프레임에 그 이동이 반영
   const partial = ds.userAngle;
   ok(Math.abs(partial) > Math.abs(ds.baseAngle) * 0.3, "1: 부분 회전 " + (partial * 180 / Math.PI).toFixed(2) + "°");
   T.down(2, 600, 400, T.lineT, { isPrimary: false });   // 두 번째 손가락(선 위)
