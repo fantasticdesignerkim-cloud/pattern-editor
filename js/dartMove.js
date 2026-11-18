@@ -2815,6 +2815,8 @@ function drawDartMoveOverlay(svgEl, p) {
     "pointer-events": "auto",
     style: "cursor:grab",
   });
+  // 손가락으로 잡을 수 있게 지름 44px 투명 누름 영역(보이는 손잡이·형상 무변경)
+  hg.appendChild(E("circle", { class: "dart-rotate-hit", cx: cx2, cy: cy2, r: 22, fill: "transparent", stroke: "none", "pointer-events": "all" }));
   hg.appendChild(E("circle", {
     cx: cx2, cy: cy2, r: 10,
     fill: "#44aaff", stroke: "#fff", "stroke-width": 2, opacity: 0.9,
@@ -2828,8 +2830,11 @@ function initDartMoveClickHandler() {
   if (window.__dartMoveClickHandlerReady) return;
   window.__dartMoveClickHandlerReady = true;
 
+  // 새 누름이 시작되면(어디서든) 직전 손잡이 동작의 «따라오는 클릭» 표시는 버린다 — 그 동작이 클릭을 만들지 않았으면 다음 정상 탭을 삼키지 않게
+  window.addEventListener("pointerdown", () => { _dartGestureClick = null; }, true);
   // ── 외곽선 클릭 → cutPoint 선택 ──────────────
   svg.addEventListener("click", e => {
+    if (dartConsumeGestureClick(e)) return;   // 손잡이를 누른·끈 그 동작에 따라오는 클릭 한 번(새 절개로 들어가지 않게)
     if (!dartMoveState.active) return;
     if (!dartMoveState.side) return;          // 앞/뒤 선택 전엔 무시
     // 드래그 핸들 위 클릭은 cutPoint 선택 무시
@@ -2990,15 +2995,36 @@ function initDartMoveClickHandler() {
     render();
   });
 
-  // ── 드래그 핸들: mousedown ────────────────────
-  svg.addEventListener("mousedown", e => {
-    if (!dartMoveState.active) return;
-    const handle = e.target.closest(".dart-rotate-handle");
-    if (!handle) return;
+  // ── 드래그 핸들: Pointer Events(마우스·펜·터치 한 경로 · 2026-11-18 야간 리뷰) ─────────
+  //   예전 mousedown/window mousemove/mouseup 은 터치에서 오지 않아 폰·iPad 에서 돌릴 수 없었고, 손을 떼면 따라오는 클릭이 새 절개로 들어갔다(터치 재현).
+  //   · 누른 포인터 하나만 따라간다(isPrimary · 같은 pointerId). 두 번째 손가락이 닿으면(canvasPan 핀치) 회전을 시작 각도로 되돌리고 끝낸다.
+  //   · 받는 곳 = 캔버스 svg 에 pointer capture — render() 가 손잡이를 다시 그려도(통째 교체) 끊기지 않는다. 화면 밖에서 떼도 끝난다.
+  //   · 끝: pointerup(각도 확정) · pointercancel / lostpointercapture / 창 blur(그때까지의 각도로 정리).
+  //   · 회전 기하(④ resolveRequestedAngle · 예산 · 충돌 · 적용)는 그대로 — 입력 수명만 바꿨다.
+  svg.addEventListener("pointerdown", e => {
+    if (!dartMoveState.active || dartMoveState.dragging) return;
+    if (!e.target.closest(".dart-rotate-handle")) return;
+    if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
     e.preventDefault();
     e.stopPropagation();
+    _dartDrag = { id: e.pointerId, type: e.pointerType, x0: e.clientX, y0: e.clientY, moved: false, angle0: dartMoveState.userAngle, eval0: dartMoveState.evaluation };
     dartMoveState.dragging = true;
+    try { svg.setPointerCapture(e.pointerId); } catch (_) { /* 무시 */ }
     svg.style.cursor = "grabbing";
+  });
+  svg.addEventListener("pointermove", e => {
+    if (!_dartDrag || e.pointerId !== _dartDrag.id || !dartMoveState.dragging) return;
+    if (!_dartDrag.moved && Math.hypot(e.clientX - _dartDrag.x0, e.clientY - _dartDrag.y0) > 2) _dartDrag.moved = true;
+    dartRotateTo(e);
+  });
+  svg.addEventListener("pointerup", e => { if (_dartDrag && e.pointerId === _dartDrag.id) dartEndDrag(e, "up"); });
+  svg.addEventListener("pointercancel", e => { if (_dartDrag && e.pointerId === _dartDrag.id) dartEndDrag(e, "cancel"); });
+  svg.addEventListener("lostpointercapture", e => { if (_dartDrag && e.pointerId === _dartDrag.id) dartEndDrag(e, "lost"); });
+  window.addEventListener("blur", () => { if (_dartDrag) dartEndDrag(null, "blur"); });
+  if (window.canvasPan && window.canvasPan.onMultiTouch) window.canvasPan.onMultiTouch(() => {   // 두 손가락 = 화면 핀치 — 회전에 섞지 않는다
+    if (!_dartDrag) return;
+    dartMoveState.userAngle = _dartDrag.angle0; dartMoveState.evaluation = _dartDrag.eval0;
+    dartEndDrag(null, "multi");
   });
 
   // ── 드래그 핸들: 더블클릭 = 끝까지 이동 ──
@@ -3007,7 +3033,8 @@ function initDartMoveClickHandler() {
   // 있다. 정상 경로라 평가 1회로 끝난다.
   svg.addEventListener("dblclick", e => {
     if (!dartMoveState.active) return;
-    const handle = e.target.closest(".dart-rotate-handle");
+    // pointer capture 를 쓰면 더블클릭 대상이 캔버스가 될 수 있다 → 누른 자리가 손잡이(44px) 안이면 손잡이 더블클릭으로 본다
+    const handle = e.target.closest(".dart-rotate-handle") || dartHandleAt(e.clientX, e.clientY);
     if (!handle) return;
     e.preventDefault();
     e.stopPropagation();
@@ -3065,11 +3092,12 @@ function initDartMoveClickHandler() {
     render();
   });
 
-  // ── 드래그 핸들: mousemove ────────────────────
-  window.addEventListener("mousemove", e => {
-    if (!dartMoveState.active || !dartMoveState.dragging) return;
-    if (!dartMoveState.cutPoint) return;
+}
 
+// 손잡이 끌기 한 걸음: 포인터 방향각 − 절개점 방향각 = 요청각 → ④ 로 확정(예전 mousemove 본문 그대로)
+function dartRotateTo(e) {
+  if (!dartMoveState.active || !dartMoveState.dragging) return;
+  if (!dartMoveState.cutPoint) return;
     const [mx, my] = eventToPatternPoint(e);
     const p = _getDraftPts();
     if (!p) return;
@@ -3104,20 +3132,37 @@ function initDartMoveClickHandler() {
     dbg('[resolve]', resolved.reason, 'deg:', (resolved.resolvedAngleRad*180/Math.PI).toFixed(2),
       'eval:', resolved.scan.evaluated, 'refine:', resolved.scan.refined);
     render();
-  });
-
-  // ── 드래그 핸들: mouseup ──────────────────────
-  window.addEventListener("mouseup", e => {
-    if (!dartMoveState.dragging) return;
-    dartMoveState.dragging = false;
-    svg.style.cursor = "";
-    const _p = _getDraftPts();
-    const _pivot = (dartMoveState.side === "back") ? _p?.E : _p?.BP;
-    const finalW = (_p && _pivot && dartMoveState.cutPoint)
-      ? dartOpenWidth(dartMoveState.cutPoint, _pivot, dartMoveState.userAngle).toFixed(1)
-      : "?";
-    setHint(`확정: ${finalW}cm — 적용 버튼을 눌러 완료`);
-  });
+}
+let _dartDrag = null;          // { id, type, x0, y0, moved, angle0, eval0 } — 지금 손잡이를 잡은 포인터 하나
+let _dartGestureClick = null;  // { x, y, until } — 그 동작 뒤에 따라오는 클릭 한 번만 삼킨다
+function dartEndDrag(e, why) {
+  const d = _dartDrag; if (!d) return;
+  _dartDrag = null;
+  try { if (svg.hasPointerCapture && svg.hasPointerCapture(d.id)) svg.releasePointerCapture(d.id); } catch (_) { /* 무시 */ }
+  if (!dartMoveState.dragging) return;
+  dartMoveState.dragging = false;
+  svg.style.cursor = "";
+  // 손잡이를 누른 이 동작이 만든 클릭(떼는 자리 · 곧바로) 한 번만 — 다음 정상 탭·단추는 그대로
+  if (e && (why === "up")) _dartGestureClick = { x: e.clientX, y: e.clientY, until: Date.now() + 600 };
+  const _p = _getDraftPts();
+  const _pivot = (dartMoveState.side === "back") ? _p?.E : _p?.BP;
+  const finalW = (_p && _pivot && dartMoveState.cutPoint)
+    ? dartOpenWidth(dartMoveState.cutPoint, _pivot, dartMoveState.userAngle).toFixed(1)
+    : "?";
+  setHint(why === "multi" ? "두 손가락은 화면 이동·확대입니다 — 회전은 처음 각도로 되돌렸습니다" : `확정: ${finalW}cm — 적용 버튼을 눌러 완료`);
+  if (why === "multi") render();
+}
+function dartConsumeGestureClick(e) {
+  const g = _dartGestureClick; if (!g) return false;
+  _dartGestureClick = null;   // 한 번만
+  if (Date.now() > g.until || Math.hypot(e.clientX - g.x, e.clientY - g.y) > 30) return false;
+  e.preventDefault(); e.stopPropagation();
+  return true;
+}
+function dartHandleAt(x, y) {
+  const h = document.querySelector(".dart-rotate-handle .dart-rotate-hit"); if (!h) return null;
+  const r = h.getBoundingClientRect(); if (!(r.width > 0)) return null;
+  return Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2)) <= r.width / 2 ? h.parentNode : null;
 }
 
 // ── UI 헬퍼 ───────────────────────────────────

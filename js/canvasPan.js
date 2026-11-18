@@ -52,6 +52,9 @@
     const t = two(), s = cv(); if (!t || !s) return;
     cancel();                                         // 한 손가락 팬·클릭 후보는 버린다(클릭 아님)
     multiHooks.forEach(f => { try { f(); } catch (_) {} });   // 도구별 진행 중 드래그·점 추가 되돌리기
+    // 핀치 손가락은 캔버스 자체가 받게 한다(2026-11-18): 핀치 중 redraw 가 손가락이 처음 닿은 선·점을 다시 그리면(교체),
+    //   그 손가락의 pointerup 이 캔버스까지 오지 않아 touches 에 남고 → 다음 한 손가락 조작이 핀치로 읽혔다(375·390 에뮬레이션 재현).
+    touches.forEach((_, id) => { try { s.setPointerCapture(id); } catch (_) { /* 이미 끝난 포인터 */ } });
     const r = s.getBoundingClientRect();
     pinch = { d: Math.hypot(t[1].x - t[0].x, t[1].y - t[0].y), mx: (t[0].x + t[1].x) / 2 - r.left, my: (t[0].y + t[1].y) / 2 - r.top };
   }
@@ -88,6 +91,12 @@
     };
     s.addEventListener("pointerup", e => up(e, true), true);
     s.addEventListener("pointercancel", e => up(e, false), true);
+    // 안전망: 캔버스가 받지 못한 손가락 떼기(캔버스 밖·대상이 사라진 뒤)는 창에서 정리한다. 캔버스가 이미 지운 id 면 아무것도 안 함(중복 처리 없음).
+    const drop = e => { if (e.pointerType !== "touch" || !touches.has(e.pointerId)) return; touches.delete(e.pointerId); if (touches.size < 2) pinch = null; if (pend && pend.id === e.pointerId) cancel(); };
+    if (window.addEventListener) {
+      window.addEventListener("pointerup", drop); window.addEventListener("pointercancel", drop);
+      window.addEventListener("blur", () => { touches.clear(); pinch = null; });   // 창을 떠나면 손가락 기록을 남기지 않는다
+    }
     // 어떤 도구도 잡지 않은 누름(전파가 래퍼까지 옴): Space = 즉시 팬(모든 stage) · 디자인 stage 의 빈 곳 = 팬 후보.
     const wrap = s.parentElement;
     if (wrap) wrap.addEventListener("pointerdown", e => {
@@ -100,7 +109,7 @@
 
   window.canvasPan = Object.freeze({
     press: press, cancel: cancel,
-    pending: () => !!pend, panning: () => !!(pend && pend.panning), pinching: () => !!pinch,
+    pending: () => !!pend, panning: () => !!(pend && pend.panning), pinching: () => !!pinch, touchCount: () => touches.size,
     onMultiTouch: f => { if (typeof f === "function") multiHooks.push(f); },
     MOUSE_PX: MOUSE_PX, TOUCH_PX: TOUCH_PX
   });
