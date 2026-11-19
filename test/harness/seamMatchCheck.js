@@ -49,7 +49,7 @@ function baseProject() {
   return { working: {
     geometry: {
       front: { outline: [L(0, 0, 12, 0, "shoulder"), L(12, 0, 12, 30, "side-seam")] },
-      back: { outline: [L(0, 0, 5, 0, "shoulder"), L(5, 0, 5.9, 8, "dart"), L(5.9, 8, 6.8, 0, "dart"), L(6.8, 0, 14.1, 0, "shoulder"), L(14, 0, 14, 30.2, "side-seam")] },
+      back: { outline: [L(0, 0, 5, 0, "shoulder"), L(5, 0, 5.9, 8, "dart", { dart: { id: "d1", apexAt: "to" } }), L(5.9, 8, 6.8, 0, "dart", { dart: { id: "d1", apexAt: "from" } }), L(6.8, 0, 14.1, 0, "shoulder"), L(14, 0, 14, 30.2, "side-seam")] },
       sleeve: { outline: [] }
     },
     bodiceResult: { hash: "B1" }, sleeveA: { sourceBodiceHash: "B1" },
@@ -151,6 +151,32 @@ const byId = (m, id) => m.rows.find(r => r.id === id);
   ok(byId(m, "ah-front").status === "unmeasured" && /cap-unmeasured/.test(byId(m, "ah-front").reason), "3: 소매산 미측정 사유 전달");
   // 프로젝트 없음
   ok(load(makeWin(null)).compute().ok === false, "3: 프로젝트 없음 = 모델 없음(카드 숨김)");
+}
+
+// ── §5 실패 격리(2026-11-19): 중복/누락 없음 · 성공 행 유지 · 어깨 구간 수 ≠ 다트 ──
+{
+  const ids = m => m.rows.map(r => r.id).join();
+  const EXPECT = "side,shoulder,ah-front,ah-back,ah-total,neck-band,band-collar";
+  let w = makeWin(baseProject()); const orig = w.bodiceCheckpoint.effectiveOutline;
+  w.bodiceCheckpoint.effectiveOutline = (pr, pc) => { if (pc === "back") throw new Error("boom"); return orig(pr, pc); };
+  let m = load(w).compute();
+  ok(ids(m) === EXPECT && byId(m, "side").a && byId(m, "shoulder").status === "unmeasured" && /측정 중 오류/.test(byId(m, "shoulder").reason) && byId(m, "ah-total").a, "5: 뒤 어깨 계산 실패 = 옆선 성공 행 유지 · 어깨만 미측정(중복·누락 없음)");
+  const p = baseProject(); p.working.sleeveA.cuff = { lengths: { get sleeveHemCm() { throw new Error("c"); }, attachLengthCm: 1 } };
+  m = load(makeWin(p)).compute();
+  ok(ids(m) === EXPECT.replace("ah-total", "ah-total,cuff") && byId(m, "cuff").status === "unmeasured" && byId(m, "ah-front").a && byId(m, "ah-back").a && byId(m, "ah-total").a, "5: 소매 측정 실패 = 성공한 진동 행 유지 · 실패한 커프스만 미측정");
+  const q = baseProject(); q.working.geometry.back.outline = [L(0, 0, 5, 0, "shoulder"), L(5, 0, 12, 0, "shoulder"), L(14, 0, 14, 30, "side-seam")];
+  m = load(makeWin(q)).compute();
+  ok(byId(m, "shoulder").b.cm === 12 && !byId(m, "shoulder").basis.some(t => /다트로 나뉜/.test(t)) && byId(m, "shoulder").basis.some(t => /다트인지 알 수 없음/.test(t)), "5: 이어진 2구간 = 다트로 단정하지 않는 중립 문구");
+  ok(byId(load(makeWin(baseProject())).compute(), "shoulder").basis.some(t => /뒤 어깨: 다트로 나뉜 2구간/.test(t)), "5: 어깨 입구에 닿은 다트 기록 = 다트 문구");
+  const gap = baseProject(); gap.working.geometry.back.outline = [L(0, 0, 5, 0, "shoulder"), L(6.8, 0, 14.1, 0, "shoulder"), L(14, 0, 14, 30, "side-seam")];
+  m = load(makeWin(gap)).compute(); ok(byId(m, "shoulder").b.cm > 12 && byId(m, "shoulder").basis.some(t => /다트인지 알 수 없음/.test(t)) && !byId(m, "shoulder").basis.some(t => /다트로 나뉜/.test(t)), "5: 틈만 있고 다트 기록 없음 = 중립 문구(길이는 구간 합 유지)");
+  const far = baseProject(); far.working.geometry.back.outline = [L(0, 0, 5, 0, "shoulder"), L(5, 0, 14.1, 0, "shoulder"), L(14, 0, 14, 30, "side-seam"), L(14, 30, 9, 30, "waist", { dart: { id: "w1", apexAt: "to" } })];
+  m = load(makeWin(far)).compute(); ok(!byId(m, "shoulder").basis.some(t => /다트로 나뉜/.test(t)) && byId(m, "shoulder").basis.some(t => /다트인지 알 수 없음/.test(t)), "5: 어깨와 무관한 다른 다트는 어깨 근거가 아님");
+  // 독립 측정: 옆선 오류 → 정상 어깨 / 앞 소매 측정만 실패 → 뒤쪽 유지
+  w = makeWin(baseProject()); w.designLineTool.sideSeamLabels = () => { throw new Error("s"); };
+  m = load(w).compute(); ok(ids(m) === EXPECT && byId(m, "side").status === "unmeasured" && byId(m, "shoulder").a && byId(m, "shoulder").b.cm === 12.3, "5: 옆선 오류 → 어깨는 정상 측정");
+  m = load(makeWin(baseProject(), { sleeveCheck: { fails: [], capLengths: { front: null, back: 22.9, total: null }, ease: { front: null, back: 1.3, total: null } } })).compute();
+  ok(ids(m) === EXPECT && byId(m, "ah-front").status === "unmeasured" && byId(m, "ah-total").status === "unmeasured" && byId(m, "ah-back").a && Math.abs(byId(m, "ah-back").b.cm - 22.9) < 1e-9, "5: 앞 소매 측정만 실패 → 유효 뒤쪽 행 유지 · 합계는 미측정");
 }
 
 console.log("seamMatchCheck: " + PASS + " passed, " + FAIL + " failed");

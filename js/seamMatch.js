@@ -58,12 +58,24 @@
       return { reason: "어깨선 일부가 의미를 정하지 못한 대체선으로 덮임" };
     var segs = o.filter(function (s) { return s && s.edge === "shoulder"; });
     if (!segs.length) return { reason: "명시된 어깨선 구간 없음" };
-    var dart = segs.length > 1;
+    // 다트 근거 = 어깨 구간 끝점에 실제로 닿은 «다트 기록(dart.id)» 구간뿐. 구간 수·틈만으로는 다트라 하지 않고, 다른 곳의 다트도 세지 않는다.
+    var ends = []; segs.forEach(function (x) { ends.push(segEnd(x, true), segEnd(x, false)); });
+    var dart = o.some(function (x) {
+      if (!x || !x.dart || !x.dart.id) return false;
+      var a = segEnd(x, true), z = segEnd(x, false);
+      return ends.some(function (e) { return e && ((a && Math.hypot(a.x - e.x, a.y - e.y) < 1e-6) || (z && Math.hypot(z.x - e.x, z.y - e.y) < 1e-6)); });
+    });
     return { cm: segs.reduce(function (t, s) { return t + BC.sideSeamSegLen(s); }, 0), parts: segs.length, dart: dart };
   }
+  function segEnd(s, first) {   // 구간의 시작/끝 점(못 구하면 null)
+    if (!s) return null;
+    if (s.from && s.to) return first ? s.from : s.to;
+    var c = s.commands; if (!Array.isArray(c) || !c.length) return null;
+    var pts = first ? c[0].points : c[c.length - 1].points; return pts && pts.length ? (first ? pts[0] : pts[pts.length - 1]) : null;
+  }
 
-  function bodiceRows(p, bc, rows) {
-    var BC = window.bodiceCheckpoint, DLT = window.designLineTool;
+  function sideRow(p, bc, rows) {
+    var DLT = window.designLineTool;
     // 1) 옆선
     var lab = DLT && DLT.sideSeamLabels ? DLT.sideSeamLabels(p) : null, ss = bc && bc.sideSeam;
     var sideBasis = ["봉제 길이 = 현재 몸판 유효 외곽에서 옆선으로 명시된 구간 합(허리 아래 연장 포함 · 다트 다리 제외)", "권위: bodiceCheckpoint.measureSideSeam — 몸판 완료 판정과 같은 측정"];
@@ -80,17 +92,21 @@
       basis.push("판정 기준 출처: bodiceCheckpoint 옆선 기준(차 0.1cm 이내 = 일치 · 0.3cm 초과 = 몸판 완료에서 불일치)");
       rows.push(pair("side", "몸판", "앞 옆선 ↔ 뒤 옆선", { label: "앞", cm: lab.front.length }, { label: "뒤", cm: lab.back.length }, st, dirText(d, "뒤", "앞"), basis, stText));
     }
+  }
+  function shoulderRow(p, rows) {
     // 2) 어깨
     var sf = shoulderOf(p, "front"), sb = shoulderOf(p, "back");
-    var shBasis = ["봉제 길이 = 현재 몸판 유효 외곽에서 어깨선으로 명시된 구간 합 — 어깨에 다트가 열려 있으면 다트 다리는 빼고 양쪽 구간을 더한다(다트를 닫은 길이)"];
+    var shBasis = ["봉제 길이 = 현재 몸판 유효 외곽에서 어깨선으로 명시된 구간 합 — 어깨에 다트가 열려 있으면(어깨 입구에 닿은 다트 기록이 있을 때) 다트 다리는 빼고 양쪽 구간을 더한다(다트를 닫은 길이)"];
     if (!num(sf.cm) || !num(sb.cm)) {
       var rr = []; if (!num(sf.cm)) rr.push("앞: " + sf.reason); if (!num(sb.cm)) rr.push("뒤: " + sb.reason);
       rows.push(unmeasured("shoulder", "몸판", "앞 어깨 ↔ 뒤 어깨", rr.join(" / "), shBasis));
     } else {
       var ds = sb.cm - sf.cm, bs = shBasis.slice();
       if (sb.dart) bs.push("뒤 어깨: 다트로 나뉜 " + sb.parts + "구간 합(다트 닫힘)");
+      else if (sb.parts > 1) bs.push("뒤 어깨: " + sb.parts + "구간 합(어깨 입구에 닿은 다트 기록이 없어 다트인지 알 수 없음)");
       if (sb.dart || sf.dart) bs.push("다트 양쪽 다리의 길이 차(닫았을 때 입구의 작은 단차)는 어깨 길이에 넣지 않는다 — 패턴 확정 단계 보정 대상");
       if (sf.dart) bs.push("앞 어깨: 다트로 나뉜 " + sf.parts + "구간 합(다트 닫힘)");
+      else if (sf.parts > 1) bs.push("앞 어깨: " + sf.parts + "구간 합(어깨 입구에 닿은 다트 기록이 없어 다트인지 알 수 없음)");
       bs.push("판정 기준 없음 — 뒤어깨 이세 허용량은 아직 정하지 않았다(패턴 확정 단계 결정 사항). 차이와 방향만 보여 준다");
       rows.push(pair("shoulder", "몸판", "앞 어깨 ↔ 뒤 어깨", { label: "앞", cm: sf.cm }, { label: "뒤", cm: sb.cm }, Math.abs(ds) < EXACT ? "match" : "diff", dirText(ds, "뒤", "앞"), bs));
     }
@@ -120,27 +136,29 @@
     var fails = c.fails || [];
     if (fails.indexOf("bodice-stale") >= 0 || fails.indexOf("source-mismatch") >= 0) return all(changed, "소매가 지금 몸판 완료본이 아닌 옛 몸판 기준 — 소매를 다시 적용하면 측정");
     if (fails.indexOf("no-sleeve") >= 0) return all(unmeasured, "소매 없음 — 소매 탭에서 만들면 측정");
-    var L = c.capLengths, E = c.ease;
-    if (!L || !E || !num(L.front) || !num(L.back) || !num(E.front) || !num(E.back)) {
-      var why = "이 소매 상태에서는 소매산·진동을 잴 수 없음" + (fails.length ? "(" + fails[0] + ")" : "");
-      return all(unmeasured, why);
-    }
-    var tot = { front: L.front, back: L.back, total: num(L.total) ? L.total : L.front + L.back }, et = { front: E.front, back: E.back, total: num(E.total) ? E.total : E.front + E.back };
+    var L = c.capLengths || {}, E = c.ease || {};
+    // 앞·뒤·합계는 각자 잴 수 있으면 잰다 — 한쪽 값이 없다고 유효한 다른 쪽을 버리지 않는다.
+    var fOk = num(L.front) && num(E.front), bOk = num(L.back) && num(E.back);
+    var tot = { front: L.front, back: L.back, total: num(L.total) ? L.total : (fOk && bOk ? L.front + L.back : null) }, et = { front: E.front, back: E.back, total: num(E.total) ? E.total : (fOk && bOk ? E.front + E.back : null) };
     names.forEach(function (n) {
-      var cap = tot[n[2]], ease = et[n[2]], ah = cap - ease, st, txt, stText = null;
-      if (Math.abs(ease) < EXACT) { st = "match"; txt = "차이 0.00"; }
-      else if (ease > 0) { st = "ease"; stText = "이즈·셔링분"; txt = "소매산이 " + f2(ease) + " 김"; }
-      else { st = "diff"; txt = "소매산이 " + f2(-ease) + " 짧음"; }
-      rows.push(pair(n[0], "소매", n[1], { label: "진동", cm: ah }, { label: "소매산", cm: cap }, st, txt, basis, stText));
+      try {
+        var cap = tot[n[2]], ease = et[n[2]];
+        if (!num(cap) || !num(ease)) { rows.push(unmeasured(n[0], "소매", n[1], "이 소매 상태에서는 " + (n[2] === "front" ? "앞" : n[2] === "back" ? "뒤" : "합계") + " 소매산·진동을 잴 수 없음" + (fails.length ? "(" + fails[0] + ")" : ""), basis)); return; }
+        var ah = cap - ease, st, txt, stText = null;
+        if (Math.abs(ease) < EXACT) { st = "match"; txt = "차이 0.00"; }
+        else if (ease > 0) { st = "ease"; stText = "이즈·셔링분"; txt = "소매산이 " + f2(ease) + " 김"; }
+        else { st = "diff"; txt = "소매산이 " + f2(-ease) + " 짧음"; }
+        rows.push(pair(n[0], "소매", n[1], { label: "진동", cm: ah }, { label: "소매산", cm: cap }, st, txt, basis, stText));
+      } catch (e) { rows.push(unmeasured(n[0], "소매", n[1], "측정 중 오류 — 값을 싣지 않음", basis)); }
     });
     // 커프스(소매 Ⓐ 커프스가 있을 때만 — 측정 권위 = sleeveA.cuff.lengths)
-    var cuff = w.sleeveA && w.sleeveA.cuff && w.sleeveA.cuff.lengths;
-    if (cuff && num(cuff.sleeveHemCm) && num(cuff.attachLengthCm)) {
+    var cuff = null; try { cuff = w.sleeveA && w.sleeveA.cuff && w.sleeveA.cuff.lengths; } catch (e) { rows.push(unmeasured("cuff", "소매", "소매구 ↔ 커프스", "측정 중 오류 — 값을 싣지 않음")); return; }
+    try { if (cuff && num(cuff.sleeveHemCm) && num(cuff.attachLengthCm)) {
       var sh = cuff.sleeveHemCm - cuff.attachLengthCm;
       rows.push(pair("cuff", "소매", "소매구 ↔ 커프스", { label: "커프스", cm: cuff.attachLengthCm }, { label: "소매구", cm: cuff.sleeveHemCm },
         sh > EXACT ? "gather" : Math.abs(sh) < EXACT ? "match" : "diff", sh > EXACT ? "셔링분 " + f2(sh) : dirText(sh, "소매구", "커프스"),
         ["소매구 = 소매 Ⓐ 직선 소맷부리 실측 · 커프스 = 커프스 달림 길이(여밈까지 소매를 붙이는 방법)", "권위: designCuff 제도 기록(sleeveA.cuff.lengths) — 트임 처리분은 따로 빼지 않은 값", "셔링분은 의도된 주름 분량이다(오류 아님)"]));
-    }
+    } } catch (e) { rows.push(unmeasured("cuff", "소매", "소매구 ↔ 커프스", "측정 중 오류 — 값을 싣지 않음")); }
   }
 
   function roleLen(outline, role) {
@@ -162,13 +180,14 @@
     if (stale && stale.kind === "changed") rows.push(changed("neck-band", "카라", N1, stale.text, b1));
     else if (stale) rows.push(unmeasured("neck-band", "카라", N1, stale.text, b1));
     else if (oldSource) rows.push(changed("neck-band", "카라", N1, oldText, b1));
-    else {
+    else try {
       var neck = bc && bc.neckline && bc.neckline.ok ? bc.neckline.half : null, seam = roleLen(cd.standGeometry.outline, "neck-seam");
       if (!num(neck)) rows.push(unmeasured("neck-band", "카라", N1, "몸판 목둘레를 잴 수 없음", b1));
       else if (!num(seam)) rows.push(unmeasured("neck-band", "카라", N1, "밴드 형상에 달림선 표시 구간이 없음", b1));
       else { var d1 = seam - neck; rows.push(pair("neck-band", "카라", N1, { label: "목둘레", cm: neck }, { label: "밴드", cm: seam }, Math.abs(d1) < EXACT ? "match" : "diff", dirText(d1, "밴드", "목둘레"), b1)); }
-    }
+    } catch (e) { rows.push(unmeasured("neck-band", "카라", N1, "측정 중 오류 — 값을 싣지 않음", b1)); }
     // 위 칼라 이음선: 현재 위 칼라 형상의 attach 구간을 직접 잰다(직접 수정 뒤에도 지금 형상). 형상에 표시가 없을 때만 카라 기록값(body.attachLenCm).
+    try {
     var top = roleLen(cd.standGeometry.outline, "top"), upGeo = cd.body && cd.body.geometry ? roleLen(cd.body.geometry.outline, "attach") : null;
     var up = num(upGeo) ? upGeo : (cd.body ? cd.body.attachLenCm : null);
     if (cd.body && !num(upGeo)) b2 = b2.concat(["위 칼라 형상에 이음선 표시가 없어 카라 기록값(body.attachLenCm)을 썼다"]);
@@ -177,6 +196,7 @@
     else if (!num(top)) rows.push(unmeasured("band-collar", "카라", N2, "밴드 형상에 윗선 표시 구간이 없음", b2));
     else if (!num(up)) rows.push(unmeasured("band-collar", "카라", N2, "위 칼라 이음선 길이 기록 없음", b2));
     else { var d2 = up - top; rows.push(pair("band-collar", "카라", N2, { label: "밴드 윗선", cm: top }, { label: "위 칼라", cm: up }, Math.abs(d2) <= COLLAR_SEAM_GATE ? "match" : "diff", dirText(d2, "위 칼라", "밴드 윗선"), b2, Math.abs(d2) >= EXACT && Math.abs(d2) <= COLLAR_SEAM_GATE ? "일치(0.01 이내)" : null)); }
+    } catch (e) { rows.push(unmeasured("band-collar", "카라", N2, "측정 중 오류 — 값을 싣지 않음", b2)); }
   }
 
   // ── 모델: 읽기만 한다. p 를 바꾸지 않는다. ──
@@ -186,9 +206,15 @@
     if (!p || !p.working || !p.working.geometry || !BC || !SC) return { ok: false, rows: [], counts: {} };
     var rows = [], bc = null;
     try { bc = BC.check(p); } catch (e) { bc = null; }
-    try { bodiceRows(p, bc, rows); } catch (e) { rows.push(unmeasured("side", "몸판", "몸판 맞춤 길이", "측정 중 오류 — 값을 싣지 않음")); }
-    try { sleeveRows(p, rows); } catch (e) { rows.push(unmeasured("ah-total", "소매", "진동 ↔ 소매산", "측정 중 오류 — 값을 싣지 않음")); }
-    try { collarRows(p, bc, rows); } catch (e) { rows.push(unmeasured("neck-band", "카라", "목둘레 ↔ 카라", "측정 중 오류 — 값을 싣지 않음")); }
+    // 구역이 중간에 실패하면 이미 만든 성공 행은 그대로 두고, 아직 없는 행만 자기 이름으로 «미측정» 한다(중복·누락 없음).
+    var guardSection = function (fn, expected) {
+      try { fn(); } catch (e) { /* 아래에서 빠진 행만 채운다 */ }
+      expected.forEach(function (x) { if (!rows.some(function (r) { return r.id === x[0]; })) rows.push(unmeasured(x[0], x[1], x[2], "측정 중 오류 — 값을 싣지 않음")); });
+    };
+    guardSection(function () { sideRow(p, bc, rows); }, [["side", "몸판", "앞 옆선 ↔ 뒤 옆선"]]);       // 옆선·어깨는 원천이 달라 서로 막지 않는다
+    guardSection(function () { shoulderRow(p, rows); }, [["shoulder", "몸판", "앞 어깨 ↔ 뒤 어깨"]]);
+    guardSection(function () { sleeveRows(p, rows); }, [["ah-front", "소매", "앞 진동 ↔ 앞 소매산"], ["ah-back", "소매", "뒤 진동 ↔ 뒤 소매산"], ["ah-total", "소매", "진동 합계 ↔ 소매산 합계"]]);
+    guardSection(function () { collarRows(p, bc, rows); }, [["neck-band", "카라", "목둘레 ↔ 밴드 달림선"], ["band-collar", "카라", "밴드 윗선 ↔ 위 칼라 이음선"]]);
     var counts = {}; rows.forEach(function (r) { counts[r.status] = (counts[r.status] || 0) + 1; });
     return { ok: true, rows: rows, counts: counts };
   }

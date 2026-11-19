@@ -123,7 +123,7 @@ let TEXT = null, M_DONE = null;
     ok(D(mouthA, mouthB) > 0.5 && !!legA && !!legB && D(legA.to, legB.from) < 1e-6, "1: 뒤 어깨 두 구간 = 열린 다트 입구 양쪽(다리 2개가 같은 꼭짓점으로)");
     const dLeg = legA && legB ? Math.abs(segLenInd(legA) - segLenInd(legB)) : NaN;
     ok(dLeg < 0.2, "1: 다트 다리 길이 차 " + (dLeg || 0).toFixed(3) + "cm(작은 단차 — 어깨 길이에 미포함)");
-    ok(sh.basis.some(t => /2구간 합/.test(t)) && sh.basis.some(t => /단차/.test(t)), "1: 카드가 다트 닫힘·단차 미포함을 밝힘");
+    ok(sh.basis.some(t => /2구간 합/.test(t)) && sh.basis.some(t => /다트인지 알 수 없음/.test(t)) && !sh.basis.some(t => /다트로 나뉜/.test(t)), "1: 원형 뒤 어깨는 다트 기록이 없어 길이(구간 합)는 그대로 · 다트 단정 없이 중립 문구");
   }
   // 진동 ↔ 소매산 = 소매 완료본 cap(실측) · 몸판 완료본 봉제 진동
   const R = P.working.sleeveResult, AH = S.SA.sewnArmholeLengths(B);
