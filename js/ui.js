@@ -442,25 +442,38 @@
   let pendingYokeGather;   // 〃 (true = 이음선 아래 몸판 중심 개더 띠, 프리셋 Ⓡ — yokeSeam 전제)
   let pendingPrincess;     // 〃 ("E"·"F" = 프린세스 이음선 — 앞·뒤 중심·옆 조각 분리, 프리셋 Ⓔ·Ⓕ)
   let pendingDartExtra;    // 〃 (객체 {a,e} = 다트 폭 절대 증가 cm, 프리셋 Ⓕ — princess 전제)
+  // ── 프리셋 선택 화면 표시 이름(2026-11-19 사용자 승인 1차 디자인 UI ②) ──
+  //   선행 교재 식별자(A~Z·a~z·Ⓐ~ⓩ + « · »)와 교재 페이지(P.N)만 화면에서 숨긴다. 저장 ID·option value·프리셋 원본 메타·
+  //   제도 근거(symbol·page·label 레코드)는 그대로다 — 표시 문자열만 바꾼다. 숨긴 뒤 같은 목록 안에 같은 이름이 생기면
+  //   그 옵션들은 원래 문구를 그대로 쓴다(동명 옵션 구분 보장).
+  const PRESET_LEAD_ID = /^\s*(?:[A-Za-z]|[Ⓐ-ⓩ])\s*·\s*/;
+  function presetDisplayName(label) { return String(label == null ? "" : label).replace(PRESET_LEAD_ID, ""); }
+  // opts: [{ value, label, available }] → 같은 순서의 표시 문자열. familyLabelOf 가 있으면 family 이름(교재 표식·페이지 없는 원래 이름).
+  function presetDisplayLabels(opts, familyLabelOf) {
+    const names = opts.map(o => familyLabelOf ? (familyLabelOf(o.value) || o.label) : presetDisplayName(o.label));
+    const count = {}; names.forEach(n => { count[n] = (count[n] || 0) + 1; });
+    return names.map((n, i) => (n && count[n] === 1) ? n : opts[i].label);
+  }
   function selectedBodiceFamilyId() { const s = document.getElementById("selBodiceFamily"); return s ? s.value : ""; }
   function selectedBodiceVariantId() { const s = document.getElementById("selBodicePreset"); return s ? s.value : ""; }
   function rebuildBodiceFamilyOptions() {
     const sel = document.getElementById("selBodiceFamily"); if (!sel || !window.bodicePresets) return;
     if (sel.options.length) return;                       // 한 번만 만든다(innerHTML 재생성 금지 원칙)
-    window.bodicePresets.familyOptions().forEach(o => {
+    const BP = window.bodicePresets, opts = BP.familyOptions(), names = presetDisplayLabels(opts, id => { const f = BP.family(id); return f ? f.label : null; });
+    opts.forEach((o, i) => {
       const el = document.createElement("option");
-      el.value = o.value; el.textContent = o.label + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
+      el.value = o.value; el.textContent = names[i] + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
       sel.appendChild(el);
     });
     sel.value = window.bodicePresets.DEFAULT_FAMILY_ID;
   }
   function rebuildBodiceVariantOptions() {
     const sel = document.getElementById("selBodicePreset"); if (!sel || !window.bodicePresets) return;
-    const opts = window.bodicePresets.variantOptions(selectedBodiceFamilyId());
+    const opts = window.bodicePresets.variantOptions(selectedBodiceFamilyId()), names = presetDisplayLabels(opts);
     const keep = sel.value;
-    sel.replaceChildren.apply(sel, opts.map(o => {
+    sel.replaceChildren.apply(sel, opts.map((o, i) => {
       const el = document.createElement("option");
-      el.value = o.value; el.textContent = o.label + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
+      el.value = o.value; el.textContent = names[i] + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
       return el;
     }));
     const found = opts.some(o => o.value === keep);
@@ -473,7 +486,7 @@
     const fid = selectedBodiceFamilyId(), vid = selectedBodiceVariantId();
     const t = BP.displayTitle(fid, vid), v = BP.variant(fid, vid);
     const parts = [];
-    if (t) parts.push(t.familyLabel + " " + t.symbol + " (교재 P" + t.page + ")");
+    if (t) parts.push(t.familyLabel + (v ? " · " + presetDisplayName(v.label) : ""));   // 표식·교재 페이지는 화면에서 숨김(메타는 유지)
     if (v && v.availability !== "available") {
       // 보류 사유는 **슬롯이 들고 있는 blockedBy** 를 그대로 보여 준다 — "준비 중"으로 뭉개지 않는다.
       if (v.referenceNote) parts.push("참고: " + v.referenceNote);
@@ -1711,9 +1724,10 @@
     const sel = document.getElementById("selSleeveFamily"); if (!sel || !window.sleevePresets) return;
     if (sel.options.length) return;                       // 한 번만 만든다(innerHTML 재생성 금지 원칙)
     const base = document.createElement("option"); base.value = SLEEVE_BASE; base.textContent = "원형 소매 기준 (기본)"; sel.appendChild(base);
-    window.sleevePresets.familyOptions().forEach(o => {
+    const SPx = window.sleevePresets, fopts = SPx.familyOptions(), fnames = presetDisplayLabels(fopts, id => { const f = SPx.family(id); return f ? f.label : null; });
+    fopts.forEach((o, i) => {
       const el = document.createElement("option");
-      el.value = o.value; el.textContent = o.label + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
+      el.value = o.value; el.textContent = fnames[i] + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
       sel.appendChild(el);
     });
     sel.value = SLEEVE_BASE;
@@ -1722,10 +1736,11 @@
     const sel = document.getElementById("selSleevePreset"); if (!sel || !window.sleevePresets) return;
     const fid = selectedSleeveFamilyId();
     const opts = fid === SLEEVE_BASE ? [{ value: "", label: "소매길이·부리·옆선·소매산 입력으로 파생", available: true }] : window.sleevePresets.variantOptions(fid);
+    const names = presetDisplayLabels(opts);
     const keep = sel.value;
-    sel.replaceChildren.apply(sel, opts.map(o => {
+    sel.replaceChildren.apply(sel, opts.map((o, i) => {
       const el = document.createElement("option");
-      el.value = o.value; el.textContent = o.label + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
+      el.value = o.value; el.textContent = names[i] + (o.available ? "" : " · 준비 중"); el.disabled = !o.available;
       return el;
     }));
     const found = opts.some(o => o.value === keep);
@@ -1737,7 +1752,7 @@
     const SP = window.sleevePresets, fid = selectedSleeveFamilyId(), vid = selectedSleeveVariantId();
     if (fid === SLEEVE_BASE) { el.textContent = "원형 소매를 소매길이·부리·옆선·소매산으로 변형하는 기본 방식"; return; }
     const t = SP.displayTitle(fid, vid), v = SP.variant(fid, vid), parts = [];
-    if (t) parts.push(t.familyLabel + " " + t.symbol + " (교재 P" + t.page + ")");
+    if (t) parts.push(t.familyLabel + (v ? " · " + presetDisplayName(v.label) : ""));   // 표식·교재 페이지는 화면에서 숨김(메타는 유지)
     if (v && v.availability !== "available") { if (v.blockedBy) parts.push("보류 사유: " + v.blockedBy); }   // «준비 중» 으로 뭉개지 않는다
     else { const f = SP.family(fid); if (f && f.familyNote) parts.push(f.familyNote); }
     el.textContent = parts.join(" · ");
@@ -2676,6 +2691,7 @@
     return cd ? (COLLAR_KIND_BY_TYPE[cd.type] || "two-piece") : null;
   }
   function selectedCollarKind() {
+    if (collarNoneSelected()) return "none";   // «카라 없음»: 어느 카라 입력 행도 보이지 않는다
     const r = resolveCollarSelection();
     if (!r.ok) return null;
     const rec = window.collarPresets.get(r.presetId);
@@ -2732,8 +2748,22 @@
     return (sel && sel.value) || (window.collarPresets ? window.collarPresets.DEFAULT_FAMILY_ID : null);
   }
   function selectedCollarVariantId() { const sel = document.getElementById("selCollarPreset"); return sel ? sel.value : ""; }
+  // «카라 없음»(2026-11-19 ④): 카라 종류 select 의 별도 값(catalog family 아님). 선택만으로는 아무것도 바꾸지 않고
+  //   «카라 없음 적용»을 눌러야 collarCheckpoint.chooseNone 으로 카라 초안·완료본을 비운다.
+  const COLLAR_NONE = "none";
+  function collarNoneSelected() { const sel = document.getElementById("selCollarFamily"); return !!(sel && sel.value === COLLAR_NONE); }
+  function collarNoneApplied(project) { return !!(window.collarCheckpoint && window.collarCheckpoint.isNone && window.collarCheckpoint.isNone(project)); }
+  // 다른 카라를 실제로 적용했을 때(초안이 새로 생김) «카라 없음»을 해제한다 → 다시 제도·완료해야 Design 완료 가능.
+  function clearCollarNone(project) { if (window.collarCheckpoint && window.collarCheckpoint.clearNone) window.collarCheckpoint.clearNone(project); }
+  // 프로젝트 열기 후: 저장된 «카라 없음»이면 select 를 맞춘다(그 밖에는 사용자 선택을 건드리지 않음 · «카라 없음»이 남아 있을 때만 기본으로).
+  function syncCollarChoiceSelect(project) {
+    const sel = document.getElementById("selCollarFamily"); if (!sel || !window.collarPresets) return;
+    const want = collarNoneApplied(project) ? COLLAR_NONE : (sel.value === COLLAR_NONE ? window.collarPresets.DEFAULT_FAMILY_ID : null);
+    if (want != null && sel.value !== want) { sel.value = want; rebuildCollarVariantOptions(); syncCollarPresetLabel(); }
+  }
   function resolveCollarSelection() {
     if (!window.collarPresets) return { ok: false, reason: "no-module" };
+    if (collarNoneSelected()) return { ok: false, reason: "collar-none" };
     return window.collarPresets.resolve(selectedCollarFamilyId(), selectedCollarVariantId());
   }
   function selectedCollarPreset() {
@@ -2754,18 +2784,20 @@
   }
   function collarSelectionStr(reason) {
     const m = { "unknown-collar-family": "카라 종류를 선택하세요", "unknown-collar-variant": "세부 제도형을 선택하세요",
-      "collar-preset-unavailable": (window.collarPresets ? window.collarPresets.PENDING_NOTE : "제도 자료 확인 후 제공"), "no-module": "" };
+      "collar-none": "카라를 달지 않습니다 · «카라 없음 적용»으로 확정", "collar-preset-unavailable": (window.collarPresets ? window.collarPresets.PENDING_NOTE : "제도 자료 확인 후 제공"), "no-module": "" };
     if (reason === "collar-preset-unavailable") { const n = pendingSlotNote(); if (n) return n; }
     return m[reason] != null ? m[reason] : "";
   }
   // 세부 제도 select 옵션을 현재 종류에서 다시 만든다(미구현 variant 는 disabled 슬롯).
   function rebuildCollarVariantOptions() {
     const sel = document.getElementById("selCollarPreset"); if (!sel || !window.collarPresets) return;
-    const fid = selectedCollarFamilyId(), opts = window.collarPresets.variantOptions(fid);
+    const fid = selectedCollarFamilyId(), opts = fid === COLLAR_NONE ? [] : window.collarPresets.variantOptions(fid), names = presetDisplayLabels(opts);
     while (sel.firstChild) sel.removeChild(sel.firstChild);
-    if (opts.length === 0) {
+    if (fid === COLLAR_NONE) {
+      const op = document.createElement("option"); op.value = ""; op.textContent = "카라 부품 없음 · 목둘레 그대로"; sel.appendChild(op);
+    } else if (opts.length === 0) {
       const op = document.createElement("option"); op.value = ""; op.textContent = "제도 자료 없음"; op.disabled = true; sel.appendChild(op);
-    } else opts.forEach(o => { const op = document.createElement("option"); op.value = o.value; op.textContent = o.label + (o.available ? "" : " · " + window.collarPresets.PENDING_SHORT); op.disabled = !o.available; sel.appendChild(op); });
+    } else opts.forEach((o, i) => { const op = document.createElement("option"); op.value = o.value; op.textContent = names[i] + (o.available ? "" : " · " + window.collarPresets.PENDING_SHORT); op.disabled = !o.available; sel.appendChild(op); });
     const first = opts.filter(o => o.available)[0] || opts[0];
     sel.value = first ? first.value : "";
   }
@@ -2778,19 +2810,20 @@
     const parts = [];
     if (dims) parts.push("참고 도면 수치: " + dims);
     if (v.referenceNote) parts.push(v.referenceNote);
-    if (v.requiresMethodPage) parts.push("전체 제도법 P" + v.requiresMethodPage + " 필요 · 적용 불가");
+    if (v.requiresMethodPage) parts.push("전체 제도법 필요 · 적용 불가");   // 교재 페이지(requiresMethodPage)는 메타로만 유지
     return parts.join(" · ");
   }
   // 버튼 문구 + 선택 상태 안내(형상은 안 건드린다).
   function syncCollarPresetLabel() {
     const r = resolveCollarSelection();
-    const rec = r.ok ? window.collarPresets.get(r.presetId) : null;
     const note = document.getElementById("designCollarCatalogNote");
     if (note && window.collarPresets) {
       const fid = selectedCollarFamilyId();
-      const t = window.collarPresets.displayTitle(fid, selectedCollarVariantId());   // 선택 variant 의 표식·페이지(대표 symbol 아님)
-      const head = t ? t.familyLabel + " " + t.symbol + " (교재 P" + t.page + ")" : "카라 종류";
-      if (r.ok) note.textContent = head + " · " + rec.label + " 적용 가능";
+      if (fid === COLLAR_NONE) { note.textContent = "카라 없음 · 카라 부품을 만들지 않습니다(목 마감 형상 없음) · 몸판·소매 검사만으로 Design 형상 완료"; return; }
+      const vid = selectedCollarVariantId(), v = window.collarPresets.variant(fid, vid);
+      const t = window.collarPresets.displayTitle(fid, vid);   // 교재 분류명(표식·교재 페이지는 화면에서 숨김 — 메타는 유지)
+      const head = t ? t.familyLabel + (v ? " · " + presetDisplayName(v.label) : "") : "카라 종류";
+      if (r.ok) note.textContent = head + " · 적용 가능";
       else {
         const ref = collarReferenceStr(fid, selectedCollarVariantId());
         note.textContent = head + " · " + collarSelectionStr(r.reason) + (ref ? " · " + ref : "");
@@ -2827,6 +2860,7 @@
         baseLineLenCm: r.baseLineLenCm, baselineReductionCm: r.baselineReductionCm, guideRiseCm: r.guideRiseCm
       }
     };
+    clearCollarNone(project);   // 다른 카라를 실제로 적용 → «카라 없음» 해제
     return { ok: true, result: r };
   }
   function setCollarNote(t) { const n = document.getElementById("designCollarNote"); if (n) n.textContent = t; }
@@ -2870,9 +2904,23 @@
     if (reason === "collar-preset-unavailable") return pendingSlotNote() || (window.collarPresets ? window.collarPresets.PENDING_NOTE : "제도 자료 확인 후 제공");   // 호출부가 "적용 불가: " 를 붙인다
     return m[reason] || "카라를 적용할 수 없습니다";
   }
+  // «카라 없음 적용»: 카라 초안·완료본·관리형 본체 선을 비우고 명시 선택을 남긴다(목 마감 형상 없음).
+  //   이 버튼 자체가 현재 카라 형상·완료 제거의 명시 승인이므로 위 칼라 직접 수정(manual) 중에도 적용한다 —
+  //   관리선은 chooseNone 이 지우고, 선 도구의 선택·편집 상태는 기존 종료 API(setMode("off"))로 끝낸다(그리던 선은 보존).
+  function onApplyCollarNone(project) {
+    const wasManual = collarBodyManual(project);
+    const r = window.collarCheckpoint && window.collarCheckpoint.chooseNone ? window.collarCheckpoint.chooseNone(project) : { ok: false };
+    if (!r.ok) { setCollarNote("카라 없음을 적용할 수 없습니다"); return; }
+    const T = window.designLineTool;
+    if (wasManual && T && T.getMode && T.getMode() === "select") T.setMode("off");   // 지운 관리선 선택·편집이 남지 않게
+    if (window.designLayout) window.designLayout.afterCollar();
+    if (typeof render === "function") render();
+    updateCollarPanel(project);
+  }
   function onApplyCollar() {
     const project = designProjectNow(); if (!project) return;
     if (!collarGateOk(project)) { setCollarNote("소매 완료 후 카라를 편집할 수 있습니다"); return; }
+    if (collarNoneSelected()) { onApplyCollarNone(project); return; }
     if (selectedCollarKind() === "hood") {   // 후드: 머리 둘레·후드 치수만 편집값으로 받는다
       const hh = readNum("inpHoodHead", 30, 80), hmv = readNum("inpHoodMeasure", 20, 70);
       if (!hh.valid) { setCollarNote("머리 둘레 범위를 확인하세요(30–80cm)"); return; }
@@ -2902,6 +2950,7 @@
   function onResetCollar() {
     const project = designProjectNow(); if (!project) return;
     project.working.collarDraft = null;
+    clearCollarNone(project);   // 초기화 = 미적용으로(«카라 없음» 선택도 해제)
     if (window.designLayout) window.designLayout.afterCollar();
     if (typeof render === "function") render();
     updateCollarPanel(project);
@@ -2927,6 +2976,7 @@
       return;
     }
     project.working.collarDraft = plan.draft;   // ── 원자 교체(스탠드·본체 둘 다 ok) ──
+    clearCollarNone(project);                   // 다른 카라를 실제로 적용 → «카라 없음» 해제
     if (window.designLayout) window.designLayout.afterCollar();
     if (typeof render === "function") render();
     updateCollarPanel(project); updateCollarBodyPanel(project);
@@ -3112,6 +3162,7 @@
       parameters: { hood: hoodParams },
       hood: { geometry: r.geometry, measure: r.measure, anchors: r.anchors }
     };
+    clearCollarNone(project);   // 다른 카라를 실제로 적용 → «카라 없음» 해제
     return { ok: true, result: r };
   }
   function updateHoodCollarPanel(project, gate, pd) {
@@ -3280,6 +3331,27 @@
     }
     syncCollarBodyModeUI(project); updateCollarCheckpointUI(project); updateCollarDraftSummary(project);
   }
+  // 적용 버튼 글자(2026-11-19 ③): 밴드를 따로 제도하는 2피스(M·N·O·P) = «밴드 적용» → «카라 본체 적용»,
+  //   독립 카라 전체를 한 번에 만드는 종류 = «카라 적용», «카라 없음» = «카라 없음 적용». ID·핸들러는 그대로.
+  function syncCollarApplyLabel(project) {
+    const b = document.getElementById("btnApplyCollar"); if (!b) return;
+    const t = collarNoneSelected() ? "카라 없음 적용" : isTwoPieceCollar(project) ? "밴드 적용" : "카라 적용";
+    if (b.textContent !== t) b.textContent = t;
+  }
+  function updateNoneCollarPanel(project, gate) {
+    const applyBtn = document.getElementById("btnApplyCollar"), resetBtn = document.getElementById("btnResetCollar");
+    const applied = collarNoneApplied(project);
+    if (applyBtn) applyBtn.disabled = !gate || applied;   // 직접 수정 중이어도 적용 가능(명시 승인 버튼)
+    if (resetBtn) resetBtn.disabled = !(applied || project.working.collarDraft);
+    syncCollarPresetLabel();
+    if (!gate) setCollarNote("소매 완료 후 카라를 편집할 수 있습니다");
+    else if (applied) setCollarNote("카라 없음 적용됨 · 카라 부품·카라 완료 없음 · 다른 카라를 적용하면 다시 제도·완료 필요");
+    else setCollarNote((project.working.collarDraft || project.working.collarResult ? "«카라 없음 적용»을 누르면 지금 카라 형상" + (collarBodyManual(project) ? "(직접 수정한 위 칼라 포함)" : "") + "과 카라 완료가 지워집니다" : "«카라 없음 적용»으로 카라 없이 진행합니다") + " · 목 마감 형상은 만들지 않음");
+    setCollarBodyNote("");
+    syncCollarBodyModeUI(project);
+    updateCollarCheckpointUI(project);
+    updateCollarDraftSummary(project);
+  }
   // refresh 훅: 입력 복원(포커스 중 안 덮음) + 버튼/게이트 + committed 기준 note.
   function updateCollarPanel(project) {
     if (!project) return;
@@ -3287,6 +3359,8 @@
     const setIf = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = fmtL(v); };
     const pd = collarPresetDefaults();   // 선택 제도형 stand 기본값(미구현이면 기본값 없음 → 입력 유지)
     syncCollarKindRows(project);
+    syncCollarApplyLabel(project);
+    if (collarNoneSelected()) { updateNoneCollarPanel(project, gate); return; }
     if (isOnePieceCollar(project)) { updateOnePieceCollarPanel(project, gate, pd); return; }
     if (isOpenCollar(project)) { updateOpenCollarPanel(project, gate, pd); return; }
     if (isWingCollar(project)) { updateWingCollarPanel(project, gate, pd); return; }
@@ -3322,7 +3396,7 @@
         ? " · 기초선 " + fmtL(m.baseLineLenCm) + "cm(감산 " + fmtL(m.baselineReductionCm) + "·2/3 안내점 " + fmtL(m.guideRiseCm) + " 올림)" : "";
       setCollarNote("달림선 " + fmtL(m.lowerNeckSeamLenCm) + "cm = 목둘레 " + fmtL(m.neckTargetCm != null ? m.neckTargetCm : m.lowerNeckSeamLenCm) + "cm(" + ((m.cbTrimCm || 0) < 0 ? "뒤중심 연장 " + fmtL(-m.cbTrimCm) : "뒤중심 보정 " + fmtL(m.cbTrimCm || 0)) + "cm) · 밴드 윗선 " + fmtL(m.upperNeckSegmentLenCm) + "cm · 앞 끝선 " + fmtL(m.lowerExtensionLenCm) + "cm · 앞 중심 올림 " + fmtL(c.frontRiseCm) + "cm" + red + " · 세션 전용");
     }
-    else setCollarNote("스탠드 높이·앞끝 올림 적용으로 카라 스탠드 생성 · 세션 전용");
+    else setCollarNote("«밴드 적용»으로 밴드를 만든 뒤 «카라 본체 적용»으로 위 칼라를 만듭니다 · 세션 전용");
     if (gate && pd.ok && collarStandOutdated(project)) { const n = document.getElementById("designCollarNote"); if (n) n.textContent += COLLAR_STAND_OUTDATED_NOTE; }
     updateCollarBodyPanel(project);
   }
@@ -3373,15 +3447,15 @@
     const st = window.designCollar.computeStand(window.bodiceCheckpoint.latest(project), cd.parameters.stand, cd.construction);
     return !!(st.ok && !sameCollarOutline(st.standGeometry.outline, cd.standGeometry.outline));
   }
-  const COLLAR_STAND_OUTDATED_NOTE = " · ⚠ 이 밴드는 예전 곡선 규칙으로 만든 모양입니다(자동으로 바꾸지 않음) — «카라 적용»을 다시 누르면 새 곡선이 됩니다(직접 수정 중이면 먼저 «수치형으로 돌아가기»)";
+  const COLLAR_STAND_OUTDATED_NOTE = " · ⚠ 이 밴드는 예전 곡선 규칙으로 만든 모양입니다(자동으로 바꾸지 않음) — «밴드 적용»을 다시 누르면 새 곡선이 됩니다(직접 수정 중이면 먼저 «수치형으로 돌아가기»)";
   function setCollarBodyNote(t) { const n = document.getElementById("designCollarBodyNote"); if (n) n.textContent = t; }
   function collarBodyFailStr(reason) {
-    const m = { "invalid-stand": "스탠드를 먼저 적용", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-point-diagonal": "칼라 끝 사선 길이는 앞끝 돌출보다 커야 합니다", "invalid-gap": "CB 제도 간격 확인", "cb-correction-failed": "위칼라 이음선 길이를 밴드와 맞출 수 없습니다", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "invalid-outer-bow": "외곽 휨 값 확인(−2–2)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
+    const m = { "invalid-stand": "«밴드 적용»을 먼저", "invalid-cb-width": "CB 칼라 폭 값 확인(1–15)", "invalid-point-diagonal": "칼라 끝 사선 길이는 앞끝 돌출보다 커야 합니다", "invalid-gap": "CB 제도 간격 확인", "cb-correction-failed": "위칼라 이음선 길이를 밴드와 맞출 수 없습니다", "invalid-front-projection": "칼라 앞끝 돌출 값 확인(0–15)", "invalid-outer-bow": "외곽 휨 값 확인(−2–2)", "self-intersection": "칼라 형상이 교차합니다 · 값을 조정하세요", "no-module": "" };
     return m[reason] || "칼라 본체를 적용할 수 없습니다";
   }
   function onApplyCollarBody() {
     const project = designProjectNow(); if (!project) return;
-    if (!collarStandReady(project)) { setCollarBodyNote("카라 스탠드를 먼저 적용하세요"); return; }
+    if (!collarStandReady(project)) { setCollarBodyNote("«밴드 적용»을 먼저 누르세요"); return; }
     const w = readNum("inpCollarBodyWidth", 1, 15), fw = readNum("inpCollarBodyFrontWidth", 1, 15), proj = readNum("inpCollarBodyProjection", 0, 15), bow = readNum("inpCollarBodyBow", -2, 2);
     if (!w.valid || !fw.valid || !proj.valid || !bow.valid) { setCollarBodyNote("칼라 본체 값 범위를 확인하세요(CB 폭·끝 사선 1–15·앞끝 돌출 0–15·외곽 휨 −2–2)"); return; }
     // CB 제도 간격(gap)은 입력이 없으므로 기존 커밋값(없으면 교재 M 기준)을 유지한다.
@@ -3416,7 +3490,7 @@
     const applyBtn = document.getElementById("btnApplyCollarBody"), resetBtn = document.getElementById("btnResetCollarBody");
     if (applyBtn) applyBtn.disabled = !ready || !pd.ok;   // 미구현 제도형에서는 본체 적용 불가
     if (resetBtn) resetBtn.disabled = !cb.has;
-    if (!ready) setCollarBodyNote("카라 스탠드 적용 후 본체를 생성할 수 있습니다");
+    if (!ready) setCollarBodyNote("«밴드 적용» 후 «카라 본체 적용»으로 위 칼라를 만들 수 있습니다");
     else if (!pd.ok) setCollarBodyNote(collarSelectionStr(pd.reason) + (cb.has ? " · 현재 본체 형상은 그대로 유지" : ""));
     else if (collarBodyManual(project)) {
       if (collarBodyInvalid(project)) setCollarBodyNote("칼라 본체 편집 무효 · " + collarBodyReasonStr(project.working.collarDraft.body.invalidReason) + " · 편집 복구 또는 기본형으로 돌아가기");
@@ -3466,7 +3540,7 @@
     const note = document.getElementById("collarDraftModeNote");
     fillDraftList("collarDraftInputs", model ? model.inputs : []);
     fillDraftList("collarDraftResults", model ? model.results : []);
-    if (note) note.textContent = !model ? "카라 스탠드 적용 후 표시" : (model.note || "");
+    if (note) note.textContent = !model ? (collarNoneApplied(project) ? "카라 없음 · 표시할 제도 치수 없음" : isTwoPieceCollar(project) ? "«밴드 적용» 후 표시" : "«카라 적용» 후 표시") : (model.note || "");
   }
 
   // ── C3 칼라 본체 직접 편집(관리형 선, 소매산 manual 미러) ──
@@ -3479,7 +3553,7 @@
   // 파라미터 본체 → 관리형 선(collar-body) 변환. 스탠드+본체 파라미터 입력 잠금(부착선 고정).
   function onCollarBodyManual() {
     const project = designProjectNow(); if (!project || !window.designCollar || !window.designLineTool) return;
-    if (!collarStandReady(project)) { setCollarBodyNote("카라 스탠드 적용 후 직접 수정할 수 있습니다"); return; }
+    if (!collarStandReady(project)) { setCollarBodyNote("«밴드 적용»·«카라 본체 적용» 후 직접 수정할 수 있습니다"); return; }
     const cd = project.working.collarDraft;
     if (!cd.body || !cd.body.geometry) { setCollarBodyNote("먼저 본체를 적용한 뒤 직접 수정할 수 있습니다"); return; }
     if (cd.body.mode === "manual") { reenterCollarBodyEdit(project); return; }
@@ -3550,7 +3624,7 @@
   function collarCPFailStr(reason) {
     const m = { "no-bodice": "몸판 완료 필요", "bodice-stale": "몸판 변경됨 · 다시 완료 필요", "no-collar": "카라 적용 필요",
       "source-mismatch": "카라 출처가 몸판 완료본과 다름", "no-sleeve": "소매 완료 필요(작업 순서)", "sleeve-stale": "소매 변경됨 · 작업 순서 확인",
-      "no-stand": "스탠드 적용 필요", "no-standalone": "스탠드 칼라 적용 필요", "no-body": "본체 적용 필요", "body-invalid": "본체 편집 무효 · 복구 필요", "manual-line-missing": "관리형 본체 선 없음",
+      "no-stand": "밴드 적용 필요", "no-standalone": "스탠드 칼라 적용 필요", "no-body": "카라 본체 적용 필요", "body-invalid": "본체 편집 무효 · 복구 필요", "manual-line-missing": "관리형 본체 선 없음",
       "attach-length-mismatch": "달림선 실측이 목둘레와 다름(길이 책임)", "break-line-missing": "몸판 앞 꺾임선 출처 없음",
       "no-tip": "칼라 끝 적용 필요", "tip-unmeasured": "칼라 끝 측정 불가", "tip-length-mismatch": "칼라 끝 수치가 형상과 다름", "tip-recompute": "칼라 끝 재계산 실패",
       "no-flat-collar": "플랫 칼라 적용 필요", "flat-recompute": "플랫 칼라 재계산 실패",
@@ -3600,6 +3674,13 @@
     const statusNote = document.getElementById("designCollarStatusNote");
     const btn = document.getElementById("btnCompleteCollar");
     if (!project || !window.collarCheckpoint) { if (btn) btn.disabled = true; if (checkNote) checkNote.textContent = ""; if (statusNote) statusNote.textContent = "카라 미완료 · 세션 전용"; return; }
+    if (collarNoneApplied(project) && !project.working.collarDraft) {   // «카라 없음»: 카라 완료 단계 자체가 없다
+      if (btn) btn.disabled = true;
+      if (checkNote) checkNote.textContent = "";
+      if (statusNote) statusNote.textContent = "카라 없음 선택 · 카라 완료 불필요 · 세션 전용";
+      updateDesignResultUI(project);
+      return;
+    }
     const c = window.collarCheckpoint.check(project), cd = project.working.collarDraft;
     if (checkNote && cd && cd.type === "shirt-one-piece") {
       const m = (cd.onePiece && cd.onePiece.measure) || null;
@@ -3688,28 +3769,96 @@
   // ── Design 형상 통합 완료(designResult) — 몸판+소매+카라 형상 패키지. 재단 패턴 아님. ──
   function designResultFailStr(reason) {
     const m = { "no-bodice": "몸판 완료 필요", "bodice-changed": "몸판 변경됨 · 다시 완료 필요", "no-sleeve": "소매 완료 필요",
-      "sleeve-changed": "소매 변경됨 · 다시 완료 필요", "sleeve-bodice-mismatch": "소매 출처가 몸판과 다름", "no-collar": "카라 완료 필요",
+      "sleeve-changed": "소매 변경됨 · 다시 완료 필요", "sleeve-bodice-mismatch": "소매 출처가 몸판과 다름", "no-collar": "카라 완료 필요(카라를 달지 않으면 «카라 없음 적용»)",
       "collar-changed": "카라 변경됨 · 다시 완료 필요", "collar-bodice-mismatch": "카라 출처가 몸판과 다름", "collar-sleeve-order": "카라 소매 순서 확인 필요",
       "sleeve-source-mismatch": "소매 출처가 몸판과 다름", "collar-source-mismatch": "카라 출처가 몸판과 다름", "no-project": "프로젝트 없음", "no-module": "",
-      "cut-invalid-on-final-bodice": "절개선이 소매까지 반영한 최종 몸판에 맞지 않음" };
+      "cut-invalid-on-final-bodice": "절개선이 소매까지 반영한 최종 몸판에 맞지 않음", "pocket-invalid": "디테일 탭의 앞 주머니가 최종 몸판 위에서 유효하지 않음" };
     return m[reason] != null ? m[reason] : reason;
   }
   // 거부 사유 + 구체 안내(절개선 거부일 때만 · 표시 전용): 어느 조각의 어느 선이 최종 몸판(어느 소매의 파생 몸판)에서 왜 무효인지, 어떻게 고치는지.
   function designResultFailText(c, reason) {
     const base = designResultFailStr(reason);
+    if (reason === "pocket-invalid") return base + (c && c.pocketReject ? " — " + c.pocketReject : "") + " · 디테일 탭에서 주머니 위치·크기를 고치거나 «주머니 해제» 후 다시 완료하세요";
     const rj = c && c.cutRejects; if (reason !== "cut-invalid-on-final-bodice" || !rj || !rj.length) return base;
     const who = c._sleeve ? "소매 " + presetSymbolOfResult(c._sleeve) + " 파생 몸판" : "최종 몸판";
     const one = rj.map(x => (x.piece === "front" ? "앞판" : x.piece === "back" ? "뒤판" : x.piece) + " 절개선 " + (x.lineId != null ? x.lineId : "?") + ": " + x.reason).join(" / ");
     return base + "(" + who + " 기준) — " + one + " · 원래 몸판에서는 맞던 선입니다 · 몸판 탭에서 그 절개선을 고치거나 지운 뒤 다시 완료하세요";
   }
+  // ── 디테일: 앞 주머니(오각 패치 1장 · js/designPocket.js) ──
+  //   설정은 working.pocket(세션 → 프로젝트 저장 → Design 완료 시 designResult.pocket). 걸리면 사유만 안내(자동 이동 없음).
+  //   탭은 몸판 완료(비스테일) 후 활성. 입력칸은 적용값이 바뀔 때만 채운다(쓰는 중인 값을 덮지 않음).
+  const POCKET_INPUTS = [["inpPocketW", "widthCm"], ["inpPocketH", "heightCm"], ["inpPocketTip", "tipDepthCm"], ["inpPocketCx", "cxFromCfCm"], ["inpPocketTop", "topBelowBustCm"], ["inpPocketFold", "mouthFoldCm"]];
+  let pocketShown = { proj: null, json: null };
+  function setPocketNote(t) { const n = document.getElementById("pocketNote"); if (n) n.textContent = t || ""; }
+  function fillPocketInputs(spec) {
+    POCKET_INPUTS.forEach(([id, key]) => { const el = document.getElementById(id); if (el) el.value = String(spec[key]); });
+    const sel = document.getElementById("selPocketSide"); if (sel) sel.value = spec.side;
+  }
+  function readPocketInputs() {
+    const DP = window.designPocket, raw = { schema: 1, kind: DP.KIND }; let bad = null;
+    const sel = document.getElementById("selPocketSide"); raw.side = sel ? sel.value : "left";
+    POCKET_INPUTS.forEach(([id, key]) => {
+      const el = document.getElementById(id), s = el ? String(el.value).trim() : "", v = Number(s);
+      if (s === "" || !isFinite(v)) { raw[key] = NaN; if (!bad) bad = DP.LABEL[key] + " 칸에 숫자를 적어 주세요"; } else raw[key] = v;
+    });
+    return { raw, bad };
+  }
+  // 적용한 값과 입력칸이 다르면 목록(저장 전 «적용하지 않은 값» 안내용). 주머니가 없으면 빈 목록.
+  function pocketInputsUnapplied(project) {
+    const DP = window.designPocket, cur = DP && project ? DP.get(project) : null; if (!cur) return [];
+    const { raw } = readPocketInputs(), diff = [];
+    if (raw.side !== cur.side) diff.push("좌우");
+    POCKET_INPUTS.forEach(([, key]) => { if (!(Math.abs(raw[key] - cur[key]) < 1e-9)) diff.push(DP.LABEL[key]); });
+    return diff;
+  }
+  function updatePocketPanel(project) {
+    const DP = window.designPocket; if (!DP) return;
+    const btn = document.querySelector('.subtab[data-subtab-btn="detail"]');
+    const ok = !!project && sleeveGateOk(project);
+    if (btn) { btn.disabled = !ok; btn.title = ok ? "" : "몸판 완료 후 활성"; }
+    if (!ok && currentDesignSubtab() === "detail") setDesignSubtab("body");
+    const applied = project ? DP.get(project) : null, json = applied ? JSON.stringify(applied) : "";
+    if (pocketShown.proj !== project || pocketShown.json !== json) { fillPocketInputs(applied || DP.defaultSpec()); pocketShown = { proj: project, json: json }; }
+    const clr = document.getElementById("btnClearPocket"); if (clr) clr.disabled = !applied;
+    const apl = document.getElementById("btnApplyPocket"); if (apl) apl.disabled = !ok;
+    const st = document.getElementById("pocketStatusNote"); if (!st) return;
+    if (!applied) { st.textContent = ok ? "주머니 없음 · «주머니 적용»으로 달 수 있습니다 (" + DP.APP_NOTE + ")" : "주머니 없음 · 몸판 완료 후 달 수 있습니다"; return; }
+    const pv = DP.previewFor(project);
+    st.textContent = pv && pv.ok
+      ? "주머니 적용 중 · 착용자 " + (applied.side === "left" ? "왼쪽" : "오른쪽") + " 앞판 · 폭 " + applied.widthCm + " × 높이 " + applied.heightCm + " · 밑각 " + applied.tipDepthCm + " · 입구 접어박기 " + applied.mouthFoldCm + "cm(앱 초깃값 기준) · 디자인 화면 점선이 부착 위치 · 세션 전용"
+      : "⚠ 주머니 설정은 있으나 지금 몸판 위에서 유효하지 않습니다 — " + (pv ? pv.reason : "확인할 수 없음") + " (Design 완료 불가)";
+  }
+  function onApplyPocket() {
+    const project = designProjectNow(), DP = window.designPocket; if (!project || !DP) return;
+    const { raw, bad } = readPocketInputs();
+    if (bad) { setPocketNote("적용 안 됨 — " + bad); return; }
+    const had = DP.get(project), r = DP.apply(project, raw);
+    if (!r.ok) { setPocketNote("적용 안 됨 — " + r.reason + (had ? " · 이전 적용값은 그대로입니다" : "")); return; }
+    setPocketNote("주머니 적용됨 · 다시 «Design 형상 완료»를 눌러야 재단에 반영됩니다");
+    updateDesignResultUI(project);
+    if (typeof render === "function") render();
+  }
+  function onClearPocket() {
+    const project = designProjectNow(), DP = window.designPocket; if (!project || !DP) return;
+    DP.clear(project);
+    setPocketNote("주머니 해제됨 · 다시 «Design 형상 완료»를 눌러야 재단에 반영됩니다");
+    updateDesignResultUI(project);
+    if (typeof render === "function") render();
+  }
+  function onPocketBookValues() {
+    const DP = window.designPocket; if (!DP) return;
+    [["inpPocketW", DP.BOOK.widthCm], ["inpPocketH", DP.BOOK.heightCm], ["inpPocketTip", DP.BOOK.tipDepthCm]].forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = String(v); });
+    setPocketNote("폭·높이·밑각을 교재 도해 값(" + DP.BOOK.source + ")으로 채웠습니다 — «주머니 적용»을 눌러야 반영됩니다");
+  }
   function updateDesignResultUI(project) {
+    updatePocketPanel(project);
     const checkNote = document.getElementById("designResultCheckNote");
     const statusNote = document.getElementById("designResultStatusNote");
     const btn = document.getElementById("btnCompleteDesign");
     if (!project || !window.designResult) { if (btn) btn.disabled = true; if (checkNote) checkNote.textContent = ""; if (statusNote) statusNote.textContent = "Design 미완료 · 세션 전용"; return; }
     const c = window.designResult.check(project);
     if (window.designDoneMarks) window.designDoneMarks.update(project, c);   // 완료 표시 캐시(같은 권위 검사 결과 · render 매 프레임 재검사 없음)
-    if (checkNote) checkNote.textContent = c.ok ? ("몸판·소매·카라 완료 · 유효 절개선 " + c._cuts.length + "개") : ("완료 전 검사: " + designResultFailText(c, c.fails[0]));
+    if (checkNote) checkNote.textContent = c.ok ? ((c._collarNone ? "몸판·소매 완료 · 카라 없음" : "몸판·소매·카라 완료") + " · 유효 절개선 " + c._cuts.length + "개") : ("완료 전 검사: " + designResultFailText(c, c.fails[0]));
     if (btn) btn.disabled = !c.ok;
     const latest = window.designResult.latest(project);
     if (statusNote) {
@@ -4028,6 +4177,17 @@
     const subtabs = document.getElementById("designSubtabs");
     if (subtabs) subtabs.querySelectorAll(".subtab").forEach(b =>
       b.addEventListener("click", () => { if (!b.disabled) { setDesignSubtab(b.getAttribute("data-subtab-btn")); if (typeof render === "function") render(); } }));
+    // 디테일 앞 주머니: 적용/해제/교재 도해 값. Enter = 적용. (inline handler 없음)
+    const applyPocket = document.getElementById("btnApplyPocket");
+    if (applyPocket) applyPocket.addEventListener("click", () => { if (!applyPocket.disabled) onApplyPocket(); });
+    const clearPocket = document.getElementById("btnClearPocket");
+    if (clearPocket) clearPocket.addEventListener("click", () => { if (!clearPocket.disabled) onClearPocket(); });
+    const bookPocket = document.getElementById("btnPocketBook");
+    if (bookPocket) bookPocket.addEventListener("click", onPocketBookValues);
+    POCKET_INPUTS.forEach(([id]) => {
+      const el = document.getElementById(id); if (!el) return;
+      el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); onApplyPocket(); } });
+    });
     // 카라 제도 치수 표시 토글(세션 UI): 오버레이만 다시 그린다.
     const chkDims = document.getElementById("chkCollarDraftDims");
     if (chkDims) chkDims.addEventListener("change", () => { if (typeof render === "function") render(); });
@@ -4100,9 +4260,11 @@
     //   선택 변경은 옵션·버튼 문구·입력 표시만 갱신하고 **collarDraft·완료본·몸판을 건드리지 않는다**.
     const famSel = document.getElementById("selCollarFamily"), presetSel = document.getElementById("selCollarPreset");
     if (famSel && presetSel && window.collarPresets && famSel.options.length === 0) {
-      window.collarPresets.familyOptions().forEach(o => {
+      { const op = document.createElement("option"); op.value = COLLAR_NONE; op.textContent = "카라 없음"; famSel.appendChild(op); }   // ④ 명시 선택(catalog family 아님)
+      const CPx = window.collarPresets, fopts = CPx.familyOptions(), fnames = presetDisplayLabels(fopts, id => { const f = CPx.family(id); return f ? f.label : null; });
+      fopts.forEach((o, i) => {
         const op = document.createElement("option"); op.value = o.value;
-        op.textContent = o.label + (o.available ? "" : " · " + window.collarPresets.PENDING_SHORT);
+        op.textContent = fnames[i] + (o.available ? "" : " · " + window.collarPresets.PENDING_SHORT);
         famSel.appendChild(op);
       });
       famSel.value = window.collarPresets.DEFAULT_FAMILY_ID;
@@ -4233,6 +4395,8 @@
     const dw = window.designWorkflow, p = dw && dw.current();
     const un = bodyInputsUnappliedList(p);
     if (un.length) out.push("몸판 수치·네크라인·여밈 입력칸에 «적용»하지 않은 값이 있습니다 — " + un.map(u => u.label + " 칸 «" + (u.shown === "" ? "빈칸" : u.shown) + "» · 적용값 " + (u.applied == null ? "없음" : (typeof u.applied === "number" ? String(Math.round(u.applied * 100) / 100) : u.applied)) + " (" + u.button + ")").join(" / "));
+    const pu = pocketInputsUnapplied(p);
+    if (pu.length) out.push("디테일 앞 주머니 입력칸에 «주머니 적용»하지 않은 값이 있습니다 — " + pu.join("·"));
     return out;
   }
 
@@ -4277,6 +4441,7 @@
       pendingDartScales = pendingFlare = pendingNeckTuck = pendingNeckGatherBand = pendingNeckGather = pendingFlareSlash = pendingWaistSeam = undefined;
       pendingPeplumCut = pendingPeplumFlare = pendingYokeSeam = pendingYokeGather = pendingPrincess = pendingDartExtra = undefined;
       sleeveLenAuto = null; sleeveRiseAuto = null; bodyPanelProject = null;
+      syncCollarChoiceSelect(designProjectNow());   // 저장된 «카라 없음» 선택을 카라 종류 select 에 되살린다
       if (u.stage === "design") {
         if (uiState.stage !== "design") setWorkspaceStage("design");
         else { refresh(); if (window.designLayout) window.designLayout.enterDesign(); }

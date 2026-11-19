@@ -41,8 +41,9 @@
     var d = pre.d, D = pre.D, L = pre.L, rowOf = {}, items = []; pre.rows.forEach(function (r) { rowOf[r.id] = r; });
     var minX = Infinity, maxY = -Infinity, maxX = -Infinity, minY = Infinity;
     L.order.forEach(function (pid) {
-      var p = d.pieces.filter(function (x) { return x.id === pid; })[0], r = D[pid], pos = L.pos[pid]; if (!p || !r || !pos || !rowOf[pid]) return;
-      items.push({ p: p, r: r, pos: pos, row: rowOf[pid], sm: pre.m.pieces[pid], g: pre.G.pieces[pid] });
+      var bid = String(pid).replace(/~m$/, ""), p = d.pieces.filter(function (x) { return x.id === bid; })[0], r = D[pid], pos = L.pos[pid]; if (!p || !r || !pos || !rowOf[pid]) return;
+      // ⑦ 앞판 좌우 한 쌍: 보이는 조각마다 한 항목(수량 1) — 일반·AAMA 가 같은 항목 모델을 쓴다. pname = ASCII 조각 이름(착용자 기준 right/left).
+      items.push({ p: p, r: r, pos: pos, row: rowOf[pid], sm: pre.m.pieces[bid], g: pre.G.pieces[pid], id: pid, label: rowOf[pid].label || p.label, pname: (r.pair || r.instMirrored) ? p.id + "-" + (r.side === "R" ? "right" : "left") : p.id });
       r.seam.forEach(function (q) { var x = q.x + pos.dx, y = q.y + pos.dy; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; });
     });
     if (!items.length) return { ok: false, reason: "내보낼 조각이 없습니다", blockers: ["내보낼 조각이 없습니다"], pre: pre };
@@ -85,13 +86,13 @@
       // 글자: ASCII 조각 id 줄(항상 읽힘) + 한글 이름(\U+ 표기) + 수량 + 식서 상태 + 골 상태
       var bb = r.bbox, bw = bb.maxX - bb.minX, bh = bb.maxY - bb.minY, cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2, tall = bh > bw * 1.5 && bw < 9, room = tall ? bw : bh;
       var h1 = Math.max(0.25, Math.min(0.6, room / 9)), h2 = Math.max(0.2, h1 * 0.7), gk = row.grain.kind;
-      var lines = [["PIECE " + p.id, h1], [p.label, h2],
+      var lines = [["PIECE " + it.pname, h1], [it.label, h2],
         [row.qty.kind === "none" ? "QTY UNSET" : "QTY " + row.qty.n + (row.qty.kind === "default" ? " (DEFAULT)" : " (USER)"), h2],
-        [gk === "default" ? "GRAIN " + row.grain.angleDeg + " DEG (BOOK DEFAULT)" : gk === "user" ? "GRAIN " + row.grain.angleDeg + " DEG (USER)" : gk === "held" ? (row.grain.shown ? "GRAIN HELD - LINE ON GRAIN_HELD IS PROVISIONAL" : "GRAIN HELD - NO DIRECTION") : gk === "none" ? "GRAIN UNSET" : "GRAIN NOT DRAWN",  h2]];
+        [gk === "default" ? "GRAIN " + row.grain.angleDeg + " DEG (" + (/앱 기본값/.test(row.grain.basis || "") ? "APP DEFAULT" : "BOOK DEFAULT") + ")" : gk === "user" ? "GRAIN " + row.grain.angleDeg + " DEG (USER)" : gk === "held" ? (row.grain.shown ? "GRAIN HELD - LINE ON GRAIN_HELD IS PROVISIONAL" : "GRAIN HELD - NO DIRECTION") : gk === "none" ? "GRAIN UNSET" : "GRAIN NOT DRAWN",  h2]];
       if (r.unfolded) lines.push(["FOLD OPENED - ONE FULL PIECE", h2]); else if (foldN) lines.push(["CUT ON FOLD", h2]);
       var off = -(lines.length - 1) * h2 * 0.8;
       lines.forEach(function (ln) { var q = tall ? { x: cx + off, y: cy } : { x: cx, y: cy + off }; text(q, pos, ln[1] * 10, ln[0], tall ? 90 : 0); off += h2 * 1.6; });
-      pieces.push({ id: p.id, label: p.label, unfolded: !!r.unfolded, qty: row.qty.n, qtyKind: row.qty.kind, grainKind: gk, cutVertices: closedRing(r.seam).length, notches: (r.notches || []).length });
+      pieces.push({ id: it.pname, base: p.id, side: (r.pair || r.instMirrored) ? r.side : null, label: it.label, unfolded: !!r.unfolded, qty: row.qty.n, qtyKind: row.qty.kind, grainKind: gk, cutVertices: closedRing(r.seam).length, notches: (r.notches || []).length });
     });
     var wMm = (maxX - minX) * 10, hMm = (maxY - minY) * 10, o = [];
     var push = function () { for (var i = 0; i < arguments.length; i++) o.push(String(arguments[i])); };
@@ -129,7 +130,7 @@
     var X = function (q, pos) { return f4((q.x + pos.dx - minX) * 10); }, Y = function (q, pos) { return f4((maxY - (q.y + pos.dy)) * 10); };
     var count = {}, B = [], INS = [], pieces = [];
     items.forEach(function (it) {
-      var p = it.p, r = it.r, pos = it.pos, row = it.row, g = it.g, name = blockName(p.id), E = [];
+      var p = it.p, r = it.r, pos = it.pos, row = it.row, g = it.g, name = blockName(it.pname), E = [];
       var add = function (layer, arr) { count[layer] = (count[layer] || 0) + 1; for (var i = 0; i < arr.length; i++) E.push(arr[i]); };
       var poly = function (layer, pts, closed) { var a = ["0", "POLYLINE", "8", layer, "66", "1", "10", "0.0", "20", "0.0", "30", "0.0", "70", closed ? "1" : "0"];
         pts.forEach(function (q) { a.push("0", "VERTEX", "8", layer, "10", X(q, pos), "20", Y(q, pos), "30", "0.0"); }); a.push("0", "SEQEND", "8", layer); add(layer, a); };
@@ -159,10 +160,10 @@
       if (g && g.ok && !g.held) line("7", g.from, g.to);
       // 조각 글자(레이어 1): 규격 항목은 ASCII 만
       var bb = r.bbox, cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2, h = Math.max(0.2, Math.min(0.5, Math.min(bb.maxX - bb.minX, bb.maxY - bb.minY) / 10)), T = [];
-      T.push("Piece Name: " + asc(p.id).replace(/\\U\+[0-9A-F]{4}/g, "?"), "Size: BASE");
-      if (row.qty.kind !== "none") T.push("Quantity: " + row.qty.n); else notes.push("«" + p.label + "» 수량 미정 — Quantity 항목을 넣지 않았습니다");
-      T.push("Annotation: " + (r.unfolded ? "FULL PIECE (FOLD OPENED)" : foldN ? "CUT ON FOLD" : "SINGLE PIECE") + (row.qty.kind === "default" ? " / QTY DEFAULT" : row.qty.kind === "user" ? " / QTY USER" : " / QTY UNSET") +
-        (gk === "default" ? " / GRAIN " + row.grain.angleDeg + " BOOK DEFAULT" : gk === "user" ? " / GRAIN " + row.grain.angleDeg + " USER" : gk === "held" ? " / GRAIN HELD - NOT EXPORTED" : gk === "none" ? " / GRAIN UNSET" : " / GRAIN NOT DRAWN"));
+      T.push("Piece Name: " + asc(it.pname).replace(/\\U\+[0-9A-F]{4}/g, "?"), "Size: BASE");
+      if (row.qty.kind !== "none") T.push("Quantity: " + row.qty.n); else notes.push("«" + it.label + "» 수량 미정 — Quantity 항목을 넣지 않았습니다");
+      T.push("Annotation: " + (r.unfolded ? "FULL PIECE (FOLD OPENED)" : foldN ? "CUT ON FOLD" : (r.pair || r.instMirrored) ? (r.side === "R" ? "RIGHT" : "LEFT") + " (WEARER) MIRROR PAIR" : "SINGLE PIECE") + (row.qty.kind === "default" ? " / QTY DEFAULT" : row.qty.kind === "user" ? " / QTY USER" : " / QTY UNSET") +
+        (gk === "default" ? " / GRAIN " + row.grain.angleDeg + (/앱 기본값/.test(row.grain.basis || "") ? " APP DEFAULT" : " BOOK DEFAULT") : gk === "user" ? " / GRAIN " + row.grain.angleDeg + " USER" : gk === "held" ? " / GRAIN HELD - NOT EXPORTED" : gk === "none" ? " / GRAIN UNSET" : " / GRAIN NOT DRAWN"));
       if (gk === "held") notes.push("«" + p.label + "» 식서 보류 — 식서선(레이어 7)을 넣지 않았습니다(임시 기본 방향을 확정된 것처럼 내보내지 않음)");
       else if (gk === "none" || gk === "unfit") notes.push("«" + p.label + "» 식서 없음 — 식서선(레이어 7)이 없습니다");
       var off = -(T.length - 1) * h * 0.8;
@@ -171,7 +172,7 @@
       for (var i = 0; i < E.length; i++) B.push(E[i]);
       B.push("0", "ENDBLK", "8", "1");
       INS.push("0", "INSERT", "8", "1", "2", name, "10", "0.0", "20", "0.0", "30", "0.0");
-      pieces.push({ id: p.id, block: name, label: p.label, unfolded: !!r.unfolded, qty: row.qty.n, qtyKind: row.qty.kind, grainKind: gk, cutVertices: n, turnPoints: turn, curvePoints: curve, notches: nN, innerMarks: nIn });
+      pieces.push({ id: it.pname, base: p.id, side: (r.pair || r.instMirrored) ? r.side : null, block: name, label: it.label, unfolded: !!r.unfolded, qty: row.qty.n, qtyKind: row.qty.kind, grainKind: gk, cutVertices: n, turnPoints: turn, curvePoints: curve, notches: nN, innerMarks: nIn });
     });
     var wMm = (maxX - minX) * 10, hMm = (maxY - minY) * 10, o = [], day = dayOf(meta), tm = String(meta.createdAt || "").slice(11, 16);
     var push = function () { for (var i = 0; i < arguments.length; i++) o.push(String(arguments[i])); };

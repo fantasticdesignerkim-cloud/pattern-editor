@@ -131,10 +131,10 @@ let V = view(S, P);
 {
   ok(r.ok && nids(V.N) === "back-ah-low,back-ah-up,back-center-wl,back-side-seam-wl,collar-stand-snp,front-ah-low,front-ah-up,front-side-seam-wl,sleeve-back-low,sleeve-back-up,sleeve-cap-top,sleeve-front-low,sleeve-front-up", "1: 기본 맞춤 표시 13개(WL 3 · 소매산점 · 밴드 SNP · 진동 4 · 소매산 4) (" + nids(V.N) + ")");
   const fw = V.N["front-side-seam-wl"], bw = V.N["back-side-seam-wl"], cw = V.N["back-center-wl"];
-  ok(near(fw.from.x, 23.053125, 1e-9) && near(fw.from.y, 38, 1e-9) && near(bw.from.x, 23.053125, 1e-9) && near(bw.from.y, 38, 1e-9) && near(cw.from.x, 0, 1e-9) && near(cw.from.y, 38, 1e-9), "1: WL = 허리선(y 38) 위 · 앞·뒤 옆선(x 23.05) · 뒤중심(x 0)");
+  ok(near(fw.sewnAt.x, 23.053125, 1e-9) && near(fw.sewnAt.y, 38, 1e-9) && near(bw.sewnAt.x, 23.053125, 1e-9) && near(bw.sewnAt.y, 38, 1e-9) && near(cw.sewnAt.x, 0, 1e-9) && near(cw.sewnAt.y, 38, 1e-9), "1: WL = 허리선(y 38) 위 · 앞·뒤 옆선(x 23.05) · 뒤중심(x 0)");
   ok(fw.pairId === "wl-side" && bw.pairId === "wl-side" && near(fw.pair.diffCm, 0, 1e-9) && /17\.38/.test(fw.pair.a) && cw.pairId === null && !cw.pair, "1: 옆선 WL = 앞↔뒤 짝(겨드랑이~WL 17.38 / 17.38 · 차 0) · 뒤중심 WL = 짝 없음");
   const sl = V.d.pieces.find(p => p.id === "sleeve-sleeve"), cl = R.sleeve.geometry.construction.find(c => c.role === "center-line"), top = cl.from.y < cl.to.y ? cl.from : cl.to, ct = V.N["sleeve-cap-top"];
-  ok(near(ct.from.x, top.x, 1e-9) && near(ct.from.y, top.y, 1e-9) && sl.edges.find(e => e.id === "cap").segs.length === 5, "1: 소매산점 = 소매 중심선 위끝(독립: 완료본 center-line) (" + J([ct.from.x, ct.from.y]) + ")");
+  ok(near(ct.sewnAt.x, top.x, 1e-9) && near(ct.sewnAt.y, top.y, 1e-9) && sl.edges.find(e => e.id === "cap").segs.length === 5, "1: 소매산점 = 소매 중심선 위끝(독립: 완료본 center-line) (" + J([ct.sewnAt.x, ct.sewnAt.y]) + ")");
   ok(ct.pairId === "cap-sp" && near(ct.pair.diffCm, R.sleeve.cap ? ct.pair.diffCm : ct.pair.diffCm, 0) && /SP/.test(ct.pair.a) && near(ct.pair.diffCm, S.W.designSleeve.capPrimitives(R.sleeve.geometry).lengths.total - R.bodice.armholeLengths.front - R.bodice.armholeLengths.back, 1e-3), "1: 소매산점 짝 = 몸판 SP(모서리) · 이세 합계 " + ct.pair.diffCm);
   // 밴드 SNP: 달림선을 뒤중심 끝에서 직접 따라가 뒤 목둘레 길이가 되는 점
   const st = V.d.pieces.find(p => p.id === "collar-stand"), ns = st.edges.find(e => e.id === "neck-seam"), cb = st.edges.find(e => e.id === "cb-fold");
@@ -143,7 +143,7 @@ let V = view(S, P);
   const pts = dense(fromCB), want = R.bodice.necklineLengths.back; let acc = 0, hit = null;
   for (let i = 1; i < pts.length && !hit; i++) { const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); if (acc + d >= want) { const t = (want - acc) / d; hit = { x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t, y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t }; } acc += d; }
   const sn = V.N["collar-stand-snp"];
-  ok(hit && Math.hypot(hit.x - sn.from.x, hit.y - sn.from.y) <= 0.01 && near(sn.atCm, want, 1e-4), "1: 밴드 SNP = 뒤중심에서 달림선을 따라 뒤 목둘레 " + want + "cm(독립 2000점 실측 · 오차 " + (hit && Math.hypot(hit.x - sn.from.x, hit.y - sn.from.y).toExponential(1)) + ")");
+  ok(hit && Math.hypot(hit.x - sn.sewnAt.x, hit.y - sn.sewnAt.y) <= 0.01 && near(sn.atCm, want, 1e-4), "1: 밴드 SNP = 뒤중심에서 달림선을 따라 뒤 목둘레 " + want + "cm(독립 2000점 실측 · 오차 " + (hit && Math.hypot(hit.x - sn.sewnAt.x, hit.y - sn.sewnAt.y).toExponential(1)) + ")");
   ok(sn.pairId === "neck-snp" && near(sn.pair.diffCm, 0, 1e-3) && /SNP/.test(sn.pair.a), "1: 밴드 SNP 짝 = 몸판 SNP(모서리) · 달림선 − 목둘레 " + sn.pair.diffCm);
   ok(Object.values(V.N).every(n => /P\.16[45]/.test(n.basis) && typeof n.atCm === "number" && n.atCm > 0 && n.atCm < n.edgeLenCm && typeof n.sig === "string"), "1: 모든 표시 = 근거 문구(P.164·165) · 변 위 위치(0 < 위치 < 변 길이) · 변 서명");
 }
@@ -153,13 +153,15 @@ let V = view(S, P);
   let worstPerp = 0, worstLen = 0, worstOn = 0;
   Object.values(V.N).forEach(n => { if (!n.to) return;
     const p = V.d.pieces.find(x => x.id === n.pieceId), e = p.edges.find(x => x.id === n.edgeId), fin = dense(e.segs.map(i => p.segs[i])), sm = V.m.pieces[n.pieceId];
-    let k = 0, b = Infinity; fin.forEach((q, i) => { const d = Math.hypot(q.x - n.from.x, q.y - n.from.y); if (d < b) { b = d; k = i; } });
+    // ⑧(2026-11-19): 선은 재단선에서 안으로 최대 3mm — 맞춤 위치(완성선 위 점)는 선을 재단선 → 안쪽으로 seamCm 만큼 이어 낸 점
+    const l0x = n.to.x - n.from.x, l0y = n.to.y - n.from.y, L0 = Math.hypot(l0x, l0y), p0 = { x: n.to.x - l0x / L0 * n.seamCm, y: n.to.y - l0y / L0 * n.seamCm };
+    let k = 0, b = Infinity; fin.forEach((q, i) => { const d = Math.hypot(q.x - p0.x, q.y - p0.y); if (d < b) { b = d; k = i; } });
     const a = fin[Math.max(0, k - 1)], c = fin[Math.min(fin.length - 1, k + 1)], tx = c.x - a.x, ty = c.y - a.y, lx = n.to.x - n.from.x, ly = n.to.y - n.from.y;
     worstPerp = Math.max(worstPerp, Math.abs(tx * lx + ty * ly) / Math.hypot(tx, ty) / Math.hypot(lx, ly));
-    const w = sm.edges.find(x => x.id === n.edgeId).widthCm; worstLen = Math.max(worstLen, Math.abs(Math.hypot(lx, ly) - w));
+    const w = sm.edges.find(x => x.id === n.edgeId).widthCm; worstLen = Math.max(worstLen, Math.abs(Math.hypot(lx, ly) - Math.min(w, 0.3)), Math.abs(n.seamCm - w));
     worstOn = Math.max(worstOn, dPoly(n.to, sm.points, true)); });
   ok(worstPerp < 1e-3, "2: 표시 선 = 완성선에 직각(최대 cos " + worstPerp.toExponential(1) + ")");
-  ok(worstLen <= 0.01 && worstOn < 1e-6, "2: 표시 선 길이 = 그 변 시접 폭(오차 ≤ 0.01 · 실제 " + worstLen.toExponential(1) + ") · 끝 = 재단선 위");
+  ok(worstLen <= 0.01 && worstOn < 1e-6, "2: 표시 선 길이 = min(시접 폭, 3mm) · 재단선에서 안으로(오차 ≤ 0.01 · 실제 " + worstLen.toExponential(1) + ") · 끝 = 재단선 위");
   const cw = V.N["back-center-wl"];
   ok(cw.to === null && /골선/.test(cw.why), "2: 골선 뒤중심 WL = 재단선 표시 없음 + 사유");
   ok(near(V.N["front-side-seam-wl"].to.x, 22.053125, 1e-9) && near(V.N["back-side-seam-wl"].to.x, 24.053125, 1e-9) && V.N["sleeve-cap-top"].to.y < V.N["sleeve-cap-top"].from.y, "2: 바깥쪽으로(앞 옆선 −x · 뒤 옆선 +x · 소매산 위쪽)");
@@ -167,12 +169,12 @@ let V = view(S, P);
 
 // ══ §3 시접 폭을 바꿔도 위치는 그대로 ══
 {
-  const before = J(Object.values(V.N).map(n => [n.id, n.from, n.atCm]));
+  const before = J(Object.values(V.N).map(n => [n.id, n.sewnAt, n.atCm]));
   ok(S.CUT.setEdge("back", "side-seam", { widthCm: 2 }, P).ok && S.CUT.setEdge("back", "center", { kind: "seam", widthCm: 1.3 }, P).ok && S.CUT.setEdge("collar-stand", "neck-seam", { widthCm: 0.6 }, P).ok, "3: 뒤 옆선 2 · 뒤중심 봉제선 1.3 · 밴드 달림선 0.6 적용");
   const W2 = view(S, P);
-  ok(J(Object.values(W2.N).map(n => [n.id, n.from, n.atCm])) === before, "3: 맞춤 표시 위치(완성선 위 점·호 길이) 전부 그대로");
-  ok(near(Math.hypot(W2.N["back-side-seam-wl"].to.x - W2.N["back-side-seam-wl"].from.x, W2.N["back-side-seam-wl"].to.y - W2.N["back-side-seam-wl"].from.y), 2, 1e-9) && near(W2.N["back-center-wl"].lenCm, 1.3, 1e-9) && W2.N["back-center-wl"].to.x < 0 && W2.N["collar-stand-snp"].to === null && /시접 미완/.test(W2.N["collar-stand-snp"].why) && W2.m.pieces["collar-stand"].refusals.some(x => x.code === "step"), "3: 선 길이만 새 폭으로(2 · 1.3) · 뒤중심은 봉제선이 되자 표시 생김 · 밴드 달림선만 0.6 = 옆 변과 일직선 단차로 시접 거부 → SNP 표시 선 없음 + 사유 " + J([W2.N["back-side-seam-wl"].lenCm, W2.N["back-center-wl"].lenCm, W2.N["back-center-wl"].to, W2.N["collar-stand-snp"].lenCm]));
-  ok(S.CUT.setEdge("collar-stand", "extension", { widthCm: 0.6 }, P).ok && Math.abs(view(S, P).N["collar-stand-snp"].lenCm - 0.6) <= 0.01, "3: 옆 변도 0.6 으로 맞추면 밴드 시접 완료 → SNP 선 길이 0.6");
+  ok(J(Object.values(W2.N).map(n => [n.id, n.sewnAt, n.atCm])) === before, "3: 맞춤 표시 위치(완성선 위 점·호 길이) 전부 그대로");
+  ok(near(Math.hypot(W2.N["back-side-seam-wl"].to.x - W2.N["back-side-seam-wl"].from.x, W2.N["back-side-seam-wl"].to.y - W2.N["back-side-seam-wl"].from.y), 0.3, 1e-9) && near(W2.N["back-side-seam-wl"].seamCm, 2, 1e-9) && near(W2.N["back-center-wl"].lenCm, 0.3, 1e-9) && near(W2.N["back-center-wl"].seamCm, 1.3, 1e-9) && W2.N["back-center-wl"].to.x < 0 && W2.N["collar-stand-snp"].to === null && /시접 미완/.test(W2.N["collar-stand-snp"].why) && W2.m.pieces["collar-stand"].refusals.some(x => x.code === "step"), "3: 선 길이만 새 폭으로(2 · 1.3) · 뒤중심은 봉제선이 되자 표시 생김 · 밴드 달림선만 0.6 = 옆 변과 일직선 단차로 시접 거부 → SNP 표시 선 없음 + 사유 " + J([W2.N["back-side-seam-wl"].lenCm, W2.N["back-center-wl"].lenCm, W2.N["back-center-wl"].to, W2.N["collar-stand-snp"].lenCm]));
+  ok(S.CUT.setEdge("collar-stand", "extension", { widthCm: 0.6 }, P).ok && Math.abs(view(S, P).N["collar-stand-snp"].seamCm - 0.6) <= 0.01 && Math.abs(view(S, P).N["collar-stand-snp"].lenCm - 0.3) <= 1e-9, "3: 옆 변도 0.6 으로 맞추면 밴드 시접 완료 → SNP 시접 0.6 · 표시 선은 재단선에서 안으로 3mm");
   ok(S.CUT.setEdge("back", "side-seam", { widthCm: 0 }, P).ok && view(S, P).N["back-side-seam-wl"].to === null && /시접 0/.test(view(S, P).N["back-side-seam-wl"].why), "3: 폭 0 = 선 없음 + «시접 0» 사유(위치는 남음)");
   ok(S.CUT.setEdge("sleeve-sleeve", "cap", { widthCm: 6 }, P).ok && view(S, P).N["sleeve-cap-top"].to === null && /시접 미완/.test(view(S, P).N["sleeve-cap-top"].why), "3: 조각 시접 미완(소매산 6cm) = 표시 선 없음 + 사유(완료인 척 안 함)");
   S.CUT.setEdge("sleeve-sleeve", "cap", { widthCm: 1 }, P); S.CUT.setEdge("back", "side-seam", { widthCm: 1 }, P);
@@ -197,13 +199,13 @@ let V = view(S, P);
   ok(dX.state === "changed" && !dX.notches && S.CUT.seam(dX, P).state === "blocked", "5: «변경됨» = 맞춤 표시 없음(옛 위치를 보여 주지 않음)");
   ok(completeChain(S, P), "5: 재완료");
   const V3 = view(S, P);
-  ok(nids(V3.N) === nids(V.N) && near(V3.N["sleeve-cap-top"].from.y, V.N["sleeve-cap-top"].from.y, 1e-9) && near(V3.N["collar-stand-snp"].atCm, V.N["collar-stand-snp"].atCm, 1e-9), "5: 재완료 = 새 형상 기준으로 다시(소매산점·밴드 SNP 그대로)");
+  ok(nids(V3.N) === nids(V.N) && near(V3.N["sleeve-cap-top"].sewnAt.y, V.N["sleeve-cap-top"].sewnAt.y, 1e-9) && near(V3.N["collar-stand-snp"].atCm, V.N["collar-stand-snp"].atCm, 1e-9), "5: 재완료 = 새 형상 기준으로 다시(소매산점·밴드 SNP 그대로)");
   const td = V3.d.notches.todo.map(t => t.what).join(" | ");
   ok(/앞 중심 WL/.test(td) && /위 칼라 SNP/.test(td) && !/진동 둘레·소매산 너치/.test(td) && /다트 위치/.test(td) && V3.d.notches.todo.every(t => t.why.length > 10), "5: 아직 만들지 않은 것 = 이유와 함께 목록 (" + V3.d.notches.todo.length + "개)");
   // 여밈 없는 앞판: 앞중심 WL 이 생기고 «앞 중심 WL» 미지원 사유는 사라짐
   const S6 = makeSession(), P6 = start(S6); S6.BC.complete(P6); S6.W.sleeveAApply.apply(P6, { sleeveLengthCm: 52, cuff: cuffOf(S6, null) }); completeChain(S6, P6);
   const V6 = view(S6, P6);
-  ok(V6.N["front-center-wl"] && near(V6.N["front-center-wl"].from.y, 38, 1e-9) && V6.N["front-center-wl"].to && !V6.d.notches.todo.some(t => /앞 중심 WL/.test(t.what)), "5: 여밈 없는 앞판 = 앞중심 WL 표시(1cm 시접 선) · 미지원 사유 없음");
+  ok(V6.N["front-center-wl"] && near(V6.N["front-center-wl"].sewnAt.y, 38, 1e-9) && V6.N["front-center-wl"].to && !V6.d.notches.todo.some(t => /앞 중심 WL/.test(t.what)), "5: 여밈 없는 앞판 = 앞중심 WL 표시(1cm 시접 선) · 미지원 사유 없음");
 }
 
 // ══ §6 진동 둘레 · 소매산 너치(P.165 · 몸판 먼저 → 소매 파생 · 구간별 이즈 배분) ══
@@ -219,7 +221,7 @@ let V = view(S, P);
     lenErr = Math.max(lenErr, Math.abs(L - AH[pid]));
     const fromUnder = runs, fromSP = runs.slice().reverse().map(revSeg);   // 진동 변은 옆선 끝(아랫점)에서 시작해 SP 에서 끝난다(실측)
     const up = walk(fromSP, 6), low = walk(fromUnder, pid === "back" ? 6.5 : 5), nu = V6.N[pid + "-ah-up"], nl = V6.N[pid + "-ah-low"];
-    worstB = Math.max(worstB, Math.hypot(up.x - nu.from.x, up.y - nu.from.y), Math.hypot(low.x - nl.from.x, low.y - nl.from.y));
+    worstB = Math.max(worstB, Math.hypot(up.x - nu.sewnAt.x, up.y - nu.sewnAt.y), Math.hypot(low.x - nl.sewnAt.x, low.y - nl.sewnAt.y));
   });
   ok(lenErr < 0.002, "6: 몸판 봉제 진동(다트 다리 제외 · 독립 실측) = 완료 몸판 기록 armholeLengths (최대 차 " + lenErr.toExponential(1) + ")");
   ok(worstB <= 0.01, "6: 몸판 진동 너치 = SP 에서 봉제 진동 6 · 진동 아랫점에서 뒤 6.5 / 앞 5 (독립 2000점 실측 · 오차 " + worstB.toExponential(1) + ")");
@@ -232,7 +234,7 @@ let V = view(S, P);
   const walkPts = (pts, want2) => { let acc = 0; for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); if (acc + d >= want2) { const t = (want2 - acc) / d; return { x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t, y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t }; } acc += d; } return null; };
   const backPts = cpts.slice(0, k0 + 1), frontPts = cpts.slice(k0);   // 소매산 선은 뒤 아랫점에서 시작(실측: 앞 길이 쪽이 뒤)
   const sBU = walkPts(backPts.slice().reverse(), want.back.up), sBL = walkPts(backPts, want.back.low), sFU = walkPts(frontPts, want.front.up), sFL = walkPts(frontPts.slice().reverse(), want.front.low);
-  const dS = [[sBU, "sleeve-back-up"], [sBL, "sleeve-back-low"], [sFU, "sleeve-front-up"], [sFL, "sleeve-front-low"]].map(x => Math.hypot(x[0].x - V6.N[x[1]].from.x, x[0].y - V6.N[x[1]].from.y));
+  const dS = [[sBU, "sleeve-back-up"], [sBL, "sleeve-back-low"], [sFU, "sleeve-front-up"], [sFL, "sleeve-front-low"]].map(x => Math.hypot(x[0].x - V6.N[x[1]].sewnAt.x, x[0].y - V6.N[x[1]].sewnAt.y));
   ok(Math.max(...dS) <= 0.01 && near(b0, 0, 1e-6), "6: 소매 너치 = 소매산점에서 6 + 이즈 · 소매 아랫점에서 6.5|5 + 이즈 (독립 실측 · 최대 오차 " + Math.max(...dS).toExponential(1) + ")");
   ok(["back", "front"].every(k => V6.N[k + "-ah-up"].pairId === V6.N["sleeve-" + k + "-up"].pairId && V6.N[k + "-ah-low"].pairId === V6.N["sleeve-" + k + "-low"].pairId), "6: 짝 = 같은 자리의 몸판 ↔ 소매 너치(위·아래 · 앞·뒤 4쌍)");
   // 총 이즈 보존: (몸판 구간 + 이즈) 의 합 = 소매산 길이 — 가운데 구간이 나머지를 흡수
@@ -242,13 +244,13 @@ let V = view(S, P);
   // 배분 수정 → 소매 너치만 움직임
   ok(S6.CUT.setEaseSplit({ back: [10, 20, 30], front: [30, 10, 0] }, P6).ok, "6: 배분 수정(뒤 10·20·30 · 앞 30·10·0)");
   const V7 = view(S6, P6);
-  ok(!V7.m.armhole.book && near(V7.m.armhole.sides.back.ease.up, r1(tot * 0.3), 1e-12) && near(V7.m.armhole.sides.back.ease.low, r1(tot * 0.1), 1e-12) && ["back-ah-up", "back-ah-low", "front-ah-up", "front-ah-low"].every(id => J(V7.N[id].from) === J(V6.N[id].from)) && J(V7.N["sleeve-back-low"].from) !== J(V6.N["sleeve-back-low"].from),
+  ok(!V7.m.armhole.book && near(V7.m.armhole.sides.back.ease.up, r1(tot * 0.3), 1e-12) && near(V7.m.armhole.sides.back.ease.low, r1(tot * 0.1), 1e-12) && ["back-ah-up", "back-ah-low", "front-ah-up", "front-ah-low"].every(id => J(V7.N[id].sewnAt) === J(V6.N[id].sewnAt)) && J(V7.N["sleeve-back-low"].sewnAt) !== J(V6.N["sleeve-back-low"].sewnAt),
     "6: 배분을 바꾸면 소매 너치만 이동(몸판 너치 그대로) · 뒤 위 이즈 " + V7.m.armhole.sides.back.ease.up + " · 뒤 아래 " + V7.m.armhole.sides.back.ease.low);
   ok(J(S6.DR.latest(P6).sleeve.geometry) === g0 && hashes(P6) === h0 && J(V7.m.pieces["sleeve-sleeve"].points) === seamPts0, "6: 소매 형상·완료 hash·시접선 무변경(너치 좌표만)");
   const badSplits = [[{ back: [6, 18, 35], front: [32, 9, 1] }, /합이 100/], [{ back: [6, 18, -1], front: [32, 9, 36] }, /0~100/], [{ back: [6, 18], front: [32, 9, 0, 35] }, /3개/], [{ back: [6, 18, NaN], front: [32, 9, 0] }, /0~100/], [{ back: [6, 18, 35] }, /두 항목/]];
   const snap = J(P6.working.cutNotches);
   ok(badSplits.every(b => { const x = S6.CUT.setEaseSplit(b[0], P6); return !x.ok && b[1].test(x.reason); }) && J(P6.working.cutNotches) === snap, "6: 합 ≠ 100 · 음수 · 칸 수 · NaN · 한쪽 누락 = 거부 + 사유 · 아무것도 안 씀");
-  ok(S6.CUT.setEaseSplit(null, P6).ok && view(S6, P6).m.armhole.book && J(view(S6, P6).N["sleeve-back-low"].from) === J(V6.N["sleeve-back-low"].from), "6: «책 기본값» = 배분 항목 삭제 → 처음 위치로");
+  ok(S6.CUT.setEaseSplit(null, P6).ok && view(S6, P6).m.armhole.book && J(view(S6, P6).N["sleeve-back-low"].sewnAt) === J(V6.N["sleeve-back-low"].sewnAt), "6: «책 기본값» = 배분 항목 삭제 → 처음 위치로");
 }
 
 // ══ §7 사용자 맞춤 표시(working.cutNotches) ══
@@ -260,10 +262,11 @@ let V = view(S, P);
   let V = view(S7, P7);
   const u1 = V.N.u1, f = V.d.pieces.find(x => x.id === "front"), fe = f.edges.find(x => x.id === "side-seam"), ch = fe.segs.map(i => f.segs[i]);
   const pts = dense(ch); let acc = 0, hit = null; for (let i = 1; i < pts.length && !hit; i++) { const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); if (acc + d >= 10) { const t = (10 - acc) / d; hit = { x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t, y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t }; } acc += d; }
-  ok(u1.user && Math.hypot(hit.x - u1.from.x, hit.y - u1.from.y) < 1e-9 && near(u1.lenCm, 1, 1e-9) && /시작에서 10/.test(u1.pair.a) && /10\.5/.test(u1.pair.b), "7: 위치 = 변 시작 끝에서 봉제 경로 10cm(독립 실측) · 재단선까지 1cm · 짝 설명에 양쪽 거리");
+  const u1L = Math.hypot(u1.to.x - u1.from.x, u1.to.y - u1.from.y), u1Sew = { x: u1.to.x - (u1.to.x - u1.from.x) / u1L * u1.seamCm, y: u1.to.y - (u1.to.y - u1.from.y) / u1L * u1.seamCm };   // ⑧ 완성선 위 점 = 재단선 끝에서 시접 폭만큼 안쪽
+  ok(u1.user && Math.hypot(hit.x - u1.sewnAt.x, hit.y - u1.sewnAt.y) < 1e-9 && Math.hypot(hit.x - u1Sew.x, hit.y - u1Sew.y) < 1e-6 && near(u1.seamCm, 1, 1e-9) && near(u1.lenCm, 0.3, 1e-9) && /시작에서 10/.test(u1.pair.a) && /10\.5/.test(u1.pair.b), "7: 위치 = 변 시작 끝에서 봉제 경로 10cm(독립 실측) · 재단선까지 1cm · 짝 설명에 양쪽 거리");
   ok(!S7.CUT.addNotch("front", "side-seam", 999, P7).ok && !S7.CUT.addNotch("front", "nope", 1, P7).ok && !S7.CUT.moveNotch("u1", -1, P7).ok && !S7.CUT.pairNotches("u1", "u1", P7).ok, "7: 변 길이 밖 · 없는 변 · 음수 · 자기 자신 짝 = 거부");
   ok(S7.CUT.addNotch("front", "side-seam", 3, P7).ok && !S7.CUT.pairNotches("u1", "u3", P7).ok, "7: 같은 변끼리 짝 = 거부(봉제로 붙는 다른 변만)");
-  ok(S7.CUT.moveNotch("u1", 12, P7).ok && near(view(S7, P7).N.u1.atCm, 12, 1e-12) && S7.CUT.setEdge("front", "side-seam", { widthCm: 2.5 }, P7).ok && near(view(S7, P7).N.u1.atCm, 12, 1e-12) && near(view(S7, P7).N.u1.lenCm, 2.5, 1e-9), "7: 거리 수정 12 · 시접 2.5 로 바꿔도 위치 그대로(선 길이만 2.5)");
+  ok(S7.CUT.moveNotch("u1", 12, P7).ok && near(view(S7, P7).N.u1.atCm, 12, 1e-12) && S7.CUT.setEdge("front", "side-seam", { widthCm: 2.5 }, P7).ok && near(view(S7, P7).N.u1.atCm, 12, 1e-12) && near(view(S7, P7).N.u1.seamCm, 2.5, 1e-9) && near(view(S7, P7).N.u1.lenCm, 0.3, 1e-9), "7: 거리 수정 12 · 시접 2.5 로 바꿔도 위치 그대로(표시 선은 계속 재단선에서 안으로 3mm)");
   ok(S7.CUT.removeNotch("u3", P7).ok && !P7.working.cutNotches.notches.u3, "7: 삭제");
   ok(hashes(P7) === H7 && S7.DR.isCurrentDesignChanged(P7) === false && J(Object.keys(P7.working.cutSpec.edges)) === J(["front|side-seam"]), "7: 완료 hash 4개 불변 · «변경됨» 아님 · 시접 설정은 시접 값만");
   // 저장 → 열기

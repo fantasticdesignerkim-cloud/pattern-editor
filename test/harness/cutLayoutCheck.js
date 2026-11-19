@@ -138,14 +138,17 @@ const r = buildP(), S = r.S, P = r.P, H0 = hashes(P), PIECES0 = J(S.CUT.derive(P
 let M = model(S, P);
 // ══ §1 ══
 {
-  ok(r.ok && M.L.order.join(",") === "back,front,sleeve-sleeve,cuff,vent-placket,vent-bias,collar-stand,collar-body", "1: 순서 = 뒤판 → 앞판 → 소매 → 부속 (" + M.L.order.join(",") + ")");
+  // ⑦ 앞판은 좌우 거울쌍 두 조각(착용자 기준 · 화면 왼쪽 = 착용자 오른쪽)으로 나란히: 뒤판 → 앞판 두 조각 → 소매 → 부속
+  const FP = M.m.pairing;
+  ok(r.ok && FP.active && J(FP.order.slice().sort()) === J(["front", "front~m"]) && M.L.order.join(",") === ["back"].concat(FP.order, ["sleeve-sleeve", "cuff", "vent-placket", "vent-bias", "collar-stand", "collar-body"]).join(","), "1: 순서 = 뒤판 → 앞판(좌우 두 조각) → 소매 → 부속 (" + M.L.order.join(",") + ")");
   const top = id => M.D[id].bbox.minY + M.L.pos[id].dy, bot = id => M.D[id].bbox.maxY + M.L.pos[id].dy, left = id => M.D[id].bbox.minX + M.L.pos[id].dx, right = id => M.D[id].bbox.maxX + M.L.pos[id].dx;
   const blB = M.D.back.blY + M.L.pos.back.dy, blF = M.D.front.blY + M.L.pos.front.dy;
   // 독립 BL: 옆선 변 끝점 중 가장 위(bodiceCheckpoint.bustLineY 규칙)
   const bl = id => { const p = M.d.pieces.find(x => x.id === id), e = p.edges.find(x => x.label === "side-seam"); return Math.min(...e.segs.flatMap(i => [p.segs[i].from.y, p.segs[i].to.y])); };
   ok(M.L.blAligned && near(blB, blF, 1e-9) && near(M.D.back.blY, bl("back"), 1e-12) && near(M.D.front.blY, bl("front"), 1e-12) && near(blB, M.L.blY, 1e-9), "1: 앞·뒤판 가슴선(BL = 옆선 위 끝) 높이 같음 (" + blB.toFixed(4) + ")");
   ok(Math.abs(top("back") - top("front")) > 0.5, "1: 위 끝 맞춤이 아님(뒤판 위 " + top("back").toFixed(2) + " · 앞판 위 " + top("front").toFixed(2) + ")");
-  ok(right("back") < left("front") && right("front") < left("sleeve-sleeve") && ["cuff", "vent-placket", "vent-bias", "collar-stand", "collar-body"].every(id => top(id) > Math.max(bot("back"), bot("front"), bot("sleeve-sleeve"))), "1: 뒤판 · 앞판 · 소매가 한 줄 좌→우 · 부속은 그 아래 줄");
+  const fL = Math.min(left("front"), left("front~m")), fR = Math.max(right("front"), right("front~m")), fBot = Math.max(bot("front"), bot("front~m"));
+  ok(right("back") < fL && fR < left("sleeve-sleeve") && near(M.D["front~m"].blY + M.L.pos["front~m"].dy, blF, 1e-9) && ["cuff", "vent-placket", "vent-bias", "collar-stand", "collar-body"].every(id => top(id) > Math.max(bot("back"), fBot, bot("sleeve-sleeve"))), "1: 뒤판 · 앞판(두 조각) · 소매가 한 줄 좌→우 · 부속은 그 아래 줄");
   const ids = M.L.order; let overlap = 0;
   for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const a = ids[i], b = ids[j]; if (left(a) < right(b) && left(b) < right(a) && top(a) < bot(b) && top(b) < bot(a)) overlap++; }
   ok(overlap === 0 && ids.every(id => M.D[id].seam && dense2(M.D[id].outline).every(q => q.x >= M.D[id].bbox.minX - 1e-9)), "1: 시접 포함 테두리끼리 겹침 0 · 테두리 = 시접까지");

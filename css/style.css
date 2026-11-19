@@ -133,6 +133,13 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .design-outline-composed{fill:none;stroke:#0E9F6E;stroke-width:2.8;stroke-linejoin:round;stroke-linecap:round}
 /* 앞중심 여밈: 안단 바깥 재단선(실선 앰버) + 접힘/CF construction(점선). */
 .design-placket-outline{fill:none;stroke:#B45309;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+/* 디테일 앞 주머니: 디자인 화면의 부착 위치(점선 · 재단선 아님) + 재단 화면의 입구 접는선·달림선(안쪽 표시, 자르지 않음). */
+.design-pocket-attach{fill:none;stroke:#7C3AED;stroke-width:2;stroke-dasharray:7 5;stroke-linejoin:round;pointer-events:none}
+.design-pocket-text{fill:#7C3AED;font-size:11px;pointer-events:none}
+#cutCv .cut-mark-pocket-attach{stroke:#7C3AED;stroke-dasharray:5 4}
+#cutCv .cut-mark-pocket-fold{stroke:#B25E09;stroke-dasharray:2 3}
+#cutCv .cut-mark-label-pocket-attach{fill:#7C3AED}
+#cutCv .cut-mark-label-pocket-fold{fill:#B25E09}
 /* 카라 스탠드(C1 직선 스캐폴드): 별도 조각 밴드(실선 스틸블루 + 옅은 fill). */
 .design-collar-stand{stroke:#0E7490;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round;fill:color-mix(in srgb,#0E7490 8%,transparent)}
 /* 카라 본체(C2): 스탠드 윗선에 부착되는 조각(실선 블루 + 옅은 fill). 스탠드와 다른 색으로 구분. */
@@ -287,6 +294,11 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 .insp-body .row label{white-space:nowrap}
 .insp-body .row label~.btn{width:auto;padding:5px 10px;white-space:nowrap}
 .insp-title{font-size:11px;font-weight:500;color:var(--navy);letter-spacing:.04em}
+/* 2026-11-19 «Design 형상 완료»: 디자인 패널 제목(summary) 줄 오른쪽 — 몸판/소매/카라 어느 탭에서나 보인다. */
+.insp[data-panel="design-body"]{position:relative}
+.insp[data-panel="design-body"] .design-complete-head{position:absolute;top:3px;right:28px;display:flex;gap:4px;z-index:1}
+.insp[data-panel="design-body"] .design-complete-head .btn{width:auto;padding:3px 10px;font-size:11px;white-space:nowrap}
+.insp[data-panel="design-body"] .design-complete-note:empty{display:none}
 .note{font-size:11px;color:var(--muted)}
 /* 소매 Ⓐ 확인 정보: 한 줄씩 쌓는다(패턴명·소매산/소매폭·AH·목표/실제 이세). 값은 ui.js 가 sleeveAApply.infoLines 로 채운다. */
 .sleeve-a-info{flex-direction:column;align-items:flex-start;gap:2px}

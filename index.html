@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026111304">
+<link rel="stylesheet" href="css/style.css?v=2026111903">
 <!-- 라이트 테마 덮어쓰기(apple-light-ui · 2026-11-13 통합): style.css 원문은 그대로, 표시만 바꾼다. -->
-<link rel="stylesheet" href="css/apple.css?v=2026111703">
+<link rel="stylesheet" href="css/apple.css?v=2026111902">
 <!-- 화면 모드(시스템/밝게/어둡게): 첫 그리기 전에 data-theme 을 정해 깜빡임을 막는다. 저장 키 dorobo.ui.theme · 연결은 js/appleChrome.js -->
 <script>try{var t=localStorage.getItem('dorobo.ui.theme');var d=t==='dark'||(t!=='light'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}catch(e){}</script>
 </head>
@@ -249,11 +249,22 @@
     <details class="insp" data-panel="design-body" open hidden>
       <summary>디자인</summary>
       <div class="insp-body">
+        <!-- Design 형상 통합(designResult · 2026-11-19 사용자 승인 1차 디자인 UI ①): 몸판/소매/카라 어느 탭에서나 «디자인» 제목 옆.
+             몸판+소매+카라(또는 «카라 없음») 형상 패키지 + 유효 cut(structuralLines). 재단 패턴 아님.
+             완료본 일치 + 유효 cut 재검증 시에만 활성(ID·동작·게이트 무변경, 위치만 이동). -->
+        <div class="design-complete-head">
+          <button class="btn action-primary" id="btnCompleteDesign">Design 형상 완료</button>
+        </div>
+        <div class="row note design-complete-note" id="designResultCheckNote" aria-live="polite"></div>
+        <div class="row note design-complete-note" id="designResultStatusNote" aria-live="polite">Design 미완료 · 세션 전용</div>
+        <!-- 재단 준비(js/cutPrep.js · 읽기 전용): 유효한 Design 완료본일 때만 상단 «재단» 활성. 불가 사유·돌아갈 곳을 여기 적는다. -->
+        <div class="row note design-complete-note" id="cutPrepNote" aria-live="polite"></div>
         <!-- 몸판/소매 서브탭: 형태 컨트롤 분리. 소매 탭은 몸판 완료(bodiceResult·비스테일) 후 활성. -->
         <div class="subtabs" id="designSubtabs" role="tablist">
           <button type="button" class="subtab" data-subtab-btn="body" aria-selected="true">몸판</button>
           <button type="button" class="subtab" data-subtab-btn="sleeve" aria-selected="false" disabled title="몸판 완료 후 활성">소매</button>
           <button type="button" class="subtab" data-subtab-btn="collar" aria-selected="false" disabled title="소매 완료 후 활성">카라</button>
+          <button type="button" class="subtab" data-subtab-btn="detail" aria-selected="false" disabled title="몸판 완료 후 활성">디테일</button>
         </div>
         <!-- 맞춤 길이(읽기 전용 · js/seamMatch.js): 서로 붙는 봉제선의 실제 길이·차이·기준을 몸판/소매/카라 탭 공통으로 본다.
              형상·완료본·저장 무변경 — 자동 맞춤·완료 차단 없음. 기본은 접힌 요약 한 줄. -->
@@ -561,7 +572,8 @@
              computeStand/computeBody 가 P.148로, 한 장 셔츠 칼라(G·H·I·J·K)는 computeOnePiece 가 P.147로 만든다. 소매 완료·비스테일일 때만 활성.
              몸판 hash 변경 시 geometry 를 숨기고 stale 표시(파라미터 보존, 명시적 재적용 필요). -->
         <div class="subtab-panel" data-subtab="collar" hidden>
-          <!-- 2026-11-12 김님: «교재 M 기본형으로 초기화» 버튼 제거. 종류·세부 제도 선택 → «카라 적용»(밴드) → «본체 적용»(위 칼라)이
+          <!-- 2026-11-12 김님: «교재 M 기본형으로 초기화» 버튼 제거. 종류·세부 제도 선택 → «밴드 적용»(M 등 밴드 별도 제도) → «카라 본체 적용»(위 칼라)이
+               (2026-11-19 문구: 밴드 별도 = «밴드 적용» · 독립 카라 전체 = «카라 적용» · «카라 없음» = «카라 없음 적용» — 버튼 글자는 ui.js 가 선택 종류로 맞춘다)
                정상 동선이고 입력칸 초기값 = 선택 제도형 레코드 기본값(M: 밴드 3·올림 1 · CB폭 4·사선 6·돌출 1.5·외곽휨 0, 앞 끝선 0.5·gap 3 은 레코드값).
                '수치형으로 돌아가기'(직접 편집 전 사용자 값 복귀)는 별개 기능으로 유지. -->
           <div class="row row-stack"><label for="selCollarFamily">카라 종류</label><select id="selCollarFamily"></select></div>
@@ -584,7 +596,7 @@
           <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyProjection">칼라 앞끝 돌출 (cm)</label><input id="inpCollarBodyProjection" type="number" min="0" max="15" step="0.1"></div>
           <div class="row" data-collar-kind="two-piece"><label for="inpCollarBodyBow">외곽 휨 (cm)</label><input id="inpCollarBodyBow" type="number" min="-2" max="2" step="0.1"></div>
           <div class="row" data-collar-kind="two-piece" style="gap:4px">
-            <button class="btn action-primary" id="btnApplyCollarBody">본체 적용</button>
+            <button class="btn action-primary" id="btnApplyCollarBody">카라 본체 적용</button>
             <button class="btn" id="btnResetCollarBody">본체 초기화</button>
           </div>
           <!-- C3 직접 편집(관리형 선): parametric → manual 변환. 선택·편집 도구로 외곽·포인트 anchor/핸들 편집.
@@ -609,17 +621,28 @@
             <button class="btn" id="btnCompleteCollar">카라 모양 완료</button>
           </div>
           <div class="row note" id="designCollarStatusNote" aria-live="polite">카라 미완료 · 세션 전용</div>
-          <!-- Design 형상 통합(designResult): 몸판+소매+카라 형상 패키지 + 유효 cut(structuralLines).
-               재단 패턴 아님. 세 완료본 일치 + 유효 cut 재검증 시에만 활성. hash 에 structuralLines 포함. -->
-          <div class="row" style="margin-top:8px"><label>Design 형상 완료</label></div>
-          <div class="row note" id="designResultCheckNote" aria-live="polite"></div>
-          <div class="row" style="gap:4px">
-            <button class="btn action-primary" id="btnCompleteDesign">Design 형상 완료</button>
-          </div>
-          <div class="row note" id="designResultStatusNote" aria-live="polite">Design 미완료 · 세션 전용</div>
-          <!-- 재단 준비(js/cutPrep.js · 읽기 전용): 유효한 Design 완료본일 때만 상단 «재단» 활성. 불가 사유·돌아갈 곳을 여기 적는다. -->
-          <div class="row note" id="cutPrepNote" aria-live="polite"></div>
         </div><!-- /subtab collar -->
+        <!-- 디테일: 셔츠 앞 주머니(오각 패치 1장 · js/designPocket.js · [패턴학교] P.100 ③). 설정은 working.pocket(세션) → Design 완료 시 designResult.pocket.
+             폭·높이·밑각 초깃값 = 교재 도해(15·16·3). 부착 위치·입구 접어박기 초깃값 = 앱 값(교재 수치 아님). 몸판 밖/다트에 걸리면 사유만 안내(자동 이동 없음). -->
+        <div class="subtab-panel" data-subtab="detail" hidden>
+          <div class="row"><label>앞 주머니 (오각 패치)</label></div>
+          <div class="row note" id="pocketBookNote">교재 [패턴학교] P.100 ③ 도해: 폭 15 · 높이 16 · 밑각 3cm. 위치는 자유(교재에 치수 없음), 입구 접기 표시만 있고 접어박기 숫자는 없음 — 아래 위치·접어박기 초깃값은 앱 값입니다.</div>
+          <div class="row"><label for="selPocketSide">다는 앞판 (착용자 기준)</label>
+            <select id="selPocketSide"><option value="left" selected>왼쪽</option><option value="right">오른쪽</option></select></div>
+          <div class="row"><label for="inpPocketW">폭 (cm)</label><input id="inpPocketW" type="number" min="5" max="30" step="0.5" value="15"></div>
+          <div class="row"><label for="inpPocketH">높이 (cm)</label><input id="inpPocketH" type="number" min="5" max="30" step="0.5" value="16"></div>
+          <div class="row"><label for="inpPocketTip">밑각 (cm · 옆 수직선 끝~맨아래 중심)</label><input id="inpPocketTip" type="number" min="0.5" max="10" step="0.5" value="3"></div>
+          <div class="row"><label for="inpPocketCx">앞중심에서 주머니 가운데까지 (cm · 앱 초깃값)</label><input id="inpPocketCx" type="number" min="0" max="40" step="0.5" value="11"></div>
+          <div class="row"><label for="inpPocketTop">가슴선에서 입구까지 (cm · 앱 초깃값)</label><input id="inpPocketTop" type="number" min="-10" max="40" step="0.5" value="2"></div>
+          <div class="row"><label for="inpPocketFold">입구 접어박기 (cm · 앱 초깃값, 교재 수치 아님)</label><input id="inpPocketFold" type="number" min="0.5" max="8" step="0.5" value="3"></div>
+          <div class="row" style="gap:4px">
+            <button class="btn action-primary" id="btnApplyPocket">주머니 적용</button>
+            <button class="btn" id="btnClearPocket" disabled>주머니 해제</button>
+            <button class="btn" id="btnPocketBook">교재 도해 값(15·16·3)</button>
+          </div>
+          <div class="row note" id="pocketNote" aria-live="polite"></div>
+          <div class="row note" id="pocketStatusNote" aria-live="polite">주머니 없음</div>
+        </div><!-- /subtab detail -->
         <!-- 작업 화면 배치(designLayout). 형상은 안 움직이고 표시 offset·카메라만 조정. -->
         <div class="row" style="margin-top:8px"><label>배치</label></div>
         <div class="row" style="gap:4px">
@@ -677,7 +700,9 @@
     <div class="cut-head">
       <div class="cut-title"><b>재단 준비</b><span class="cut-sub">검은 선 = 완성선(다트 긴 V 포함) · 초록 = 다트 접어 정리한 완성 외곽 · 붉은 선 = 시접(재단선) · 보라 = 맞춤 표시 · 주황 점선 원 = 보류 너치 · 선을 누르면 시접 폭</span></div>
       <span class="cut-status" id="cutStatus" aria-live="polite"></span>
+      <span class="cut-defaults" id="cutDefaults" title="선택하지 않아도 보이는 기본값 — 선을 눌러 바꾼 구간만 다릅니다">기본 시접 1cm · 골선 0cm</span>
       <div class="cut-actions">
+        <button type="button" class="btn" id="btnCutWidths" aria-pressed="false" title="모든 구간의 실제 적용 시접(직접 지정 *·골선 포함)을 선 위에 한꺼번에 표시합니다 — 화면 표시만">시접량 표시</button>
         <button type="button" class="btn" id="btnCutZoomOut" aria-label="축소">−</button>
         <button type="button" class="btn" id="btnCutFit">전체 보기</button>
         <button type="button" class="btn" id="btnCutFitSel" disabled aria-disabled="true" title="목록이나 화면에서 조각을 먼저 고르세요">조각 보기</button>
@@ -724,7 +749,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026111201"></script>
-<script src="js/render.js?v=2026111901"></script>
+<script src="js/render.js?v=2026111903"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026111201"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -847,28 +872,30 @@
 <!-- 카라 프리셋 registry(결정론 코드 데이터·단일 진실 원천): window.collarPresets. 선택 옵션·기본값·출처 메타. -->
 <script src="js/collarPresets.js?v=2026092530"></script>
 <!-- 카라 모양 완료 체크포인트: window.collarCheckpoint. 게이트 + working.collarResult 세션 스냅샷(형상 source=bodice, 소매=순서 게이트). -->
-<script src="js/collarCheckpoint.js?v=2026092520"></script>
+<script src="js/collarCheckpoint.js?v=2026111901"></script>
 <!-- 카라 제도 보조수치 표시 모델(순수·표시 전용): window.collarAnnotation. 형상·hash 무관. -->
 <script src="js/collarAnnotation.js?v=2026092520"></script>
+<!-- 디테일 «앞 주머니»(오각 패치): window.designPocket. 순수 기하·검증·세션 설정(working.pocket). designResult 보다 먼저. -->
+<script src="js/designPocket.js?v=2026111903"></script>
 <!-- Design 형상 통합: window.designResult. 세 완료본 + structuralLines(유효 cut) 묶음. 재단 아님. -->
-<script src="js/designResult.js?v=2026110401"></script>
+<script src="js/designResult.js?v=2026111903"></script>
 <!-- 원형(draft) 작업 화면 카메라 배치: window.draftLayout. 형상·저장 불변, 카메라만(union-fit). -->
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026111105"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/projectFile.js?v=2026111404"></script>
-<script src="js/ui.js?v=2026111901"></script>
+<script src="js/projectFile.js?v=2026111903"></script>
+<script src="js/ui.js?v=2026111903"></script>
 <!-- 라이트 테마 크롬(UI 전용): 확대 알약 · 폰 하단 시트 · 화면 모드. 기존 전역 함수만 호출. -->
 <script src="js/appleChrome.js?v=2026111302"></script>
 <!-- 원형 이세 배지·계산 노트 · 원형/디자인 비교(읽기 전용 · UI 전용). -->
 <script src="js/inspectorInsights.js?v=2026111302"></script>
 <!-- 맞춤 길이 카드(읽기 전용 파생 표시 · UI 전용): 기존 측정 권위만 읽는다. -->
-<script src="js/seamMatch.js?v=2026111901"></script>
+<script src="js/seamMatch.js?v=2026111902"></script>
 <!-- 재단 준비 1단계(읽기 전용 파생 · UI 전용): designResult 권위만 읽는다. 저장 형식·stage 무변경. -->
 <script src="js/seamAllowance.js?v=2026111701"></script>
-<script src="js/cutPrep.js?v=2026111704"></script>
-<script src="js/cutPrint.js?v=2026111705"></script>
-<script src="js/cutDxf.js?v=2026111704"></script>
+<script src="js/cutPrep.js?v=2026111903"></script>
+<script src="js/cutPrint.js?v=2026111902"></script>
+<script src="js/cutDxf.js?v=2026111902"></script>
 
 </body>
 </html>

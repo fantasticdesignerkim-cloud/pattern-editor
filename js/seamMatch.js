@@ -173,9 +173,9 @@
     var b2 = [half + " · 밴드 앞 끝 연장은 넣지 않음", "밴드 윗선 = 현재 밴드 형상 실측 · 위 칼라 이음선 = 현재 위 칼라 형상의 이음선 구간 실측", "판정 기준 출처: collarCheckpoint — 차 0.01cm 이내여야 카라 완료(같은 길이로 붙는 선)"];
     var both = function (mk, reason) { rows.push(mk("neck-band", "카라", N1, reason, b1)); rows.push(mk("band-collar", "카라", N2, reason, b2)); };
     var stale = bodiceStaleReason(p);
-    if (!cd) return both(unmeasured, "카라 없음 — 카라 탭에서 만들면 측정");
+    if (!cd) return both(unmeasured, w.collarChoice === "none" ? "«카라 없음» 선택 — 잴 카라 봉제선 없음" : "카라 없음 — 카라 탭에서 만들면 측정");
     var oldSource = !!(BC.latest(p) && cd.sourceBodiceHash !== BC.latest(p).hash), oldText = "카라가 지금 몸판 완료본이 아닌 옛 몸판 기준 — 카라를 다시 적용하면 측정";
-    if (cd.type === "shirt-two-piece" && !cd.standGeometry) return both(oldSource ? changed : unmeasured, oldSource ? oldText : "밴드 형상 없음 — «카라 적용» 뒤 측정");
+    if (cd.type === "shirt-two-piece" && !cd.standGeometry) return both(oldSource ? changed : unmeasured, oldSource ? oldText : "밴드 형상 없음 — «밴드 적용» 뒤 측정");
     if (cd.type !== "shirt-two-piece") return both(unmeasured, "밴드 + 위 칼라로 된 셔츠 칼라만 1차 지원 — 이 카라 종류의 달림선 길이는 카라 제작 정보에서 확인");
     if (stale && stale.kind === "changed") rows.push(changed("neck-band", "카라", N1, stale.text, b1));
     else if (stale) rows.push(unmeasured("neck-band", "카라", N1, stale.text, b1));
@@ -191,7 +191,7 @@
     var top = roleLen(cd.standGeometry.outline, "top"), upGeo = cd.body && cd.body.geometry ? roleLen(cd.body.geometry.outline, "attach") : null;
     var up = num(upGeo) ? upGeo : (cd.body ? cd.body.attachLenCm : null);
     if (cd.body && !num(upGeo)) b2 = b2.concat(["위 칼라 형상에 이음선 표시가 없어 카라 기록값(body.attachLenCm)을 썼다"]);
-    if (!cd.body) rows.push(unmeasured("band-collar", "카라", N2, "위 칼라 없음 — «본체 적용» 뒤 측정", b2));
+    if (!cd.body) rows.push(unmeasured("band-collar", "카라", N2, "위 칼라 없음 — «카라 본체 적용» 뒤 측정", b2));
     else if (cd.body.invalid) rows.push(unmeasured("band-collar", "카라", N2, "위 칼라 선이 유효하지 않음 — 고친 뒤 측정", b2));
     else if (!num(top)) rows.push(unmeasured("band-collar", "카라", N2, "밴드 형상에 윗선 표시 구간이 없음", b2));
     else if (!num(up)) rows.push(unmeasured("band-collar", "카라", N2, "위 칼라 이음선 길이 기록 없음", b2));

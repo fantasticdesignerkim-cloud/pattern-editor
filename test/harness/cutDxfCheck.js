@@ -192,6 +192,9 @@ const B = DX(S).build(P, META), X = B.ok ? parseDxf(B.dxf) : null, EX = expect(S
 ok(r.ok && B.ok && typeof B.dxf === "string" && B.dxf.length > 5000, "0: 대표 셔츠(앞 여밈 · 긴 소매 + 커프스 + 트임 · 밴드 · 위 칼라) 완료 → DXF 생성 " + (B.ok ? B.dxf.length + "자" : J(B.blockers)));
 const by = (type, layer) => X.ents.filter(e => e.type === type && e.layer === layer);
 const order = EX.m.L.order;
+// ⑦ 보이는 조각 id → DXF 조각 이름 · AAMA 블록 이름 (앞판 = 착용자 기준 front-right/front-left · FRONT_RIGHT_BASE/FRONT_LEFT_BASE)
+const PN0 = (m0, pid) => { const r1 = m0.D[pid]; return (r1.pair || r1.instMirrored) ? r1.base + "-" + (r1.side === "R" ? "right" : "left") : pid; };
+const BN = pid => PN0(EX.m, pid).replace(/[^A-Za-z0-9]+/g, "_").toUpperCase() + "_BASE";
 
 // ══ §1 형식 ══
 {
@@ -227,7 +230,7 @@ const order = EX.m.L.order;
   ok(maxLen <= 0.02 && curved >= 3, "2: 완성선 둘레 길이 = 참값과 최대 " + maxLen.toFixed(4) + "mm 차(상대 " + (maxLenRel * 100).toFixed(5) + "%) ≤ 기준 0.02mm · 곡선 있는 조각 " + curved + "개");
   if (process.env.CUTDXF_OUT) console.log(perPiece.join("\n"));
   // 닫힘·자기 교차 없음(재단선)
-  ok(cut.every(e => crossCount(e.pts) === 0), "2: 재단선 8개 모두 자기 교차 0(닫힌 단순 다각형)");
+  ok(cut.every(e => crossCount(e.pts) === 0), "2: 재단선 " + cut.length + "개(앞판 좌우 포함) 모두 자기 교차 0(닫힌 단순 다각형)");
   // 너치
   const nl = by("LINE", "NOTCH"), nc = by("CIRCLE", "NOTCH"), foldPts = X.ents.filter(e => e.layer === "FOLD" || e.layer === "INTERNAL").map(e => e.type === "LINE" ? [{ x: e.x, y: e.y }, { x: e.x2, y: e.y2 }] : e.pts), dFold = q => Math.min(...foldPts.map(fp => dPts(q, fp))); let nExp = 0, nBad = 0, nFar = 0, nOnFold = 0;
   order.forEach((pid, k) => { const T = EX.T(pid); EX.m.D[pid].notches.forEach(n => { nExp++; const a = T(n.from);
@@ -251,8 +254,10 @@ const order = EX.m.L.order;
     "2: 골 펼친 조각 " + unf.length + "개(" + unf.join("·") + ") = 한 장씩 · 가운데 선은 INTERNAL(자르지 않음 · 인쇄·AAMA 와 같은 뜻) 하나씩 · FOLD 0 · 뒤판 완성 폭 " + (fbk.x1 - fbk.x0).toFixed(1) + "mm = 반쪽 " + (half.widthCm * 10).toFixed(1) + " × 2 · 가운데 선이 한가운데");
   // 글자: 조각마다 ASCII id · 한글 이름 · 수량 · 식서 상태
   const tx = by("TEXT", "TEXT"), txt = tx.map(e => e.text);
-  ok(order.every((pid, k) => { const p = PIECE(EX.m.d, pid), q = EX.m.Q.pieces[pid], inside = tx.filter(e => inBB(e, bb(cut[k].pts), 0.01)).map(e => e.text);
-    return inside.indexOf("PIECE " + pid) >= 0 && inside.map(unesc).indexOf(p.label) >= 0 && inside.indexOf("QTY " + q.qty + " (DEFAULT)") >= 0 && inside.some(s => /^GRAIN \d+(\.\d+)? DEG \(BOOK DEFAULT\)$/.test(s)) && (!EX.m.D[pid].unfolded || inside.indexOf("FOLD OPENED - ONE FULL PIECE") >= 0); }) && txt.filter(s => /^PIECE /.test(s)).length === order.length && tx.every(e => e.h >= 2 && e.h <= 6),
+  // ⑦ 보이는 조각 id(order)와 저장 조각 id 가 다르다: 앞판 거울 쪽 «front~m» = 표시 이름 front-left/right · 한글 이름(왼앞판/오른앞판) · 수량 1(Q.inst)
+  const PN = pid => { const r1 = EX.m.D[pid]; return (r1.pair || r1.instMirrored) ? r1.base + "-" + (r1.side === "R" ? "right" : "left") : pid; };
+  ok(order.every((pid, k) => { const p = PIECE(EX.m.d, pid.replace(/~m$/, "")), q = (EX.m.Q.inst && EX.m.Q.inst[pid]) || EX.m.Q.pieces[pid], lab = EX.m.D[pid].label || p.label, inside = tx.filter(e => inBB(e, bb(cut[k].pts), 0.01)).map(e => e.text);
+    return inside.indexOf("PIECE " + PN(pid)) >= 0 && inside.map(unesc).indexOf(lab) >= 0 && inside.indexOf("QTY " + q.qty + " (DEFAULT)") >= 0 && inside.some(s => /^GRAIN \d+(\.\d+)? DEG \(BOOK DEFAULT\)$/.test(s)) && (!EX.m.D[pid].unfolded || inside.indexOf("FOLD OPENED - ONE FULL PIECE") >= 0); }) && txt.filter(s => /^PIECE /.test(s)).length === order.length && tx.every(e => e.h >= 2 && e.h <= 6),
     "2: 조각마다 재단선 범위 안에 «PIECE id» · 한글 이름(\\U+ 표기 → 복원 일치) · «QTY n (DEFAULT)» · 식서 상태 · 펼친 조각 표시 · 글자 높이 2~6mm");
   // 대표 조각: 긴 소매 · 골 펼친 카라 · 트임 작은 조각
   const dim = pid => { const e = bb(cut[order.indexOf(pid)].pts); return [+(e.x1 - e.x0).toFixed(1), +(e.y1 - e.y0).toFixed(1)]; };
@@ -303,8 +308,9 @@ const order = EX.m.L.order;
   ok(b3.ok && t3.indexOf("GRAIN 80 DEG (USER)") >= 0 && t3.indexOf("QTY 4 (USER)") >= 0 && x3.ents.filter(e => e.type === "POLYLINE" && e.layer === "CUT").length === order.length, "3: 직접 지정한 식서·수량 = «(USER)» 로 구별 · 수량 4 여도 재단선은 조각마다 하나");
   P3.working.cutGrain.pieces.front.sig = "n1-a-b";
   const pre3 = S3.W.cutPrint.preflight(P3); b3 = DX(S3).build(P3, META); x3 = b3.ok ? parseDxf(b3.dxf) : null;
-  const held = pre3.rows.filter(q => q.id === "front")[0];
-  ok(held && held.grain.kind === "held" && b3.ok && x3.ents.filter(e => e.type === "LINE" && e.layer === "GRAIN_HELD").length === (held.grain.shown ? 5 : 0) && x3.ents.filter(e => e.type === "LINE" && e.layer === "GRAIN").length === (order.length - 1) * 5 && x3.ents.some(e => e.type === "TEXT" && /^GRAIN HELD/.test(e.text)) && pre3.attention.some(s => /식서 보류/.test(s)),
+  // ⑦ 앞판 = 좌우 두 조각 — 저장된 식서 하나가 두 조각에 같이 읽히므로 둘 다 보류(같은 설정의 반사)
+  const heldRows = pre3.rows.filter(q => q.base === "front"), held = heldRows[0];
+  ok(heldRows.length === 2 && heldRows.every(q => q.grain.kind === "held") && b3.ok && x3.ents.filter(e => e.type === "LINE" && e.layer === "GRAIN_HELD").length === heldRows.filter(q => q.grain.shown).length * 5 && x3.ents.filter(e => e.type === "LINE" && e.layer === "GRAIN").length === (order.length - heldRows.length) * 5 && x3.ents.some(e => e.type === "TEXT" && /^GRAIN HELD/.test(e.text)) && pre3.attention.some(s => /식서 보류/.test(s)),
     "3: 식서 보류 조각 = GRAIN 레이어에 없음 · 임시 기본은 GRAIN_HELD 레이어 · 글자 «GRAIN HELD» · 사전 점검 알림(저장값은 적용 안 함)");
 }
 
@@ -318,7 +324,7 @@ const order = EX.m.L.order;
 // ══ §5 화면 · 옛 원형 DXF 동선 보존 ══
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), st = fs.readFileSync(path.join(ROOT, "js", "storage.js"), "utf8"), pr = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8");
-  ok(/js\/cutDxf\.js\?v=2026111704/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
+  ok(/js\/cutDxf\.js\?v=2026111902/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
   ok(/onclick="exportDXF\(\)">DXF 다운로드</.test(html) && /function exportDXF\(\)\{/.test(st) && !/cutDxf/.test(st), "5: 원형 단계의 «DXF 다운로드»(exportDXF) 동선은 그대로 — 재단 DXF 와 별개");
   ok(/data-cp=\\"dxf\\"/.test(pr) && /DXF 파일 저장/.test(pr) && /AAMA\/ASTM 규격 파일이 아니며/.test(pr) && /아직 확인하지 않았습니다/.test(pr) && /disabled aria-disabled/.test(pr), "5: 사전 점검 창에 «DXF 파일 저장» · 규격·호환을 과장하지 않는 문구 · 막히면 disabled");
 }
@@ -343,11 +349,11 @@ const order = EX.m.L.order;
   const names = Object.keys(Z.blocks), allE = [].concat(...names.map(n => Z.blocks[n]), Z.ents);
   ok(J(Z.layers) === J(NUM) && allE.every(e => NUM.indexOf(e.layer) >= 0) && Z.layers.every(l => /^\d+$/.test(l)), "6: 레이어 = 숫자 이름만(1·2·3·4·6·7·8·14·15) · 모든 도형이 그 안(레이어 0 · 글자 이름 없음)");
   const ins = Z.ents.filter(e => e.type === "INSERT"), st = Z.ents.filter(e => e.type === "TEXT").map(e => e.c[1]);
-  ok(names.length === order.length && new Set(names).size === order.length && order.every(pid => Z.blocks[pid.replace(/[^A-Za-z0-9]+/g, "_").toUpperCase() + "_BASE"]) && ins.length === order.length && ins.every(e => Z.blocks[e.c[2]] && parseFloat(e.c[10]) === 0 && parseFloat(e.c[20]) === 0) && Z.ents.every(e => e.type === "INSERT" || e.type === "TEXT"),
+  ok(names.length === order.length && new Set(names).size === order.length && order.every(pid => Z.blocks[BN(pid)]) && !Z.blocks.FRONT_BASE && Z.blocks.FRONT_RIGHT_BASE && Z.blocks.FRONT_LEFT_BASE && ins.length === order.length && ins.every(e => Z.blocks[e.c[2]] && parseFloat(e.c[10]) === 0 && parseFloat(e.c[20]) === 0) && Z.ents.every(e => e.type === "INSERT" || e.type === "TEXT"),
     "6: 조각마다 블록 하나(" + names.length + "개 · 이름 = 조각id_BASE) · ENTITIES 에는 블록 넣기(INSERT) " + ins.length + "개와 스타일 글자만(수량만큼 복제 없음)");
   ok(["Style Name: DOROBO_" + A.resultHash, "Creation Date: 16-11-2026", "Creation Time: 00:00:00", "Author: DOROBO vTEST", "Sample Size: BASE", "Units: METRIC"].every(x => st.indexOf(x) >= 0), "6: 스타일 글자 = Style Name · Creation Date(DD-MM-YYYY) · Creation Time · Author · Sample Size · Units: METRIC");
   let bad = [], maxV = 0, maxCh = 0, nPts = 0, nNotch = 0, maxNd = 0, turnAll = 0, curveAll = 0;
-  order.forEach(pid => { const bl = Z.blocks[pid.replace(/[^A-Za-z0-9]+/g, "_").toUpperCase() + "_BASE"], rr = EX.m.D[pid], T = EX.T(pid), L = n => bl.filter(e => e.layer === n), q = EX.m.Q.pieces[pid], g = EX.G.pieces[pid];
+  order.forEach(pid => { const bl = Z.blocks[BN(pid)], rr = EX.m.D[pid], T = EX.T(pid), L = n => bl.filter(e => e.layer === n), q = (EX.m.Q.inst && EX.m.Q.inst[pid]) || EX.m.Q.pieces[pid], g = EX.G.pieces[pid];
     const c1 = L("1").filter(e => e.type === "POLYLINE"), s2 = rr.seam.map(T); if (Math.hypot(s2[0].x - s2[s2.length - 1].x, s2[0].y - s2[s2.length - 1].y) < 1e-5) s2.pop();
     if (c1.length !== 1 || c1[0].c[70] !== "1" || c1[0].pts.length !== s2.length) { bad.push(pid + ":cut"); return; }
     c1[0].pts.forEach((p2, i2) => { maxV = Math.max(maxV, Math.hypot(p2.x - s2[i2].x, p2.y - s2[i2].y)); });
@@ -358,15 +364,15 @@ const order = EX.m.L.order;
     const nl = rr.notches.filter(n => n.to), n4 = L("4"); nNotch += n4.length;
     if (n4.length !== nl.length || !n4.every(e => e.type === "POINT" && nl.some(n => { const a = T(n.from), b2 = T(n.to), len = Math.hypot(a.x - b2.x, a.y - b2.y); return (Math.hypot(pt(e).x - a.x, pt(e).y - a.y) < 2e-4 || Math.hypot(pt(e).x - b2.x, pt(e).y - b2.y) < 2e-4) && Math.abs(parseFloat(e.c[39]) - len) < 2e-4; }))) bad.push(pid + ":notch");
     n4.forEach(e => { maxNd = Math.max(maxNd, dClosed(pt(e), c1[0].pts)); const a = parseFloat(e.c[50]) * Math.PI / 180, tip = { x: pt(e).x + Math.cos(a) * parseFloat(e.c[39]), y: pt(e).y + Math.sin(a) * parseFloat(e.c[39]) }; if (!nl.some(n => Math.hypot(T(n.from).x - tip.x, T(n.from).y - tip.y) < 1e-3 || Math.hypot(T(n.to).x - tip.x, T(n.to).y - tip.y) < 1e-3)) bad.push(pid + ":notch-angle"); });
-    const tx = bl.filter(e => e.type === "TEXT").map(e => e.c[1]); if (!(bl.filter(e => e.type === "TEXT").every(e => e.layer === "1") && tx.indexOf("Piece Name: " + pid) >= 0 && tx.indexOf("Size: BASE") >= 0 && tx.indexOf("Quantity: " + q.qty) >= 0 && tx.some(x => /^Annotation: /.test(x)))) bad.push(pid + ":text");
+    const tx = bl.filter(e => e.type === "TEXT").map(e => e.c[1]); if (!(bl.filter(e => e.type === "TEXT").every(e => e.layer === "1") && tx.indexOf("Piece Name: " + PN0(EX.m, pid)) >= 0 && tx.indexOf("Size: BASE") >= 0 && tx.indexOf("Quantity: " + q.qty) >= 0 && tx.some(x => /^Annotation: /.test(x)))) bad.push(pid + ":text");
     if (rr.unfolded ? !(L("6").length === 0 && L("8").length >= 1 && /FULL PIECE \(FOLD OPENED\)/.test(tx.join("|"))) : L("6").length !== 0) bad.push(pid + ":fold"); });
   ok(bad.length === 0, "6: 블록마다 — 레이어 1 닫힌 재단선 하나 · 2/3 점 = 재단선 꼭짓점 전부 · 14 닫힌 봉제선 · 7 식서선 하나 · 4 너치 점(길이 39 · 방향 50 이 실제 너치 끝을 가리킴) · 조각 글자(Piece Name·Size·Quantity·Annotation) · 펼친 조각은 대칭선(6) 없음 " + J(bad));
   ok(maxV < 1e-4 && maxCh <= 0.0105 && nPts > 300 && turnAll >= order.length * 3 && curveAll > 100, "6: 재단선 꼭짓점 = 모델 × 10mm(차 " + maxV.toExponential(1) + "mm) · 봉제선 곡선 오차 " + maxCh.toFixed(4) + "mm ≤ 0.01 · 꺾임점 " + turnAll + " · 곡선점 " + curveAll);
   ok(nNotch >= 10 && maxNd <= 0.06, "6: 너치 점 " + nNotch + "개 = 모두 재단선 위(가장 먼 것 " + maxNd.toFixed(3) + "mm ≤ 0.06)");
   // 식서 보류 · 수량 미정 · 막힘 · 일반 형식 무변경 · 불변
   const r6 = buildP(), S6 = r6.S, P6 = r6.P; S6.CUT.setGrain("front", { angleDeg: 80 }, P6); P6.working.cutGrain.pieces.front.sig = "n1-a-b";
-  const a6 = DX(S6).build(P6, META, { format: "aama" }), z6 = parseB(a6.dxf), fb = z6.blocks.FRONT_BASE;
-  ok(a6.ok && fb.filter(e => e.layer === "7").length === 0 && fb.some(e => e.type === "TEXT" && /GRAIN HELD - NOT EXPORTED/.test(e.c[1])) && a6.notes.some(x => /식서 보류/.test(x)) && z6.blocks.BACK_BASE.filter(e => e.layer === "7").length === 1,
+  const a6 = DX(S6).build(P6, META, { format: "aama" }), z6 = parseB(a6.dxf), fbs = ["FRONT_RIGHT_BASE", "FRONT_LEFT_BASE"].map(n => z6.blocks[n]);   // 같은 저장 식서가 좌우 두 조각에 읽히므로 두 블록 모두 보류
+  ok(a6.ok && fbs.every(fb => fb && fb.filter(e => e.layer === "7").length === 0 && fb.some(e => e.type === "TEXT" && /GRAIN HELD - NOT EXPORTED/.test(e.c[1]))) && a6.notes.some(x => /식서 보류/.test(x)) && z6.blocks.BACK_BASE.filter(e => e.layer === "7").length === 1,
     "6: 식서 보류 조각 = 식서선(7)을 넣지 않음(임시 기본을 확정처럼 내보내지 않음) + 글자·알림 · 다른 조각은 그대로");
   const S7 = makeSession(), P7 = start(S7), a7 = DX(S7).build(P7, META, { format: "aama" });
   ok(!a7.ok && !a7.dxf && J(a7.blockers) === J(S7.W.cutPrint.preflight(P7).blockers), "6: 완료 전 = AAMA 구조 파일도 없음 · 같은 사전 점검 목록");

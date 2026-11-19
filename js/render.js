@@ -301,6 +301,19 @@ function _appendPlacket(root, placket, L, scale){
   root.appendChild(g);
 }
 
+// 앞 주머니 부착 위치(디테일): 앞판 offset(L.front) 동승. 점선 오각형(재단선 아님) + 이름 글자.
+function _appendPocketMark(root, pv, L, scale){
+  if(!pv || !Array.isArray(pv.attach) || !pv.attach.length) return;
+  const off=(L && L.front) ? L.front : {dx:0,dy:0};
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-pocket":"front", "data-pocket-side":pv.side });
+  const od=_openPathD(pv.attach);
+  if(od) g.appendChild(E("path",{ d:od+" Z", class:"design-pocket-attach", fill:"none" }));
+  let sx=0, sy=0; pv.attach.forEach(s=>{ sx+=s.from.x; sy+=s.from.y; });
+  const [cx,cy]=c2p(sx/pv.attach.length, sy/pv.attach.length);
+  g.appendChild(E("text",{ x:cx, y:cy, class:"design-pocket-text", "text-anchor":"middle", "data-pocket-text":"label" }, pv.label));
+  root.appendChild(g);
+}
+
 // 카라 스탠드 파생(working.collarDraft.standGeometry): 닫힌 밴드 outline. 카라 전용 offset(L.collar)
 // transform 동승. working.geometry 밖 별도 조각이라 엉덩이 길이 재계산과 무관하게 유지된다.
 function _appendCollarStand(root, collarDraft, off, scale){
@@ -906,6 +919,15 @@ function render(){
       const pRoot = E("g"); pRoot.setAttribute("data-design-root", "placket");
       _appendPlacket(pRoot, dp.working.frontPlacket, L, scale);
       svg.appendChild(pRoot);
+    }
+    // 디테일 «앞 주머니» 부착 위치(적용돼 있고 최종 몸판 위에서 유효할 때만 · 표시 전용): 앞판 위 점선 오각형 + 이름. 형상·hash 무관.
+    if (dp.working.pocket && window.designPocket && window.designPocket.previewFor) {
+      const _pv = window.designPocket.previewFor(dp);
+      if (_pv && _pv.ok) {
+        const kRoot = E("g"); kRoot.setAttribute("data-design-root", "pocket");
+        _appendPocketMark(kRoot, _pv, L, scale);
+        svg.appendChild(kRoot);
+      }
     }
     // 카라 스탠드 파생(있을 때만): 별도 조각(L.collar offset). 몸판 hash 변경 시 standGeometry=null 로 숨김.
     if (dp.working.collarDraft && (dp.working.collarDraft.standGeometry || dp.working.collarDraft.body || dp.working.collarDraft.onePiece || dp.working.collarDraft.openCollar || dp.working.collarDraft.tip || dp.working.collarDraft.joined || dp.working.collarDraft.flat || dp.working.collarDraft.sailor || dp.working.collarDraft.bow || dp.working.collarDraft.frill || dp.working.collarDraft.hood || dp.working.collarDraft.tailored || dp.working.collarDraft.shawl || dp.working.collarDraft.standalone)) {

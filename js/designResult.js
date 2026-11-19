@@ -11,6 +11,8 @@
 //   · cut 은 bodiceResult.hash·스테일 판정에도 미포함 → **designResult.hash 가 structuralLines 를 포함**해야
 //     cut 변경이 Design 변경으로 잡힌다.
 //
+// (2026-11-19) 명시 «카라 없음»(working.collarChoice "none" · 카라 초안 없음)이면 카라 항목을 건너뛰고 collar=null·collarHash=null·
+//   collarChoice "none" 으로 묶는다(hash 서명에 cn 키 추가 — 기존 카라 완료본 hash 는 그대로).
 // 완료 게이트: 몸판·소매·카라 result 모두 존재·현재 상태 일치 / sleeve·collar 의 sourceBodiceHash===bodice.hash /
 //   collar 의 소매 작업 순서 정상 / 유효 cut 이 **최종 몸판**의 effective outline 에서 재검증. idempotent(같은 상태 반복 →
 //   기존 참조·completedAt 유지). 완료 후 형상 수정은 기존 결과를 삭제하지 않고 "Design 변경됨" 표시.
@@ -43,8 +45,18 @@
     }).sort();
   }
   function signatureOf(res) {
-    return JSON.stringify({ bh: res.bodiceHash, sh: res.sleeveHash, ch: res.collarHash, cuts: canonCuts(res.structuralLines.cut) });
+    var sig = { bh: res.bodiceHash, sh: res.sleeveHash, ch: res.collarHash, cuts: canonCuts(res.structuralLines.cut) };
+    if (res.collarChoice === "none") sig.cn = 1;   // «카라 없음» 명시 선택만 키 추가 — 기존 카라 완료본의 hash 는 바이트 그대로
+    if (res.pocket) sig.pk = pocketCanon(res.pocket);   // 디테일 «앞 주머니»가 있을 때만 키 추가 — 주머니 없는 기존 완료본의 hash 는 바이트 그대로
+    return JSON.stringify(sig);
   }
+  // 주머니 설정 정준(키 순서 고정 · 소수 4자리)
+  function pocketCanon(p) {
+    return ["schema", "kind", "side", "widthCm", "heightCm", "tipDepthCm", "cxFromCfCm", "topBelowBustCm", "mouthFoldCm"].map(function (k) { return typeof p[k] === "number" ? round4(p[k]) : p[k]; }).join("|");
+  }
+  // «카라 없음» 명시 선택(2026-11-19 사용자 승인 1차 디자인 UI ④): working.collarChoice === "none" 이고 카라 초안이 없을 때만.
+  //   미적용(키 없음)·기존 프로젝트와 구별된다 — 키가 없으면 지금까지처럼 카라 완료본이 필요하다. 목 마감 형상은 만들지 않는다.
+  function collarNone(proj) { var w = proj && proj.working; return !!(w && w.collarChoice === "none" && !w.collarDraft); }
 
   // ── 최종 몸판 조회(공용 경계 · 순수) ── src = 결과 묶음({ bodice, sleeve }) — designResult 완료본이나 check 의 중간값.
   //   { source: "sleeve-derived" | "bodice", front, back } — front/back 은 frozen result 의 조각 그대로(복제 아님). 몸판 없으면 null.
@@ -85,10 +97,12 @@
     var BC = window.bodiceCheckpoint, SC = window.sleeveCheckpoint, CC = window.collarCheckpoint, DLT = window.designLineTool;
     if (!BC || !SC || !CC || !DLT) return { ok: false, fails: ["no-module"] };
     var fails = [];
-    var bodice = BC.latest(proj), sleeve = SC.latest(proj), collar = CC.latest(proj);
+    var none = collarNone(proj);
+    var bodice = BC.latest(proj), sleeve = SC.latest(proj), collar = none ? null : CC.latest(proj);
     if (!bodice) fails.push("no-bodice"); else if (BC.isCurrentBodiceChanged(proj)) fails.push("bodice-changed");
     if (!sleeve) fails.push("no-sleeve"); else { if (SC.isCurrentSleeveChanged(proj)) fails.push("sleeve-changed"); if (SC.invalidatedByBodice(proj)) fails.push("sleeve-bodice-mismatch"); }
-    if (!collar) fails.push("no-collar"); else { if (CC.isCurrentCollarChanged(proj)) fails.push("collar-changed"); if (CC.invalidatedByBodice(proj)) fails.push("collar-bodice-mismatch"); if (CC.sleeveStepChanged(proj)) fails.push("collar-sleeve-order"); }
+    if (none) { /* 카라 없음: 카라 완료본·카라 게이트 없음(몸판·소매 검사만) */ }
+    else if (!collar) fails.push("no-collar"); else { if (CC.isCurrentCollarChanged(proj)) fails.push("collar-changed"); if (CC.invalidatedByBodice(proj)) fails.push("collar-bodice-mismatch"); if (CC.sleeveStepChanged(proj)) fails.push("collar-sleeve-order"); }
     if (sleeve && bodice && sleeve.sourceBodiceHash !== bodice.hash) fails.push("sleeve-source-mismatch");
     if (collar && bodice && collar.sourceBodiceHash !== bodice.hash) fails.push("collar-source-mismatch");
     // 유효 cut: **최종 몸판(frozen — 소매 파생 몸판 또는 bodiceResult)의 effective outline 기준** 재검증.
@@ -96,7 +110,15 @@
     var fin = finalBodiceOf({ bodice: bodice, sleeve: sleeve });
     var cc = classifyCuts(DLT, proj.working.patternLines, bodice, fin);
     if (cc.rejects.length) fails.push("cut-invalid-on-final-bodice");
-    return { ok: fails.length === 0, fails: fails, _bodice: bodice, _sleeve: sleeve, _collar: collar, _cuts: cc.cuts, _finalBodice: fin, cutRejects: cc.rejects };
+    // 디테일 «앞 주머니»(있을 때만): 설정이 읽히고 최종 몸판 위에서 유효해야 완료 — 걸리면 사유와 함께 거부(위치를 옮기지 않는다).
+    var pocket = null, pocketReject = null, DP = window.designPocket, rawPocket = DP && DP.get ? DP.get(proj) : null;
+    if (rawPocket) {
+      if (bodice && sleeve) {
+        var pev = DP.evaluate(rawPocket, { bodice: bodice, sleeve: sleeve });
+        if (pev.ok) pocket = pev.spec; else { pocketReject = pev.reason; fails.push("pocket-invalid"); }
+      } else { var pn = DP.normalizeSpec(rawPocket); if (pn.ok) pocket = pn.spec; else { pocketReject = pn.reason; fails.push("pocket-invalid"); } }
+    }
+    return { ok: fails.length === 0, fails: fails, _bodice: bodice, _sleeve: sleeve, _collar: collar, _collarNone: none, _cuts: cc.cuts, _finalBodice: fin, cutRejects: cc.rejects, _pocket: pocket, pocketReject: pocketReject };
   }
 
   // ── 완료 ── 게이트 통과 시 working.designResult 불변 스냅샷. 실패 시 변경 없음. 같은 상태 반복은 idempotent.
@@ -109,12 +131,14 @@
     var result = {
       schemaVersion: 1,
       sourceBlock: { id: sb.id || null, version: sb.version != null ? sb.version : null, canonicalHash: sb.canonicalHash || null },
-      bodiceHash: c._bodice.hash, sleeveHash: c._sleeve.hash, collarHash: c._collar.hash,
-      bodice: c._bodice, sleeve: c._sleeve, collar: c._collar,   // 이미 deep-frozen → 안전하게 참조
+      bodiceHash: c._bodice.hash, sleeveHash: c._sleeve.hash, collarHash: c._collar ? c._collar.hash : null,
+      bodice: c._bodice, sleeve: c._sleeve, collar: c._collar,   // 이미 deep-frozen → 안전하게 참조(카라 없음 = null)
       structuralLines: { cut: c._cuts.map(function (cut) { return { piece: cut.piece, segments: clone(cut.segments) }; }) }
       // ★ 전역 symmetry 필드 없음: 조각마다 접힘이 다르다(앞여밈 몸판=비대칭, 뒤판=CB fold, 소매=1피스,
       //   스탠드·칼라 본체=CB fold 반패턴). 파트별 접힘·수량은 다음 재단 단계에서 결정. 하위 collarResult.symmetry 는 유지.
     };
+    if (c._collarNone) result.collarChoice = "none";   // 명시 «카라 없음»(기존 완료본 형태는 그대로)
+    if (c._pocket) result.pocket = deepFreeze(clone(c._pocket));   // 디테일 «앞 주머니»(주머니 없는 완료본은 키 자체가 없다)
     result.hash = hashStr(signatureOf(result));
     var existing = proj.working.designResult;
     if (existing && existing.hash === result.hash) return { ok: true, result: existing, idempotent: true, check: c };   // 같은 상태 → 기존 참조·completedAt 유지
@@ -131,9 +155,11 @@
     proj = proj || project(); if (!proj) return false;
     var res = proj.working.designResult; if (!res) return true;
     var c = check(proj); if (!c.ok) return true;
-    var cur = { bodiceHash: c._bodice.hash, sleeveHash: c._sleeve.hash, collarHash: c._collar.hash, structuralLines: { cut: c._cuts } };
+    var cur = { bodiceHash: c._bodice.hash, sleeveHash: c._sleeve.hash, collarHash: c._collar ? c._collar.hash : null, structuralLines: { cut: c._cuts } };
+    if (c._collarNone) cur.collarChoice = "none";
+    if (c._pocket) cur.pocket = c._pocket;
     return hashStr(signatureOf(cur)) !== res.hash;
   }
 
-  window.designResult = Object.freeze({ check: check, complete: complete, latest: latest, isCurrentDesignChanged: isCurrentDesignChanged, finalBodiceOf: finalBodiceOf });
+  window.designResult = Object.freeze({ check: check, complete: complete, latest: latest, isCurrentDesignChanged: isCurrentDesignChanged, finalBodiceOf: finalBodiceOf, collarNone: collarNone });
 })();

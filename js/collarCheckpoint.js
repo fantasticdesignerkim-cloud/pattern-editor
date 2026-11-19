@@ -986,5 +986,24 @@
     return !SC.latest(proj) || SC.isCurrentSleeveChanged(proj) || SC.invalidatedByBodice(proj);
   }
 
-  window.collarCheckpoint = Object.freeze({ check: check, complete: complete, latest: latest, isCurrentCollarChanged: isCurrentCollarChanged, invalidatedByBodice: invalidatedByBodice, sleeveStepChanged: sleeveStepChanged });
+  // ── «카라 없음» 명시 선택(2026-11-19 사용자 승인 1차 디자인 UI ④) ──
+  //   chooseNone: working.collarChoice = "none" + 카라 초안·완료본·관리형 본체 선을 한 번에 비운다(잔존 없음).
+  //     목 마감 형상은 만들지 않는다. 선택은 working 에 있으므로 프로젝트 저장/열기로 그대로 따라간다.
+  //   clearNone: 다른 카라를 실제로 적용했을 때만 호출(선택 select 변경만으로는 지우지 않는다) → 다시 제도·완료 필요.
+  //   isNone: 키가 없으면(미적용·기존 프로젝트) false — 기존 «카라 완료 필요» 게이트 그대로.
+  function isNone(proj) { proj = proj || project(); var w = proj && proj.working; return !!(w && w.collarChoice === "none"); }
+  function chooseNone(proj) {
+    proj = proj || project(); if (!proj || !proj.working) return { ok: false, reason: "no-project" };
+    var w = proj.working, cd = w.collarDraft;
+    if (cd && cd.body && cd.body.lineId) w.patternLines = (w.patternLines || []).filter(function (l) { return l.id !== cd.body.lineId; });
+    w.collarDraft = null; w.collarResult = null; w.collarChoice = "none";
+    return { ok: true };
+  }
+  function clearNone(proj) {
+    proj = proj || project(); var w = proj && proj.working;
+    if (w && Object.prototype.hasOwnProperty.call(w, "collarChoice")) delete w.collarChoice;
+  }
+
+  window.collarCheckpoint = Object.freeze({ check: check, complete: complete, latest: latest, isCurrentCollarChanged: isCurrentCollarChanged, invalidatedByBodice: invalidatedByBodice, sleeveStepChanged: sleeveStepChanged,
+    isNone: isNone, chooseNone: chooseNone, clearNone: clearNone });
 })();

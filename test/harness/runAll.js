@@ -207,6 +207,8 @@ const suites = [
   { file: "seamMatchIntegrationCheck.js", golden: false },
   // 재단 준비 1단계(2026-11-13): Design 완료본 → 읽기 전용 재단 조각(시접 전) · 폐곡선 검사 · 누락 이유 · 무효화 · 저장 복원 · 소매 파생/분리 중복 방지.
   { file: "cutPrepIntegrationCheck.js", golden: false },
+  // 1차 디자인 UI ①~④(2026-11-19): 공통 «Design 형상 완료» 위치 · 명시 «카라 없음» 완료→재단→저장/열기→카라 전환 · 버튼 문구 · 선택 화면 동명 없음.
+  { file: "collarNoneCheck.js", golden: false },
   { file: "cutPlacketIntegrationCheck.js", golden: false },
   { file: "cutVentIntegrationCheck.js", golden: false },
   // 시접(2026-11-14): 순수 기하(평행 이동·모서리 교점·오목·다트 접기 복원·거부) + 실제 8조각·설정 소유권(working.cutSpec)·저장 복원
@@ -223,7 +225,10 @@ const suites = [
   { file: "cutGrainCheck.js", golden: false },
   { file: "cutPrintCheck.js", golden: false },
   { file: "cutDxfCheck.js", golden: false },
+  { file: "cutPairCheck.js", golden: false },
   { file: "cutDartTrueCheck.js", golden: false },
+  // 디자인 «디테일» 셔츠 앞 주머니(오각 패치, 2026-11-19): P.100 치수 · 완성선/시접(입구 접어박기) · 앞판 비재단 달림선(한쪽만) · DXF · 저장/열기 · 변경 추적 · 기존 프로젝트 회귀.
+  { file: "designPocketCheck.js", golden: false },
 ];
 
 const tailLines = (buf, n) => (buf || "").toString().trim().split("\n").slice(-n).join("\n");

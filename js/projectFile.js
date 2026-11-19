@@ -208,10 +208,12 @@
   function computeStatus(proj) {
     var w = proj.working, BC = window.bodiceCheckpoint, SC = window.sleeveCheckpoint, CC = window.collarCheckpoint, DR = window.designResult;
     if (!BC || !SC || !CC || !DR) fail("checkpoint-unavailable");
+    var collar = stageStatus(w.collarResult, CC.isCurrentCollarChanged, proj);
+    if (w.collarChoice === "none") collar.none = true;   // 명시 «카라 없음»만 키 추가(기존 파일의 status 는 그대로 비교된다)
     return {
       bodice: stageStatus(w.bodiceResult, BC.isCurrentBodiceChanged, proj),
       sleeve: stageStatus(w.sleeveResult, SC.isCurrentSleeveChanged, proj),
-      collar: stageStatus(w.collarResult, CC.isCurrentCollarChanged, proj),
+      collar: collar,
       design: stageStatus(w.designResult, DR.isCurrentDesignChanged, proj)
     };
   }
@@ -316,9 +318,16 @@
     Object.keys(w).forEach(function (k) { if (!/^[A-Za-z][A-Za-z0-9]*$/.test(k)) fail("working-key", k); });
     ["bodiceResult", "sleeveResult", "collarResult"].forEach(function (k) { if (w[k] != null && !isDeepFrozen(w[k])) fail("frozen-invariant", k); });
     if (w.designResult != null && !Object.isFrozen(w.designResult)) fail("frozen-invariant", "designResult");
+    if (w.collarChoice !== undefined && (w.collarChoice !== "none" || w.collarDraft != null || w.collarResult != null)) fail("working-collar-choice");   // «카라 없음»은 카라 형상과 공존하지 않는다
+    // 디테일 «앞 주머니»: 키가 없으면 주머니 없음(이전 저장본 그대로) · 있으면 엄격 형식(고쳐 쓰지 않음)
+    if (Object.prototype.hasOwnProperty.call(w, "pocket")) {
+      var DPk = window.designPocket, pv = DPk && DPk.validateStored ? DPk.validateStored(w.pocket) : { ok: false, reason: "주머니 모듈이 없습니다" };
+      if (!pv.ok) fail("working-pocket", pv.reason);
+      if (w.designResult != null && w.designResult.pocket != null && !isDeepFrozen(w.designResult.pocket)) fail("frozen-invariant", "designResult.pocket");
+    }
     // 화면 단계
     var u = payload.ui;
-    if (!u || (u.stage !== "draft" && u.stage !== "design") || ["body", "sleeve", "collar"].indexOf(u.subtab) < 0) fail("ui-state");
+    if (!u || (u.stage !== "draft" && u.stage !== "design") || ["body", "sleeve", "collar", "detail"].indexOf(u.subtab) < 0) fail("ui-state");
     // 완료/변경됨: 기존 판정 함수로 재계산 → 저장 시점과 같아야 한다(몰래 완료·몰래 변경 없음)
     var status = dw.evaluateIsolated(proj, computeStatus);
     if (!sameJSON(status, payload.status)) fail("status-mismatch", JSON.stringify(payload.status) + " → " + JSON.stringify(status));
@@ -370,6 +379,7 @@
     "block-invalid": "원형 완료본 서명이 맞지 않습니다",
     "block-schema-unsupported": "지원하지 않는 원형 완료본 형식입니다",
     "status-mismatch": "완료/변경됨 상태를 재계산한 결과가 파일과 다릅니다",
+    "working-pocket": "저장된 앞 주머니 설정을 읽을 수 없습니다(형식·범위 오류)",
     "graph-roundtrip": "복원 검증 실패(재인코딩 불일치)"
   };
   function reasonText(r, detail) {
@@ -384,7 +394,7 @@
     return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + "-" + z(d.getHours()) + z(d.getMinutes());
   }
   function statusLine(st) {
-    function one(name, s) { return name + " " + (!s.completed ? "미완료" : s.changed ? "변경됨" : "완료"); }
+    function one(name, s) { return name + " " + (s.none ? "없음(선택)" : !s.completed ? "미완료" : s.changed ? "변경됨" : "완료"); }
     return [one("몸판", st.bodice), one("소매", st.sleeve), one("카라", st.collar), one("Design", st.design)].join(" · ");
   }
 

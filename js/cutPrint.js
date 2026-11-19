@@ -56,16 +56,21 @@
       shown++;
       (sm.notches || []).filter(function (n) { return n.held; }).forEach(function (n) { out.attention.push("«" + p.label + "» 맞춤 «" + n.name + "» 보류 — 다트 입구 정리로 그 자리 완성선이 바뀜(어긋남 " + n.heldDevCm + "cm · 기울기 " + n.heldDevDeg + "°) · 인쇄·DXF 에서 뺍니다(위치를 옮기지 않음 · 저장값 그대로)"); });
       if (r.foldWhy) out.warnings.push("«" + p.label + "» 골선을 펼치지 못해 반쪽으로 인쇄합니다(골선 표시) — " + r.foldWhy);
-      var q = Q.pieces[p.id] || {}, g = G.pieces[p.id] || {};
-      var row = { id: p.id, label: p.label, unfolded: !!r.unfolded,
-        qty: { n: q.qty == null ? null : q.qty, kind: q.qty == null ? "none" : q.explicit ? "user" : "default", how: q.how || "" },
-        grain: { kind: g.held ? "held" : g.angleDeg == null ? "none" : !g.ok ? "unfit" : (g.explicitAngle || g.explicitAt) ? "user" : "default", angleDeg: g.angleDeg == null ? null : g.angleDeg, shown: !!g.ok, basis: g.basis || null, why: g.why || g.heldWhy || null } };
-      out.rows.push(row);
-      if (row.qty.kind === "none") out.attention.push("«" + p.label + "» 재단 수량 미정 — 종이에 «수량 미정»으로 인쇄됩니다");
-      if (row.grain.kind === "held") out.attention.push("«" + p.label + "» 식서 보류 — " + (row.grain.shown ? "임시 기본 방향을 점선으로 인쇄합니다" : "화살표 없이 «식서 보류»로 인쇄합니다") + "(저장해 둔 설정은 적용하지 않음)");
-      if (row.grain.kind === "none") out.attention.push("«" + p.label + "» 식서 방향 미정 — 화살표 없이 «식서 미정»으로 인쇄됩니다");
-      if (row.grain.kind === "unfit") out.attention.push("«" + p.label + "» 식서 화살표가 조각 안에 들어가지 않아 인쇄되지 않습니다");
+      // ⑦ 앞판 좌우 한 쌍: 보이는 조각마다 한 줄(각 1장 · 같은 설정을 반사). 쌍이 아닐 때는 예전과 같은 한 줄.
+      var insts = r.pair && D[r.pair.mirrorId] ? [p.id, r.pair.mirrorId] : [p.id];
+      insts.forEach(function (iid) {
+        var ri = D[iid], lab = ri.label || p.label, paired = insts.length > 1, q = (paired && Q.inst && Q.inst[iid]) || Q.pieces[p.id] || {}, g = G.pieces[iid] || {};
+        var row = { id: iid, base: p.id, label: lab, unfolded: !!ri.unfolded, paired: paired, side: paired ? ri.side : null,
+          qty: { n: q.qty == null ? null : q.qty, kind: q.qty == null ? "none" : q.explicit ? "user" : "default", how: q.how || "" },
+          grain: { kind: g.held ? "held" : g.angleDeg == null ? "none" : !g.ok ? "unfit" : (g.explicitAngle || g.explicitAt) ? "user" : "default", angleDeg: g.angleDeg == null ? null : g.angleDeg, shown: !!g.ok, basis: g.basis || null, why: g.why || g.heldWhy || null } };
+        out.rows.push(row);
+        if (row.qty.kind === "none") out.attention.push("«" + lab + "» 재단 수량 미정 — 종이에 «수량 미정»으로 인쇄됩니다");
+        if (row.grain.kind === "held") out.attention.push("«" + lab + "» 식서 보류 — " + (row.grain.shown ? "임시 기본 방향을 점선으로 인쇄합니다" : "화살표 없이 «식서 보류»로 인쇄합니다") + "(저장해 둔 설정은 적용하지 않음)");
+        if (row.grain.kind === "none") out.attention.push("«" + lab + "» 식서 방향 미정 — 화살표 없이 «식서 미정»으로 인쇄됩니다");
+        if (row.grain.kind === "unfit") out.attention.push("«" + lab + "» 식서 화살표가 조각 안에 들어가지 않아 인쇄되지 않습니다");
+      });
     });
+    out.pairing = m.pairing || null;   // ⑦ 쌍으로 펼치지 않은 사유(reason)는 경고가 아니라 참고 — 기존 수량·표시 그대로이므로 화면 «참고»에서만 알린다
     if (!shown && !out.blockers.length) out.blockers.push("인쇄할 조각이 없습니다");
     if (m.orphans && m.orphans.length) out.warnings.push("연결이 끊긴 시접 설정 " + m.orphans.length + "건 — 인쇄에 쓰이지 않습니다");
     if (m.notchOrphans && m.notchOrphans.length) out.warnings.push("연결이 끊긴 맞춤 표시 " + m.notchOrphans.length + "건 — 인쇄되지 않습니다");
@@ -112,8 +117,8 @@
   var LABEL_CM = 0.32;   // 선 이름 글자 3.2mm(실물)
   // 한 조각 → SVG 글자 + 덮는 영역(재단선 다각형 · 글자 상자) — 조각 좌표에 배치 이동(dx,dy)을 얹는다
   function pieceSvg(p, r, pos, row, sm, g) {
-    var o = [], shapes = [], T = function (q) { return { x: q.x + pos.dx, y: q.y + pos.dy }; };
-    o.push("<g class=\"cp-piece\" data-piece=\"" + esc(p.id) + "\" transform=\"translate(" + n4(pos.dx) + " " + n4(pos.dy) + ")\">");
+    var o = [], shapes = [], T = function (q) { return { x: q.x + pos.dx, y: q.y + pos.dy }; }, sgn = r.instMirrored ? -1 : 1, plab = row.label || p.label;   // sgn: 거울 쪽 글자 위치만 반대로(글자 자체는 뒤집지 않음)
+    o.push("<g class=\"cp-piece\" data-piece=\"" + esc(row.id || p.id) + "\" transform=\"translate(" + n4(pos.dx) + " " + n4(pos.dy) + ")\">");
     o.push("<path class=\"cp-cut\" d=\"" + polyD(r.seam) + "\"/>");
     o.push("<path class=\"cp-fin\" d=\"" + pathD(r.outline) + " Z\"/>");
     if (r.trued) o.push("<path class=\"cp-fin cp-trued\" d=\"" + pathD(r.trued) + " Z\"/>");   // 접어 정리한 완성 외곽(다트 긴 V 는 위 완성선에 그대로)
@@ -123,10 +128,10 @@
       var zone = mk.kind.indexOf("zone-") === 0;
       o.push("<path class=\"" + (zone ? "cp-zone" : "cp-mark") + "\" d=\"" + pathD(mk.segs) + (zone ? " Z" : "") + "\"/>");
       if (!mk.label || mk.mirrored) return;
-      var s0 = mk.segs[0], ly = s0.from.y + (s0.to.y - s0.from.y) * (mk.kind === "cf" ? 0.3 : 0.62), lx = s0.from.x - 0.15;
+      var s0 = mk.segs[0], ly = s0.from.y + (s0.to.y - s0.from.y) * (mk.kind === "cf" ? 0.3 : 0.62), lx = s0.from.x - 0.15 * sgn;
       o.push(txt("cp-lab", lx, ly, LABEL_CM, mk.label, " transform=\"rotate(-90 " + n4(lx) + " " + n4(ly) + ")\""));
     });
-    if (p.placket && p.placket.facingWidthCm > 0) { var ex = p.placket.cutX + 0.45, ey = p.placket.topY + (p.placket.botY - p.placket.topY) * 0.46;
+    if (p.placket && p.placket.facingWidthCm > 0) { var ex = (r.instMirrored ? -p.placket.cutX : p.placket.cutX) + 0.45 * sgn, ey = p.placket.topY + (p.placket.botY - p.placket.topY) * 0.46;
       o.push(txt("cp-lab", ex, ey, LABEL_CM, "안단 끝(외곽)", " transform=\"rotate(-90 " + n4(ex) + " " + n4(ey) + ")\"")); }
     r.edges.forEach(function (e) {   // 골선: 펼친 조각 = 가운데 선 하나 · 펼치지 못한 조각 = 접어 재단 표시
       var se = sm.edges.filter(function (x) { return x.id === e.id; })[0]; if (!se || se.kind !== "fold") return;
@@ -143,8 +148,8 @@
     var bb = r.bbox, w = bb.maxX - bb.minX, h = bb.maxY - bb.minY, cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2, tall = h > w * 1.5 && w < 9;
     var room = tall ? w : h, fs = Math.max(0.3, Math.min(0.7, room / 6)), fs2 = Math.max(0.26, fs * 0.62);
     var ql = row.qty.kind === "none" ? "수량 미정" : "재단 " + row.qty.n + "장" + (row.qty.how ? " · " + row.qty.how : "") + (row.qty.kind === "default" ? " (기본)" : " (직접 지정)");
-    var gk = row.grain.kind, gl = gk === "default" ? "식서 " + row.grain.angleDeg + "° · 교재 기본" : gk === "user" ? "식서 " + row.grain.angleDeg + "° · 직접 지정" : gk === "held" ? (row.grain.shown ? "식서 보류 — 점선은 임시 기본" : "식서 보류 — 방향 미정") : gk === "none" ? "식서 미정" : "식서 표시 못함";
-    var lines = [[p.label, fs, "cp-name"], [ql, fs2, "cp-info"], ["완성 " + fmt(p.widthCm) + " × " + fmt(p.heightCm) + " cm" + (r.unfolded ? " · 골 펼친 한 장" : ""), fs2, "cp-info"], [gl, fs2, "cp-info"]];
+    var gk = row.grain.kind, gl = gk === "default" ? "식서 " + row.grain.angleDeg + "° · " + (/앱 기본값/.test(row.grain.basis || "") ? "앱 기본" : "교재 기본") : gk === "user" ? "식서 " + row.grain.angleDeg + "° · 직접 지정" : gk === "held" ? (row.grain.shown ? "식서 보류 — 점선은 임시 기본" : "식서 보류 — 방향 미정") : gk === "none" ? "식서 미정" : "식서 표시 못함";
+    var lines = [[plab, fs, "cp-name"], [ql, fs2, "cp-info"], ["완성 " + fmt(p.widthCm) + " × " + fmt(p.heightCm) + " cm" + (r.unfolded ? " · 골 펼친 한 장" : ""), fs2, "cp-info"], [gl, fs2, "cp-info"]];
     var rot = tall ? " transform=\"rotate(-90 " + n4(cx) + " " + n4(cy) + ")\"" : "", y = cy - fs * 0.6, wmax = 0;
     lines.forEach(function (ln, i) { o.push(txt(ln[2], cx, y, ln[1], ln[0], " text-anchor=\"middle\"" + rot)); y += (i === 0 ? fs2 * 1.5 : fs2 * 1.35); wmax = Math.max(wmax, String(ln[0]).length * ln[1]); });
     var hw = wmax / 2, hh = fs + fs2 * 4.5, lb = tall ? [{ x: cx - hh, y: cy - hw }, { x: cx + hh, y: cy - hw }, { x: cx + hh, y: cy + hw }, { x: cx - hh, y: cy + hw }] : [{ x: cx - hw, y: cy - hh }, { x: cx + hw, y: cy - hh }, { x: cx + hw, y: cy + hh }, { x: cx - hw, y: cy + hh }];
@@ -161,9 +166,9 @@
     meta = meta || {};
     var d = pre.d, D = pre.D, L = pre.L, parts = [], shapes = [], rowOf = {}; pre.rows.forEach(function (r) { rowOf[r.id] = r; });
     L.order.forEach(function (pid) {
-      var p = d.pieces.filter(function (x) { return x.id === pid; })[0], r = D[pid], pos = L.pos[pid]; if (!p || !r || !pos || !rowOf[pid]) return;
-      var ps = pieceSvg(p, r, pos, rowOf[pid], pre.m.pieces[pid], pre.G.pieces[pid]);
-      parts.push(ps.svg); ps.shapes.forEach(function (s) { s.pid = pid; s.label = p.label; shapes.push(s); });
+      var bid = String(pid).replace(/~m$/, ""), p = d.pieces.filter(function (x) { return x.id === bid; })[0], r = D[pid], pos = L.pos[pid]; if (!p || !r || !pos || !rowOf[pid]) return;
+      var ps = pieceSvg(p, r, pos, rowOf[pid], pre.m.pieces[bid], pre.G.pieces[pid]);
+      parts.push(ps.svg); ps.shapes.forEach(function (s) { s.pid = pid; s.label = rowOf[pid].label || p.label; shapes.push(s); });
     });
     var all = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
     shapes.forEach(function (s) { all.x0 = Math.min(all.x0, s.bb.x0); all.y0 = Math.min(all.y0, s.bb.y0); all.x1 = Math.max(all.x1, s.bb.x1); all.y1 = Math.max(all.y1, s.bb.y1); });
@@ -285,7 +290,7 @@
     o.push("</svg><div>숫자 = 쪽 번호(왼쪽 위부터 행 순서)</div></div></div>");
     o.push("<h2>사전 점검 — 조각 · 수량 · 식서</h2><table><tr><th>조각</th><th>재단 수량</th><th>식서</th><th>비고</th></tr>");
     pre.rows.forEach(function (r) {
-      o.push("<tr><td>" + esc(r.label) + "</td><td>" + (r.qty.n == null ? "<span class=\"cp-warn\">미정</span>" : r.qty.n + "장 · " + QK[r.qty.kind]) + "</td><td>" + (r.grain.kind === "user" || r.grain.kind === "default" ? r.grain.angleDeg + "° · " + GK[r.grain.kind] : "<span class=\"cp-warn\">" + GK[r.grain.kind] + (r.grain.kind === "held" && r.grain.shown ? "(점선 = 임시 기본 " + r.grain.angleDeg + "°)" : "") + "</span>") + "</td><td>" + (r.unfolded ? "골 펼친 한 장" : "") + "</td></tr>");
+      o.push("<tr><td>" + esc(r.label) + "</td><td>" + (r.qty.n == null ? "<span class=\"cp-warn\">미정</span>" : r.qty.n + "장 · " + QK[r.qty.kind]) + "</td><td>" + (r.grain.kind === "user" || r.grain.kind === "default" ? r.grain.angleDeg + "° · " + (r.grain.kind === "default" && /앱 기본값/.test(r.grain.basis || "") ? "앱 기본" : GK[r.grain.kind]) : "<span class=\"cp-warn\">" + GK[r.grain.kind] + (r.grain.kind === "held" && r.grain.shown ? "(점선 = 임시 기본 " + r.grain.angleDeg + "°)" : "") + "</span>") + "</td><td>" + (r.unfolded ? "골 펼친 한 장" : "") + "</td></tr>");
     });
     o.push("</table>");
     var notes = pre.attention.concat(pre.warnings);
@@ -365,7 +370,7 @@
     if (pre.rows && pre.rows.length) {
       o.push("<div class=\"cut-print-h\">사전 점검 — 수량·식서가 기본값인지 직접 정한 값인지</div><table class=\"cut-print-table\"><tr><th>조각</th><th>수량</th><th>식서</th></tr>");
       pre.rows.forEach(function (r) {
-        o.push("<tr><td>" + esc(r.label) + (r.unfolded ? " <small>(골 펼친 한 장)</small>" : "") + "</td><td" + (r.qty.kind === "none" ? " class=\"is-warn\"" : "") + ">" + (r.qty.n == null ? "미정" : r.qty.n + "장 · " + QK[r.qty.kind]) + "</td><td" + (/held|none|unfit/.test(r.grain.kind) ? " class=\"is-warn\"" : "") + ">" + (r.grain.angleDeg == null ? "" : r.grain.angleDeg + "° · ") + GK[r.grain.kind] + (r.grain.kind === "held" && r.grain.shown ? "(임시 기본을 점선으로)" : "") + "</td></tr>");
+        o.push("<tr><td>" + esc(r.label) + (r.unfolded ? " <small>(골 펼친 한 장)</small>" : "") + "</td><td" + (r.qty.kind === "none" ? " class=\"is-warn\"" : "") + ">" + (r.qty.n == null ? "미정" : r.qty.n + "장 · " + QK[r.qty.kind]) + "</td><td" + (/held|none|unfit/.test(r.grain.kind) ? " class=\"is-warn\"" : "") + ">" + (r.grain.angleDeg == null ? "" : r.grain.angleDeg + "° · ") + (r.grain.kind === "default" && /앱 기본값/.test(r.grain.basis || "") ? "앱 기본" : GK[r.grain.kind]) + (r.grain.kind === "held" && r.grain.shown ? "(임시 기본을 점선으로)" : "") + "</td></tr>");
       });
       o.push("</table>");
     }

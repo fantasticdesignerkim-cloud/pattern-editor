@@ -298,18 +298,20 @@ const dv = S.CUT.derive(P, true), sm = S.CUT.seam(dv, P), D = S.CUT.displayOf(dv
 // ══ §5 출력 ══
 {
   const pr = S.W.cutPrint.build(P, null, META), nTr = (pr.sheetSvg.match(/class="cp-fin cp-trued"/g) || []).length, trD = /class="cp-fin cp-trued"[^>]* d="([^"]+)"/.exec(pr.sheetSvg);
-  ok(pr.ok && nTr === 2 && /fill="none" stroke="#000" stroke-width="\.025"/.test(pr.sheetSvg.match(/class="cp-fin cp-trued"[^>]*/)[0]) && (pr.sheetSvg.match(/class="cp-fin"/g) || []).length === 8, "5: 인쇄 — 완성선 8(긴 V 포함) + 정리 외곽 2(앞·뒤) · 같은 선 굵기 · 채움 없음");
+  ok(pr.ok && nTr === 3 && /fill="none" stroke="#000" stroke-width="\.025"/.test(pr.sheetSvg.match(/class="cp-fin cp-trued"[^>]*/)[0]) && (pr.sheetSvg.match(/class="cp-fin"/g) || []).length === 9, "5: 인쇄 — 완성선 9(긴 V 포함 · 앞판 좌우 2) + 정리 외곽 3(앞 좌·우 + 뒤) · 같은 선 굵기 · 채움 없음");
   const gx = S.W.cutDxf.build(P, META), ax = S.W.cutDxf.build(P, META, { format: "aama" });
   const cnt = (t, re) => (t.match(re) || []).length;
-  ok(gx.ok && gx.stats.layers.FINISHED === 8 && gx.stats.layers.FINISHED_TRUED === 2 && gx.stats.layers.CUT === 8, "5: 일반 DXF — FINISHED 8 · FINISHED_TRUED 2(앞·뒤) · CUT 8");
+  ok(gx.ok && gx.stats.layers.FINISHED === 9 && gx.stats.layers.FINISHED_TRUED === 3 && gx.stats.layers.CUT === 9, "5: 일반 DXF — FINISHED 9 · FINISHED_TRUED 3(앞 좌·우 + 뒤) · CUT 9 (앞판 좌우 각 1장)");
   // AAMA: 블록별 레이어 14 닫힌 선 개수와 차이
   const blk = name => { const a = ax.dxf.indexOf("BLOCK\r\n8\r\n1\r\n2\r\n" + name), b = ax.dxf.indexOf("ENDBLK", a); return ax.dxf.slice(a, b); };
   const polys = (txt, layer) => txt.split("\r\n0\r\nPOLYLINE\r\n").slice(1).filter(x => x.startsWith("8\r\n" + layer + "\r\n")).map(x => ({ closed: /\r\n70\r\n1\r\n/.test(x.split("VERTEX")[0] + "\r\n"), pts: x.split("\r\n0\r\nVERTEX\r\n").slice(1).map(v => { const m = /10\r\n(-?[\d.]+)\r\n20\r\n(-?[\d.]+)/.exec(v); return { x: +m[1], y: +m[2] }; }) }));
-  const f14 = polys(blk("FRONT_BASE"), "14"), b14 = polys(blk("BACK_BASE"), "14"), f1 = polys(blk("FRONT_BASE"), "1")[0], s14 = polys(blk("SLEEVE_SLEEVE_BASE"), "14");
-  const diff = f14.length === 2 && f14[0].pts.length === f14[1].pts.length ? f14[0].pts.filter((q, i) => d2(q, f14[1].pts[i]) > 1e-3).length : -1;
-  ok(ax.ok && f14.length === 2 && f14.every(x => x.closed) && diff === 1 && b14.length === 2 && b14.every(x => x.closed) && s14.length === 1, "5: AAMA 구조 — 앞판 레이어 14 에 닫힌 선 2개(긴 V · 정리 외곽 — 다른 점은 다트 꼭짓점 하나) · 뒤판 2개 · 다트 없는 소매는 1개(중복으로 지우지 않음)");
-  const tr = f14[1].pts, cutMin = Math.min(...f1.pts.map(q => dRing(q, tr)));
-  ok(cutMin > 9.89 && Math.min(...f1.pts.map(q => dRing(q, f14[0].pts))) > 9.89, "5: AAMA 앞판 재단선(레이어 1) = 정리 외곽에서 " + cutMin.toFixed(2) + "mm 이상(시접 1cm)");
+  // ⑦ 앞판은 좌우 두 블록(FRONT_RIGHT_BASE · FRONT_LEFT_BASE) — 둘 다 같은 기하 검증(거울 쪽을 건너뛰지 않는다)
+  const FB = ["FRONT_RIGHT_BASE", "FRONT_LEFT_BASE"].map(n => ({ n, f14: polys(blk(n), "14"), f1: polys(blk(n), "1")[0] }));
+  const b14 = polys(blk("BACK_BASE"), "14"), s14 = polys(blk("SLEEVE_SLEEVE_BASE"), "14");
+  const diffOf = f14 => f14.length === 2 && f14[0].pts.length === f14[1].pts.length ? f14[0].pts.filter((q, i) => d2(q, f14[1].pts[i]) > 1e-3).length : -1;
+  ok(ax.ok && !/BLOCK\r\n8\r\n1\r\n2\r\nFRONT_BASE\r\n/.test(ax.dxf) && FB.every(b => b.f14.length === 2 && b.f14.every(x => x.closed) && diffOf(b.f14) === 1) && b14.length === 2 && b14.every(x => x.closed) && s14.length === 1, "5: AAMA 구조 — 앞판 좌·우 블록 각각 레이어 14 에 닫힌 선 2개(긴 V · 정리 외곽 — 다른 점은 다트 꼭짓점 하나) · 뒤판 2개 · 다트 없는 소매는 1개(중복으로 지우지 않음)");
+  const cutMins = FB.map(b => Math.min(...b.f1.pts.map(q => dRing(q, b.f14[1].pts))));
+  ok(cutMins.every(c => c > 9.89) && FB.every(b => Math.min(...b.f1.pts.map(q => dRing(q, b.f14[0].pts))) > 9.89), "5: AAMA 앞판 좌·우 재단선(레이어 1) = 정리 외곽에서 " + cutMins.map(c => c.toFixed(2)).join("/") + "mm 이상(시접 1cm)");
   const L5 = buildP(), P5 = L5.P; delete P5.working.cutDart; const g5 = L5.S.W.cutDxf.build(P5, META), p5 = L5.S.W.cutPrint.build(P5, null, META);
   ok(g5.ok && !g5.stats.layers.FINISHED_TRUED && !/cp-trued/.test(p5.sheetSvg) && !/FINISHED_TRUED\r\n66/.test(g5.dxf), "5: 이전 프로젝트 = 인쇄·DXF 에 정리 외곽 없음(예전 출력 그대로)");
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), css = fs.readFileSync(path.join(ROOT, "css", "apple.css"), "utf8");
@@ -357,7 +359,7 @@ const dv = S.CUT.derive(P, true), sm = S.CUT.seam(dv, P), D = S.CUT.displayOf(dv
   S6.CUT.setDartMode("back", bdart.id, "center-chord", P6); const w1 = S6.CUT.setEdge("back", "shoulder", { widthCm: 1.5 }, P6); V7 = view6();
   ok(w1.ok && V7.m.pieces.back.ok && V7.m.pieces.back.notches.filter(n => n.held).length === 2 && V7.m.pieces.back.notches.filter(n => !n.held).every(n => n.to || n.why), "6: 다시 직선 정리 + 어깨 시접 1.5cm = 같은 2개 보류(폭과 무관 · 위치로만 판정) · 나머지는 새 재단선까지");
   const fdart = S6.CUT.dartsOf(V7.d, P6).list.find(x => x.pieceId === "front"); S6.CUT.setDartMode("front", fdart.id, "down-legacy", P6); V7 = view6(); const fNow = V7.m.pieces.front.notches; S6.CUT.setDartMode("front", fdart.id, "up-extend", P6); const fUp = view6().m.pieces.front.notches;
-  ok(fNow.every(n => !n.held) && fUp.every(n => !n.held) && J(fNow.map(n => [n.id, n.from])) === J(fUp.map(n => [n.id, n.from])), "6: 앞 진동 다트 위↔아래 = 앞판 너치 보류 0 · 너치 자리 같음(연장 방식은 진동선을 바꾸지 않음)");
+  ok(fNow.every(n => !n.held) && fUp.every(n => !n.held) && J(fNow.map(n => [n.id, n.sewnAt])) === J(fUp.map(n => [n.id, n.sewnAt])), "6: 앞 진동 다트 위↔아래 = 앞판 너치 보류 0 · 너치 자리 같음(연장 방식은 진동선을 바꾸지 않음)");
   ok(J(P6.working.cutNotches) === nsSaved && hashes(P6) === h6, "6: 저장된 너치(위치·서명) 그대로 · 삭제·재배치 없음 · 완료 hash 그대로");
   // 뒤 어깨 입구 연장 — 긴 V 를 자동으로 늘리지 않고 한계 안내
   const bd = V7.D6.back, bt = V7.m.pieces.back.trued.darts[0];

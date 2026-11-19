@@ -595,7 +595,13 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 #cutCv .cut-edge-fold-label{fill:#0A5FD0}
 #cutCv .cut-edge-sel{fill:none;stroke:var(--ax-accent);stroke-width:4px;vector-effect:non-scaling-stroke;stroke-linecap:round;pointer-events:none}
 #cutCv .cut-edge-hit{fill:none;stroke:transparent;stroke-width:18px;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
-.cut-seam-card{position:absolute;left:16px;bottom:16px;right:340px;max-width:560px;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border-radius:14px;
+/* ⑤ 시접 카드 = 재단 뷰(캔버스 영역) 하단 가운데 고정: 좌우 오프셋(옆 목록 폭만큼 오른쪽을 비움)을 둔 채 max-width 로 줄이고 margin:auto 로 가운데 */
+.cut-defaults{font-size:12px;color:var(--ax-text2);padding:2px 8px;border-radius:10px;background:var(--ax-fill);white-space:nowrap}
+#btnCutWidths.is-on,#btnCutWidths[aria-pressed="true"]{background:var(--ax-accent);color:#fff}
+#cutCv .cut-width-label{fill:#1D1D1F;text-anchor:middle;dominant-baseline:central;font-family:var(--ax-font);font-weight:600;paint-order:stroke;stroke:#fff;stroke-width:.18px;stroke-linejoin:round;pointer-events:none}
+#cutCv .cut-width-label.is-explicit{fill:#0A5FD0}
+#cutCv .cut-width-label.is-fold{fill:#0A5FD0;font-weight:500}
+.cut-seam-card{position:absolute;left:16px;bottom:16px;right:340px;margin:0 auto;max-width:560px;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border-radius:14px;
   background:var(--ax-inspector);border:.5px solid var(--ax-hair);box-shadow:0 6px 24px rgba(0,0,0,.16);font-size:13px}
 .cut-seam-card[hidden]{display:none}
 .cut-seam-card .csc-name{flex:1 1 100%;font-size:14px;font-weight:600}
@@ -629,7 +635,7 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 @media (max-width:860px){
   .cut-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(220px,1fr) minmax(0,42%)}
   .cut-side{border-left:0;border-top:.5px solid var(--ax-hair)}
-  .cut-seam-card{left:8px;right:8px;bottom:8px;max-width:none;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));max-height:42vh;overflow-y:auto;overscroll-behavior:contain}
+  .cut-seam-card{left:8px;right:8px;bottom:8px;margin:0;max-width:none;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));max-height:42vh;overflow-y:auto;overscroll-behavior:contain}
   .cut-seam-card .csc-notch-edit,.cut-seam-card .csc-notch{max-height:none;overflow:visible}
   .cut-item .ci-qty input,.cut-item .ci-qty .btn{min-height:44px}
   .cut-seam-card select,.cut-seam-card input,.cut-seam-card .btn{min-height:44px}

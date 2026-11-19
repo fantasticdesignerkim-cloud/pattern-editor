@@ -148,7 +148,10 @@ const lineOK = (g, poly, minClear) => { let okk = true, mc = Infinity; for (let 
   ok(a("collar-body") === 0 && a("collar-stand") === 0 && a("cuff") === 0, "1: 위 칼라·밴드·커프스 = 길이 방향 0° " + J([a("collar-body"), a("collar-stand"), a("cuff")]));
   ok(a("vent-placket") === 90 && (a("vent-bias") === 45 || a("vent-bias") === 135), "1: 덧단 = 길이 방향 · 트임 바이어스 = 45° " + J([a("vent-placket"), a("vent-bias")]));
   ok(Object.keys(G.pieces).every(k => /P\.169|P\.91/.test(G.pieces[k].basis || "")), "1: 기본값마다 교재 근거 문구(P.169 · 바이어스 P.91)");
-  ok(Object.keys(G.pieces).join(",") === M.d.pieces.map(p => p.id).join(",") && Object.keys(G.pieces).every(k => G.pieces[k].ok && G.pieces[k].from && G.pieces[k].to && !Array.isArray(G.pieces[k].from)), "1: 조각마다 화살표 하나(8조각 전부 표시)");
+  // ⑦ 앞판은 좌우 거울쌍 → 저장 조각 8개 + 거울 쪽 파생 화살표 1개(front~m · 읽기 전용) = 보이는 화살표 9개
+  const gk = Object.keys(G.pieces), base = gk.filter(k => !/~m$/.test(k));
+  ok(base.join(",") === M.d.pieces.map(p => p.id).join(",") && gk.length === base.length + 1 && gk.filter(k => /~m$/.test(k)).join(",") === "front~m" && gk.every(k => G.pieces[k].ok && G.pieces[k].from && G.pieces[k].to && !Array.isArray(G.pieces[k].from)), "1: 조각마다 화살표 하나(저장 8조각 + 앞판 거울 쪽 1 = 9개 전부 표시)");
+  ok(near(-G.pieces.front.from.x, G.pieces["front~m"].from.x, 1e-9) && near(-G.pieces.front.to.x, G.pieces["front~m"].to.x, 1e-9) && near(G.pieces.front.from.y, G.pieces["front~m"].from.y, 1e-9) && G.pieces["front~m"].angleDeg === 90, "1: 거울 쪽 식서 = 원본 식서의 세로 축 반사(90° 유지)");
   ok(M.D.back.unfolded && M.D["collar-body"].unfolded && G.pieces.back.unfolded && G.pieces.back.at.x > 0 && G.pieces["collar-body"].at.x > 0.2, "1: 골 펼친 조각 = 하나만 · 원래 쪽에 둠(반사 쪽에 복제 없음)");
   const fake = id => S.CUT.defaultGrain({ id, edges: [], marks: [], segs: [] });
   ok(fake("yoke-back").angleDeg === null && /직접 지정/.test(fake("yoke-back").why) && fake("sleeve-upper").angleDeg === null, "1: 근거를 확인하지 못한 조각 = 기본 없음(추정하지 않음)");
