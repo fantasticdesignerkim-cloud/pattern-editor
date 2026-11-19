@@ -2053,3 +2053,75 @@ function drawPoints(svg,f,p,dr,darts_,B,W,BL,showBase,showDart,showDep,showPatte
 
   svg.appendChild(gp);
 }
+
+// ── 곡선 손잡이 터치·펜 연결 (2026-11-19) ─────────────────────────────────────────────────────
+//   목선·진동·소매 손잡이(drawFrontNeck/drawBackNeck/drawFrontArmhole/drawArmhole/drawSleeve)는 mousedown/window mousemove/mouseup 만
+//   받아서 터치·펜으로는 끌 수 없었다(끌기 중에는 호환 마우스 이벤트가 오지 않는다). 손잡이마다 고치지 않고 **한 곳**에서 받아,
+//   기존 손잡이 핸들러가 그대로 쓰는 mousedown/mousemove/mouseup 으로 넘겨준다 → 좌표 제약·공식·Undo(init.js mousedown 훅)·저장
+//   (init.js mouseup 훅의 저장 예약)은 마우스와 같은 함수를 그대로 탄다. 마우스 포인터는 건드리지 않는다(종전 경로).
+//   · 누른 포인터 하나만(isPrimary) · svg 에 pointer capture(render 가 손잡이를 다시 그려도 계속) · 손잡이는 가장 가까운 것을 22px(터치)/14px(펜) 안에서.
+//   · 정상 종료 = pointerup(움직였을 때만 Undo 1회·저장). 취소 = pointercancel · lostpointercapture · 창 blur · 두 번째 손가락(핀치) →
+//     시작 상태로 되돌리고, 이 조작이 쌓은 Undo 와 예약된 저장을 지운다(취소된 조작은 저장하지 않는다).
+(function(){
+  if (typeof svg === "undefined" || !svg.addEventListener) return;
+  const HIT = { touch: 22, pen: 14 }, MOVE_PX = 3;
+  let drag = null, hooked = false, savePending = false;
+  // 예약된 저장 추적(wrap 만 — state.js 는 그대로): 직전 성공 편집의 저장이 드래그 도중 미확정 상태를 기록하거나 취소에 지워지지 않게 한다.
+  let wrapped = false;
+  function trackSave() {      // 저장 함수는 render.js 보다 늦게 올라올 수 있어 첫 누름에서 감싼다
+    if (wrapped) return;
+    const _mark = window.markAutoSave, _auto = window.autoSaveCurveData;
+    if (typeof _mark !== "function" || typeof _auto !== "function") return;
+    wrapped = true;
+    window.markAutoSave = function () { savePending = true; return _mark.apply(this, arguments); };
+    window.autoSaveCurveData = function () { savePending = false; return _auto.apply(this, arguments); };
+  }
+  trackSave();                                                       // 이미 있으면 즉시
+  if (!wrapped) document.addEventListener("DOMContentLoaded", trackSave);   // 후속 스크립트(저장 함수) 로드 뒤 — 첫 마우스 저장 예약보다 먼저
+  const editOn = () => !!(state.armEditMode || state.neckEditMode || state.sleeveEditMode);
+  const dartOn = () => typeof dartMoveState !== "undefined" && !!dartMoveState && !!dartMoveState.active;
+  const fire = (t, type, x, y) => t.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, screenX: x, screenY: y, button: 0, buttons: type === "mouseup" ? 0 : 1, view: window }));
+  function pick(e) {
+    let best = null, bd = Infinity;
+    const lim = HIT[e.pointerType] || HIT.touch;
+    svg.querySelectorAll("circle").forEach(c => {
+      if (c.style.cursor !== "grab" || (c.closest && c.closest(".dart-rotate-handle"))) return;
+      const b = c.getBoundingClientRect(), d = Math.hypot(b.left + b.width / 2 - e.clientX, b.top + b.height / 2 - e.clientY);
+      if (d <= Math.max(lim, Math.max(b.width, b.height) / 2) && d < bd) { bd = d; best = c; }
+    });
+    return best;
+  }
+  function end(kind) {
+    const d = drag; if (!d) return; drag = null;
+    try { svg.releasePointerCapture(d.id); } catch (_) { /* 무시 */ }
+    fire(window, "mouseup", d.x, d.y);           // 손잡이 핸들러의 window 리스너를 정리(init.js 훅이 저장을 예약한다)
+    if (kind === "up" && d.moved && serializeEditState() !== d.snap) return;   // 정상 종료: Undo 1회(mousedown 훅) + 저장(mouseup 훅)
+    clearTimeout(state.autoSaveTimer); savePending = false;   // 취소·움직임 없는 탭 = 저장하지 않는다(직전 성공 편집 저장은 시작 때 이미 확정)
+    state.undoStack = d.undo.slice(); state.redoStack = d.redo.slice();   // 길이가 아니라 통째로 복원(60개 상한 shift·redo 비움 대비)
+    if (serializeEditState() !== d.snap) { applyEditSnapshot(d.snap); render(); }
+  }
+  svg.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse" || !e.isPrimary || drag || !editOn() || dartOn()) return;
+    trackSave();
+    const cp = window.canvasPan;
+    if (cp && (cp.touchCount() > 1 || cp.pinching())) return;
+    const h = pick(e); if (!h) return;
+    if (!hooked && cp && cp.onMultiTouch) { hooked = true; cp.onMultiTouch(() => end("multi")); }   // 두 번째 손가락 = 핀치 → 조작 취소
+    e.preventDefault(); e.stopPropagation();    // 호환 마우스 이벤트·화면 팬 시작을 막는다
+    const hb = h.getBoundingClientRect(), ox = hb.left + hb.width / 2 - e.clientX, oy = hb.top + hb.height / 2 - e.clientY;   // 손가락-손잡이 중심 어긋남 보정(첫 움직임에서 튀지 않게)
+    if (savePending && typeof window.autoSaveCurveData === "function") { clearTimeout(state.autoSaveTimer); window.autoSaveCurveData(); }   // 직전 편집의 예약 저장을 지금(확정 상태로) 끝낸다
+    drag = { id: e.pointerId, ox: ox, oy: oy, x: e.clientX + ox, y: e.clientY + oy, x0: e.clientX, y0: e.clientY, moved: false, snap: serializeEditState(), undo: state.undoStack.slice(), redo: state.redoStack.slice() };
+    try { svg.setPointerCapture(e.pointerId); } catch (_) { /* 무시 */ }
+    fire(h, "mousedown", e.clientX + ox, e.clientY + oy);
+  });
+  window.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.x = e.clientX + drag.ox; drag.y = e.clientY + drag.oy;
+    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > MOVE_PX) drag.moved = true;
+    if (drag.moved) fire(window, "mousemove", drag.x, drag.y);
+  });
+  window.addEventListener("pointerup", e => { if (drag && e.pointerId === drag.id) end("up"); });
+  window.addEventListener("pointercancel", e => { if (drag && e.pointerId === drag.id) end("cancel"); });
+  svg.addEventListener("lostpointercapture", e => { if (drag && e.pointerId === drag.id) end("lost"); });
+  window.addEventListener("blur", () => end("blur"));
+})();

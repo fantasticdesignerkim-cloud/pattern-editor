@@ -37,6 +37,7 @@ const suites = [
   { file: "dartSourceCheck.js",       golden: false },
   { file: "dartPointerCheck.js",      golden: false },
   { file: "touchLifecycleCheck.js",   golden: false },
+  { file: "handleTouchBridgeCheck.js", golden: false },
   // 디자인 프로젝트(D1 세션 데이터): 실제 blockMaster+blockWorkflow+designProject vm 실행.
   { file: "designProjectCheck.js",    golden: false },
   // 디자인 geometry renderer(D2 builder): 실제 designRenderer.js 를 vm 으로 실행.
