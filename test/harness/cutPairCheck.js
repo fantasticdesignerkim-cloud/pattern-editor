@@ -1,9 +1,9 @@
 // ══════════════════════════════════════════════
-// cutPairCheck.js — 재단 ⑦ 앞판 좌우 한 쌍(투영 계층) · ⑧ 맞춤 표시 3mm I자 · ⑤ 시접 폭 보기 마크업 (2026-11-19)
+// cutPairCheck.js — 재단 ⑦ 앞판 좌우 한 쌍(투영 계층) · ⑧ 맞춤 표시 7mm I자 · ⑤ 시접 폭 보기 마크업 (2026-11-19)
 //   독립 검증: 모듈 코드가 아니라 이 파일 안의 반사 식·DXF 파서·거리 계산으로 대조한다.
 //   §1 좌우 외곽·시접선·다트(정리 외곽)·여밈 표시·너치·변 경로 좌표가 세로 축(x→−x)으로 실제 반사 · §2 배치(나란히 · 겹침 없음 · 착용자 기준 이름)
 //   §3 수량: 저장 수량 의미 보존(2 → 쌍 · 그 밖 값/나뉜 앞판 → 쌍 아님) · 골 펼친 뒤판·다른 조각 수량 불변 · 같은 시접 편집이 두 조각에 반영
-//   §4 DXF(일반·AAMA) 조각별 수량 1 · 같은 형상(반사) · 노치 길이 ≤ 3mm · §5 ⑧ 노치: 재단선에서 안으로 최대 3mm · 좁은 시접은 봉제선에서 멈춤 · 시접 0 = 점
+//   §4 DXF(일반·AAMA) 조각별 수량 1 · 같은 형상(반사) · 노치 길이 ≤ 7mm · §5 ⑧ 노치: 재단선에서 안으로 최대 7mm · 좁은 시접은 봉제선에서 멈춤 · 시접 0 = 점
 //   §6 ⑤ 마크업(기본값 표시 · 시접 폭 보기 단추 · 카드 가운데 CSS) · 캐시 핀
 //   node test/harness/cutPairCheck.js   (이 파일은 Bash 없이 작성돼 아직 실행하지 못했다 — 실행 결과로만 신뢰할 것)
 // ══════════════════════════════════════════════
@@ -178,19 +178,19 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
   // 구형 저장 파일: cutQty 없음 · cutSpec 에 앞판 변 키가 이미 있음 → 같은 키가 두 조각에 적용
   ok(v1.m.pieces.front.edges.find(e => e.id === "side-seam").widthCm === 2, "3: 구형 저장(cutSpec 키 front|side-seam)이 새 모델에서도 같은 키로 읽힘");
 
-  // ── §5 ⑧ 노치 3mm ──
+  // ── §5 ⑧ 노치 7mm ──
   const nt = v1.m.pieces.front.notches.filter(n => n.to && !n.held);
   ok(nt.length > 0, "5: 앞판에 선으로 그려지는 맞춤 표시가 있음");
   const fin = denseOf(v1.D.front.outline), cutPts = v1.D.front.seam;
   nt.forEach(n => {
     const len = Math.hypot(n.to.x - n.from.x, n.to.y - n.from.y);
-    ok(len <= 0.3 + 1e-9, "5: 노치 " + n.id + " 길이 ≤ 3mm (" + len.toFixed(4) + ")");
+    ok(len <= 0.7 + 1e-9, "5: 노치 " + n.id + " 길이 ≤ 7mm (" + len.toFixed(4) + ")");
     ok(dPoly(n.to, cutPts, true) < 2e-3, "5: 노치 " + n.id + " 한 끝은 재단선 위");
     ok(dPoly(n.from, fin, false) < dPoly(n.to, fin, false) - 1e-9, "5: 노치 " + n.id + " 는 재단선에서 안(봉제선) 쪽으로");
     ok(near(len, n.lenCm, 1e-9), "5: lenCm = 실제 선 길이");
   });
-  const big = nt.find(n => n.seamCm != null && n.seamCm > 0.3 + 1e-9);
-  ok(!!big && near(big.lenCm, 0.3, 1e-9) && !big.narrow, "5: 시접이 3mm 보다 넓으면 정확히 3mm (옆선 2cm)");
+  const big = nt.find(n => n.seamCm != null && n.seamCm > 0.7 + 1e-9);
+  ok(!!big && near(big.lenCm, 0.7, 1e-9) && !big.narrow, "5: 시접이 7mm 보다 넓으면 정확히 7mm (옆선 2cm)");
   // 좁은 시접 0.2cm: 봉제선을 넘지 않는다
   const nId = big.id, nEdge = big.edgeId;
   ok(S.CUT.setEdge("front", nEdge, { kind: "seam", widthCm: 0.2 }, P).ok, "5: 그 변 시접 0.2cm");
@@ -206,7 +206,7 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
   const n0 = view(S, P).m.pieces.front.notches.find(n => n.id === nId);
   ok(n0 && !n0.to && /시접 0|골선/.test(n0.why || ""), "5: 시접 0 은 선이 아니라 점(기존 의미 유지)");
   ok(S.CUT.setEdge("front", nEdge, { kind: "seam", widthCm: 1 }, P).ok, "5: 시접 1cm 로 복구");
-  ok(S.CUT.NOTCH_MAX_CM === 0.3, "5: 최대 길이 상수 3mm");
+  ok(S.CUT.NOTCH_MAX_CM === 0.7, "5: 최대 길이 상수 7mm");
 
   // ── §4 DXF ──
   const meta = { version: "t", createdAt: "2026-11-19T00:00:00" };
@@ -228,9 +228,9 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
     const texts = E.filter(e => e.type === "TEXT").map(e => (e.f["1"] || [])[0]);
     ok(texts.filter(t => t === "PIECE front-right").length === 1 && texts.filter(t => t === "PIECE front-left").length === 1 && texts.filter(t => /^QTY 1/.test(t)).length >= 2, "4: 일반 DXF 글자 PIECE front-right/left 각 1 · QTY 1");
     const nl = E.filter(e => e.type === "LINE" && layerOf(e) === "NOTCH").map(e => Math.hypot(num(e, 11) - num(e, 10), num(e, 21) - num(e, 20)));
-    ok(nl.length > 0 && nl.every(l => l <= 3 + 1e-3), "4: 일반 DXF 노치 선 길이 모두 ≤ 3mm");
+    ok(nl.length > 0 && nl.every(l => l <= 7 + 1e-3), "4: 일반 DXF 노치 선 길이 모두 ≤ 7mm");
     const Ea = parseDxf(ax.dxf), pts4 = Ea.filter(e => e.type === "POINT" && layerOf(e) === "4");
-    ok(pts4.length > 0 && pts4.every(e => (e.f["39"] || []).length === 1 && (e.f["50"] || []).length === 1 && Number(e.f["39"][0]) <= 3 + 1e-3 && Number(e.f["39"][0]) > 0), "4: AAMA 노치 = 레이어 4 점 엔티티 + 길이(39, mm ≤ 3) + 방향(50) 메타");
+    ok(pts4.length > 0 && pts4.every(e => (e.f["39"] || []).length === 1 && (e.f["50"] || []).length === 1 && Number(e.f["39"][0]) <= 7 + 1e-3 && Number(e.f["39"][0]) > 0), "4: AAMA 노치 = 레이어 4 점 엔티티 + 길이(39, mm ≤ 7) + 방향(50) 메타");
     const blocks = Ea.filter(e => e.type === "INSERT").map(e => (e.f["2"] || [])[0]);
     ok(blocks.filter(b => b === "FRONT_RIGHT_BASE").length === 1 && blocks.filter(b => b === "FRONT_LEFT_BASE").length === 1 && blocks.indexOf("FRONT_BASE") < 0, "4: AAMA INSERT = 앞판 오른·왼 각 1 (예전 FRONT_BASE 없음)");
     const aq = Ea.filter(e => e.type === "TEXT").map(e => (e.f["1"] || [])[0]);
