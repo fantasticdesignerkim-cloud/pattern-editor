@@ -165,7 +165,7 @@ function coverage(b, S1, P1) { const T = tilesOf(b.body), sp = sheetPts(S1, P1);
 let B;
 {
   const pre = PR(S).preflight(P);
-  ok(r.ok && pre.ok && pre.blockers.length === 0 && pre.rows.length === 9 && pre.rows.filter(x => x.base === "front").length === 2 && pre.rows.every(x => x.qty.kind === "default" && x.grain.kind === "default" && x.grain.shown) && pre.attention.length === 0, "2: 대표 셔츠 = 막는 문제 없음 · 8조각(앞판은 좌우 두 줄 = 보이는 9조각) · 수량·식서 전부 «기본» · 확인할 것 0 " + J(pre.blockers.concat(pre.attention)));
+  ok(r.ok && pre.ok && pre.blockers.length === 0 && pre.rows.length === 11 && pre.rows.filter(x => x.base === "front").length === 2 && pre.rows.every(x => x.qty.kind === "default" && x.grain.kind === "default" && x.grain.shown) && pre.attention.length === 0, "2: 대표 셔츠 = 막는 문제 없음 · 8조각(앞판·소매·커프스는 좌우 두 줄 = 보이는 11조각) · 수량·식서 전부 «기본» · 확인할 것 0 " + J(pre.blockers.concat(pre.attention)));
   S.CUT.setGrain("front", { angleDeg: 80 }, P); S.CUT.setQty("cuff", 4, P);
   const p2 = PR(S).preflight(P), f = p2.rows.find(x => x.id === "front"), cf = p2.rows.find(x => x.id === "cuff");
   ok(f.grain.kind === "user" && f.grain.angleDeg === 80 && cf.qty.kind === "user" && cf.qty.n === 4 && p2.rows.find(x => x.id === "back").grain.kind === "default", "2: 직접 고친 식서·수량 = «직접 지정»으로 구별(다른 조각은 기본)");
@@ -176,9 +176,9 @@ let B;
   P.working.cutGrain.pieces.front.sig = sigOld; S.CUT.setGrain("front", { angleDeg: null, at: null }, P); S.CUT.setQty("cuff", null, P);
   // 수량 미정 · 식서 미정(지금 셔츠에는 그런 조각이 없어 모델 결과만 바꿔 넣어 확인)
   const real = S.W.cutPrep, clone = o => JSON.parse(J(o));
-  S.W.cutPrep = Object.assign({}, real, { qtyOf: (...a) => { const q = clone(real.qtyOf(...a)); q.pieces.cuff.qty = null; q.pieces.cuff.explicit = false; return q; }, grainOf: (...a) => { const g = clone(real.grainOf(...a)); g.pieces["collar-body"] = Object.assign(g.pieces["collar-body"], { ok: false, angleDeg: null, why: "직접 지정" }); return g; } });
+  S.W.cutPrep = Object.assign({}, real, { qtyOf: (...a) => { const q = clone(real.qtyOf(...a)); q.pieces["vent-bias"].qty = null; q.pieces["vent-bias"].explicit = false; return q; }, grainOf: (...a) => { const g = clone(real.grainOf(...a)); g.pieces["collar-body"] = Object.assign(g.pieces["collar-body"], { ok: false, angleDeg: null, why: "직접 지정" }); return g; } });
   const b4 = PR(S).build(P, null, META), p4 = b4.pre; S.W.cutPrep = real;
-  ok(b4.ok && p4.rows.find(x => x.id === "cuff").qty.kind === "none" && p4.rows.find(x => x.id === "collar-body").grain.kind === "none" && p4.attention.length === 2 && /수량 미정/.test(b4.sheetSvg) && /식서 미정/.test(b4.sheetSvg) && (b4.sheetSvg.match(/class="cp-grain"/g) || []).length === 8,
+  ok(b4.ok && p4.rows.find(x => x.id === "vent-bias").qty.kind === "none" && p4.rows.find(x => x.id === "collar-body").grain.kind === "none" && p4.attention.length === 2 && /수량 미정/.test(b4.sheetSvg) && /식서 미정/.test(b4.sheetSvg) && (b4.sheetSvg.match(/class="cp-grain"/g) || []).length === 10,
     "2: 수량 미정 · 식서 미정 = 알림 2건 · 종이에 «수량 미정»·«식서 미정» · 미정 조각은 화살표 없음(기본처럼 그리지 않음)");
   B = PR(S).buildHtml(P, null, META);
 }
@@ -195,13 +195,13 @@ let B;
   const xs = sp.pts.map(q => q.x), ys = sp.pts.map(q => q.y);
   ok(near(B.sheet.wCm, Math.max(...xs) - Math.min(...xs) + 1, 0.5) && B.sheet.wCm >= Math.max(...xs) - Math.min(...xs) + 1 - 1e-6 && B.sheet.hCm >= Math.max(...ys) - Math.min(...ys) + 1 - 1e-6, "3: 전체 크기 = 조각 범위 + 둘레 0.5cm " + J([+B.sheet.wCm.toFixed(1), +B.sheet.hCm.toFixed(1)]));
   const cnt = re => (B.sheetSvg.match(re) || []).length, m = sp.m;
-  ok(cnt(/class="cp-piece"/g) === 9 && cnt(/class="cp-cut"/g) === 9 && cnt(/class="cp-fin"/g) === 9 && cnt(/class="cp-grain"/g) === 9 && m.d.pieces.every(p => cnt(new RegExp('data-piece="' + p.id + '"', "g")) === 1) && cnt(/data-piece="front~m"/g) === 1, "3: 보이는 조각마다 한 번만(재단선 9 · 완성선 9 · 식서 9 = 저장 8조각 + 앞판 거울 쪽 1) — 수량만큼 복제 없음");
+  ok(cnt(/class="cp-piece"/g) === 11 && cnt(/class="cp-cut"/g) === 11 && cnt(/class="cp-fin"/g) === 11 && cnt(/class="cp-grain"/g) === 11 && m.d.pieces.every(p => cnt(new RegExp('data-piece="' + p.id + '"', "g")) === 1) && cnt(/data-piece="front~m"/g) === 1, "3: 보이는 조각마다 한 번만(재단선 11 · 완성선 11 · 식서 11 = 저장 8조각 + 앞판·소매·커프스 거울 쪽 3) — 수량만큼 복제 없음");
   ok((B.body.match(/id="cpSheet"/g) || []).length === 1 && (B.body.match(/<use href="#cpSheet"\/>/g) || []).length === T.length + 1, "3: 도형은 한 벌 · 타일은 같은 한 벌을 창만 달리해 봄(타일마다 다시 그리지 않음 → 경계에서 어긋날 수 없음)");
   const bk = m.D.back, half = PIECE(m.d, "back"), cutW = Math.max(...bk.seam.map(q => q.x)) - Math.min(...bk.seam.map(q => q.x));
   ok(bk.unfolded && m.Q.pieces.back.qty === 1 && cutW > half.widthCm * 2 - 0.01 && /뒤[^<]*<\/text><text[^>]*>재단 1장[^<]*골 · 펼친 한 장/.test(B.sheetSvg) && /골\(펼친 중심 — 자르지 않음\)/.test(B.sheetSvg), "3: 골 펼친 뒤판 = 한 장(폭 " + cutW.toFixed(1) + " ≥ 반쪽 " + half.widthCm.toFixed(1) + " × 2) · «재단 1장» · 가운데 골 표시(이중 반사 없음)");
   const nN = m.L.order.reduce((a, pid) => a + m.D[pid].notches.length, 0);
   ok(nN > 10 && cnt(/class="cp-notch"/g) + cnt(/class="cp-notch-dot"/g) === nN, "3: 너치 " + nN + "개 = 화면 모델과 같은 수");
-  ok(/재단 2장[^<]*\(기본\)/.test(B.sheetSvg) && /식서 90° · 교재 기본/.test(B.sheetSvg) && T.every(t => /DOROBO vTEST · 완료본 #/.test(t.band) && /100% 인쇄/.test(t.band) && new RegExp(">R" + t.row + "C" + t.col + " · " + t.row + "행 " + t.col + "열 · \\d+/" + T.length + "쪽<").test(t.band) && /조각: \S/.test(t.band)), "3: 조각 이름·수량·식서 상태 글자 · 모든 타일에 행열 번호·쪽·조각 이름·판·완료본·100% 안내");
+  ok(/재단 1장[^<]*\(기본\)/.test(B.sheetSvg) && /식서 90° · 교재 기본/.test(B.sheetSvg) && T.every(t => /DOROBO vTEST · 완료본 #/.test(t.band) && /100% 인쇄/.test(t.band) && new RegExp(">R" + t.row + "C" + t.col + " · " + t.row + "행 " + t.col + "열 · \\d+/" + T.length + "쪽<").test(t.band) && /조각: \S/.test(t.band)), "3: 조각 이름·수량·식서 상태 글자 · 모든 타일에 행열 번호·쪽·조각 이름·판·완료본·100% 안내");
   ok(T.every(t => { const g = /class="cp-gauge"[^>]* d="M(-?[\d.]+) (-?[\d.]+) L(-?[\d.]+) (-?[\d.]+) /.exec(t.band); return g && near(num(g[3]) - num(g[1]), 10, 1e-9) && num(g[2]) === num(g[4]) && num(g[1]) >= 0.1 && num(g[3]) <= t.pw - 0.1 && num(g[2]) + 0.1 < t.by && /세로 확인 = 아래 틀 높이 264mm/.test(t.band) && /큰 검척선은 안내 쪽/.test(t.band) && !/cp-gauge/.test(t.inner); }), "3: 모든 타일 안내 띠에 가로 10cm 검척선(띠 안 · 패턴 영역 밖) + 세로 확인 방법(틀 높이 264mm · 안내 쪽 큰 검척선)");
   // 안내 띠 ↔ 패턴 영역 분리: 띠 = 쪽 위 12mm · 패턴 영역 = 그 아래 안쪽 <svg>(잘라 그림). 띠 항목 상자는 띠 안·쪽 안·서로 안 겹침. 패턴 영역 안에는 글자·덮는 상자 없음.
   const hit = (a, b2) => a.x < b2.x + b2.w - 1e-9 && b2.x < a.x + a.w - 1e-9 && a.y < b2.y + b2.h - 1e-9 && b2.y < a.y + a.h - 1e-9;
@@ -283,7 +283,7 @@ let B;
 // ══ §7 화면 · 문구 ══
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), SRC0 = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8"), css = fs.readFileSync(path.join(ROOT, "css", "apple.css"), "utf8");
-  ok(/id="btnCutPrint"[^>]*>인쇄·DXF</.test(html) && /js\/cutPrint\.js\?v=2026111902/.test(html) && html.indexOf("js/cutPrint.js") > html.indexOf("js/cutPrep.js"), "7: 재단 화면에 «실물 인쇄» 단추 · cutPrint.js 는 cutPrep.js 다음에 불러옴");
+  ok(/id="btnCutPrint"[^>]*>인쇄·DXF</.test(html) && /js\/cutPrint\.js\?v=2026112001/.test(html) && html.indexOf("js/cutPrint.js") > html.indexOf("js/cutPrep.js"), "7: 재단 화면에 «실물 인쇄» 단추 · cutPrint.js 는 cutPrep.js 다음에 불러옴");
   ok(!/PDF ?다운로드|PDF ?내려받기|PDF 저장 단추/.test(SRC0 + html) && /인쇄 창 열기/.test(SRC0) && /파일을 바로 내려받는 것이 아닙니다/.test(SRC0) && /PDF로 저장/.test(SRC0) && /100%\(실제 크기\)/.test(SRC0), "7: «PDF 다운로드»라고 쓰지 않음 · «인쇄 창 열기» + 시스템 인쇄 창에서 «PDF로 저장» 동선 안내");
   ok(/disabled aria-disabled=\\"true\\" title=/.test(SRC0) && /지금은 인쇄·DXF 저장을 할 수 없습니다/.test(SRC0) && /@media screen\{#cutPrintRoot\{display:none!important\}\}/.test(SRC0) && /body>\*:not\(#cutPrintRoot\)\{display:none!important\}/.test(SRC0), "7: 막힌 상태 = 단추 disabled + 이유 · 인쇄 내용은 화면에는 숨기고 인쇄할 때만 보임");
   ok(/\.cut-print-card\{/.test(css) && /@media \(max-width:640px\)\{[^@]*\.cut-print \.btn\{min-height:44px\}/.test(css), "7: 사전 점검 창 스타일 · 폰에서 단추 44px");

@@ -133,6 +133,11 @@
     });
     if (p.placket && p.placket.facingWidthCm > 0) { var ex = (r.instMirrored ? -p.placket.cutX : p.placket.cutX) + 0.45 * sgn, ey = p.placket.topY + (p.placket.botY - p.placket.topY) * 0.46;
       o.push(txt("cp-lab", ex, ey, LABEL_CM, "안단 끝(외곽)", " transform=\"rotate(-90 " + n4(ex) + " " + n4(ey) + ")\"")); }
+    (r.guides || []).forEach(function (gd) {   // 기본 표시선(자르지 않음): C.F · C.B · 가슴선 · 허리선
+      if (gd.line) o.push("<path class=\"cp-gline cp-gline-" + gd.kind + "\" d=\"M" + n4(gd.a.x) + " " + n4(gd.a.y) + " L" + n4(gd.b.x) + " " + n4(gd.b.y) + "\"/>");
+      var gl = gd.kind === "bust" || gd.kind === "waist" ? gd.ko : gd.text;
+      o.push(txt("cp-lab", gd.tx, gd.ty, gd.th, gl, " text-anchor=\"middle\""));
+    });
     r.edges.forEach(function (e) {   // 골선: 펼친 조각 = 가운데 선 하나 · 펼치지 못한 조각 = 접어 재단 표시
       var se = sm.edges.filter(function (x) { return x.id === e.id; })[0]; if (!se || se.kind !== "fold") return;
       var segs = e.parts[0], a = segs[0].from, z = segs[segs.length - 1].to, mx = (a.x + z.x) / 2, my = (a.y + z.y) / 2, vert = Math.abs(a.x - z.x) < Math.abs(a.y - z.y);
@@ -209,7 +214,7 @@
   //   <use> 로 비춰 그린 도형에는 바깥 조상 선택자가 닿지 않는다(실측: 스타일이 빠져 검게 채워짐) → 스타일시트가 아니라 요소 속성으로 직접 적는다.
   var STY = {
     "cp-cut": "fill=\"none\" stroke=\"#000\" stroke-width=\".05\" stroke-linejoin=\"round\"", "cp-fin": "fill=\"none\" stroke=\"#000\" stroke-width=\".025\" stroke-linejoin=\"round\"",
-    "cp-fold": "fill=\"none\" stroke=\"#000\" stroke-width=\".035\" stroke-dasharray=\".8 .15 .15 .15\"", "cp-mark": "fill=\"none\" stroke=\"#333\" stroke-width=\".02\" stroke-dasharray=\".3 .2\"",
+    "cp-fold": "fill=\"none\" stroke=\"#000\" stroke-width=\".035\" stroke-dasharray=\".8 .15 .15 .15\"", "cp-mark": "fill=\"none\" stroke=\"#333\" stroke-width=\".02\" stroke-dasharray=\".3 .2\"", "cp-gline": "fill=\"none\" stroke=\"#555\" stroke-width=\".02\" stroke-dasharray=\".4 .25\"",
     "cp-zone": "fill=\"none\" stroke=\"#555\" stroke-width=\".015\" stroke-dasharray=\".1 .15\"", "cp-notch": "fill=\"none\" stroke=\"#000\" stroke-width=\".035\"", "cp-notch-dot": "fill=\"#000\" stroke=\"none\"",
     "cp-grain": "fill=\"none\" stroke=\"#000\" stroke-width=\".035\" stroke-linecap=\"round\" stroke-linejoin=\"round\"", "cp-grain-held": "stroke-dasharray=\".4 .25\"",
     "cp-name": "fill=\"#000\" stroke=\"none\" font-weight=\"600\"", "cp-info": "fill=\"#222\" stroke=\"none\"", "cp-lab": "fill=\"#333\" stroke=\"none\"", "cp-tl": "fill=\"#444\" stroke=\"none\"",

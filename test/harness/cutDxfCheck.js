@@ -303,7 +303,7 @@ const BN = pid => PN0(EX.m, pid).replace(/[^A-Za-z0-9]+/g, "_").toUpperCase() + 
   ok(!/querySelector|getElementById|getBBox|getAttribute|innerHTML|viewZ|viewX|\bsvg\b|fetch\(|XMLHttpRequest|sendBeacon|WebSocket|localStorage|sessionStorage|\.working\b|setEdge\(|setGrain\(|setQty\(/.test(SRC0), "3: 소스 = 화면(SVG DOM·카메라) 읽기 없음 · 전송 없음 · 저장소 접근 없음 · 재단 설정 쓰기 없음");
   // 직접 지정 · 보류 · 미정
   const r3 = buildP(), S3 = r3.S, P3 = r3.P;
-  S3.CUT.setGrain("front", { angleDeg: 80 }, P3); S3.CUT.setQty("cuff", 4, P3);
+  S3.CUT.setGrain("front", { angleDeg: 80 }, P3); S3.CUT.setQty("collar-body", 4, P3);
   let b3 = DX(S3).build(P3, META), x3 = parseDxf(b3.dxf), t3 = x3.ents.filter(e => e.type === "TEXT").map(e => e.text);
   ok(b3.ok && t3.indexOf("GRAIN 80 DEG (USER)") >= 0 && t3.indexOf("QTY 4 (USER)") >= 0 && x3.ents.filter(e => e.type === "POLYLINE" && e.layer === "CUT").length === order.length, "3: 직접 지정한 식서·수량 = «(USER)» 로 구별 · 수량 4 여도 재단선은 조각마다 하나");
   P3.working.cutGrain.pieces.front.sig = "n1-a-b";
@@ -324,7 +324,7 @@ const BN = pid => PN0(EX.m, pid).replace(/[^A-Za-z0-9]+/g, "_").toUpperCase() + 
 // ══ §5 화면 · 옛 원형 DXF 동선 보존 ══
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), st = fs.readFileSync(path.join(ROOT, "js", "storage.js"), "utf8"), pr = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8");
-  ok(/js\/cutDxf\.js\?v=2026111902/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
+  ok(/js\/cutDxf\.js\?v=2026112001/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
   ok(/onclick="exportDXF\(\)">DXF 다운로드</.test(html) && /function exportDXF\(\)\{/.test(st) && !/cutDxf/.test(st), "5: 원형 단계의 «DXF 다운로드»(exportDXF) 동선은 그대로 — 재단 DXF 와 별개");
   ok(/data-cp=\\"dxf\\"/.test(pr) && /DXF 파일 저장/.test(pr) && /AAMA\/ASTM 규격 파일이 아니며/.test(pr) && /아직 확인하지 않았습니다/.test(pr) && /disabled aria-disabled/.test(pr), "5: 사전 점검 창에 «DXF 파일 저장» · 규격·호환을 과장하지 않는 문구 · 막히면 disabled");
 }
@@ -364,7 +364,7 @@ const BN = pid => PN0(EX.m, pid).replace(/[^A-Za-z0-9]+/g, "_").toUpperCase() + 
     const nl = rr.notches.filter(n => n.to), n4 = L("4"); nNotch += n4.length;
     if (n4.length !== nl.length || !n4.every(e => e.type === "POINT" && nl.some(n => { const a = T(n.from), b2 = T(n.to), len = Math.hypot(a.x - b2.x, a.y - b2.y); return (Math.hypot(pt(e).x - a.x, pt(e).y - a.y) < 2e-4 || Math.hypot(pt(e).x - b2.x, pt(e).y - b2.y) < 2e-4) && Math.abs(parseFloat(e.c[39]) - len) < 2e-4; }))) bad.push(pid + ":notch");
     n4.forEach(e => { maxNd = Math.max(maxNd, dClosed(pt(e), c1[0].pts)); const a = parseFloat(e.c[50]) * Math.PI / 180, tip = { x: pt(e).x + Math.cos(a) * parseFloat(e.c[39]), y: pt(e).y + Math.sin(a) * parseFloat(e.c[39]) }; if (!nl.some(n => Math.hypot(T(n.from).x - tip.x, T(n.from).y - tip.y) < 1e-3 || Math.hypot(T(n.to).x - tip.x, T(n.to).y - tip.y) < 1e-3)) bad.push(pid + ":notch-angle"); });
-    const tx = bl.filter(e => e.type === "TEXT").map(e => e.c[1]); if (!(bl.filter(e => e.type === "TEXT").every(e => e.layer === "1") && tx.indexOf("Piece Name: " + PN0(EX.m, pid)) >= 0 && tx.indexOf("Size: BASE") >= 0 && tx.indexOf("Quantity: " + q.qty) >= 0 && tx.some(x => /^Annotation: /.test(x)))) bad.push(pid + ":text");
+    const tx = bl.filter(e => e.type === "TEXT" && e.layer !== "15").map(e => e.c[1]); if (!(bl.filter(e => e.type === "TEXT" && e.layer !== "15").every(e => e.layer === "1") && tx.indexOf("Piece Name: " + PN0(EX.m, pid)) >= 0 && tx.indexOf("Size: BASE") >= 0 && tx.indexOf("Quantity: " + q.qty) >= 0 && tx.some(x => /^Annotation: /.test(x)))) bad.push(pid + ":text");
     if (rr.unfolded ? !(L("6").length === 0 && L("8").length >= 1 && /FULL PIECE \(FOLD OPENED\)/.test(tx.join("|"))) : L("6").length !== 0) bad.push(pid + ":fold"); });
   ok(bad.length === 0, "6: 블록마다 — 레이어 1 닫힌 재단선 하나 · 2/3 점 = 재단선 꼭짓점 전부 · 14 닫힌 봉제선 · 7 식서선 하나 · 4 너치 점(길이 39 · 방향 50 이 실제 너치 끝을 가리킴) · 조각 글자(Piece Name·Size·Quantity·Annotation) · 펼친 조각은 대칭선(6) 없음 " + J(bad));
   ok(maxV < 1e-4 && maxCh <= 0.0105 && nPts > 300 && turnAll >= order.length * 3 && curveAll > 100, "6: 재단선 꼭짓점 = 모델 × 10mm(차 " + maxV.toExponential(1) + "mm) · 봉제선 곡선 오차 " + maxCh.toFixed(4) + "mm ≤ 0.01 · 꺾임점 " + turnAll + " · 곡선점 " + curveAll);

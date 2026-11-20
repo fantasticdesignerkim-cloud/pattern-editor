@@ -1088,31 +1088,51 @@
   //   쌍으로 펼치는 조건(전부 검증 · 어긋나면 아무것도 바꾸지 않고 사유만 남긴다): 조각 «front» 가 있고 · 외곽 검사 통과 · 다른 «front…» 조각이 없음(이미 분리/비대칭 아님) ·
   //   저장 수량 읽기 가능 · 지금 수량이 정확히 2 · 앞중심이 세로 직선으로 확인됨. 사용자가 수량을 2 가 아닌 값으로 바꿨으면 그 의미를 추정하지 않고 기존 한 조각 표시.
   //   좌우 이름 = 착용자 기준: 앞중심이 조각의 오른쪽 끝에 있으면 그 조각은 겉에서 정면으로 볼 때 화면 왼쪽 = 착용자의 오른쪽 몸판(오른앞판).
+  //   2026-11-20 일반화: 같은 투영을 소매(sleeve-…)·커프스(cuff)에도 쓴다. 쌍 조건의 «수량» = 1(기본 · 한 쌍) — 사용자가 1 이 아닌 값을 정했으면 쌍으로 펼치지 않고 그 수량 그대로 한 조각.
   var PAIR_BASE = "front", PAIR_MIRROR = "front~m";
   function baseOf(id) { return String(id).replace(/~m$/, ""); }
-  function sideName(side) { return side === "R" ? "오른앞판" : "왼앞판"; }
-  function sideLabel(label, side) { return /^앞판/.test(label) ? label.replace(/^앞판/, sideName(side)) : sideName(side) + " · " + label; }
-  function pairingOf(d, proj) {
-    var out = { active: false, base: PAIR_BASE, mirrorId: PAIR_MIRROR, reason: null }, no = function (r) { out.reason = r; return out; };
-    var p = (d.pieces || []).filter(function (x) { return x.id === PAIR_BASE; })[0]; if (!p) return out;
-    if (!p.check.ok || !p.edges) return no("앞판 외곽 검사가 끝나지 않아 좌우 한 쌍으로 펼치지 않았습니다");
-    var other = (d.pieces || []).filter(function (x) { return x.id !== PAIR_BASE && /^front/i.test(x.id); })[0];
-    if (other) return no("앞판이 이미 따로 나뉘어 있어(«" + other.label + "») 좌우 한 쌍으로 펼치지 않고 기존 수량 그대로 둡니다");
-    var q = readQty(proj); if (q.state === "invalid") return no("저장된 재단 수량을 읽을 수 없어 좌우 한 쌍으로 펼치지 않습니다 — " + q.reason);
-    var n = q.pieces[PAIR_BASE] != null ? q.pieces[PAIR_BASE] : defaultQty(PAIR_BASE, false);
-    if (n !== 2) return no("앞판 재단 수량이 " + n + "장(직접 지정)이라 «왼 1장 + 오른 1장» 한 쌍으로 펼치지 않습니다 — 수량 의미를 추정해 바꾸지 않고 기존 한 조각 그대로 둡니다");
-    var cfX = null;
-    if (p.placket) cfX = p.placket.cfX;
-    else {
-      var ce = p.edges.filter(function (e) { return e.label === "center"; });
-      if (ce.length === 1) { var cs = ce[0].segs.map(function (i) { return p.segs[i]; }); if (cs.every(function (g) { return g.kind === "line" && Math.abs(g.from.x - g.to.x) < 1e-6 && Math.abs(g.from.x - cs[0].from.x) < 1e-6; })) cfX = cs[0].from.x; }
+  function isPairable(p) { return p.id === "front" || p.id === "cuff" || (p.group === "sleeve" && /^sleeve-/.test(p.id)); }
+  function sideName(side, base) { var w = side === "R" ? "오른" : "왼"; return w + (!base || base === "front" ? "앞판" : base === "cuff" ? "커프스" : "소매"); }
+  function sideLabel(label, side, base) { var nm = sideName(side, base); return base === "front" ? (/^앞판/.test(label) ? label.replace(/^앞판/, nm) : nm + " · " + label) : (nm + " · " + label); }
+  function pairOne(d, proj, base, q) {
+    var out = { active: false, base: base, mirrorId: base + "~m", reason: null }, no = function (r) { out.reason = r; return out; };
+    var p = (d.pieces || []).filter(function (x) { return x.id === base; })[0]; if (!p) return out;
+    var nm = base === "front" ? "앞판" : base === "cuff" ? "커프스" : "소매";
+    if (!p.check.ok || !p.edges) return no(nm + " 외곽 검사가 끝나지 않아 좌우 한 쌍으로 펼치지 않았습니다");
+    if (base === "front") {
+      var other = (d.pieces || []).filter(function (x) { return x.id !== base && /^front/i.test(x.id); })[0];
+      if (other) return no("앞판이 이미 따로 나뉘어 있어(«" + other.label + "») 좌우 한 쌍으로 펼치지 않고 기존 수량 그대로 둡니다");
     }
-    if (cfX == null || !isFinite(cfX)) return no("앞중심을 세로 직선으로 확인하지 못해 좌우 한 쌍으로 펼치지 않았습니다");
-    var bb = bboxOf([p.segs], []), origSide = cfX > (bb.minX + bb.maxX) / 2 ? "R" : "L", mirSide = origSide === "R" ? "L" : "R";
-    out.active = true; out.origSide = origSide; out.mirrorSide = mirSide; out.cfX = cfX; out.qtyExplicit = q.pieces[PAIR_BASE] != null;
-    out.labels = {}; out.labels[PAIR_BASE] = sideLabel(p.label, origSide); out.labels[PAIR_MIRROR] = sideLabel(p.label, mirSide);
-    out.viewerLeftFirst = origSide === "R";   // 화면(겉에서 본 정면) 왼쪽 = 착용자 오른쪽
-    out.order = origSide === "R" ? [PAIR_BASE, PAIR_MIRROR] : [PAIR_MIRROR, PAIR_BASE];
+    var n = q.pieces[base] != null ? q.pieces[base] : defaultQty(base, false);
+    if (n !== 1) return no(nm + " 재단 수량이 " + n + "장(직접 지정)이라 «왼 1장 + 오른 1장» 한 쌍으로 펼치지 않습니다 — 수량 의미를 추정해 바꾸지 않고 기존 한 조각 그대로 둡니다");
+    var cfX = null, bb = bboxOf([p.segs], []);
+    if (base === "front") {
+      if (p.placket) cfX = p.placket.cfX;
+      else {
+        var ce = p.edges.filter(function (e) { return e.label === "center"; });
+        if (ce.length === 1) { var cs = ce[0].segs.map(function (i) { return p.segs[i]; }); if (cs.every(function (g) { return g.kind === "line" && Math.abs(g.from.x - g.to.x) < 1e-6 && Math.abs(g.from.x - cs[0].from.x) < 1e-6; })) cfX = cs[0].from.x; }
+      }
+      if (cfX == null || !isFinite(cfX)) return no("앞중심을 세로 직선으로 확인하지 못해 좌우 한 쌍으로 펼치지 않았습니다");
+    }
+    // 앞판: 앞중심이 오른쪽 끝 = 오른앞판. 소매·커프스: 원본 = 오른쪽 · 반사 = 왼쪽(제도 기준 관례 — 모양이 거울상일 뿐 재단·봉제는 두 장이 한 쌍으로 같다)
+    var origSide = base === "front" ? (cfX > (bb.minX + bb.maxX) / 2 ? "R" : "L") : "R", mirSide = origSide === "R" ? "L" : "R";
+    out.active = true; out.origSide = origSide; out.mirrorSide = mirSide; out.cfX = cfX; out.qtyExplicit = q.pieces[base] != null;
+    out.labels = {}; out.labels[base] = sideLabel(p.label, origSide, base); out.labels[out.mirrorId] = sideLabel(p.label, mirSide, base);
+    out.viewerLeftFirst = origSide === "R";
+    out.order = origSide === "R" ? [base, out.mirrorId] : [out.mirrorId, base];
+    return out;
+  }
+  // 반환 = 앞판의 쌍 정보(기존 호환) + .all = { 원본 id: 쌍 정보 } (앞판·소매·커프스)
+  function pairingOf(d, proj) {
+    var q = readQty(proj), all = {}, head = null, reasons = [];
+    (d.pieces || []).filter(isPairable).forEach(function (p) {
+      if (q.state === "invalid") { all[p.id] = { active: false, base: p.id, mirrorId: p.id + "~m", reason: "저장된 재단 수량을 읽을 수 없어 좌우 한 쌍으로 펼치지 않습니다 — " + q.reason }; return; }
+      all[p.id] = pairOne(d, proj, p.id, q);
+    });
+    head = all[PAIR_BASE] || { active: false, base: PAIR_BASE, mirrorId: PAIR_MIRROR, reason: null };
+    var out = Object.assign({}, head); out.all = all;
+    Object.keys(all).forEach(function (k) { if (k !== PAIR_BASE && all[k].reason) reasons.push(all[k].reason); });
+    out.otherReasons = reasons;
     return out;
   }
   function mirrorDisp(r, pr) {
@@ -1123,11 +1143,41 @@
     o.notches = (r.notches || []).map(function (n) { return { id: n.id, from: Mx(n.from), to: n.to ? Mx(n.to) : null }; });
     o.heldNotches = (r.heldNotches || []).map(function (n) { return { id: n.id, name: n.name, at: Mx(n.at), why: n.why }; });
     o.marks = (r.marks || []).map(function (mk) { var c = { kind: mk.kind, segs: mk.segs.map(Ms) }; if (mk.label) c.label = mk.label; if (mk.side) c.side = mk.side; return c; });
+    o.guides = (r.guides || []).map(function (gd) { return Object.assign({}, gd, { a: Mx(gd.a), b: Mx(gd.b), tx: -gd.tx === 0 ? 0 : -gd.tx }); });
     o.trued = r.trued ? r.trued.map(Ms) : null;
     o.truedDarts = (r.truedDarts || []).map(function (q) { return Object.assign({}, q, { cap: q.cap.map(Mx), apex: Mx(q.apex) }); });
     o.mirror = { A: { x: 0, y: 0 }, B: { x: 0, y: 1 } };   // 눌린 점을 원본 좌표로 되돌릴 때(clickArc) 쓰는 같은 축
     o.bbox = bboxOf([o.outline], [o.seam].concat(o.seamParts));
     return o;
+  }
+  // ══ 기본 표시선(자르지 않는 선) — 2026-11-20 ══
+  //   앞판 앞중심 «C.F» · 뒤판 뒤중심 «C.B» · 앞·뒤판 가슴선(BL = 옆선 위끝 높이 = blYOf) · 허리선(WL = 원형 기준 형상 outline 의 waist 변 높이 · derive 가 refY 로 싣는다 — 새로 계산하지 않는다).
+  //   모델은 조각 좌표의 {kind, a, b, line, ko, en, tx, ty, th} — 화면·인쇄·DXF 가 같은 값을 읽는다(글자 중심 tx,ty · 높이 th cm). 중심선은 이미 그려지는 선(여밈 «앞중심» 표시 · 골선)이 있으면 line:false(글자만).
+  var GUIDE_TEXT_CM = 0.4;
+  function hChord(pts, y) { var xs = []; for (var i = 0; i < pts.length; i++) { var a = pts[i], b = pts[(i + 1) % pts.length]; if ((a.y - y) * (b.y - y) < 0 || (a.y === y && b.y !== y)) { var t = (y - a.y) / (b.y - a.y); xs.push(a.x + (b.x - a.x) * t); } } return xs.length >= 2 ? { x0: Math.min.apply(null, xs), x1: Math.max.apply(null, xs) } : null; }
+  function guidesOf(p, r, refY) {
+    var out = [];
+    if (!r || (p.id !== "front" && p.id !== "back") || !p.edges || !p.check || !p.check.ok) return out;
+    var pts = sample(r.outline, 24), bb = r.bbox, cxm = (bb.minX + bb.maxX) / 2, th = GUIDE_TEXT_CM, cfX = null, y0 = null, y1 = null, hasLine = false;
+    if (p.id === "front" && p.placket) { cfX = p.placket.cfX; y0 = p.placket.topY; y1 = p.placket.botY; hasLine = true; }
+    else {
+      var ce = p.edges.filter(function (e) { return e.label === "center"; });
+      if (ce.length === 1) { var cs = ce[0].segs.map(function (i) { return p.segs[i]; }); if (cs.every(function (g) { return g.kind === "line" && Math.abs(g.from.x - g.to.x) < 1e-6 && Math.abs(g.from.x - cs[0].from.x) < 1e-6; })) {
+        cfX = cs[0].from.x; y0 = Math.min.apply(null, cs.map(function (g) { return Math.min(g.from.y, g.to.y); })); y1 = Math.max.apply(null, cs.map(function (g) { return Math.max(g.from.y, g.to.y); })); hasLine = r.foldEdge === ce[0].id; } }
+    }
+    if (cfX != null && isFinite(cfX) && y0 != null && y1 > y0) {
+      var inw = Math.abs(cxm - cfX) < 0.5 ? 1 : (cxm < cfX ? -1 : 1), nm = p.id === "front" ? "C.F" : "C.B";
+      out.push({ kind: p.id === "front" ? "cf" : "cb", a: { x: cfX, y: y0 }, b: { x: cfX, y: y1 }, line: !hasLine, ko: p.id === "front" ? "앞중심" : "뒤중심", en: nm, text: nm, tx: cfX + inw * 0.75, ty: y0 + (y1 - y0) * 0.55, th: th });
+    }
+    var bust = blYOf(p), waist = refY && refY[p.id] != null ? refY[p.id] : null;
+    [["bust", bust, "가슴선", "BUST LINE"], ["waist", waist, "허리선", "WAIST LINE"]].forEach(function (g) {
+      if (g[1] == null || !isFinite(g[1])) return;
+      var ch = hChord(pts, g[1]); if (!ch) return;
+      if (cfX != null) { if (cfX > cxm) ch.x1 = Math.min(ch.x1, cfX); else if (cfX < cxm) ch.x0 = Math.max(ch.x0, cfX); }
+      if (!(ch.x1 - ch.x0 > 1)) return;
+      out.push({ kind: g[0], a: { x: ch.x0, y: g[1] }, b: { x: ch.x1, y: g[1] }, line: true, ko: g[2], en: g[3], text: g[3], tx: ch.x0 + 0.5 + g[3].length * th * 0.3, ty: g[1] + th * 1.4, th: th });
+    });
+    return out;
   }
   // 조각별 표시 데이터. d = derive(proj, true) · m = seam(d, proj)
   function displayOf(d, m) {
@@ -1160,8 +1210,12 @@
       r.bbox = bboxOf([r.outline], [r.seam].concat(r.seamParts));
       out[p.id] = r;
     });
-    var pr = m && m.pairing;   // ⑦ 앞판 좌우 한 쌍(조건은 pairingOf — 어긋나면 아무것도 하지 않는다)
-    if (pr && pr.active && out[pr.base] && !out[pr.base].unfolded && out[pr.base].seam) {
+    // 기본 표시선(자르지 않음): 앞중심 C.F · 뒤중심 C.B · 가슴선 · 허리선 — 거울 쪽은 같은 변환으로 옮긴다
+    (d.pieces || []).forEach(function (p) { if (out[p.id]) out[p.id].guides = guidesOf(p, out[p.id], d.refY); });
+    var prs = m && m.pairing && m.pairing.all;   // ⑦ 좌우 한 쌍(앞판·소매·커프스 — 조건은 pairOne · 어긋나면 아무것도 하지 않는다)
+    Object.keys(prs || {}).forEach(function (bk) {
+      var pr = prs[bk];
+      if (!(pr && pr.active && out[pr.base] && !out[pr.base].unfolded && out[pr.base].seam)) return;
       var o0 = out[pr.base]; o0.base = pr.base; o0.pairRole = "orig"; o0.side = pr.origSide; o0.label = pr.labels[pr.base];
       o0.pair = { mirrorId: pr.mirrorId, viewerLeftFirst: pr.viewerLeftFirst };
       out[pr.mirrorId] = mirrorDisp(o0, pr);
@@ -1170,7 +1224,7 @@
         var rr = out[e[0]], want = e[1] === "R" ? "right" : "left";
         rr.marks = rr.marks.filter(function (mk) { return mk.kind !== "pocket-attach" || mk.side === want; });
       });
-    }
+    });
     return out;
   }
   // 화면에서 누른 점(조각 좌표) → 그 변 위 봉제 경로 위치(호 길이). 반사 쪽 경로를 눌렀으면(mirrored) 먼저 골선에 대해 되돌린다.
@@ -1235,13 +1289,9 @@
     for (var i = 0; i < ks.length; i++) { var v = s.pieces[ks[i]]; if (!QTY_ID.test(ks[i])) return bad("조각 id 형식 오류(" + ks[i] + ")"); if (!(typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 99)) return bad("수량은 1~99 정수(" + ks[i] + ")"); }
     return { state: "ok", pieces: s.pieces };
   }
+  //   2026-11-20 김님 확정: 모든 재단 수량 기본 1. 좌우가 있는 조각(앞판·소매·커프스)은 «왼 1 + 오른 1» 거울 쌍으로 보이고(수량 1 = 한 쌍), 골로 쓰는 조각(뒤판·칼라·밴드)은 골 1장.
   function defaultQty(id, folded) {
-    if (id === "back") return folded ? 1 : 2;
-    if (id === "front") return 2;
-    if (id === "pocket") return 1;   // 앞 주머니 = 오각 패치 1장
-    if (/^sleeve-/.test(id)) return 2;
-    if (id === "cuff" || id === "vent-placket" || id === "vent-bias") return 2;
-    if (id === "collar-stand" || id === "collar-body") return folded ? 2 : 4;
+    if (id === "back" || id === "front" || id === "pocket" || id === "cuff" || id === "vent-placket" || id === "vent-bias" || id === "collar-stand" || id === "collar-body" || /^sleeve-/.test(id)) return 1;
     return null;
   }
   function qtyOf(d, disp, proj) {
@@ -1250,16 +1300,16 @@
       if (!p.check.ok) return;
       var folded = !!(disp[p.id] && disp[p.id].unfolded), def = defaultQty(p.id, folded), mine = q.pieces[p.id];
       out.pieces[p.id] = { qty: mine != null ? mine : def, explicit: mine != null, def: def, folded: folded,
-        how: folded ? "골 · 펼친 한 장" : (def === 2 || mine === 2) && p.id !== "cuff" && !/^vent-/.test(p.id) ? "좌우 대칭" : (/^collar-/.test(p.id) ? "겉·안" : "") };
-      if (/^collar-/.test(p.id)) out.pieces[p.id].how = folded ? "골 · 펼친 한 장 × 겉·안" : "좌우 × 겉·안";
+        how: folded ? "골 · 펼친 한 장" : "" };
+      if (/^collar-/.test(p.id)) out.pieces[p.id].how = folded ? "골 · 펼친 한 장 × 겉·안" : "겉·안";
     });
     Object.keys(q.pieces).forEach(function (k) { if (!out.pieces[k]) out.stale.push(k); });
     // ⑦ 쌍으로 펼친 앞판: 저장 수량(원본 id · 2)은 그대로 두고, 보이는 두 조각은 각 1장. out.inst = 조각 «표시 id» 별 재단 장 수(인쇄·DXF·화면 글자가 읽는다).
     out.inst = {};
     Object.keys(disp).forEach(function (id) {
       var r = disp[id]; if (!r || !r.pair || !out.pieces[id] || disp[r.pair.mirrorId] == null) return;
-      var b = out.pieces[id]; b.how = (b.how ? b.how + " · " : "") + "왼앞판 1장 + 오른앞판 1장(거울상 쌍)"; b.paired = true;
-      [id, r.pair.mirrorId].forEach(function (k) { out.inst[k] = { qty: 1, explicit: b.explicit, def: 1, folded: false, how: "착용자 기준 " + sideName(disp[k].side) + " 1장 · 거울상 쌍", paired: true, side: disp[k].side }; });
+      var b = out.pieces[id]; b.how = (b.how ? b.how + " · " : "") + sideName("L", r.base) + " 1장 + " + sideName("R", r.base) + " 1장(거울상 쌍)"; b.paired = true;
+      [id, r.pair.mirrorId].forEach(function (k) { out.inst[k] = { qty: 1, explicit: b.explicit, def: 1, folded: false, how: "착용자 기준 " + sideName(disp[k].side, disp[k].base) + " 1장 · 거울상 쌍", paired: true, side: disp[k].side }; });
     });
     return out;
   }
@@ -1370,7 +1420,7 @@
       var dispPoly = polyOf(r.outline), halfPoly = r.unfolded ? polyOf(p.segs) : dispPoly, g = null;
       if (mine.at) { g = grainLine(dispPoly, mine.at, ang); if (g.ok) o.at = { x: mine.at.x, y: mine.at.y }; else { o.atStale = true; g = null; } }
       if (!g) {
-        var bb = r.bbox, cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2, fs = Math.max(1.2, Math.min(2.4, (bb.maxX - bb.minX) / 9)), hw = (String(p.label).length + 3) * fs * 0.5;
+      var bb = r.bbox, cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2, fs = Math.max(1.2, Math.min(2.4, (bb.maxX - bb.minX) / 9)), hw = (String(p.label).length + 3) * fs * 0.5;
         var mk = []; (p.marks || []).forEach(function (m0) { if (/^zone-/.test(m0.kind)) return; m0.segs.forEach(function (sg) { if (sg.kind === "line") mk.push(sg.from, sg.to); }); });
         if (r.fold) r.fold.segs.forEach(function (sg) { mk.push(sg.from, sg.to); });
         var ck = [d.resultHash, sig, p.id, r.unfolded ? r.foldEdge : "-", ang, r4(bb.minX), r4(bb.maxX), r4(bb.minY), r4(bb.maxY)].join("|"), at;   // 기본 자리 찾기는 무겁다 → 같은 모양·각도면 다시 찾지 않는다
@@ -1441,6 +1491,9 @@
       pieces: b.pieces, missing: b.missing, excluded: b.excluded, info: b.info, failedPieces: bad,
       previewPartsIgnored: !!(proj.working && Array.isArray(proj.working.parts) && proj.working.parts.length)
     };
+    var rg = proj && proj.referenceGeometry, ry = {};   // 허리선 높이 = 원형 기준 형상 앞·뒤 outline 의 waist 변 y(그대로 읽는다)
+    ["front", "back"].forEach(function (k) { var o = rg && rg[k] && Array.isArray(rg[k].outline) ? rg[k].outline : [], w = o.filter(function (g) { return g && g.edge === "waist" && g.from && g.to && isFinite(g.from.y) && Math.abs(g.from.y - g.to.y) < 1e-6; })[0]; if (w) ry[k] = w.from.y; });
+    out.refY = ry;
     if (withEdges) { var nsp = readNotchSpec(proj); out.notches = notchesOf(latest, b.pieces, nsp.split); }   // 맞춤 표시는 요청할 때만(기본 derive 출력은 그대로)
     return deepFreeze(out);
   }
@@ -1563,6 +1616,10 @@
       });
       if (p.placket && p.placket.facingWidthCm > 0) { var ex = (r.instMirrored ? -p.placket.cutX : p.placket.cutX) + 0.75 * sgn, ey =p.placket.topY + (p.placket.botY - p.placket.topY) * 0.46;
         g.appendChild(el("text", { "class": "cut-mark-label", x: ex, y: ey, "font-size": 0.78, transform: "rotate(-90 " + ex + " " + ey + ")" }, "안단 끝(외곽)")); }
+      (r.guides || []).forEach(function (gd) {   // 기본 표시선(자르지 않음): C.F · C.B · 가슴선 · 허리선 — 글자 위치는 인쇄·DXF 와 같은 모델 값
+        if (gd.line) g.appendChild(el("path", { "class": "cut-guide cut-guide-" + gd.kind, "data-guide": gd.kind, d: "M" + gd.a.x + " " + gd.a.y + " L" + gd.b.x + " " + gd.b.y }));
+        g.appendChild(el("text", { "class": "cut-guide-label cut-guide-label-" + gd.kind, "data-guide-label": gd.kind, x: gd.tx, y: gd.ty, "text-anchor": "middle", "font-size": gd.th }, gd.kind === "bust" || gd.kind === "waist" ? gd.ko : gd.text));
+      });
       var bb = r.bbox, cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2, fs = Math.max(1.2, Math.min(2.4, (bb.maxX - bb.minX) / 9)), qq = (Q.inst && Q.inst[pid]) || Q.pieces[pid];
       g.appendChild(el("text", { "class": "cut-piece-label", x: cx, y: cy, "font-size": fs }, plabel + (qq && qq.qty ? " ×" + qq.qty : "")));
       g.appendChild(el("text", { "class": "cut-piece-size", x: cx, y: cy + fs * 1.15, "font-size": fs * 0.72 }, fmt(p.widthCm) + " × " + fmt(p.heightCm) + " cm" + (r.unfolded ? " (반쪽 · 펼침 " + fmt(bb.maxX - bb.minX) + " 시접 포함)" : "")));
@@ -1766,8 +1823,11 @@
       d.notches.todo.forEach(function (t) { box.appendChild(li("cut-miss", "<b>" + esc(t.what) + "</b> " + esc(t.why))); });
     }
     var notes = d.info.concat(d.excluded.map(function (x) { return x.label + ": " + x.reason; }));
-    if (sv && sv.pairing && sv.pairing.active) notes.push("앞판 = 착용자 기준 왼앞판 1장 + 오른앞판 1장(실제 거울상) — 저장된 시접·맞춤 표시·식서·수량은 원본 앞판 하나에 연결되어 두 조각이 함께 바뀝니다");
-    else if (sv && sv.pairing && sv.pairing.reason) notes.push("앞판 좌우 한 쌍 표시 안 함 — " + sv.pairing.reason);
+    if (sv && sv.pairing && sv.pairing.all) {
+      var pall = sv.pairing.all, act = Object.keys(pall).filter(function (k) { return pall[k].active; });
+      if (act.length) notes.push("좌우가 있는 조각(" + act.map(function (k) { return k === "front" ? "앞판" : k === "cuff" ? "커프스" : "소매"; }).join("·") + ") = 착용자 기준 왼 1장 + 오른 1장(실제 거울상) — 저장된 시접·맞춤 표시·식서·수량은 원본 조각 하나에 연결되어 두 조각이 함께 바뀝니다(수량 1 = 한 쌍)");
+      Object.keys(pall).forEach(function (k) { if (!pall[k].active && pall[k].reason) notes.push((k === "front" ? "앞판" : k === "cuff" ? "커프스" : "소매") + " 좌우 한 쌍 표시 안 함 — " + pall[k].reason); });
+    }
     if (d.previewPartsIgnored) notes.push("디자인 화면의 «파트 분리» 미리보기는 완료 패키지에 없어 재단 조각에 넣지 않았습니다");
     if (notes.length) { box.appendChild(li("cut-list-h", "참고")); notes.forEach(function (t) { box.appendChild(li("cut-info", esc(t))); }); }
     var src = $("cutSource");

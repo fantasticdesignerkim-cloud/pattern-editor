@@ -70,6 +70,8 @@
       var fin = chains(r.outline); fin.forEach(function (c, i) { poly("FINISHED", fin.length === 1 ? closedRing(c) : c, pos, fin.length === 1); });
       if (r.trued) { var tr0 = chains(r.trued); tr0.forEach(function (c) { poly("FINISHED_TRUED", tr0.length === 1 ? closedRing(c) : c, pos, tr0.length === 1); }); }
       (r.marks || []).forEach(function (mk) { var zone = mk.kind.indexOf("zone-") === 0; chains(mk.segs).forEach(function (c) { if (c.length === 2 && !zone) line("INTERNAL", c[0], c[1], pos); else poly("INTERNAL", zone ? closedRing(c) : c, pos, zone); }); });
+      // 기본 표시선(자르지 않음 · INTERNAL) + 글자(TEXT): C.F · C.B · BUST LINE · WAIST LINE — 화면·인쇄와 같은 모델 값(r.guides)
+      (r.guides || []).forEach(function (gd) { if (gd.line) line("INTERNAL", gd.a, gd.b, pos); text({ x: gd.tx, y: gd.ty }, pos, gd.th * 10, gd.text, 0); });
       var foldN = 0;
       (r.edges || []).forEach(function (e) { var se = (it.sm.edges || []).filter(function (x) { return x.id === e.id; })[0]; if (!se || se.kind !== "fold") return;
         // 펼친 한 장의 가운데 선 = 자르지 않는 참고선(INTERNAL · 인쇄 «골(펼친 중심 — 자르지 않음)» · AAMA 레이어 8 과 같은 뜻).
@@ -144,6 +146,7 @@
       // 접어 정리한 완성 외곽도 레이어 14 의 닫힌 선으로(master 확정: 다트 봉제선과 정리 외곽 둘 다 필요 — 한쪽을 중복으로 지우지 않는다)
       if (r.trued) { var tr1 = chains(r.trued); tr1.forEach(function (ch) { poly("14", tr1.length === 1 ? closedRing(ch) : ch, tr1.length === 1); }); }
       (r.marks || []).forEach(function (mk) { var zone = mk.kind.indexOf("zone-") === 0; chains(mk.segs).forEach(function (ch) { if (ch.length === 2 && !zone) line("8", ch[0], ch[1]); else poly("8", zone ? closedRing(ch) : ch, zone); }); });
+      (r.guides || []).forEach(function (gd) { if (gd.line) line("8", gd.a, gd.b); add("15", ["0", "TEXT", "8", "15", "10", X({ x: gd.tx, y: gd.ty }, pos), "20", Y({ x: gd.tx, y: gd.ty }, pos), "30", "0.0", "40", f4(gd.th * 10), "1", gd.text, "72", "1", "11", X({ x: gd.tx, y: gd.ty }, pos), "21", Y({ x: gd.tx, y: gd.ty }, pos), "31", "0.0"]); });
       var foldN = 0;
       (r.edges || []).forEach(function (e) { var se = (it.sm.edges || []).filter(function (x) { return x.id === e.id; })[0]; if (!se || se.kind !== "fold") return;
         var layer = r.unfolded ? "8" : "6";   // 펼친 한 장 = 가운데 선은 안쪽 선 · 반쪽 그대로 = 대칭선
