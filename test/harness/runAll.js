@@ -226,6 +226,7 @@ const suites = [
   { file: "cutPrintCheck.js", golden: false },
   { file: "cutDxfCheck.js", golden: false },
   { file: "cutPairCheck.js", golden: false },
+  { file: "cutMarkerCheck.js", golden: false },
   { file: "cutDartTrueCheck.js", golden: false },
   // 디자인 «디테일» 셔츠 앞 주머니(오각 패치, 2026-11-19): P.100 치수 · 완성선/시접(입구 접어박기) · 앞판 비재단 달림선(한쪽만) · DXF · 저장/열기 · 변경 추적 · 기존 프로젝트 회귀.
   { file: "designPocketCheck.js", golden: false },
