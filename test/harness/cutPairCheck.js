@@ -184,13 +184,13 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
   const fin = denseOf(v1.D.front.outline), cutPts = v1.D.front.seam;
   nt.forEach(n => {
     const len = Math.hypot(n.to.x - n.from.x, n.to.y - n.from.y);
-    ok(len <= 0.7 + 1e-9, "5: 노치 " + n.id + " 길이 ≤ 7mm (" + len.toFixed(4) + ")");
+    ok(len <= 0.3 + 1e-9, "5: 노치 " + n.id + " 길이 ≤ 3mm (" + len.toFixed(4) + ")");
     ok(dPoly(n.to, cutPts, true) < 2e-3, "5: 노치 " + n.id + " 한 끝은 재단선 위");
     ok(dPoly(n.from, fin, false) < dPoly(n.to, fin, false) - 1e-9, "5: 노치 " + n.id + " 는 재단선에서 안(봉제선) 쪽으로");
     ok(near(len, n.lenCm, 1e-9), "5: lenCm = 실제 선 길이");
   });
-  const big = nt.find(n => n.seamCm != null && n.seamCm > 0.7 + 1e-9);
-  ok(!!big && near(big.lenCm, 0.7, 1e-9) && !big.narrow, "5: 시접이 7mm 보다 넓으면 정확히 7mm (옆선 2cm)");
+  const big = nt.find(n => n.seamCm != null && n.seamCm > 0.3 + 1e-9);
+  ok(!!big && near(big.lenCm, 0.3, 1e-9) && !big.narrow, "5: 시접이 3mm 보다 넓으면 정확히 7mm (옆선 2cm)");
   // 좁은 시접 0.2cm: 봉제선을 넘지 않는다
   const nId = big.id, nEdge = big.edgeId;
   ok(S.CUT.setEdge("front", nEdge, { kind: "seam", widthCm: 0.2 }, P).ok, "5: 그 변 시접 0.2cm");
@@ -206,7 +206,7 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
   const n0 = view(S, P).m.pieces.front.notches.find(n => n.id === nId);
   ok(n0 && !n0.to && /시접 0|골선/.test(n0.why || ""), "5: 시접 0 은 선이 아니라 점(기존 의미 유지)");
   ok(S.CUT.setEdge("front", nEdge, { kind: "seam", widthCm: 1 }, P).ok, "5: 시접 1cm 로 복구");
-  ok(S.CUT.NOTCH_MAX_CM === 0.7, "5: 최대 길이 상수 7mm");
+  ok(S.CUT.NOTCH_MAX_CM === 0.3, "5: 최대 길이 상수 3mm");
 
   // ── §4 DXF ──
   const meta = { version: "t", createdAt: "2026-11-19T00:00:00" };
@@ -228,9 +228,9 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
     const texts = E.filter(e => e.type === "TEXT").map(e => (e.f["1"] || [])[0]);
     ok(texts.filter(t => t === "PIECE front-right").length === 1 && texts.filter(t => t === "PIECE front-left").length === 1 && texts.filter(t => /^QTY 1/.test(t)).length >= 2, "4: 일반 DXF 글자 PIECE front-right/left 각 1 · QTY 1");
     const nl = E.filter(e => e.type === "LINE" && layerOf(e) === "NOTCH").map(e => Math.hypot(num(e, 11) - num(e, 10), num(e, 21) - num(e, 20)));
-    ok(nl.length > 0 && nl.every(l => l <= 7 + 1e-3), "4: 일반 DXF 노치 선 길이 모두 ≤ 7mm");
-    const Ea = parseDxf(ax.dxf), pts4 = Ea.filter(e => e.type === "POINT" && layerOf(e) === "4");
-    ok(pts4.length > 0 && pts4.every(e => (e.f["39"] || []).length === 1 && (e.f["50"] || []).length === 1 && Number(e.f["39"][0]) <= 7 + 1e-3 && Number(e.f["39"][0]) > 0), "4: AAMA 노치 = 레이어 4 점 엔티티 + 길이(39, mm ≤ 7) + 방향(50) 메타");
+    ok(nl.length > 0 && nl.every(l => l <= 3 + 1e-3), "4: 일반 DXF 노치 선 길이 모두 ≤ 3mm");
+    const Ea = parseDxf(ax.dxf), pts4 = Ea.filter(e => e.type === "POINT" && layerOf(e) === "4"), ln4 = Ea.filter(e => e.type === "LINE" && layerOf(e) === "4");
+    ok(pts4.length === 0 && ln4.length > 0 && ln4.every(e => { const l = Math.hypot(num(e, 11) - num(e, 10), num(e, 21) - num(e, 20)); return l > 0 && l <= 3 + 1e-3; }), "4: AAMA 노치 = 레이어 4 I자 선(V자 점 엔티티 없음) · 길이 ≤ 3mm")
     const blocks = Ea.filter(e => e.type === "INSERT").map(e => (e.f["2"] || [])[0]);
     ok(blocks.filter(b => b === "FRONT_RIGHT_BASE").length === 1 && blocks.filter(b => b === "FRONT_LEFT_BASE").length === 1 && blocks.indexOf("FRONT_BASE") < 0, "4: AAMA INSERT = 앞판 오른·왼 각 1 (예전 FRONT_BASE 없음)");
     const aq = Ea.filter(e => e.type === "TEXT").map(e => (e.f["1"] || [])[0]);
@@ -249,7 +249,7 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
   ok(/id="cutDefaults"[^>]*>[^<]*1cm[^<]*0cm/.test(html), "6: 선택 없이 보이는 기본값 표시(시접 1cm · 골선 0cm)");
   ok(/id="btnCutWidths"[^>]*aria-pressed="false"/.test(html), "6: 시접 폭 보기 전환 단추");
   ok(/\.cut-seam-card\{[^}]*margin:0 auto[^}]*max-width:560px/.test(css) && /\.cut-seam-card\{left:8px;right:8px;bottom:8px;margin:0/.test(css), "6: 카드 = 하단 가운데(auto 여백) · 좁은 화면은 전체 폭 하단");
-  ok(/js\/cutPrep\.js\?v=2026112001/.test(html) && /js\/cutPrint\.js\?v=2026112001/.test(html) && /js\/cutDxf\.js\?v=2026112001/.test(html) && /css\/apple\.css\?v=2026112001/.test(html), "6: 캐시 버전 핀");
+  ok(/js\/cutPrep\.js\?v=2026112002/.test(html) && /js\/cutPrint\.js\?v=2026112002/.test(html) && /js\/cutDxf\.js\?v=2026112002/.test(html) && /css\/apple\.css\?v=2026112002/.test(html), "6: 캐시 버전 핀");
   // ── §7 2026-11-20 소매·커프스 좌우 쌍 · C.F / C.B · 가슴선 · 허리선 ──
   {
     const v7 = view(S, P), D7 = v7.D, Q7 = v7.Q, pairs = ["front", "sleeve-sleeve"].concat(D7.cuff ? ["cuff"] : []);   // 이 시험 셔츠에는 커프스가 없다(커프스 쌍은 cutLayoutCheck 가 확인)

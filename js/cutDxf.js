@@ -120,7 +120,7 @@
   // ── AAMA/ASTM D6673 구조를 따른 DXF(조각마다 BLOCK 하나 · 숫자 레이어 · 조각/스타일 글자) ──
   //   확인한 것(공개 자료): 레이어 번호 1 재단선 · 2 꺾임점 · 3 곡선점 · 4 너치 · 6 대칭(골)선 · 7 식서 · 8 안쪽 선 · 14 봉제(완성)선 · 15 주석,
   //     조각마다 블록 하나, 글자 항목 «Piece Name: / Size: / Quantity: / Annotation:» «Style Name: / Creation Date: / Creation Time: / Author: / Sample Size: / Units: METRIC».
-  //   확인하지 못한 것(관례대로 씀 · 실제 CAD 에서 미검증): 너치 = 레이어 4 의 POINT(재단선 쪽 끝 · 50 = 안쪽 방향 각 · 39 = 길이) · ENTITIES 의 INSERT · 판 R12.
+  //   확인하지 못한 것(관례대로 씀 · 실제 CAD 에서 미검증): 너치 = 레이어 4 의 I자 LINE(재단선에서 안으로 3mm · 2026-11-20 Optitex 에서 POINT 가 V자로 읽혀 변경) · ENTITIES 의 INSERT · 판 R12.
   //   규격 인증·특정 CAD 호환을 뜻하지 않는다. 그레이딩 규칙표(.rul)는 만들지 않는다(사이즈 하나).
   var AAMA_LAYERS = [["1", 7, "재단선(시접 포함) · 조각/스타일 글자"], ["2", 1, "꺾임점"], ["3", 3, "곡선점"], ["4", 1, "너치"], ["6", 6, "대칭(골)선 — 반쪽 조각"], ["7", 4, "식서"], ["8", 5, "안쪽 선(자르지 않음)"], ["14", 2, "봉제선(완성선)"], ["15", 8, "주석"]];
   var TURN_DEG = 12;   // 재단선 꼭짓점에서 방향이 이만큼 넘게 꺾이면 꺾임점(레이어 2), 아니면 곡선점(레이어 3)
@@ -156,8 +156,7 @@
       (r.notches || []).forEach(function (nt) {
         if (!nt.to) { if (nt.from) { nIn++; point("8", nt.from); } return; }
         var outer = dCut(nt.from) <= dCut(nt.to) ? nt.from : nt.to, inner = outer === nt.from ? nt.to : nt.from;
-        var ang = Math.atan2(-(inner.y - outer.y), inner.x - outer.x) * 180 / Math.PI; if (ang < 0) ang += 360;
-        nN++; point("4", outer, ["39", f4(Math.hypot(inner.x - outer.x, inner.y - outer.y) * 10), "50", f4(ang)]);
+        nN++; line("4", outer, inner);   // 2026-11-20: 점(V자로 읽힘) 대신 재단선에서 안으로 곧은 I자 선(3mm)
       });
       var gk = row.grain.kind;
       if (g && g.ok && !g.held) line("7", g.from, g.to);

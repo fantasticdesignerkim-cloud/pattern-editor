@@ -884,7 +884,7 @@
   // ── 다트 입구 정리 뒤 너치 확인(2026-11-17 Codex 검토) ──
   //   너치 위치는 원래 완성선(정리 전) 기준 호 길이다. 정리 외곽이 그 자리에서 바뀌었으면(점이 외곽 위에 없거나 방향이 다르면) 옛 자리를 정상 너치로 내지 않는다:
   //   보류(이유 표시) · 인쇄·DXF 에서 뺀다 · 위치를 옮기지 않는다 · 저장값 그대로. 영향 없는 너치는 그대로 둔다(같은 자리·같은 방향이면 보류 안 함).
-  var HOLD_POS_CM = 0.002, HOLD_DEG = 0.1, NOTCH_MAX_CM = 0.7;   // NOTCH_MAX_CM = 맞춤 표시 선 최대 길이 7mm(재단선에서 안으로)
+  var HOLD_POS_CM = 0.002, HOLD_DEG = 0.1, NOTCH_MAX_CM = 0.3;   // NOTCH_MAX_CM = 맞춤 표시 선 최대 길이 3mm(재단선에서 안으로 · 2026-11-20 김님: Optitex 검수 후 7→3mm)
   function nearestOnRing(ring, q) {
     var best = [];
     ring.forEach(function (g) {
@@ -923,7 +923,7 @@
       if (t > 1e-9 && u >= -1e-9 && u <= 1 + 1e-9 && (!best || t < best.t)) best = { t: t, x: at.pt.x + dx * t, y: at.pt.y + dy * t };
     }
     if (!best) return { from: at.pt, sewnAt: at.pt, to: null, why: "직각선이 시접선과 만나지 않음" };
-    // ⑧ 표시 규격(2026-11-19): 위치(완성선 위 호 길이 · 직각 방향)는 그대로. 선은 재단선(to)에서 안쪽으로 최대 NOTCH_MAX_CM(7mm) 곧은 I자 한 줄.
+    // ⑧ 표시 규격(2026-11-19): 위치(완성선 위 호 길이 · 직각 방향)는 그대로. 선은 재단선(to)에서 안쪽으로 최대 NOTCH_MAX_CM(3mm) 곧은 I자 한 줄.
     //   시접이 7mm 보다 좁으면 완성선(봉제선)에서 멈춘다(from = 완성선 위 점) — 봉제선을 넘지 않는다. 시접 0·골선·보류·미완은 위 분기 그대로(점/없음).
     var len = Math.min(NOTCH_MAX_CM, best.t), ux = (best.x - at.pt.x) / best.t, uy = (best.y - at.pt.y) / best.t;
     var inner = best.t <= NOTCH_MAX_CM ? at.pt : { x: best.x - ux * len, y: best.y - uy * len };
