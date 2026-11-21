@@ -301,6 +301,19 @@ function _appendPlacket(root, placket, L, scale){
   root.appendChild(g);
 }
 
+// 앞여밈 단추 위치(working.frontButtons): 앞중심 단추선 위의 점. 위치만(지름·단춧구멍은 교재 근거 판독 전 — 보류). 앞판 offset 동승.
+function _appendButtons(root, fb, L, scale){
+  if(!fb || !Array.isArray(fb.marks) || !fb.marks.length) return;
+  const off=(L && L.front) ? L.front : {dx:0,dy:0};
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-buttons":"front" });
+  fb.marks.forEach((m,i)=>{
+    const x=m.x*scale, y=m.y*scale;
+    g.appendChild(E("circle",{ cx:x, cy:y, r:4, class:"design-button-mark", "data-button-index":String(i) }));
+    g.appendChild(E("path",{ d:"M"+(x-6)+" "+y+"L"+(x+6)+" "+y+"M"+x+" "+(y-6)+"L"+x+" "+(y+6), class:"design-button-cross", fill:"none" }));
+  });
+  root.appendChild(g);
+}
+
 // 앞 주머니 부착 위치(디테일): 앞판 offset(L.front) 동승. 점선 오각형(재단선 아님) + 이름 글자.
 function _appendPocketMark(root, pv, L, scale){
   if(!pv || !Array.isArray(pv.attach) || !pv.attach.length) return;
@@ -919,6 +932,11 @@ function render(){
       const pRoot = E("g"); pRoot.setAttribute("data-design-root", "placket");
       _appendPlacket(pRoot, dp.working.frontPlacket, L, scale);
       svg.appendChild(pRoot);
+    }
+    if (dp.working.frontPlacket && dp.working.frontButtons) {
+      const bRoot = E("g"); bRoot.setAttribute("data-design-root", "buttons");
+      _appendButtons(bRoot, dp.working.frontButtons, L, scale);
+      svg.appendChild(bRoot);
     }
     // 디테일 «앞 주머니» 부착 위치(적용돼 있고 최종 몸판 위에서 유효할 때만 · 표시 전용): 앞판 위 점선 오각형 + 이름. 형상·hash 무관.
     if (dp.working.pocket && window.designPocket && window.designPocket.previewFor) {

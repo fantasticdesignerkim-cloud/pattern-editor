@@ -331,7 +331,7 @@ let T1 = null, S2 = null;
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
   const at = f => html.indexOf('src="js/' + f + '?v=');
-  ok(at("projectFile.js") > at("designResult.js") && at("projectFile.js") < at("ui.js") && /projectFile\.js\?v=2026111903/.test(html), "6: projectFile 로드 순서·캐시 버전");
+  ok(at("projectFile.js") > at("designResult.js") && at("projectFile.js") < at("ui.js") && /projectFile\.js\?v=2026112101/.test(html), "6: projectFile 로드 순서·캐시 버전");
   ok(/id="btnSaveProject" onclick="projectFile\.onSave\(\)"/.test(html) && /id="inpOpenProject"[^>]*onchange="projectFile\.onOpenFile\(this\)"/.test(html), "6: 파일 메뉴 «프로젝트 저장»·«프로젝트 열기»");
   ok(/onclick="exportData\(\)"/.test(html) && /onchange="importDataFromFile\(this\)"/.test(html), "6: 기존 곡선 JSON 내보내기/가져오기 보존");
 }

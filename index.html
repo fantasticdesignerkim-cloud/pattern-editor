@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>DOROBO — 문화식 원형 에디터</title>
-<link rel="stylesheet" href="css/style.css?v=2026111903">
+<link rel="stylesheet" href="css/style.css?v=2026112101">
 <!-- 라이트 테마 덮어쓰기(apple-light-ui · 2026-11-13 통합): style.css 원문은 그대로, 표시만 바꾼다. -->
 <link rel="stylesheet" href="css/apple.css?v=2026112002">
 <!-- 화면 모드(시스템/밝게/어둡게): 첫 그리기 전에 data-theme 을 정해 깜빡임을 막는다. 저장 키 dorobo.ui.theme · 연결은 js/appleChrome.js -->
@@ -17,7 +17,7 @@
     <span class="app-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M5 19c3-1 4.5-13 8-13 2.6 0 3.4 4.6 6 5"/></svg></span>
     <span class="brand">DOROBO</span>
     <!-- 앱 버전 단일 원천: 배포할 때 이 번호만 올린다 (docs/STATUS.md § 앱 버전 표시) -->
-    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.20.4">v2026.11.20.4</span>
+    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.20.5">v2026.11.20.5</span>
     <span class="brand-sub">문화식 원형</span>
   </div>
 
@@ -337,6 +337,16 @@
           <button class="btn" id="btnClearPlacket">여밈 제거</button>
         </div>
         <div class="row note" id="designPlacketNote" aria-live="polite"></div>
+        <!-- 앞여밈 단추 위치(js/designButtons.js): 앞중심 단추선 위, 목점에서 아래로 잰 거리. 여밈이 있어야 적용. 지름·단춧구멍은 교재 근거 판독 전이라 없음. -->
+        <div class="row" style="margin-top:8px"><label>앞여밈 단추</label></div>
+        <div class="row"><label for="inpButtonStart">첫 단추 (목점에서 cm)</label><input id="inpButtonStart" type="number" min="0" step="0.5"></div>
+        <div class="row"><label for="inpButtonEnd">끝 단추 (목점에서 cm)</label><input id="inpButtonEnd" type="number" min="0" step="0.5"></div>
+        <div class="row"><label for="inpButtonCount">단추 개수</label><input id="inpButtonCount" type="number" min="1" max="40" step="1"></div>
+        <div class="row" style="gap:4px">
+          <button class="btn action-primary" id="btnApplyButtons" disabled aria-disabled="true">단추 적용</button>
+          <button class="btn" id="btnClearButtons" disabled aria-disabled="true">단추 제거</button>
+        </div>
+        <div class="row note" id="designButtonsNote" aria-live="polite"></div>
         <!-- 몸판 모양 완료(bodiceCheckpoint): 검사 통과 시 working.bodiceResult 세션 스냅샷.
              소매 단계가 확정 진동선을 참조. 아직 시접·너치·재단선 아님. -->
         <!-- 옆선 길이(2026-11-08 김님 방향 전환): 자동 길이 맞춤·자석·여유 설정 UI 제거 — 앞·뒤 옆선 실측은 캔버스 옆선 옆에 외곽선과 같은 색으로 상시 표시. 저장된 옛 여유 의도는 완료 판정에 그대로 쓰이고 아래 완료 안내에 보인다. -->
@@ -749,7 +759,7 @@
 <script src="js/layer.js?v=2026070731"></script>
 <script src="js/draft.js?v=2026091910"></script>
 <script src="js/handles.js?v=2026111201"></script>
-<script src="js/render.js?v=2026111903"></script>
+<script src="js/render.js?v=2026112101"></script>
 <script src="js/sleeve.js?v=2026080911"></script>
 <script src="js/storage.js?v=2026111201"></script>
 <script>const DEBUG_DART_MOVE = false;</script>
@@ -770,6 +780,7 @@
 <script src="js/designRenderer.js?v=2026100303"></script>
 <!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
 <script src="js/designPlacket.js?v=2026082001"></script>
+<script src="js/designButtons.js?v=2026112101"></script>
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
 <script src="js/designSleeve.js?v=2026102001"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
@@ -883,8 +894,8 @@
 <script src="js/draftLayout.js?v=2026080911"></script>
 <script src="js/init.js?v=2026111105"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
-<script src="js/projectFile.js?v=2026111903"></script>
-<script src="js/ui.js?v=2026111903"></script>
+<script src="js/projectFile.js?v=2026112101"></script>
+<script src="js/ui.js?v=2026112101"></script>
 <!-- 라이트 테마 크롬(UI 전용): 확대 알약 · 폰 하단 시트 · 화면 모드. 기존 전역 함수만 호출. -->
 <script src="js/appleChrome.js?v=2026111302"></script>
 <!-- 원형 이세 배지·계산 노트 · 원형/디자인 비교(읽기 전용 · UI 전용). -->

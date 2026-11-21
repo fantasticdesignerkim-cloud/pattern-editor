@@ -865,6 +865,55 @@
     const cp = committedPlacket(project);
     if (!cp.has) return;
     computeFrontPlacket(project, { overlapCm: cp.overlap, facingWidthCm: cp.facing, lengthMode: "full" });
+    refreshFrontButtons(project);   // 여밈이 재파생되면 단추 위치도 같은 파라미터로 다시 계산(여밈이 없어졌으면 제거)
+  }
+  // ── 앞여밈 단추 위치(designButtons) ── 여밈의 앞중심선(cfX)·목점(topY)·밑단(botY)에서 균등 간격으로 파생. 세션 전용.
+  function placketFrame(project) {
+    const pk = project && project.working && project.working.frontPlacket, c = pk && pk.construction && pk.construction[1];
+    return c && c.from && c.to ? { cfX: c.from.x, topY: c.from.y, botY: c.to.y } : null;
+  }
+  function committedButtons(project) {
+    const b = project && project.working && project.working.frontButtons;
+    return b && b.parameters ? { has: true, start: b.parameters.startCm, end: b.parameters.endCm, count: b.parameters.count } : { has: false };
+  }
+  function refreshFrontButtons(project) {
+    const cb = committedButtons(project); if (!cb.has) return;
+    const r = window.designButtons ? window.designButtons.compute({ startCm: cb.start, endCm: cb.end, count: cb.count }, placketFrame(project)) : { ok: false };
+    project.working.frontButtons = r.ok ? { parameters: r.parameters, marks: r.marks } : null;   // 실패 시 stale 유지 금지
+  }
+  function setButtonsNote(txt) { const n = document.getElementById("designButtonsNote"); if (n) n.textContent = txt; }
+  function buttonsNoteFor(reason) {
+    return ({ "no-frame": "먼저 앞중심 여밈을 적용하세요", "invalid-count": "개수는 1~" + (window.designButtons ? window.designButtons.MAX_COUNT : 40) + " 정수여야 합니다",
+      "invalid-position": "시작·끝 거리를 숫자로 입력하세요", "out-of-range": "시작·끝은 0 이상, 여밈 길이(목점~밑단) 이하여야 합니다",
+      "start-equals-end": "개수 2 이상은 시작과 끝이 달라야 합니다", "reversed": "끝이 시작보다 아래(큰 값)여야 합니다" })[reason] || "단추를 적용할 수 없습니다";
+  }
+  function readButtonInputs() {
+    const raw = id => { const el = document.getElementById(id); return el ? String(el.value).trim() : ""; };
+    return { startCm: raw("inpButtonStart") === "" ? NaN : Number(raw("inpButtonStart")), endCm: raw("inpButtonEnd") === "" ? NaN : Number(raw("inpButtonEnd")), count: raw("inpButtonCount") === "" ? NaN : Number(raw("inpButtonCount")) };
+  }
+  function onApplyButtons() {
+    const project = designProjectNow(); if (!project || !window.designButtons) return;
+    const q = readButtonInputs();
+    if (q.count === 1 && isNaN(q.endCm)) q.endCm = q.startCm;   // 개수 1 은 끝 입력이 필요 없다
+    const r = window.designButtons.compute(q, placketFrame(project));
+    if (!r.ok) { setButtonsNote(buttonsNoteFor(r.reason)); return; }
+    project.working.frontButtons = { parameters: r.parameters, marks: r.marks };
+    if (typeof render === "function") render();
+    setButtonsNote("단추 " + r.marks.length + "개 · 목점에서 " + fmtL(r.parameters.startCm) + (r.marks.length > 1 ? "~" + fmtL(r.parameters.endCm) : "") + "cm · 세션 전용 · 지름·단춧구멍은 근거 판독 전이라 표시하지 않음");
+    syncButtonButtons();
+  }
+  function onClearButtons() {
+    const project = designProjectNow(); if (!project) return;
+    project.working.frontButtons = null;
+    ["inpButtonStart", "inpButtonEnd", "inpButtonCount"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    if (typeof render === "function") render();
+    setButtonsNote("단추 제거됨"); syncButtonButtons();
+  }
+  function syncButtonButtons() {
+    const project = designProjectNow();
+    const apply = document.getElementById("btnApplyButtons"), clear = document.getElementById("btnClearButtons");
+    if (apply) apply.disabled = !(project && committedPlacket(project).has);
+    if (clear) clear.disabled = !(project && committedButtons(project).has);
   }
   function placketNoteFor(reason) {
     if (reason === "invalid-overlap" || reason === "invalid-facing") return "여밈분·안단 폭은 0 이상이어야 합니다";
@@ -887,17 +936,20 @@
   function onClearPlacket() {
     const project = designProjectNow();
     if (!project) return;
-    project.working.frontPlacket = null;
+    project.working.frontPlacket = null; project.working.frontButtons = null;   // 단추는 여밈에 종속
+    onButtonsGone();
     ["inpPlacketOverlap", "inpPlacketFacing"].forEach(id => { const el = document.getElementById(id); if (el) el.value = "0"; });
     if (typeof render === "function") render();
     setPlacketNote("여밈 제거됨"); syncPlacketButtons();
     updateBodiceCheckpointUI(project);
   }
+  function onButtonsGone() { ["inpButtonStart", "inpButtonEnd", "inpButtonCount"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; }); setButtonsNote(""); }
   function syncPlacketButtons() {
     const project = designProjectNow();
     const apply = document.getElementById("btnApplyPlacket"), clear = document.getElementById("btnClearPlacket");
     if (apply) apply.disabled = !(project && readPlacketInputs().valid);
     if (clear) clear.disabled = !(project && committedPlacket(project).has);
+    syncButtonButtons();
   }
 
   // ── 몸판 모양 완료 체크포인트(bodiceCheckpoint) ──
@@ -3906,6 +3958,9 @@
     const cp = committedPlacket(project);
     setIf("inpPlacketOverlap", cp.overlap); setIf("inpPlacketFacing", cp.facing);
     setPlacketNote(cp.has ? "여밈 " + fmtL(cp.overlap) + "cm · 안단 " + fmtL(cp.facing) + "cm(컷온) · 세션 전용" : "");
+    const cbn = committedButtons(project);
+    if (cbn.has) { setIf("inpButtonStart", cbn.start); setIf("inpButtonEnd", cbn.end); setIf("inpButtonCount", cbn.count); setButtonsNote("단추 " + cbn.count + "개 · 세션 전용"); }
+    else if (!cp.has) onButtonsGone();
     syncPlacketButtons();
     updateBodiceCheckpointUI(project);
   }
@@ -4169,6 +4224,15 @@
     if (applyPk) applyPk.addEventListener("click", () => { if (!applyPk.disabled) onApplyPlacket(); });
     const clearPk = document.getElementById("btnClearPlacket");
     if (clearPk) clearPk.addEventListener("click", () => { if (!clearPk.disabled) onClearPlacket(); });
+    // 앞여밈 단추: Enter 로 적용 · 적용/제거 버튼(여밈이 있어야 적용 가능).
+    ["inpButtonStart", "inpButtonEnd", "inpButtonCount"].forEach(id => {
+      const el = document.getElementById(id); if (!el) return;
+      el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); const b = document.getElementById("btnApplyButtons"); if (b && !b.disabled) onApplyButtons(); } });
+    });
+    const applyBt = document.getElementById("btnApplyButtons");
+    if (applyBt) applyBt.addEventListener("click", () => { if (!applyBt.disabled) onApplyButtons(); });
+    const clearBt = document.getElementById("btnClearButtons");
+    if (clearBt) clearBt.addEventListener("click", () => { if (!clearBt.disabled) onClearButtons(); });
     // 몸판 모양 완료(bodiceCheckpoint): 검사 통과 시에만 활성(updateBodiceCheckpointUI 가 disabled 관리).
     const completeBodice = document.getElementById("btnCompleteBodice");
     if (completeBodice) completeBodice.addEventListener("click", () => { if (!completeBodice.disabled) onCompleteBodice(); });

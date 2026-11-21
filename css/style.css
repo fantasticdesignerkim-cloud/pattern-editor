@@ -577,3 +577,6 @@ svg#cv{width:100%;flex:1;min-height:0;touch-action:none;background:transparent;d
 #cv .done-badge rect{fill:#FFFFFF;fill-opacity:.92;stroke:#0E9F6E;stroke-width:1}
 #cv .done-badge[data-state="changed"] text{fill:#92400E}
 #cv .done-badge[data-state="changed"] rect{stroke:#D97706}
+
+.design-button-mark{fill:#fff;stroke:#B45309;stroke-width:1.6}
+.design-button-cross{stroke:#B45309;stroke-width:1;opacity:.8}
