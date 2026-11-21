@@ -220,7 +220,7 @@ let M = model(S, P);
   M = model(S, P);
   const want = { back: 1, front: 1, "sleeve-sleeve": 1, cuff: 1, "collar-body": 1, "collar-stand": 1, "vent-placket": 1, "vent-bias": 1 };
   ok(Object.keys(want).every(k => M.Q.pieces[k].qty === want[k] && !M.Q.pieces[k].explicit) && M.Q.state === "none", "4: 기본 수량 전부 1(2026-11-20 확정 · 좌우 조각은 한 쌍 = 1)");
-  ok(/골/.test(M.Q.pieces.back.how) && /겉·안/.test(M.Q.pieces["collar-body"].how) && /거울상 쌍/.test(M.Q.pieces.front.how) && /거울상 쌍/.test(M.Q.pieces["sleeve-sleeve"].how) && /거울상 쌍/.test(M.Q.pieces.cuff.how), "4: 표시 = 골 · 펼친 한 장 / 겉·안 / 앞판·소매·커프스 거울상 쌍");
+  ok(/골/.test(M.Q.pieces.back.how) && /겉감·안감/.test(M.Q.pieces["collar-body"].how) && /거울상 쌍/.test(M.Q.pieces.front.how) && /거울상 쌍/.test(M.Q.pieces["sleeve-sleeve"].how) && /거울상 쌍/.test(M.Q.pieces.cuff.how), "4: 표시 = 골 · 펼친 한 장 / 겉·안 / 앞판·소매·커프스 거울상 쌍");
   const spec0 = J(P.working.cutSpec), nt0 = J(P.working.cutNotches || null);
   ok(S.CUT.setQty("front", 4, P).ok && J(P.working.cutQty) === J({ schema: 1, pieces: { front: 4 } }) && model(S, P).Q.pieces.front.explicit, "4: 앞판 4 로 수정 → working.cutQty 에 그 값만");
   const bad = [0, 100, 1.5, -1, NaN, "2", null === 0];

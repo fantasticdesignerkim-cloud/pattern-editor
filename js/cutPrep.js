@@ -1277,7 +1277,7 @@
   }
 
   // ══ 재단 수량(working.cutQty · 판 1 · 2026-11-15 master 확정 기본값) ══
-  //   기본: 뒤판 골 1(골이 아니면 2) · 앞판 2 · 소매 2 · 커프스 2 · 위 칼라·밴드 골 2(겉·안 · 골이 아니면 4) · 트임 덧단·바이어스 2. 그 밖 조각 = 기본 없음(직접 입력).
+  //   (2026-11-20 이전 기본 «앞판 2·소매 2·칼라 골 2…» 는 폐기 — 아래 defaultQty 가 현재 규칙: 전부 1. 칼라·밴드는 1장이고 겉감·안감 각각 재단은 안내 문구로만 말한다.) 그 밖 조각 = 기본 없음(직접 입력).
   //   펼친 한 장은 한 장 — 거울 표시로 수량을 두 배로 하지 않는다. 사용자가 고친 값만 저장. 엄격 검증(모르는 키·판·정수 1~99 아님 = 읽지 않음 · 잠금).
   var QTY_ID = /^[a-z][A-Za-z0-9-]{0,40}$/;
   function readQty(proj) {
@@ -1303,7 +1303,7 @@
       var folded = !!(disp[p.id] && disp[p.id].unfolded), def = defaultQty(p.id, folded), mine = q.pieces[p.id];
       out.pieces[p.id] = { qty: mine != null ? mine : def, explicit: mine != null, def: def, folded: folded,
         how: folded ? "골 · 펼친 한 장" : "" };
-      if (/^collar-/.test(p.id)) out.pieces[p.id].how = folded ? "골 · 펼친 한 장 × 겉·안" : "겉·안";
+      if (/^collar-/.test(p.id)) out.pieces[p.id].how = folded ? "골 1장 · 겉감·안감은 각각 재단" : "1장 · 겉감·안감은 각각 재단";   // 수량 1 = 조각 한 장(2026-11-21 김님: 수량은 1 로 두고 몇 장 자를지는 안내·재단 단계가 정한다)
     });
     Object.keys(q.pieces).forEach(function (k) { if (!out.pieces[k]) out.stale.push(k); });
     // ⑦ 쌍으로 펼친 앞판: 저장 수량(원본 id · 2)은 그대로 두고, 보이는 두 조각은 각 1장. out.inst = 조각 «표시 id» 별 재단 장 수(인쇄·DXF·화면 글자가 읽는다).
