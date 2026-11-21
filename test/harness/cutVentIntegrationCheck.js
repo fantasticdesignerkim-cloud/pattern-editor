@@ -183,6 +183,21 @@ function foldsOnto(p, fx) {
   ok(d2.state === "ready" && J(d2.pieces) === J(d.pieces) && J(d2.missing) === J(d.missing) && d2.resultHash === d.resultHash, "6: 열기 뒤 재단 조각 = 저장 전과 바이트 동일");
 }
 
+// §7 트임 덧단·바이어스도 소매처럼 좌우 한 쌍(2026-11-21): 수량 1 = 왼 1 + 오른 1 거울 쌍 · 저장 키는 원본 id 하나
+{
+  const r = build(null), S = r.S, P = r.P, d = S.CUT.derive(P, true), m = S.CUT.seam(d, P), D = S.CUT.displayOf(d, m), Q = S.CUT.qtyOf(d, D, P);
+  ["vent-placket", "vent-bias"].forEach(id => {
+    const pr = m.pairing.all[id], a = D[id], b = D[id + "~m"];
+    ok(pr && pr.active && !!b, "7: " + id + " 좌우 쌍 활성 · 거울 조각 있음");
+    if (!(pr && pr.active && a && b)) return;
+    ok(/^오른/.test(a.label) && /^왼/.test(b.label) && /트임/.test(a.label) && /트임/.test(b.label), "7: " + id + " 이름 오른/왼 + 트임 (" + a.label + " | " + b.label + ")");
+    const mirrored = a.outline.length === b.outline.length && a.outline.every((g, i) => Math.abs(-g.from.x - b.outline[i].from.x) < 1e-9 && Math.abs(g.from.y - b.outline[i].from.y) < 1e-9);
+    ok(mirrored, "7: " + id + " 거울 조각 = 원본 x 반사");
+    ok(Q.pieces[id] && Q.pieces[id].qty === 1, "7: " + id + " 수량 1(쌍 한 벌)");
+  });
+  ok(S.CUT.setQty("vent-placket", 2, P).ok && !S.CUT.seam(S.CUT.derive(P, true), P).pairing.all["vent-placket"].active, "7: 수량 2(직접 지정) = 쌍 아님 · 기존 한 조각");
+}
+
 console.log("cutVentIntegrationCheck: " + PASS + " passed, " + FAIL + " failed");
 fails.forEach(f => console.log("  FAIL " + f));
 process.exit(FAIL ? 1 : 0);

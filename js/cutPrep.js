@@ -1091,13 +1091,15 @@
   //   2026-11-20 일반화: 같은 투영을 소매(sleeve-…)·커프스(cuff)에도 쓴다. 쌍 조건의 «수량» = 1(기본 · 한 쌍) — 사용자가 1 이 아닌 값을 정했으면 쌍으로 펼치지 않고 그 수량 그대로 한 조각.
   var PAIR_BASE = "front", PAIR_MIRROR = "front~m";
   function baseOf(id) { return String(id).replace(/~m$/, ""); }
-  function isPairable(p) { return p.id === "front" || p.id === "cuff" || (p.group === "sleeve" && /^sleeve-/.test(p.id)); }
-  function sideName(side, base) { var w = side === "R" ? "오른" : "왼"; return w + (!base || base === "front" ? "앞판" : base === "cuff" ? "커프스" : "소매"); }
+  function isPairable(p) { return p.id === "front" || p.id === "cuff" || p.id === "vent-placket" || p.id === "vent-bias" || (p.group === "sleeve" && /^sleeve-/.test(p.id)); }
+  //   좌우 쌍 조각의 읽는 이름(앞판·커프스·트임 덧단·트임 바이어스·소매) — 소매 트임은 소매마다 한 장씩이라 소매와 같은 쌍(2026-11-21).
+  function pairKindName(base) { return base === "front" ? "앞판" : base === "cuff" ? "커프스" : base === "vent-placket" ? "트임 덧단" : base === "vent-bias" ? "트임 바이어스" : "소매"; }
+  function sideName(side, base) { var w = side === "R" ? "오른" : "왼"; return w + pairKindName(!base ? "front" : base); }
   function sideLabel(label, side, base) { var nm = sideName(side, base); return base === "front" ? (/^앞판/.test(label) ? label.replace(/^앞판/, nm) : nm + " · " + label) : (nm + " · " + label); }
   function pairOne(d, proj, base, q) {
     var out = { active: false, base: base, mirrorId: base + "~m", reason: null }, no = function (r) { out.reason = r; return out; };
     var p = (d.pieces || []).filter(function (x) { return x.id === base; })[0]; if (!p) return out;
-    var nm = base === "front" ? "앞판" : base === "cuff" ? "커프스" : "소매";
+    var nm = pairKindName(base);
     if (!p.check.ok || !p.edges) return no(nm + " 외곽 검사가 끝나지 않아 좌우 한 쌍으로 펼치지 않았습니다");
     if (base === "front") {
       var other = (d.pieces || []).filter(function (x) { return x.id !== base && /^front/i.test(x.id); })[0];
@@ -1825,8 +1827,8 @@
     var notes = d.info.concat(d.excluded.map(function (x) { return x.label + ": " + x.reason; }));
     if (sv && sv.pairing && sv.pairing.all) {
       var pall = sv.pairing.all, act = Object.keys(pall).filter(function (k) { return pall[k].active; });
-      if (act.length) notes.push("좌우가 있는 조각(" + act.map(function (k) { return k === "front" ? "앞판" : k === "cuff" ? "커프스" : "소매"; }).join("·") + ") = 착용자 기준 왼 1장 + 오른 1장(실제 거울상) — 저장된 시접·맞춤 표시·식서·수량은 원본 조각 하나에 연결되어 두 조각이 함께 바뀝니다(수량 1 = 한 쌍)");
-      Object.keys(pall).forEach(function (k) { if (!pall[k].active && pall[k].reason) notes.push((k === "front" ? "앞판" : k === "cuff" ? "커프스" : "소매") + " 좌우 한 쌍 표시 안 함 — " + pall[k].reason); });
+      if (act.length) notes.push("좌우가 있는 조각(" + act.map(pairKindName).join("·") + ") = 착용자 기준 왼 1장 + 오른 1장(실제 거울상) — 저장된 시접·맞춤 표시·식서·수량은 원본 조각 하나에 연결되어 두 조각이 함께 바뀝니다(수량 1 = 한 쌍)");
+      Object.keys(pall).forEach(function (k) { if (!pall[k].active && pall[k].reason) notes.push(pairKindName(k) + " 좌우 한 쌍 표시 안 함 — " + pall[k].reason); });
     }
     if (d.previewPartsIgnored) notes.push("디자인 화면의 «파트 분리» 미리보기는 완료 패키지에 없어 재단 조각에 넣지 않았습니다");
     if (notes.length) { box.appendChild(li("cut-list-h", "참고")); notes.forEach(function (t) { box.appendChild(li("cut-info", esc(t))); }); }
