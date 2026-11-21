@@ -230,6 +230,8 @@ const suites = [
   { file: "cutDartTrueCheck.js", golden: false },
   // 디자인 «디테일» 셔츠 앞 주머니(오각 패치, 2026-11-19): P.100 치수 · 완성선/시접(입구 접어박기) · 앞판 비재단 달림선(한쪽만) · DXF · 저장/열기 · 변경 추적 · 기존 프로젝트 회귀.
   { file: "designPocketCheck.js", golden: false },
+  // 디자인 앞여밈 단추 위치(2026-11-21): 균등 간격 · 개수 1·2 경계 · 시작=끝/역순/범위 밖 거부 · 저장본 검증.
+  { file: "designButtonsCheck.js", golden: false },
 ];
 
 const tailLines = (buf, n) => (buf || "").toString().trim().split("\n").slice(-n).join("\n");
