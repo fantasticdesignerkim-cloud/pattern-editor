@@ -307,7 +307,7 @@ function _appendButtons(root, fb, L, scale){
   const off=(L && L.front) ? L.front : {dx:0,dy:0};
   const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-buttons":"front" });
   fb.marks.forEach((m,i)=>{
-    const x=m.x*scale, y=m.y*scale;
+    const [x,y]=c2p(m.x, m.y);   // 여밈 선(_openPathD)과 같은 좌표 변환
     g.appendChild(E("circle",{ cx:x, cy:y, r:4, class:"design-button-mark", "data-button-index":String(i) }));
     g.appendChild(E("path",{ d:"M"+(x-6)+" "+y+"L"+(x+6)+" "+y+"M"+x+" "+(y-6)+"L"+x+" "+(y+6), class:"design-button-cross", fill:"none" }));
   });
