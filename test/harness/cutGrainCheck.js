@@ -150,7 +150,7 @@ const lineOK = (g, poly, minClear) => { let okk = true, mc = Infinity; for (let 
   ok(Object.keys(G.pieces).every(k => /P\.169|P\.91/.test(G.pieces[k].basis || "")), "1: 기본값마다 교재 근거 문구(P.169 · 바이어스 P.91)");
   // ⑦ 앞판은 좌우 거울쌍 → 저장 조각 8개 + 거울 쪽 파생 화살표 1개(front~m · 읽기 전용) = 보이는 화살표 9개
   const gk = Object.keys(G.pieces), base = gk.filter(k => !/~m$/.test(k));
-  ok(base.join(",") === M.d.pieces.map(p => p.id).join(",") && gk.length === base.length + 3 && gk.filter(k => /~m$/.test(k)).sort().join(",") === "cuff~m,front~m,sleeve-sleeve~m" && gk.every(k => G.pieces[k].ok && G.pieces[k].from && G.pieces[k].to && !Array.isArray(G.pieces[k].from)), "1: 조각마다 화살표 하나(저장 8조각 + 앞판·소매·커프스 거울 쪽 3 = 11개 전부 표시)");
+  ok(base.join(",") === M.d.pieces.map(p => p.id).join(",") && gk.length === base.length + 5 && gk.filter(k => /~m$/.test(k)).sort().join(",") === "cuff~m,front~m,sleeve-sleeve~m,vent-bias~m,vent-placket~m" && gk.every(k => G.pieces[k].ok && G.pieces[k].from && G.pieces[k].to && !Array.isArray(G.pieces[k].from)), "1: 조각마다 화살표 하나(저장 8조각 + 앞판·소매·커프스 거울 쪽 5 = 13개 전부 표시)");
   ok(near(-G.pieces.front.from.x, G.pieces["front~m"].from.x, 1e-9) && near(-G.pieces.front.to.x, G.pieces["front~m"].to.x, 1e-9) && near(G.pieces.front.from.y, G.pieces["front~m"].from.y, 1e-9) && G.pieces["front~m"].angleDeg === 90, "1: 거울 쪽 식서 = 원본 식서의 세로 축 반사(90° 유지)");
   ok(M.D.back.unfolded && M.D["collar-body"].unfolded && G.pieces.back.unfolded && G.pieces.back.at.x > 0 && G.pieces["collar-body"].at.x > 0.2, "1: 골 펼친 조각 = 하나만 · 원래 쪽에 둠(반사 쪽에 복제 없음)");
   const fake = id => S.CUT.defaultGrain({ id, edges: [], marks: [], segs: [] });

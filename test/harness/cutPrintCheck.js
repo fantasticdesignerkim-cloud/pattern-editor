@@ -165,7 +165,7 @@ function coverage(b, S1, P1) { const T = tilesOf(b.body), sp = sheetPts(S1, P1);
 let B;
 {
   const pre = PR(S).preflight(P);
-  ok(r.ok && pre.ok && pre.blockers.length === 0 && pre.rows.length === 11 && pre.rows.filter(x => x.base === "front").length === 2 && pre.rows.every(x => x.qty.kind === "default" && x.grain.kind === "default" && x.grain.shown) && pre.attention.length === 0, "2: 대표 셔츠 = 막는 문제 없음 · 8조각(앞판·소매·커프스는 좌우 두 줄 = 보이는 11조각) · 수량·식서 전부 «기본» · 확인할 것 0 " + J(pre.blockers.concat(pre.attention)));
+  ok(r.ok && pre.ok && pre.blockers.length === 0 && pre.rows.length === 13 && pre.rows.filter(x => x.base === "front").length === 2 && pre.rows.every(x => x.qty.kind === "default" && x.grain.kind === "default" && x.grain.shown) && pre.attention.length === 0, "2: 대표 셔츠 = 막는 문제 없음 · 8조각(앞판·소매·커프스는 좌우 두 줄 = 보이는 13조각) · 수량·식서 전부 «기본» · 확인할 것 0 " + J(pre.blockers.concat(pre.attention)));
   S.CUT.setGrain("front", { angleDeg: 80 }, P); S.CUT.setQty("cuff", 4, P);
   const p2 = PR(S).preflight(P), f = p2.rows.find(x => x.id === "front"), cf = p2.rows.find(x => x.id === "cuff");
   ok(f.grain.kind === "user" && f.grain.angleDeg === 80 && cf.qty.kind === "user" && cf.qty.n === 4 && p2.rows.find(x => x.id === "back").grain.kind === "default", "2: 직접 고친 식서·수량 = «직접 지정»으로 구별(다른 조각은 기본)");
@@ -178,7 +178,7 @@ let B;
   const real = S.W.cutPrep, clone = o => JSON.parse(J(o));
   S.W.cutPrep = Object.assign({}, real, { qtyOf: (...a) => { const q = clone(real.qtyOf(...a)); q.pieces["vent-bias"].qty = null; q.pieces["vent-bias"].explicit = false; return q; }, grainOf: (...a) => { const g = clone(real.grainOf(...a)); g.pieces["collar-body"] = Object.assign(g.pieces["collar-body"], { ok: false, angleDeg: null, why: "직접 지정" }); return g; } });
   const b4 = PR(S).build(P, null, META), p4 = b4.pre; S.W.cutPrep = real;
-  ok(b4.ok && p4.rows.find(x => x.id === "vent-bias").qty.kind === "none" && p4.rows.find(x => x.id === "collar-body").grain.kind === "none" && p4.attention.length === 2 && /수량 미정/.test(b4.sheetSvg) && /식서 미정/.test(b4.sheetSvg) && (b4.sheetSvg.match(/class="cp-grain"/g) || []).length === 10,
+  ok(b4.ok && p4.rows.find(x => x.id === "vent-bias").qty.kind === "none" && p4.rows.find(x => x.id === "collar-body").grain.kind === "none" && p4.attention.length === 2 && /수량 미정/.test(b4.sheetSvg) && /식서 미정/.test(b4.sheetSvg) && (b4.sheetSvg.match(/class="cp-grain"/g) || []).length === 12,
     "2: 수량 미정 · 식서 미정 = 알림 2건 · 종이에 «수량 미정»·«식서 미정» · 미정 조각은 화살표 없음(기본처럼 그리지 않음)");
   B = PR(S).buildHtml(P, null, META);
 }
@@ -195,7 +195,7 @@ let B;
   const xs = sp.pts.map(q => q.x), ys = sp.pts.map(q => q.y);
   ok(near(B.sheet.wCm, Math.max(...xs) - Math.min(...xs) + 1, 0.5) && B.sheet.wCm >= Math.max(...xs) - Math.min(...xs) + 1 - 1e-6 && B.sheet.hCm >= Math.max(...ys) - Math.min(...ys) + 1 - 1e-6, "3: 전체 크기 = 조각 범위 + 둘레 0.5cm " + J([+B.sheet.wCm.toFixed(1), +B.sheet.hCm.toFixed(1)]));
   const cnt = re => (B.sheetSvg.match(re) || []).length, m = sp.m;
-  ok(cnt(/class="cp-piece"/g) === 11 && cnt(/class="cp-cut"/g) === 11 && cnt(/class="cp-fin"/g) === 11 && cnt(/class="cp-grain"/g) === 11 && m.d.pieces.every(p => cnt(new RegExp('data-piece="' + p.id + '"', "g")) === 1) && cnt(/data-piece="front~m"/g) === 1, "3: 보이는 조각마다 한 번만(재단선 11 · 완성선 11 · 식서 11 = 저장 8조각 + 앞판·소매·커프스 거울 쪽 3) — 수량만큼 복제 없음");
+  ok(cnt(/class="cp-piece"/g) === 13 && cnt(/class="cp-cut"/g) === 13 && cnt(/class="cp-fin"/g) === 13 && cnt(/class="cp-grain"/g) === 13 && m.d.pieces.every(p => cnt(new RegExp('data-piece="' + p.id + '"', "g")) === 1) && cnt(/data-piece="front~m"/g) === 1, "3: 보이는 조각마다 한 번만(재단선 13 · 완성선 13 · 식서 13 = 저장 8조각 + 앞판·소매·커프스·트임 거울 쪽 5) — 수량만큼 복제 없음");
   ok((B.body.match(/id="cpSheet"/g) || []).length === 1 && (B.body.match(/<use href="#cpSheet"\/>/g) || []).length === T.length + 1, "3: 도형은 한 벌 · 타일은 같은 한 벌을 창만 달리해 봄(타일마다 다시 그리지 않음 → 경계에서 어긋날 수 없음)");
   const bk = m.D.back, half = PIECE(m.d, "back"), cutW = Math.max(...bk.seam.map(q => q.x)) - Math.min(...bk.seam.map(q => q.x));
   ok(bk.unfolded && m.Q.pieces.back.qty === 1 && cutW > half.widthCm * 2 - 0.01 && /뒤[^<]*<\/text><text[^>]*>재단 1장[^<]*골 · 펼친 한 장/.test(B.sheetSvg) && /골\(펼친 중심 — 자르지 않음\)/.test(B.sheetSvg), "3: 골 펼친 뒤판 = 한 장(폭 " + cutW.toFixed(1) + " ≥ 반쪽 " + half.widthCm.toFixed(1) + " × 2) · «재단 1장» · 가운데 골 표시(이중 반사 없음)");

@@ -298,10 +298,10 @@ const dv = S.CUT.derive(P, true), sm = S.CUT.seam(dv, P), D = S.CUT.displayOf(dv
 // ══ §5 출력 ══
 {
   const pr = S.W.cutPrint.build(P, null, META), nTr = (pr.sheetSvg.match(/class="cp-fin cp-trued"/g) || []).length, trD = /class="cp-fin cp-trued"[^>]* d="([^"]+)"/.exec(pr.sheetSvg);
-  ok(pr.ok && nTr === 3 && /fill="none" stroke="#000" stroke-width="\.025"/.test(pr.sheetSvg.match(/class="cp-fin cp-trued"[^>]*/)[0]) && (pr.sheetSvg.match(/class="cp-fin"/g) || []).length === 11, "5: 인쇄 — 완성선 11(긴 V 포함 · 앞판·소매 좌우 쌍) + 정리 외곽 3(앞 좌·우 + 뒤) · 같은 선 굵기 · 채움 없음");
+  ok(pr.ok && nTr === 3 && /fill="none" stroke="#000" stroke-width="\.025"/.test(pr.sheetSvg.match(/class="cp-fin cp-trued"[^>]*/)[0]) && (pr.sheetSvg.match(/class="cp-fin"/g) || []).length === 13, "5: 인쇄 — 완성선 13(긴 V 포함 · 앞판·소매·트임 좌우 쌍) + 정리 외곽 3(앞 좌·우 + 뒤) · 같은 선 굵기 · 채움 없음");
   const gx = S.W.cutDxf.build(P, META), ax = S.W.cutDxf.build(P, META, { format: "aama" });
   const cnt = (t, re) => (t.match(re) || []).length;
-  ok(gx.ok && gx.stats.layers.FINISHED === 11 && gx.stats.layers.FINISHED_TRUED === 3 && gx.stats.layers.CUT === 11, "5: 일반 DXF — FINISHED 11 · FINISHED_TRUED 3(앞 좌·우 + 뒤) · CUT 11 (앞판·소매·커프스 좌우 각 1장)");
+  ok(gx.ok && gx.stats.layers.FINISHED === 13 && gx.stats.layers.FINISHED_TRUED === 3 && gx.stats.layers.CUT === 13, "5: 일반 DXF — FINISHED 13 · FINISHED_TRUED 3(앞 좌·우 + 뒤) · CUT 13 (앞판·소매·커프스 좌우 각 1장)");
   // AAMA: 블록별 레이어 14 닫힌 선 개수와 차이
   const blk = name => { const a = ax.dxf.indexOf("BLOCK\r\n8\r\n1\r\n2\r\n" + name), b = ax.dxf.indexOf("ENDBLK", a); return ax.dxf.slice(a, b); };
   const polys = (txt, layer) => txt.split("\r\n0\r\nPOLYLINE\r\n").slice(1).filter(x => x.startsWith("8\r\n" + layer + "\r\n")).map(x => ({ closed: /\r\n70\r\n1\r\n/.test(x.split("VERTEX")[0] + "\r\n"), pts: x.split("\r\n0\r\nVERTEX\r\n").slice(1).map(v => { const m = /10\r\n(-?[\d.]+)\r\n20\r\n(-?[\d.]+)/.exec(v); return { x: +m[1], y: +m[2] }; }) }));

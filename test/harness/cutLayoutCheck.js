@@ -140,7 +140,7 @@ let M = model(S, P);
 {
   // ⑦ 앞판은 좌우 거울쌍 두 조각(착용자 기준 · 화면 왼쪽 = 착용자 오른쪽)으로 나란히: 뒤판 → 앞판 두 조각 → 소매 → 부속
   const FP = M.m.pairing;
-  ok(r.ok && FP.active && J(FP.order.slice().sort()) === J(["front", "front~m"]) && M.L.order.join(",") === ["back"].concat(FP.order, ["sleeve-sleeve", "sleeve-sleeve~m", "cuff", "cuff~m", "vent-placket", "vent-bias", "collar-stand", "collar-body"]).join(","), "1: 순서 = 뒤판 → 앞판(좌우 두 조각) → 소매 → 부속 (" + M.L.order.join(",") + ")");
+  ok(r.ok && FP.active && J(FP.order.slice().sort()) === J(["front", "front~m"]) && M.L.order.join(",") === ["back"].concat(FP.order, ["sleeve-sleeve", "sleeve-sleeve~m", "cuff", "cuff~m", "vent-placket", "vent-placket~m", "vent-bias", "vent-bias~m", "collar-stand", "collar-body"]).join(","), "1: 순서 = 뒤판 → 앞판(좌우 두 조각) → 소매 → 부속 (" + M.L.order.join(",") + ")");
   const top = id => M.D[id].bbox.minY + M.L.pos[id].dy, bot = id => M.D[id].bbox.maxY + M.L.pos[id].dy, left = id => M.D[id].bbox.minX + M.L.pos[id].dx, right = id => M.D[id].bbox.maxX + M.L.pos[id].dx;
   const blB = M.D.back.blY + M.L.pos.back.dy, blF = M.D.front.blY + M.L.pos.front.dy;
   // 독립 BL: 옆선 변 끝점 중 가장 위(bodiceCheckpoint.bustLineY 규칙)
