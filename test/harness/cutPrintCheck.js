@@ -176,9 +176,9 @@ let B;
   P.working.cutGrain.pieces.front.sig = sigOld; S.CUT.setGrain("front", { angleDeg: null, at: null }, P); S.CUT.setQty("cuff", null, P);
   // 수량 미정 · 식서 미정(지금 셔츠에는 그런 조각이 없어 모델 결과만 바꿔 넣어 확인)
   const real = S.W.cutPrep, clone = o => JSON.parse(J(o));
-  S.W.cutPrep = Object.assign({}, real, { qtyOf: (...a) => { const q = clone(real.qtyOf(...a)); q.pieces["vent-bias"].qty = null; q.pieces["vent-bias"].explicit = false; return q; }, grainOf: (...a) => { const g = clone(real.grainOf(...a)); g.pieces["collar-body"] = Object.assign(g.pieces["collar-body"], { ok: false, angleDeg: null, why: "직접 지정" }); return g; } });
+  S.W.cutPrep = Object.assign({}, real, { qtyOf: (...a) => { const q = clone(real.qtyOf(...a)); q.pieces["collar-stand"].qty = null; q.pieces["collar-stand"].explicit = false; return q; }, grainOf: (...a) => { const g = clone(real.grainOf(...a)); g.pieces["collar-body"] = Object.assign(g.pieces["collar-body"], { ok: false, angleDeg: null, why: "직접 지정" }); return g; } });
   const b4 = PR(S).build(P, null, META), p4 = b4.pre; S.W.cutPrep = real;
-  ok(b4.ok && p4.rows.find(x => x.id === "vent-bias").qty.kind === "none" && p4.rows.find(x => x.id === "collar-body").grain.kind === "none" && p4.attention.length === 2 && /수량 미정/.test(b4.sheetSvg) && /식서 미정/.test(b4.sheetSvg) && (b4.sheetSvg.match(/class="cp-grain"/g) || []).length === 12,
+  ok(b4.ok && p4.rows.find(x => x.id === "collar-stand").qty.kind === "none" && p4.rows.find(x => x.id === "collar-body").grain.kind === "none" && p4.attention.length === 2 && /수량 미정/.test(b4.sheetSvg) && /식서 미정/.test(b4.sheetSvg) && (b4.sheetSvg.match(/class="cp-grain"/g) || []).length === 12,
     "2: 수량 미정 · 식서 미정 = 알림 2건 · 종이에 «수량 미정»·«식서 미정» · 미정 조각은 화살표 없음(기본처럼 그리지 않음)");
   B = PR(S).buildHtml(P, null, META);
 }
