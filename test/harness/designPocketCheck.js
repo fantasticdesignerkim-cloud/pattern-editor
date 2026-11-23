@@ -315,8 +315,8 @@ const layerOf = e => (e.f["8"] || [])[0];
     ["selPocketSide", "inpPocketW", "inpPocketH", "inpPocketTip", "inpPocketCx", "inpPocketTop", "inpPocketFold", "btnApplyPocket", "btnClearPocket", "btnPocketBook", "pocketNote", "pocketStatusNote"].forEach(id => ok(html.split('id="' + id + '"').length === 2, "8: id " + id + " 1개"));
     const iP = html.indexOf('src="js/designPocket.js?v='), iR = html.indexOf('src="js/designResult.js?v='), iU = html.indexOf('src="js/ui.js?v='), iPF = html.indexOf('src="js/projectFile.js?v=');
     ok(iP > 0 && iP < iR && iR < iPF && iPF < iU, "8: 스크립트 순서 designPocket → designResult → projectFile → ui");
-    ok(/js\/cutPrep\.js\?v=2026112103/.test(html) && /js\/render\.js\?v=2026112301/.test(html) && /css\/style\.css\?v=2026112101/.test(html) && /js\/projectFile\.js\?v=2026112101/.test(html) && /js\/ui\.js\?v=2026112301/.test(html), "8: 캐시 버전 핀(cutPrep · render · style · projectFile · ui = index 실제 값)");
-    ok(/js\/cutPrint\.js\?v=2026112002/.test(html) && /js\/cutDxf\.js\?v=2026112002/.test(html), "8: 인쇄·DXF 캐시는 2026112001 (2026-11-20 갱신)");
+    ok(/js\/cutPrep\.js\?v=2026112302/.test(html) && /js\/render\.js\?v=2026112302/.test(html) && /css\/style\.css\?v=2026112101/.test(html) && /js\/projectFile\.js\?v=2026112302/.test(html) && /js\/ui\.js\?v=2026112302/.test(html), "8: 캐시 버전 핀(cutPrep · render · style · projectFile · ui = index 실제 값)");
+    ok(/js\/cutPrint\.js\?v=2026112302/.test(html) && /js\/cutDxf\.js\?v=2026112002/.test(html), "8: 인쇄·DXF 캐시는 2026112001 (2026-11-20 갱신)");
     ok(!/onclick=/.test(html.slice(html.indexOf('data-subtab="detail"'), html.indexOf("<!-- /subtab detail -->"))), "8: 디테일 패널 inline handler 없음");
   }
 

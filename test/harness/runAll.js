@@ -232,6 +232,8 @@ const suites = [
   { file: "designPocketCheck.js", golden: false },
   // 디자인 앞여밈 단추 위치(2026-11-21): 균등 간격 · 개수 1·2 경계 · 시작=끝/역순/범위 밖 거부 · 저장본 검증.
   { file: "designButtonsCheck.js", golden: false },
+  // 단추 지름 11.5mm · 단춧구멍 13mm(2026-11-23): 구멍 좌표 · 완료본/hash(구멍 적용 때만) · 오른앞판 한 조각 · 일반/AAMA DXF 실제 13mm · 쌍 아님 사유.
+  { file: "designButtonHoleCheck.js", golden: false },
 ];
 
 const tailLines = (buf, n) => (buf || "").toString().trim().split("\n").slice(-n).join("\n");

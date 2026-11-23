@@ -37,12 +37,14 @@
     "collar-bodice-mismatch": "카라가 지금 몸판이 아니라 예전 몸판 기준입니다", "collar-source-mismatch": "카라가 지금 몸판이 아니라 예전 몸판 기준입니다",
     "collar-sleeve-order": "소매를 다시 완료한 뒤 카라도 다시 완료해야 합니다",
     "cut-invalid-on-final-bodice": "절개선 일부가 최종 몸판에서 유효하지 않습니다",
-    "pocket-invalid": "앞 주머니가 최종 몸판 위에서 유효하지 않습니다"
+    "pocket-invalid": "앞 주머니가 최종 몸판 위에서 유효하지 않습니다",
+    "buttons-invalid": "단춧구멍이 동결된 몸판 여밈(완성 앞단·가장자리) 안에서 유효하지 않습니다"
   };
   var TAB_LABEL = { body: "몸판", sleeve: "소매", collar: "카라", detail: "디테일" };
   function returnTabOf(fail) {
     if (!fail) return "collar";
     if (fail === "pocket-invalid") return "detail";
+    if (fail === "buttons-invalid") return "body";
     if (/bodice/.test(fail) && !/^(sleeve|collar)-/.test(fail)) return "body";
     if (fail === "cut-invalid-on-final-bodice") return "body";
     if (/^(no-sleeve|sleeve-)/.test(fail)) return "sleeve";
@@ -342,10 +344,30 @@
     return m;
   }
 
+  // 단춧구멍 표시(완료본 buttons.holes → 조각 표시선). 합친 앞판 정보(pc.info)로 다시 검산: 앞중심 가운데 · 수평 · 목~밑단 안 · 끝이 완성 앞단(접는선 = 앞중심 + 여밈분)을 넘지 않음.
+  //   일반 INTERNAL / AAMA 8 로 나가는 내부 봉제 표시 — 재단선·너치가 아니다. side = 착용자 오른쪽(왼앞판에는 반사 복제하지 않는다).
+  function buttonholeMarks(bt, q) {
+    var hs = bt && bt.holes, L = bt && bt.holeLengthCm;   // bt = 동결된 designResult.buttonholes
+    if (!Array.isArray(hs) || !hs.length || !(typeof L === "number" && isFinite(L) && L > 0)) return { ok: false, reason: "단춧구멍 기록을 읽을 수 없습니다" };
+    var DBv = W().designButtons;
+    if (DBv && DBv.validateSpec) { var vs = DBv.validateSpec(bt, { parameters: { overlapCm: q.overlapCm }, construction: [{}, { from: { x: q.cfX, y: q.topY }, to: { x: q.cfX, y: q.botY } }] }); if (!vs.ok) return { ok: false, reason: vs.reason }; }
+    var T = 1e-3, marks = [], i, h;
+    for (i = 0; i < hs.length; i++) {
+      h = hs[i];
+      if (!h || !h.a || !h.b || !allFinite([{ kind: "line", from: h.a, to: h.b }])) return { ok: false, reason: "단춧구멍 좌표를 읽을 수 없습니다" };
+      if (Math.abs(h.a.y - h.b.y) > T) return { ok: false, reason: "단춧구멍이 수평이 아닙니다" };
+      if (Math.abs((h.a.x + h.b.x) / 2 - q.cfX) > T || Math.abs(Math.abs(h.b.x - h.a.x) - L) > T) return { ok: false, reason: "단춧구멍이 앞중심 가운데·길이와 맞지 않습니다" };
+      if (!(h.a.y > q.topY + 1e-6 && h.a.y < q.botY - 1e-6)) return { ok: false, reason: "단춧구멍이 앞단 목~밑단 가장자리에 닿거나 벗어났습니다" };
+      if (!(Math.max(h.a.x, h.b.x) < q.foldX - 1e-6)) return { ok: false, reason: "단춧구멍 끝이 완성 앞단에 닿거나 넘어갑니다" };
+      marks.push({ kind: "buttonhole", outline: [{ kind: "line", from: { x: h.a.x, y: h.a.y }, to: { x: h.b.x, y: h.b.y } }], side: "right" });
+    }
+    return { ok: true, marks: marks.map(function (m) { var mn = normOutline(m.outline); return { kind: m.kind, segs: mn.segs, side: m.side }; }), lengthCm: L };
+  }
+
   function sleeveSym(res) { var o = res && res.origin; return (o && (o.symbol || o.sym)) || null; }
 
   function candidates(R) {
-    var out = [], missing = [], info = [], DR = W().designResult;
+    var out = [], missing = [], info = [], holeWhy = [], DR = W().designResult;   // holeWhy = 단춧구멍을 내보내지 못한 사유(막는 문제가 아니라 알림 — 구멍만 빠진다)
     function add(group, id, label, source, outline, extra) { out.push(Object.assign({ group: group, id: id, label: label, source: source, outline: outline }, extra || {})); }
     // 몸판 — 최종 몸판(designResult.finalBodiceOf 권위)
     var b = R.bodice, fin = DR && DR.finalBodiceOf ? DR.finalBodiceOf(R) : null;
@@ -358,6 +380,7 @@
       info.push("최종 몸판 = 소매 파생 몸판 — 원래 몸판(bodiceResult) 앞·뒤는 중복이라 조각에 넣지 않았습니다");
       // 소매 Ⓡ~Ⓩ 엔진은 여밈 붙은 몸판을 받지 않는다(bodice-not-a) — 이 조합은 실제 엔진이 만들지 않는 경로라 합성 근거가 없다.
       if (b && b.placket) missing.push({ id: "placket", label: "앞 여밈·컷온 안단", reason: "소매와 함께 제도한 파생 몸판에는 여밈·안단을 합치지 않습니다 — 디자인 엔진이 만들지 않는 조합이라 확인된 근거가 없음" });
+      if (R.buttonholes) holeWhy.push("소매 파생 몸판에는 앞단을 합치지 않아 오른앞판 앞단을 찾을 수 없어 단춧구멍을 출력하지 않습니다");
     } else if (b) {
       var yoke = !!(b.frontYoke && b.frontBody && b.backYoke && b.backBody), sYoke = !!(b.shoulderYoke && b.frontBody && b.backBody),
         princess = !!(b.frontCenter && b.frontSide && b.backCenter && b.backSide), peplum = !!(b.frontPeplum || b.backPeplum);
@@ -370,8 +393,9 @@
       else if (peplum) { bp("front", "앞판(허리 위)"); bp("back", "뒤판(허리 위)"); if (b.frontPeplum) bp("frontPeplum", "앞 페플럼"); if (b.backPeplum) bp("backPeplum", "뒤 페플럼"); }
       else { bp("front", "앞판"); bp("back", "뒤판"); }
       if (b.placket) {
-        if (!modes) out.forEach(function (c) { if (c.id === "front") c.placket = b.placket; });   // 나뉘지 않은 앞판 한 장 = 합성 대상(buildPieces)
+        if (!modes) out.forEach(function (c) { if (c.id === "front") { c.placket = b.placket; if (R.buttonholes) c.buttons = R.buttonholes; } });   // 나뉘지 않은 앞판 한 장 = 합성 대상(buildPieces) · 단춧구멍은 동결된 designResult.buttonholes 에서만, 합친 앞단 위에만
         else {
+          if (R.buttonholes) holeWhy.push("나뉜 앞판(요크·프린세스·페플럼)은 오른앞판 앞단 한 장으로 합치지 않아 단춧구멍을 출력하지 않습니다");
           missing.push({ id: "placket", label: "앞 여밈·컷온 안단", reason: "여밈 " + b.placket.parameters.overlapCm + " · 안단 " + b.placket.parameters.facingWidthCm + "cm — 나뉜 앞판(요크·프린세스·페플럼)은 앞중심이 여러 조각에 걸쳐 있어 아직 한 장으로 합치지 않습니다" + (peplum ? " — 앞판 위에 점선으로만 표시" : "") });
           if (peplum) out.forEach(function (c) { if (c.id === "front") c.marks = [{ kind: "placket", outline: b.placket.outline }]; });
         }
@@ -444,12 +468,12 @@
       });
       missing.push({ id: "cuts", label: "절개선 " + cuts.length + "개", reason: "절개선으로 조각을 나누지 않았습니다 — 조각 위에 점선으로만 표시(파트 확정 = 재단 다음 단계)" });
     }
-    return { pieces: out, missing: missing, info: info };
+    return { pieces: out, missing: missing, info: info, holeWhy: holeWhy };
   }
 
   // ── 조각 확정(정규화·검사·중복 제거) — 순수 ──
   function buildPieces(R, withEdges) {
-    var cand = candidates(R), pieces = [], seenRef = [], seenHash = {}, sameShape = [], excluded = [], missing = cand.missing.slice();
+    var cand = candidates(R), pieces = [], seenRef = [], seenHash = {}, sameShape = [], excluded = [], missing = cand.missing.slice(), holeWhy = cand.holeWhy.slice();
     cand.pieces.forEach(function (c) {
       if (c.outline && seenRef.indexOf(c.outline) >= 0) { excluded.push({ id: c.id, label: c.label, reason: "같은 외곽을 가리키는 중복 — 한 번만 표시" }); return; }
       if (c.outline) seenRef.push(c.outline);
@@ -467,7 +491,13 @@
         if (pc.ok && pchk.ok) {
           n.segs = pc.segs; rec.placket = Object.assign({ widthBeforeCm: w0 }, pc.info); rec.label = c.label + "(여밈·안단 포함)";
           marks = marks.concat(placketMarks(pc.info));
+          if (c.buttons) {   // 단춧구멍: 합친 앞판의 앞중심 가운데 수평선 · 착용자 오른쪽 앞판에만(displayOf 가 좌우 쌍에서 걸러 낸다)
+            var bh = buttonholeMarks(c.buttons, pc.info);
+            if (bh.ok) { marks = marks.concat(bh.marks); rec.buttonholes = { count: bh.marks.length, lengthCm: bh.lengthCm }; }
+            else holeWhy.push(bh.reason + " · 단춧구멍을 출력하지 않습니다");
+          }
         } else {
+          if (c.buttons) holeWhy.push("앞판과 앞단을 한 장으로 합치지 못해 오른앞판 앞단을 정할 수 없어 단춧구멍을 출력하지 않습니다");
           var why = pc.ok ? pchk.reason : pc.reason, pn = normOutline(c.placket.outline);
           missing.push({ id: "placket", label: "앞 여밈·컷온 안단", reason: "앞판과 한 장으로 합치지 못했습니다 — " + why + " · 앞판은 여밈 없는 완성선 그대로" + (pn.ok ? " · 여밈 자리는 점선" : "") });
           if (pn.ok) marks.push({ kind: "placket", segs: pn.segs });
@@ -487,7 +517,7 @@
       }
       pieces.push(rec);
     });
-    return { pieces: pieces, missing: missing, info: cand.info.concat(sameShape), excluded: excluded };
+    return { pieces: pieces, missing: missing, info: cand.info.concat(sameShape), excluded: excluded, holeWhy: holeWhy };   // holeWhy: 위 cand.holeWhy 복사본 + 합성 단계 사유
   }
 
   // ══ 시접(2026-11-14) ══ 변 이름·고정 ID · 설정 소유권(working.cutSpec) · 순수 기하(js/seamAllowance.js)
@@ -1224,8 +1254,17 @@
       // 앞 주머니 달림선(착용자 기준 한쪽)은 그 쪽 앞판에만 — 반대쪽 거울상에 복사하지 않는다.
       [[pr.base, pr.origSide], [pr.mirrorId, pr.mirrorSide]].forEach(function (e) {
         var rr = out[e[0]], want = e[1] === "R" ? "right" : "left";
-        rr.marks = rr.marks.filter(function (mk) { return mk.kind !== "pocket-attach" || mk.side === want; });
+        rr.marks = rr.marks.filter(function (mk) { return (mk.kind !== "pocket-attach" && mk.kind !== "buttonhole") || mk.side === want; });   // 단춧구멍도 착용자 오른쪽 앞판에만 — 왼쪽 거울상에 복사하지 않는다
       });
+    });
+    // 단춧구멍은 좌우 쌍으로 오른앞판을 확인한 경우에만 나간다 — 쌍이 아니거나 골로 펼친 앞판이면 어느 쪽인지 알 수 없어 전부 뺀다(사유는 r.buttonholeWhy · 참고 문구).
+    Object.keys(out).forEach(function (id) {
+      var rr = out[id]; if (id.slice(-2) === "~m" || !rr.marks || !rr.marks.some(function (mk) { return mk.kind === "buttonhole"; })) return;
+      var paired = !!(rr.pair && out[rr.pair.mirrorId]);
+      if (paired && !rr.unfolded) return;
+      rr.marks = rr.marks.filter(function (mk) { return mk.kind !== "buttonhole"; });
+      var pr0 = prs && prs[id];
+      rr.buttonholeWhy = rr.unfolded ? "앞판이 골로 펼쳐져 좌우를 가를 수 없습니다" : (pr0 && pr0.reason) || "좌우 한 쌍(왼 1장 + 오른 1장)으로 펼쳐지지 않아 오른앞판을 정할 수 없습니다";
     });
     return out;
   }
@@ -1490,7 +1529,7 @@
     var out = {
       state: "ready", resultHash: latest.hash, completedAt: latest.completedAt || null,
       sourceBlock: { version: latest.sourceBlock ? latest.sourceBlock.version : null },
-      pieces: b.pieces, missing: b.missing, excluded: b.excluded, info: b.info, failedPieces: bad,
+      pieces: b.pieces, missing: b.missing, excluded: b.excluded, info: b.info, holeWhy: b.holeWhy || [], failedPieces: bad,
       previewPartsIgnored: !!(proj.working && Array.isArray(proj.working.parts) && proj.working.parts.length)
     };
     var rg = proj && proj.referenceGeometry, ry = {};   // 허리선 높이 = 원형 기준 형상 앞·뒤 outline 의 waist 변 y(그대로 읽는다)
@@ -1830,6 +1869,13 @@
       if (act.length) notes.push("좌우가 있는 조각(" + act.map(pairKindName).join("·") + ") = 착용자 기준 왼 1장 + 오른 1장(실제 거울상) — 저장된 시접·맞춤 표시·식서·수량은 원본 조각 하나에 연결되어 두 조각이 함께 바뀝니다(수량 1 = 한 쌍)");
       Object.keys(pall).forEach(function (k) { if (!pall[k].active && pall[k].reason) notes.push(pairKindName(k) + " 좌우 한 쌍 표시 안 함 — " + pall[k].reason); });
     }
+    (d.pieces || []).forEach(function (p) {   // 단춧구멍(내부 봉제 표시 · 오른앞판에만): 나가는지 안 나가는지 사유와 함께
+      if (!p.buttonholes) return;
+      var pa = sv && sv.pairing && sv.pairing.all && sv.pairing.all[p.id], on = !!(pa && pa.active);
+      notes.push(on ? "단춧구멍 " + p.buttonholes.count + "개 · 길이 " + c2s(p.buttonholes.lengthCm * 10) + "mm — 착용자 오른앞판(" + (pa.origSide === "R" ? "원본 조각" : "거울 쪽 조각") + ")에만 내부 봉제 표시로 나갑니다(재단선·너치 아님 · 왼앞판에 복사하지 않음)"
+        : "단춧구멍 출력 안 함 — 오른앞판을 확인하지 못했습니다" + (pa && pa.reason ? ": " + pa.reason : ""));
+    });
+    (d.holeWhy || []).forEach(function (t) { notes.push("단춧구멍 출력 안 함 — " + t); });
     if (d.previewPartsIgnored) notes.push("디자인 화면의 «파트 분리» 미리보기는 완료 패키지에 없어 재단 조각에 넣지 않았습니다");
     if (notes.length) { box.appendChild(li("cut-list-h", "참고")); notes.forEach(function (t) { box.appendChild(li("cut-info", esc(t))); }); }
     var src = $("cutSource");

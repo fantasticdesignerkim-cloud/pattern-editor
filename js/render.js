@@ -301,8 +301,7 @@ function _appendPlacket(root, placket, L, scale){
   root.appendChild(g);
 }
 
-// 앞여밈 단추(working.frontButtons): 앞중심 단추선 위, 실제 지름(parameters.diameterCm, 기본 1.3 = P.120) 원 + 중심 십자.
-//   단춧구멍은 교재 근거 미판독 — 보류. 앞판 offset 동승.
+// 앞여밈 단추(working.frontButtons): 앞중심 단추선 위, 실제 지름(parameters.diameterCm · 키 없는 옛 저장본 = 1.3) 원 + 중심 십자 + (있으면) 단춧구멍 수평선. 앞판 offset 동승.
 function _appendButtons(root, fb, L, scale){
   if(!fb || !Array.isArray(fb.marks) || !fb.marks.length) return;
   const off=(L && L.front) ? L.front : {dx:0,dy:0};
@@ -314,6 +313,12 @@ function _appendButtons(root, fb, L, scale){
     const h=r*0.6;
     g.appendChild(E("circle",{ cx:x, cy:y, r:r, class:"design-button-mark", "data-button-index":String(i) }));
     g.appendChild(E("path",{ d:"M"+(x-h)+" "+y+"L"+(x+h)+" "+y+"M"+x+" "+(y-h)+"L"+x+" "+(y+h), class:"design-button-cross", fill:"none" }));
+  });
+  // 단춧구멍(holes 가 있을 때만 · 옛 저장본은 없음): 앞중심을 가운데로 한 실척 수평선. 재단 출력은 오른앞판에만 나간다(여기는 제도 화면 표시).
+  if(Array.isArray(fb.holes)) fb.holes.forEach((q,i)=>{
+    if(!q || !q.a || !q.b) return;
+    const [ax,ay]=c2p(q.a.x, q.a.y), [bx,by]=c2p(q.b.x, q.b.y);
+    g.appendChild(E("path",{ d:"M"+ax+" "+ay+"L"+bx+" "+by, class:"design-button-cross design-button-hole", fill:"none", "data-hole-index":String(i) }));
   });
   root.appendChild(g);
 }

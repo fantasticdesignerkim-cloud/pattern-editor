@@ -329,6 +329,18 @@
     if (Object.prototype.hasOwnProperty.call(w, "frontButtons")) {
       var DBt = window.designButtons, bv = DBt && DBt.validateStored ? DBt.validateStored(w.frontButtons) : { ok: false, reason: "단추 모듈이 없습니다" };
       if (!bv.ok) fail("working-buttons", bv.reason);
+      // 단춧구멍이 있는 단추는 저장된 여밈에서 같은 파라미터로 다시 계산한 값과 일치해야 한다(구멍 없는 옛 단추는 검사하지 않는다 — 소급 변경 금지)
+      else if (w.frontButtons && w.frontButtons.parameters && w.frontButtons.parameters.holeLengthCm != null) {
+        var bvp = DBt.verifyAgainstPlacket(w.frontButtons, w.frontPlacket);
+        if (!bvp.ok) fail("working-buttons", "단춧구멍 검증 실패(" + bvp.reason + ")");
+      }
+    }
+    // Design 완료본의 단춧구멍 기하: 키가 없으면 구멍 없음(이전 저장본 그대로) · 있으면 동결 + 동결된 몸판 완료본의 여밈에 맞는 엄격 형식
+    if (w.designResult != null && Object.prototype.hasOwnProperty.call(w.designResult, "buttonholes")) {
+      var DBh = window.designButtons, hb = w.designResult.buttonholes;
+      if (!isDeepFrozen(hb)) fail("frozen-invariant", "designResult.buttonholes");
+      var hvv = DBh && DBh.validateSpec ? DBh.validateSpec(hb, w.designResult.bodice && w.designResult.bodice.placket) : { ok: false, reason: "단추 모듈이 없습니다" };
+      if (!hvv.ok) fail("designresult-buttonholes", hvv.reason);
     }
     // 화면 단계
     var u = payload.ui;

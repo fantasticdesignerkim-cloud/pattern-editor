@@ -48,7 +48,11 @@
     var sig = { bh: res.bodiceHash, sh: res.sleeveHash, ch: res.collarHash, cuts: canonCuts(res.structuralLines.cut) };
     if (res.collarChoice === "none") sig.cn = 1;   // «카라 없음» 명시 선택만 키 추가 — 기존 카라 완료본의 hash 는 바이트 그대로
     if (res.pocket) sig.pk = pocketCanon(res.pocket);   // 디테일 «앞 주머니»가 있을 때만 키 추가 — 주머니 없는 기존 완료본의 hash 는 바이트 그대로
+    if (res.buttonholes) sig.bhl = holeCanon(res.buttonholes);   // 단춧구멍(내부 설계 표시)이 있을 때만 키 추가 — 구멍 없는 기존 완료본의 hash 는 바이트 그대로
     return JSON.stringify(sig);
+  }
+  function holeCanon(b) {
+    return [round4(b.diameterCm), round4(b.holeLengthCm)].concat(b.holes.map(function (q) { return [q.a.x, q.a.y, q.b.x, q.b.y].map(round4).join(","); })).join("|");
   }
   // 주머니 설정 정준(키 순서 고정 · 소수 4자리)
   function pocketCanon(p) {
@@ -118,7 +122,13 @@
         if (pev.ok) pocket = pev.spec; else { pocketReject = pev.reason; fails.push("pocket-invalid"); }
       } else { var pn = DP.normalizeSpec(rawPocket); if (pn.ok) pocket = pn.spec; else { pocketReject = pn.reason; fails.push("pocket-invalid"); } }
     }
-    return { ok: fails.length === 0, fails: fails, _bodice: bodice, _sleeve: sleeve, _collar: collar, _collarNone: none, _cuts: cc.cuts, _finalBodice: fin, cutRejects: cc.rejects, _pocket: pocket, pocketReject: pocketReject };
+    // 단춧구멍(있을 때만 · 내부 설계 표시): 세션 단추를 **동결된 몸판 완료본의 여밈**에 맞춰 검증한다. 구멍만 바뀌거나 지워져도 몸판·소매·카라 완료본은 그대로이고 이 Design 완료만 낡는다.
+    var holes = null, holeReject = null, DBt = window.designButtons;
+    if (bodice && DBt && DBt.holeSpecOf) {
+      var hv = DBt.holeSpecOf(proj.working.frontButtons, bodice.placket);
+      if (hv.ok) holes = hv.spec || null; else { holeReject = hv.reason; fails.push("buttons-invalid"); }
+    }
+    return { ok: fails.length === 0, fails: fails, _bodice: bodice, _sleeve: sleeve, _collar: collar, _collarNone: none, _cuts: cc.cuts, _finalBodice: fin, cutRejects: cc.rejects, _pocket: pocket, pocketReject: pocketReject, _buttonholes: holes, buttonholeReject: holeReject };
   }
 
   // ── 완료 ── 게이트 통과 시 working.designResult 불변 스냅샷. 실패 시 변경 없음. 같은 상태 반복은 idempotent.
@@ -139,6 +149,7 @@
     };
     if (c._collarNone) result.collarChoice = "none";   // 명시 «카라 없음»(기존 완료본 형태는 그대로)
     if (c._pocket) result.pocket = deepFreeze(clone(c._pocket));   // 디테일 «앞 주머니»(주머니 없는 완료본은 키 자체가 없다)
+    if (c._buttonholes) result.buttonholes = deepFreeze(clone(c._buttonholes));   // 단춧구멍 기하(구멍 없는 완료본은 키 자체가 없다)
     result.hash = hashStr(signatureOf(result));
     var existing = proj.working.designResult;
     if (existing && existing.hash === result.hash) return { ok: true, result: existing, idempotent: true, check: c };   // 같은 상태 → 기존 참조·completedAt 유지
@@ -158,6 +169,7 @@
     var cur = { bodiceHash: c._bodice.hash, sleeveHash: c._sleeve.hash, collarHash: c._collar ? c._collar.hash : null, structuralLines: { cut: c._cuts } };
     if (c._collarNone) cur.collarChoice = "none";
     if (c._pocket) cur.pocket = c._pocket;
+    if (c._buttonholes) cur.buttonholes = c._buttonholes;
     return hashStr(signatureOf(cur)) !== res.hash;
   }
 
