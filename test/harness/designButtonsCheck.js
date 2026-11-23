@@ -55,5 +55,17 @@ bad({ parameters: a.parameters, marks: a.marks.map(m => ({ x: NaN, y: m.y })) },
 bad([], "27: 배열");
 bad("x", "28: 문자열");
 
+// 지름(P.120 단추 크기 1.3) — 표시용, 위치 계산 불변
+ok(a.parameters.diameterCm === 1.3 && B.DEFAULT_DIAMETER === 1.3, "29: 지름 생략 = 1.3");
+const d2 = B.compute({ startCm: 4, endCm: 36, count: 5, diameterCm: 2 }, F);
+ok(d2.ok && d2.parameters.diameterCm === 2 && JSON.stringify(d2.marks) === JSON.stringify(a.marks), "30: 지름 지정 · 위치 무변화");
+ok(B.compute({ startCm: 4, endCm: 36, count: 5, diameterCm: 0.5 }, F).ok && B.compute({ startCm: 4, endCm: 36, count: 5, diameterCm: 5 }, F).ok, "31: 지름 경계 0.5·5 허용");
+rej({ startCm: 4, endCm: 36, count: 5, diameterCm: 0.4 }, "invalid-diameter", "32: 지름 하한 미만");
+rej({ startCm: 4, endCm: 36, count: 5, diameterCm: 5.1 }, "invalid-diameter", "33: 지름 상한 초과");
+rej({ startCm: 4, endCm: 36, count: 5, diameterCm: NaN }, "invalid-diameter", "34: 지름 NaN");
+const legacy = { parameters: { startCm: 4, endCm: 36, count: 5 }, marks: a.marks };
+ok(B.validateStored(legacy).ok, "35: 지름 없는 이전 저장본 허용");
+bad({ parameters: Object.assign({}, a.parameters, { diameterCm: 9 }), marks: a.marks }, "36: 저장본 지름 범위 밖");
+
 console.log(`designButtonsCheck: ${PASS} pass, ${FAIL} fail`);
 if (FAIL) { console.log(fails.join("\n")); process.exit(1); }

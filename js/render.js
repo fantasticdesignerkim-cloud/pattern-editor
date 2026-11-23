@@ -301,15 +301,19 @@ function _appendPlacket(root, placket, L, scale){
   root.appendChild(g);
 }
 
-// 앞여밈 단추 위치(working.frontButtons): 앞중심 단추선 위의 점. 위치만(지름·단춧구멍은 교재 근거 판독 전 — 보류). 앞판 offset 동승.
+// 앞여밈 단추(working.frontButtons): 앞중심 단추선 위, 실제 지름(parameters.diameterCm, 기본 1.3 = P.120) 원 + 중심 십자.
+//   단춧구멍은 교재 근거 미판독 — 보류. 앞판 offset 동승.
 function _appendButtons(root, fb, L, scale){
   if(!fb || !Array.isArray(fb.marks) || !fb.marks.length) return;
   const off=(L && L.front) ? L.front : {dx:0,dy:0};
-  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-buttons":"front" });
+  const dCm=(fb.parameters && typeof fb.parameters.diameterCm==="number") ? fb.parameters.diameterCm : 1.3;   // 지름 없는 이전 저장본 = 기본값
+  const g=E("g",{ transform:"translate("+(off.dx*scale)+","+(off.dy*scale)+")", "data-design-buttons":"front", "data-button-diameter":String(dCm) });
   fb.marks.forEach((m,i)=>{
     const [x,y]=c2p(m.x, m.y);   // 여밈 선(_openPathD)과 같은 좌표 변환
-    g.appendChild(E("circle",{ cx:x, cy:y, r:4, class:"design-button-mark", "data-button-index":String(i) }));
-    g.appendChild(E("path",{ d:"M"+(x-6)+" "+y+"L"+(x+6)+" "+y+"M"+x+" "+(y-6)+"L"+x+" "+(y+6), class:"design-button-cross", fill:"none" }));
+    const r=Math.abs(c2p(m.x+dCm/2, m.y)[0]-x);   // 실척 반지름(화면 px)
+    const h=r*0.6;
+    g.appendChild(E("circle",{ cx:x, cy:y, r:r, class:"design-button-mark", "data-button-index":String(i) }));
+    g.appendChild(E("path",{ d:"M"+(x-h)+" "+y+"L"+(x+h)+" "+y+"M"+x+" "+(y-h)+"L"+x+" "+(y+h), class:"design-button-cross", fill:"none" }));
   });
   root.appendChild(g);
 }
