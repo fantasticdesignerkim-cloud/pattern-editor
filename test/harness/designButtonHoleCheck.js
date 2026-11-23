@@ -63,7 +63,7 @@ function start(S) {
 }
 function setCollarM(S) { const P = S.P(), plan = S.CP.composeDraft("bunka-shirt-collar-M", S.BC.latest(P), S.DC); if (plan.ok) { P.working.collarDraft = plan.draft; P.working.collarResult = null; } return plan; }
 // mode: "none"(단추 없음) · "legacy"(구멍 없는 옛 단추 · 지름 키 없음) · "hole"(지름 1.15 · 구멍 1.3 · 6개)
-function buildShirt(mode) {
+function buildShirt(mode, withCuff, elbow, elbowA, sleeveLen) {
   const S = makeSession(), P = start(S);
   const pp = { overlapCm: 1.2, facingWidthCm: 1.2, lengthMode: "full" }, pr0 = S.W.designPlacket.compute(S.BC.effectiveOutline(P, "front"), pp);
   if (pr0.ok) P.working.frontPlacket = { parameters: pp, outline: pr0.outline, construction: pr0.construction };
@@ -80,7 +80,7 @@ function buildShirt(mode) {
       P.working.frontButtons = btn;
     }
   }
-  const a = pr0.ok && S.BC.complete(P).ok, ra = S.W.sleeveAApply.apply(P, { sleeveLengthCm: 52 });
+  const a = pr0.ok && S.BC.complete(P).ok, ra = (elbow ? S.W.sleeveCApply.apply(P, { sleeveLengthCm: 52, elbowLengthCm: elbow }) : S.W.sleeveAApply.apply(P, Object.assign({ sleeveLengthCm: sleeveLen || 52 }, withCuff ? { cuff: JSON.parse(J(S.W.designCuff.defaults())) } : {}, elbowA ? { elbowLengthCm: elbowA } : {})));
   const okAll = a && ra && ra.ok && (() => { const x = S.SC.complete(P).ok, pl = setCollarM(S), y = S.CC.complete(P).ok, z = S.DR.complete(P).ok; return x && pl.ok && y && z; })();
   return { S, P, ok: !!okAll, btn };
 }
@@ -185,7 +185,14 @@ const isHole13 = e => { if (e.type !== "LINE") return false; const m = lineMm(e)
     ok(inRange(iR).length === 6 && inRange(iL).length === 0, "4: 일반 DXF = INTERNAL 레이어 실제 길이 13mm 수평선 6개가 front-right 에만, front-left 0");
     ok(E.filter(e => layerOf(e) === "INTERNAL" && isHole13(e)).length === 6, "4: 일반 DXF 전체에서도 13mm 구멍선은 6개뿐(다른 조각에 없음)");
     const A = parseDxf(ax.dxf), a8 = A.filter(e => layerOf(e) === "8" && isHole13(e));
-    ok(a8.length === 6 && new Set(a8.map(e => e.blk)).size === 1 && !/left/i.test(String(a8[0].blk)), "4: AAMA = 레이어 8 실제 길이 13mm 6개 · 한 블록(왼앞판 블록 아님)");
+    // AAMA: 조각 ↔ 블록 실제 매핑(ax.stats.pieces: id·side·block)으로 착용자 오른앞판 블록에만 있는지 확인
+    const ap = ax.stats.pieces, pR = ap.find(p => p.id === "front-right"), pL = ap.find(p => p.id === "front-left");
+    ok(!!pR && !!pL && pR.side === "R" && pL.side === "L" && pR.block !== pL.block, "4: AAMA 조각 매핑 = front-right(side R) · front-left(side L) 가 서로 다른 블록");
+    if (pR && pL) {
+      const in8 = blk => A.filter(e => e.blk === blk && layerOf(e) === "8" && isHole13(e)).length;
+      ok(in8(pR.block) === 6 && in8(pL.block) === 0, "4: AAMA = 레이어 8 실제 길이 13mm 수평선 6개가 오른앞판 블록(" + pR.block + ")에만, 왼앞판 블록(" + pL.block + ") 0");
+      ok(a8.length === 6 && a8.every(e => e.blk === pR.block), "4: AAMA 전체의 13mm 구멍선 6개가 전부 오른앞판 블록 소속(다른 조각 블록에 없음)");
+    }
     const gN = N.S.DXF.build(N.P, meta);
     ok(gN.ok && parseDxf(gN.dxf).filter(e => layerOf(e) === "INTERNAL" && isHole13(e)).length === 0, "4: 단추 없는 셔츠 DXF = 13mm 구멍선 0(기존 출력 그대로)");
   }
@@ -217,6 +224,110 @@ const isHole13 = e => { if (e.type !== "LINE") return false; const m = lineMm(e)
   if (rtL) {
     const b0 = rtL.P0.working.designResult, b1 = rtL.Q.working.designResult;
     ok(b1.hash === b0.hash && !("buttonholes" in b1) && J(rtL.Q.working.frontButtons) === J(rtL.P0.working.frontButtons) && !("diameterCm" in rtL.Q.working.frontButtons.parameters) && !("holes" in rtL.Q.working.frontButtons), "6: 옛 단추 저장→열기 = 구멍·지름 키 생성 없음 · hash 동일");
+  }
+
+  // ── §7 Optitex 출력 보완(2026-11-23): 밴드·위칼라 겉/안 · C.B/C.F 글자 크기 · 소매 중심선/EL · 커프스 접는선 ──
+  //   실제 UI 경로 = 소매 Ⓐ + 기본 커프스(sleeveAApply.apply({sleeveLengthCm, cuff})) · Ⓐ 는 EL 입력이 없다 → EL 없음. EL 있음은 아래 §7b(소매 Ⓒ).
+  {
+    const meta = { version: "t", createdAt: "2026-11-23T00:00:00" }, C = buildShirt("hole", true);
+    ok(C.ok, "7: 기본 긴 셔츠(소매 Ⓐ + 커프스 + 단추·구멍) 완료 사슬");
+    if (C.ok) {
+      const g7 = C.S.DXF.build(C.P, meta), a7 = C.S.DXF.build(C.P, meta, { format: "aama" });
+      ok(g7.ok && a7.ok, "7: 일반·AAMA DXF 둘 다 만들어짐");
+      if (g7.ok && a7.ok) {
+        const ids = a7.stats.pieces.map(q => q.id);
+        ["collar-stand", "collar-body"].forEach(b => ok(ids.includes(b + "-outer") && ids.includes(b + "-inner") && !ids.includes(b), "7: " + b + " 겉·안 두 조각으로 식별(-outer/-inner)"));
+        ok(a7.stats.pieces.filter(q => /^collar-/.test(q.id)).every(q => q.qty === 1), "7: 겉·안 조각은 각각 수량 1");
+        const gi = g7.stats.pieces.map(q => q.id); ok(["collar-stand-outer", "collar-stand-inner", "collar-body-outer", "collar-body-inner"].every(k => gi.includes(k)), "7: 일반 DXF 도 같은 조각 식별");
+        const E7 = parseDxf(g7.dxf), A7 = parseDxf(a7.dxf);
+        ok(E7.filter(e => e.type === "POLYLINE" && layerOf(e) === "CUT").length === g7.stats.pieces.length, "7: 재단선 폐곡선 수 = 조각 수(겉·안 포함)");
+        // EXTMAX = 실제 재단선(시접 포함) 범위 · 겉·안 조각이 서로 · 다른 조각과 겹치지 않음
+        const cuts = E7.filter(e => e.type === "POLYLINE" && layerOf(e) === "CUT").map(e => e.verts.map(v => [Number(v.f["10"][0]), Number(v.f["20"][0])]));
+        const bb = pts => ({ x0: Math.min(...pts.map(q => q[0])), x1: Math.max(...pts.map(q => q[0])), y0: Math.min(...pts.map(q => q[1])), y1: Math.max(...pts.map(q => q[1])) });
+        const boxes = cuts.map(bb), W7 = Math.max(...boxes.map(b => b.x1)), H7 = Math.max(...boxes.map(b => b.y1));
+        const hdr = txt => { const m = /\$EXTMAX\r?\n10\r?\n([-\d.]+)\r?\n20\r?\n([-\d.]+)/.exec(txt); return m ? [Number(m[1]), Number(m[2])] : null; };
+        const hg = hdr(g7.dxf), ha = hdr(a7.dxf);
+        ok(hg && Math.abs(hg[0] - W7) < 1e-3 && Math.abs(hg[1] - H7) < 1e-3 && Math.min(...boxes.map(b => b.x0)) > -1e-6 && Math.min(...boxes.map(b => b.y0)) > -1e-6, "7: 일반 DXF EXTMAX = 실제 재단선 범위(겉·안 포함 · 음수 좌표 없음)");
+        ok(ha && Math.abs(ha[0] - hg[0]) < 1e-3 && Math.abs(ha[1] - hg[1]) < 1e-3, "7: AAMA EXTMAX = 일반 DXF 와 같은 범위");
+        let ov = 0; for (let i = 0; i < boxes.length; i++) for (let k = i + 1; k < boxes.length; k++) { const a = boxes[i], b = boxes[k]; if (a.x0 < b.x1 - 1e-6 && b.x0 < a.x1 - 1e-6 && a.y0 < b.y1 - 1e-6 && b.y0 < a.y1 - 1e-6) ov++; }
+        ok(ov === 0, "7: 재단선 범위 상자끼리 겹침 0(겉·안 포함, 시접 포함) — 겹침 " + ov);
+        // 수동 수량은 존중
+        const hq = buildShirt("hole", true); hq.S.CUT.setQty("collar-stand", 2, hq.P);
+        const aq = hq.S.DXF.build(hq.P, meta, { format: "aama" }), pq = aq.stats.pieces.filter(q => q.base === "collar-stand");
+        ok(aq.ok && pq.length === 1 && pq[0].id === "collar-stand" && pq[0].qty === 2, "7: 수동 수량 2 = 겉/안으로 나누지 않고 한 조각 Quantity 2(저장본 존중)");
+        // C.B / C.F 글자 실척 9mm
+        const T = E7.filter(e => e.type === "TEXT" && /^(C\.B|C\.F)$/.test((e.f["1"] || [""])[0]));
+        ok(T.length >= 3 && T.every(e => Number(e.f["40"][0]) >= 8.99), "7: C.B/C.F 글자 높이 ≥ 9mm(실척)");
+        // 소매 중심선 · 커프스 접는선: 모델
+        const d7 = view(C.S, C.P), kinds = id => (d7.D[id].marks || []).map(m => m.kind), has = (id, k) => !!d7.D[id] && kinds(id).includes(k);
+        ok(has("sleeve-sleeve", "sleeve-center") && has("sleeve-sleeve~m", "sleeve-center"), "7: 소매 좌·우 모두 중심선 mark");
+        ok(!has("sleeve-sleeve", "sleeve-elbow") && !has("sleeve-sleeve~m", "sleeve-elbow"), "7: EL 없는 소매(Ⓐ)는 EL 선을 추측해 만들지 않음");
+        ok(has("cuff", "cuff-fold") && has("cuff~m", "cuff-fold"), "7: 커프스 좌·우 모두 접는선(cuff-fold) mark");
+        // 일반/AAMA 내부 레이어: 선 수가 모델과 같고, 재단선(CUT/1)·너치(NOTCH/4)에 섞이지 않음
+        const nCenter = ["sleeve-sleeve", "sleeve-sleeve~m"].filter(k => has(k, "sleeve-center")).length, nFold = ["cuff", "cuff~m"].filter(k => has(k, "cuff-fold")).length;
+        const marksTotal = Object.keys(d7.D).reduce((n, k) => n + d7.D[k].marks.filter(m => m.kind !== "zone-x").length, 0);
+        const gIn = E7.filter(e => layerOf(e) === "INTERNAL" && (e.type === "LINE" || e.type === "POLYLINE")).length, aIn = A7.filter(e => layerOf(e) === "8" && (e.type === "LINE" || e.type === "POLYLINE")).length;
+        ok(nCenter === 2 && nFold === 2 && gIn >= marksTotal && aIn >= marksTotal && Math.abs(gIn - aIn) <= 0, "7: 내부선 수 일반(INTERNAL) = AAMA(레이어 8) · 소매 중심선 2 + 커프스 접는선 2 포함 — " + gIn + "/" + aIn);
+        ok(!E7.some(e => layerOf(e) === "CUT" && e.type !== "POLYLINE") && !A7.some(e => layerOf(e) === "1" && e.type === "LINE") && !E7.some(e => layerOf(e) === "NOTCH" && e.type === "POLYLINE"), "7: 내부선이 재단선(CUT/1)·너치에 섞이지 않음");
+        const n4 = A7.filter(e => layerOf(e) === "4");
+        ok(n4.length > 0 && n4.every(e => e.type === "LINE" && Math.abs(lineMm(e).len - 3) < 0.05), "7: AAMA I자 너치(레이어 4) 3mm LINE 유지");
+        const front = (g7.stats.pieces.find(q => q.id === "front-right") || {}).id;
+        ok(E7.filter(e => layerOf(e) === "INTERNAL" && isHole13(e)).length === 6 && !!front, "7: 오른앞판 13mm 단춧구멍 6개 유지(일반)");
+        const pR = a7.stats.pieces.find(q => q.id === "front-right"), pL = a7.stats.pieces.find(q => q.id === "front-left");
+        ok(!!pR && !!pL && A7.filter(e => e.blk === pR.block && layerOf(e) === "8" && isHole13(e)).length === 6 && A7.filter(e => e.blk === pL.block && layerOf(e) === "8" && isHole13(e)).length === 0, "7: 오른앞판 13mm 단춧구멍 6개 유지(AAMA · 왼앞판 0)");
+      }
+    }
+  }
+
+  // ── §7b EL 있음(소매 Ⓒ · 실제 UI 의 EL 입력 경로 sleeveCApply.apply) — 중심선·EL 둘 다, 좌우 · 일반/AAMA 내부 레이어 ──
+  {
+    const meta = { version: "t", createdAt: "2026-11-23T00:00:00" }, EC = buildShirt("hole", false, 31.4);
+    ok(EC.ok, "7b: 소매 Ⓒ(EL 31.4) 셔츠 완료 사슬");
+    if (EC.ok) {
+      const d = view(EC.S, EC.P), sl = Object.keys(d.D).filter(k => /^sleeve-/.test(k)), kinds = k => d.D[k].marks.map(m => m.kind);
+      const g = EC.S.DXF.build(EC.P, meta), a = EC.S.DXF.build(EC.P, meta, { format: "aama" });
+      ok(sl.length >= 1 && sl.every(k => kinds(k).includes("sleeve-elbow")) && sl.every(k => kinds(k).includes("sleeve-center")), "7b: EL 있는 소매 = 중심선 + EL 둘 다(" + sl.join(",") + ")");
+      if (g.ok && a.ok) {
+        const G = parseDxf(g.dxf), A = parseDxf(a.dxf), nSl = sl.length;
+        const cnt = (E, lay) => E.filter(e => layerOf(e) === lay && e.type === "LINE" && !isHole13(e)).length;
+        ok(cnt(G, "INTERNAL") >= nSl * 2 && cnt(A, "8") >= nSl * 2 && cnt(G, "INTERNAL") === cnt(A, "8"), "7b: 일반 INTERNAL = AAMA 레이어 8 내부선 수 같음 · 소매 조각마다 중심선+EL");
+      }
+    }
+  }
+
+  // ── §7c 실제 셔츠 기본 긴소매 Ⓐ(+커프스) 의 EL 31.4 — 정상 UI 적용(sleeveAApply.apply 에 입력칸 값) → 완료 → 일반/AAMA DXF 좌우 내부 레이어 ──
+  {
+    const meta = { version: "t", createdAt: "2026-11-23T00:00:00" }, E0 = buildShirt("hole", true), E1 = buildShirt("hole", true, null, 31.4);
+    ok(E0.ok && E1.ok, "7c: Ⓐ 긴소매(+커프스) EL 없음/31.4 둘 다 적용→완료 사슬");
+    if (E0.ok && E1.ok) {
+      const a0 = E0.P.working.sleeveA, a1 = E1.P.working.sleeveA, r0 = E0.P.working.sleeveResult, r1 = E1.P.working.sleeveResult;
+      ok(a1.parameters.elbowLengthCm === 31.4 && !("elbowLengthCm" in a0.parameters) && r1.inputs.elbowLengthCm === 31.4 && !("elbowLengthCm" in r0.inputs), "7c: EL 은 실제로 그려졌을 때만 저장·완료 입력에 든다(없으면 키 없음 = 옛 저장본과 같은 모양)");
+      ok(J(a0.meta.capLengths) === J(a1.meta.capLengths) && a0.meta.sleeveLengthCm === a1.meta.sleeveLengthCm && a0.meta.bicepCm === a1.meta.bicepCm && J(E0.P.working.geometry.sleeve.outline) === J(E1.P.working.geometry.sleeve.outline) && J(a0.cuff.lengths) === J(a1.cuff.lengths), "7c: EL 은 표시선뿐 — 소매 외곽·소매산·봉제 길이·커프스 길이 그대로");
+      const d0 = view(E0.S, E0.P), d1 = view(E1.S, E1.P), mk = (d, k) => d.D[k].marks.map(m => m.kind);
+      ok(["sleeve-sleeve", "sleeve-sleeve~m"].every(k => mk(d1, k).includes("sleeve-elbow") && mk(d1, k).includes("sleeve-center")) && ["sleeve-sleeve", "sleeve-sleeve~m"].every(k => !mk(d0, k).includes("sleeve-elbow")), "7c: 좌·우 소매 EL+중심선 있음 / 옛 저장본(EL 없음)은 EL 안 만듦");
+      ok(J(d0.D["sleeve-sleeve"].seam) === J(d1.D["sleeve-sleeve"].seam) && J(d0.D["sleeve-sleeve"].outline) === J(d1.D["sleeve-sleeve"].outline), "7c: 재단선(시접 포함)·완성선 EL 유무와 무관하게 동일");
+      const g = E1.S.DXF.build(E1.P, meta), a = E1.S.DXF.build(E1.P, meta, { format: "aama" }), g0 = E0.S.DXF.build(E0.P, meta), a0x = E0.S.DXF.build(E0.P, meta, { format: "aama" });
+      ok(g.ok && a.ok && g0.ok && a0x.ok, "7c: 일반·AAMA DXF 생성");
+      if (g.ok && a.ok) {
+        const G = parseDxf(g.dxf), A = parseDxf(a.dxf), G0 = parseDxf(g0.dxf), A0 = parseDxf(a0x.dxf);
+        const ints = (E, lay) => E.filter(e => layerOf(e) === lay && e.type === "LINE" && !isHole13(e)).length;
+        ok(ints(G, "INTERNAL") - ints(G0, "INTERNAL") === 2 && ints(A, "8") - ints(A0, "8") === 2, "7c: EL 있음 − 없음 = 내부선 정확히 2(좌·우 소매 EL 각 1) · 일반 INTERNAL / AAMA 레이어 8");
+        // 소매 좌·우 블록(AAMA)마다 레이어 8 에 EL(수평선) 1 · 중심선(수직선) 1
+        const bl = a.stats.pieces.filter(q => q.base === "sleeve-sleeve").map(q => q.block);
+        const hv = (E, blk) => { const L = E.filter(e => e.blk === blk && layerOf(e) === "8" && e.type === "LINE"), g = c => e => Number((e.f[c] || [])[0]); return { h: L.filter(e => Math.abs(g("21")(e) - g("20")(e)) < 1e-6).length, v: L.filter(e => Math.abs(g("11")(e) - g("10")(e)) < 1e-6).length }; };
+        ok(bl.length === 2 && bl.every(b => { const q = hv(A, b); return q.h === 1 && q.v >= 1; }), "7c: AAMA 좌·우 소매 블록마다 레이어 8 에 EL(수평) 정확히 1 + 수직선(중심선 · 트임 가위집 포함) ≥ 1");
+        ok(!G.some(e => layerOf(e) === "CUT" && e.type !== "POLYLINE") && !A.some(e => layerOf(e) === "1" && e.type === "LINE") && A.filter(e => layerOf(e) === "4").every(e => e.type === "LINE" && Math.abs(lineMm(e).len - 3) < 0.05), "7c: EL 이 재단선·너치에 섞이지 않음 · 3mm I자 너치 유지");
+        ok(G.filter(e => layerOf(e) === "INTERNAL" && isHole13(e)).length === 6, "7c: 13mm 단춧구멍 6개 유지");
+      }
+    }
+    // 짧은 소매: 본체 안에 EL 31.4 가 들어가지 않으면 소매는 그대로 만들고 EL 만 뺀다(막지 않음 · 값을 옮기지 않음)
+    const SH = buildShirt("hole", false, null, 31.4, 25);
+    ok(SH.ok && !("elbowLengthCm" in SH.P.working.sleeveA.parameters) && SH.P.working.sleeveA.warnings.includes("elbow-omitted") && !SH.P.working.geometry.sleeve.construction.some(c => c.role === "elbow-line"), "7c: 짧은 소매(25cm) = EL 31.4 생략(elbow-omitted) · 소매 적용·완료는 성공");
+    const SH2 = buildShirt("hole", false, null, null, 25);
+    ok(SH2.ok && J(SH2.P.working.geometry.sleeve.outline) === J(SH.P.working.geometry.sleeve.outline), "7c: 짧은 소매는 EL 요청 유무와 무관하게 같은 외곽");
+    // 다시 제도(rederive)도 같은 EL 유지 · 수정(36)도 적용
+    const E2 = buildShirt("hole", true, null, 36);
+    ok(E2.ok && E2.P.working.sleeveA.parameters.elbowLengthCm === 36 && (E2.S.W.sleeveAApply.rederive(E2.P), E2.P.working.sleeveA.parameters.elbowLengthCm === 36), "7c: EL 수정값(36) 적용 · 재제도 후에도 유지");
   }
 
 })();

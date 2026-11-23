@@ -1749,6 +1749,12 @@
     const v = Number(raw);
     return { v: v, valid: isFinite(v) && v >= 10 && v <= 60, why: "10–60 범위" };
   }
+  // Ⓐ 의 팔꿈치선 EL(선택 · 표시선): 빈 값 = EL 안 그림 · 값이 있으면 10–60 범위만 받는다(기본 31.4 = 입력칸 초깃값). 본체 길이 안에 안 들어가면(짧은 소매) sleeveAApply 가 EL 만 뺀다.
+  function readElbowA() {
+    const el = document.getElementById("inpSleeveElbow"), raw = el ? String(el.value).trim() : "";
+    if (raw === "") return { v: undefined, valid: true };
+    return readElbow();
+  }
   // Ⓒ 적용(라인 적용·«소매 적용»/Enter 공용). 성공 시 다른 라인 상태를 해제하고 true. 실패하면 이전 소매 유지 — 단 Ⓒ 가 이미 켜져 있으면 차단 표시(이전 형상을 현재 입력의 결과로 쓰지 않는다).
   function applySleeveC(project) {
     const rejectC = (text, reason) => {
@@ -1867,7 +1873,7 @@
     if (elbowRow) {
       const rr2 = fid !== SLEEVE_BASE && window.sleevePresets ? window.sleevePresets.resolve(fid, selectedSleeveVariantId()) : null;
       const rec2 = rr2 && rr2.ok ? window.sleevePresets.get(rr2.presetId) : null;
-      elbowRow.hidden = !(sleeveCOn(project) || sleeveHOn(project) || (rec2 && rec2.inputs.some(i => i.key === "elbowLengthCm")));
+      elbowRow.hidden = !(sleeveCOn(project) || sleeveHOn(project) || sleeveAOn(project) || (rr2 && rr2.ok && rr2.presetId === "bunka-sleeve-A") || (rec2 && rec2.inputs.some(i => i.key === "elbowLengthCm")));
     }
     const tuckRow = document.getElementById("rowSleeveTuck");   // 턱 분량(Ⓕ 입력) — 선택된(또는 켜진) 라인의 입력 목록에 있을 때만 보인다
     if (tuckRow) {
@@ -2099,7 +2105,9 @@
     if (!len.valid || !(len.v > 0)) { setSleeveNote("소매길이 10–90 범위를 확인하세요"); noteSleeveKept(project, selSym); return; }
     const cf = readCuffInputs();
     if (!cf.valid) { setSleeveNote("커프스 입력 확인: " + cf.why + " · 이전 소매 유지"); noteSleeveKept(project, selSym); return; }
-    const a = window.sleeveAApply.apply(project, { sleeveLengthCm: len.v, cuff: cf.cuff });
+    const eA = readElbowA();
+    if (!eA.valid) { setSleeveNote("팔꿈치 길이 EL " + eA.why + " 를 확인하세요 · 이전 소매 유지"); noteSleeveKept(project, selSym); return; }
+    const a = window.sleeveAApply.apply(project, { sleeveLengthCm: len.v, cuff: cf.cuff, elbowLengthCm: eA.v });
     if (!a.ok) { setSleeveNote("소매 Ⓐ 차단: " + a.text + " · 이전 소매 유지"); noteSleeveKept(project, selSym); return; }   // 추측 폴백 없음 — 사유만 표시
     clearOtherSleeveLines(project, "A");   // 기본/Ⓐ/Ⓑ/Ⓒ 배타
     relayoutSleeve();
@@ -2390,7 +2398,9 @@
       if (!len.valid || !(len.v > 0)) { setSleeveNote("소매길이 10–90 범위를 확인하세요"); return; }
       const cf = readCuffInputs();
       if (!cf.valid) { setSleeveNote("커프스 입력 확인: " + cf.why + " · 이전 소매 유지"); return; }
-      const a = window.sleeveAApply.apply(project, { sleeveLengthCm: len.v, cuff: cf.cuff });
+      const eA = readElbowA();
+      if (!eA.valid) { setSleeveNote("팔꿈치 길이 EL " + eA.why + " 를 확인하세요 · 이전 소매 유지"); return; }
+      const a = window.sleeveAApply.apply(project, { sleeveLengthCm: len.v, cuff: cf.cuff, elbowLengthCm: eA.v });
       if (!a.ok) { setSleeveNote("소매 Ⓐ 차단: " + a.text + " · 이전 소매 유지"); return; }
       relayoutSleeve();
       if (typeof render === "function") render();
@@ -2469,6 +2479,8 @@
     if (sa) {   // 소매 Ⓐ: 입력칸은 Ⓐ 결과 값(소매폭 = 부리폭 · 소매산 높이)을 읽기 전용으로 보여 준다
       setIf("inpSleeveLength", sa.parameters.sleeveLengthCm);
       syncCuffInputs(sa);
+      const elA = document.getElementById("inpSleeveElbow");   // EL 이 실제로 그려진 Ⓐ 만 입력칸에 되돌린다(EL 없는 옛 저장본·짧은 소매는 칸을 건드리지 않음 — 다른 라인과 칸을 공유)
+      if (elA && document.activeElement !== elA && !sa.blocked && Number.isFinite(sa.parameters.elbowLengthCm)) elA.value = String(sa.parameters.elbowLengthCm);
       if (!sa.blocked) { setIf("inpSleeveCuff", sa.meta.bicepCm); setIf("inpSleeveBicep", sa.meta.bicepCm); setIf("inpSleeveCapHeight", sa.meta.capHeightCm); }
       setSleeveNote(sa.blocked ? "소매 Ⓐ 차단: " + sa.blocked.text : sa.parameters.cuff ? "소매 Ⓐ · 몸판 진동둘레 기준 · 소매길이(커프스 포함) + 커프스·트임 입력" : "소매 Ⓐ · 몸판 진동둘레 기준 · 소매길이만 입력");
     }

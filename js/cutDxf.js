@@ -35,7 +35,7 @@
   function closedRing(pts) { var p = pts.slice(); if (p.length > 2 && Math.hypot(p[0].x - p[p.length - 1].x, p[0].y - p[p.length - 1].y) < 1e-6) p.pop(); return p; }
 
   // 사전 점검(cutPrint.preflight 한 벌) + 조각 묶음 + 전체 범위 — 두 형식(일반 · AAMA 구조)이 같이 쓴다
-  function collect(proj) {
+  function collect(proj, opt) {
     var CP = W().cutPrint; if (!CP || !CP.preflight) return { ok: false, reason: "사전 점검 모듈을 불러오지 못했습니다", blockers: ["사전 점검 모듈을 불러오지 못했습니다"] };
     var pre = CP.preflight(proj); if (!pre.ok) return { ok: false, reason: pre.blockers[0], blockers: pre.blockers, pre: pre };
     var d = pre.d, D = pre.D, L = pre.L, rowOf = {}, items = []; pre.rows.forEach(function (r) { rowOf[r.id] = r; });
@@ -46,6 +46,23 @@
       items.push({ p: p, r: r, pos: pos, row: rowOf[pid], sm: pre.m.pieces[bid], g: pre.G.pieces[pid], id: pid, label: rowOf[pid].label || p.label, pname: (r.pair || r.instMirrored) ? p.id + "-" + (r.side === "R" ? "right" : "left") : p.id });
       r.seam.forEach(function (q) { var x = q.x + pos.dx, y = q.y + pos.dy; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; });
     });
+    // 밴드·위 칼라(겉·안): 수량이 기본값(저장된 수동 수량 없음)이면 Optitex 에서 두 장이 보이도록 겉(-outer)·안(-inner) 조각으로 나눠 내보낸다.
+    //   겉 = 원래 자리 · 안 = 같은 형상을 전체 배치 아래 한 줄에 놓는다(겹치지 않게). 수동 수량(explicit)은 그대로 한 조각 + Quantity n(저장본 존중).
+    var faceItems = [], faceY = null, split = [];
+    items.forEach(function (it) {
+      if ((it.id === "collar-stand" || it.id === "collar-body") && it.row && it.row.qty && it.row.qty.kind === "default" && it.row.qty.n === 1) split.push(it);
+    });
+    if (split.length && !(opt && opt.collarFaces === false)) {
+      var gap = 2, bottom = maxY;   // bottom = 지금 가장 아래(y 는 아래로 커진다)
+      split.forEach(function (it) {
+        var bb = it.r.bbox, h = bb.maxY - bb.minY, nd = { dx: it.pos.dx, dy: (bottom + gap) - (bb.minY + 0) };
+        var cp = Object.assign({}, it, { pos: nd, pname: it.pname + "-inner", label: it.label + "(안)", face: "INNER", id: it.id + "~inner" });
+        it.pname = it.pname + "-outer"; it.label = it.label + "(겉)"; it.face = "OUTER";
+        faceItems.push(cp); bottom += gap + h;
+        it.r.seam.forEach(function (q) { var x = q.x + nd.dx, y = q.y + nd.dy; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; });
+      });
+      faceItems.forEach(function (f) { items.push(f); });
+    }
     if (!items.length) return { ok: false, reason: "내보낼 조각이 없습니다", blockers: ["내보낼 조각이 없습니다"], pre: pre };
     return { ok: true, pre: pre, items: items, minX: minX, maxX: maxX, minY: minY, maxY: maxY };
   }
@@ -53,8 +70,8 @@
 
   //   meta = { version, createdAt } (글자만) · opt = { format: "generic"(기본) | "aama" }. 반환: { ok, dxf, fileName, stats, pre } / { ok:false, reason, blockers, pre }
   function build(proj, meta, opt) {
-    if (opt && opt.format === "aama") return buildAama(proj, meta);
-    var c = collect(proj); if (!c.ok) return c;
+    if (opt && opt.format === "aama") return buildAama(proj, meta, opt);
+    var c = collect(proj, opt); if (!c.ok) return c;
     meta = meta || {};
     var pre = c.pre, items = c.items, minX = c.minX, maxX = c.maxX, minY = c.minY, maxY = c.maxY;
     var E = [], count = {}, add = function (layer, arr) { count[layer] = (count[layer] || 0) + 1; for (var i = 0; i < arr.length; i++) E.push(arr[i]); };
@@ -91,6 +108,7 @@
       var lines = [["PIECE " + it.pname, h1], [it.label, h2],
         [row.qty.kind === "none" ? "QTY UNSET" : "QTY " + row.qty.n + (row.qty.kind === "default" ? " (DEFAULT)" : " (USER)"), h2],
         [gk === "default" ? "GRAIN " + row.grain.angleDeg + " DEG (" + (/앱 기본값/.test(row.grain.basis || "") ? "APP DEFAULT" : "BOOK DEFAULT") + ")" : gk === "user" ? "GRAIN " + row.grain.angleDeg + " DEG (USER)" : gk === "held" ? (row.grain.shown ? "GRAIN HELD - LINE ON GRAIN_HELD IS PROVISIONAL" : "GRAIN HELD - NO DIRECTION") : gk === "none" ? "GRAIN UNSET" : "GRAIN NOT DRAWN",  h2]];
+      if (it.face) lines.push(["FACE " + it.face + " (" + (it.face === "OUTER" ? "SHELL" : "LINING") + ")", h2]);
       if (r.unfolded) lines.push(["FOLD OPENED - ONE FULL PIECE", h2]); else if (foldN) lines.push(["CUT ON FOLD", h2]);
       var off = -(lines.length - 1) * h2 * 0.8;
       lines.forEach(function (ln) { var q = tall ? { x: cx + off, y: cy } : { x: cx, y: cy + off }; text(q, pos, ln[1] * 10, ln[0], tall ? 90 : 0); off += h2 * 1.6; });
@@ -125,8 +143,8 @@
   var AAMA_LAYERS = [["1", 7, "재단선(시접 포함) · 조각/스타일 글자"], ["2", 1, "꺾임점"], ["3", 3, "곡선점"], ["4", 1, "너치"], ["6", 6, "대칭(골)선 — 반쪽 조각"], ["7", 4, "식서"], ["8", 5, "안쪽 선(자르지 않음)"], ["14", 2, "봉제선(완성선)"], ["15", 8, "주석"]];
   var TURN_DEG = 12;   // 재단선 꼭짓점에서 방향이 이만큼 넘게 꺾이면 꺾임점(레이어 2), 아니면 곡선점(레이어 3)
   function blockName(id) { return String(id).replace(/[^A-Za-z0-9]+/g, "_").toUpperCase() + "_BASE"; }
-  function buildAama(proj, meta) {
-    var c = collect(proj); if (!c.ok) return c;
+  function buildAama(proj, meta, opt) {
+    var c = collect(proj, opt); if (!c.ok) return c;
     meta = meta || {};
     var pre = c.pre, items = c.items, minX = c.minX, maxX = c.maxX, minY = c.minY, maxY = c.maxY, notes = [];
     var X = function (q, pos) { return f4((q.x + pos.dx - minX) * 10); }, Y = function (q, pos) { return f4((maxY - (q.y + pos.dy)) * 10); };
@@ -165,7 +183,7 @@
       T.push("Piece Name: " + asc(it.pname).replace(/\\U\+[0-9A-F]{4}/g, "?"), "Size: BASE");
       if (row.qty.kind !== "none") T.push("Quantity: " + row.qty.n); else notes.push("«" + it.label + "» 수량 미정 — Quantity 항목을 넣지 않았습니다");
       T.push("Annotation: " + (r.unfolded ? "FULL PIECE (FOLD OPENED)" : foldN ? "CUT ON FOLD" : (r.pair || r.instMirrored) ? (r.side === "R" ? "RIGHT" : "LEFT") + " (WEARER) MIRROR PAIR" : "SINGLE PIECE") + (row.qty.kind === "default" ? " / QTY DEFAULT" : row.qty.kind === "user" ? " / QTY USER" : " / QTY UNSET") +
-        (gk === "default" ? " / GRAIN " + row.grain.angleDeg + (/앱 기본값/.test(row.grain.basis || "") ? " APP DEFAULT" : " BOOK DEFAULT") : gk === "user" ? " / GRAIN " + row.grain.angleDeg + " USER" : gk === "held" ? " / GRAIN HELD - NOT EXPORTED" : gk === "none" ? " / GRAIN UNSET" : " / GRAIN NOT DRAWN"));
+        (it.face ? " / FACE " + it.face + " (" + (it.face === "OUTER" ? "SHELL" : "LINING") + ")" : "") + (gk === "default" ? " / GRAIN " + row.grain.angleDeg + (/앱 기본값/.test(row.grain.basis || "") ? " APP DEFAULT" : " BOOK DEFAULT") : gk === "user" ? " / GRAIN " + row.grain.angleDeg + " USER" : gk === "held" ? " / GRAIN HELD - NOT EXPORTED" : gk === "none" ? " / GRAIN UNSET" : " / GRAIN NOT DRAWN"));
       if (gk === "held") notes.push("«" + p.label + "» 식서 보류 — 식서선(레이어 7)을 넣지 않았습니다(임시 기본 방향을 확정된 것처럼 내보내지 않음)");
       else if (gk === "none" || gk === "unfit") notes.push("«" + p.label + "» 식서 없음 — 식서선(레이어 7)이 없습니다");
       var off = -(T.length - 1) * h * 0.8;

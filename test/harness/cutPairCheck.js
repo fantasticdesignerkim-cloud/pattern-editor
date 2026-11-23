@@ -249,7 +249,7 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
   ok(/id="cutDefaults"[^>]*>[^<]*1cm[^<]*0cm/.test(html), "6: 선택 없이 보이는 기본값 표시(시접 1cm · 골선 0cm)");
   ok(/id="btnCutWidths"[^>]*aria-pressed="false"/.test(html), "6: 시접 폭 보기 전환 단추");
   ok(/\.cut-seam-card\{[^}]*margin:0 auto[^}]*max-width:560px/.test(css) && /\.cut-seam-card\{left:8px;right:8px;bottom:8px;margin:0/.test(css), "6: 카드 = 하단 가운데(auto 여백) · 좁은 화면은 전체 폭 하단");
-  ok(/js\/cutPrep\.js\?v=2026112302/.test(html) && /js\/cutPrint\.js\?v=2026112302/.test(html) && /js\/cutDxf\.js\?v=2026112002/.test(html) && /css\/apple\.css\?v=2026112002/.test(html), "6: 캐시 버전 핀");
+  ok(/js\/cutPrep\.js\?v=2026112303/.test(html) && /js\/cutPrint\.js\?v=2026112302/.test(html) && /js\/cutDxf\.js\?v=2026112303/.test(html) && /css\/apple\.css\?v=2026112002/.test(html), "6: 캐시 버전 핀");
   // ── §7 2026-11-20 소매·커프스 좌우 쌍 · C.F / C.B · 가슴선 · 허리선 ──
   {
     const v7 = view(S, P), D7 = v7.D, Q7 = v7.Q, pairs = ["front", "sleeve-sleeve"].concat(D7.cuff ? ["cuff"] : []);   // 이 시험 셔츠에는 커프스가 없다(커프스 쌍은 cutLayoutCheck 가 확인)

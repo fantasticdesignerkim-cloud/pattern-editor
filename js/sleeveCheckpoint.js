@@ -1285,7 +1285,7 @@
     return o;
   }
   // Ⓐ 입력: 커프스가 없으면 종전 그대로 { sleeveLengthCm } (키·hash 불변).
-  function inputsA(a) { var i = { sleeveLengthCm: a.parameters.sleeveLengthCm }; if (a.parameters.cuff) i.cuff = clone(a.parameters.cuff); return i; }
+  function inputsA(a) { var i = { sleeveLengthCm: a.parameters.sleeveLengthCm }; if (fin(a.parameters.elbowLengthCm)) i.elbowLengthCm = a.parameters.elbowLengthCm; if (a.parameters.cuff) i.cuff = clone(a.parameters.cuff); return i; }   // EL 은 실제로 그려졌을 때만(없으면 키 없음 · 옛 저장본·짧은 소매 hash 불변)
   function completeA(proj, c) {
     var a = c._a, sb = proj.sourceBlock || {};
     var result = {

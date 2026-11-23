@@ -222,8 +222,8 @@ let B;
   ok(/fill="none" stroke="#000" stroke-width="\.05"/.test(A("cp-cut")) && /fill="none" stroke="#000" stroke-width="\.025"/.test(A("cp-fin")) && /fill="none"/.test(A("cp-fold")) && /fill="none"/.test(A("cp-grain")) && /fill="none"/.test(A("cp-notch")) && /fill="none"/.test(A("cp-frame")) && /fill="none"/.test(A("cp-gauge")) &&
     [...B.body.matchAll(/<(path|rect|circle) class="(cp-[a-z-]+)[^"]*"([^>]*)>/g)].every(mm => mm[2] === "cp-notch-dot" ? /fill="#000"/.test(mm[3]) : /fill="none"/.test(mm[3])) && !/\.cp-cut\{/.test(B.css),
     "3: 모든 선 도형이 요소 속성으로 fill=none·굵기를 가짐(<use> 로 비춘 도형에는 스타일시트가 닿지 않아 검게 채워지던 실측 결함의 회귀)");
-  ok(/@page\{size:210mm 297mm;margin:10mm\}/.test(B.css) && /\.cp-pg\{width:190mm;height:276mm/.test(B.css) && !/px/.test(B.css + B.sheetSvg) && [...B.sheetSvg.matchAll(/font-size="([\d.]+)"/g)].every(mm => num(mm[1]) >= 0.26 && num(mm[1]) <= 0.7),
-    "3: 선 굵기·글자 = 실물 기준(재단선 0.5mm · 완성선 0.25mm · 글자 2.6~7mm) · @page A4 여백 10mm · 화면 px 없음");
+  ok(/@page\{size:210mm 297mm;margin:10mm\}/.test(B.css) && /\.cp-pg\{width:190mm;height:276mm/.test(B.css) && !/px/.test(B.css + B.sheetSvg) && [...B.sheetSvg.matchAll(/font-size="([\d.]+)"/g)].every(mm => num(mm[1]) >= 0.26 && num(mm[1]) <= 0.9),
+    "3: 선 굵기·글자 = 실물 기준(재단선 0.5mm · 완성선 0.25mm · 글자 2.6~9mm · C.F/C.B 확대) · @page A4 여백 10mm · 화면 px 없음");
   const B2 = PR(S).buildHtml(P, null, META); ok(B2.html === B.html && B.html.length > 20000, "3: 같은 입력 = 같은 출력(화면 상태·카메라와 무관 — 입력에 없음)");
   const g = B.body.split("cp-pg")[0];
   ok(/실물 크기 재단 패턴/.test(g) && /배율 <b>100%\(실제 크기\)<\/b>/.test(g) && /머리글·바닥글\(머리말 및 꼬리말\)은 끕니다/.test(g) && /자름선/.test(g) && /붙임선/.test(g) && /맞춤 표시/.test(g) && /cp-gauge-big/.test(g) && /페이지에 맞춤/.test(g) && /가로 100mm/.test(g) && /세로 100mm/.test(g) && /축소 안내도 — 치수 아님/.test(g) && (g.match(/class="cp-grid"/g) || []).length === T.length && /<table>/.test(g) && /보류·미정 없음/.test(g) && /width="114mm" height="110mm" viewBox="0 0 11.4 11"/.test(g),

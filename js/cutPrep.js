@@ -415,11 +415,13 @@
     } else if (Array.isArray(g.outline) && g.outline.length) {
       var nm = (Array.isArray(g.pieces) && g.pieces.length === 1) ? g.pieces[0] : "sleeve";
       add("sleeve", "sleeve-" + nm, SLEEVE_PIECE_LABEL[nm] || "소매", "designResult.sleeve.geometry", g.outline, { note: nm === "sleeve" && Array.isArray(g.pieces) ? "앞·뒤를 맞댄 한 장" : null, construction: g.construction,
-        edgeNames: (s.origin && s.origin.presetId === "bunka-sleeve-A" && g.outline.length === 4) ? SLEEVE_A_EDGES : null });   // 소매 Ⓐ 외곽 순서 계약 [소매산, 뒤 옆선, 앞 옆선, 소맷부리]
+        edgeNames: (s.origin && s.origin.presetId === "bunka-sleeve-A" && g.outline.length === 4) ? SLEEVE_A_EDGES : null,
+        marks: sleeveRefMarks(g.construction, g.outline) });   // 소매 Ⓐ 외곽 순서 계약 [소매산, 뒤 옆선, 앞 옆선, 소맷부리]
     } else if (g.sleevePiece === false) info.push("소매 조각 없음 — 몸판 일체형 소매" + (sym ? "(" + sym + ")" : "") + "라 소매는 몸판 조각 안에 있습니다");
     else missing.push({ id: "sleeve", label: "소매", reason: "소매 외곽이 비어 있습니다" });
     if (s && s.cuff && s.cuff.piece) {
-      add("sleeve", "cuff", "커프스", "designResult.sleeve.cuff.piece", s.cuff.piece.outline);
+      add("sleeve", "cuff", "커프스", "designResult.sleeve.cuff.piece", s.cuff.piece.outline,
+        { marks: (s.cuff.piece.construction || []).filter(function (c) { return c && c.kind === "line" && c.role === "fold-line" && c.from && c.to; }).slice(0, 1).map(function (c) { return { kind: "cuff-fold", outline: [{ kind: "line", from: { x: c.from.x, y: c.from.y }, to: { x: c.to.x, y: c.to.y } }], label: "커프스 접는선" }; }) });
       if (s.cuff.vent) {
         var vp = ventPieces(s.cuff.vent), sl = out.filter(function (p) { return p.group === "sleeve" && p.id !== "cuff"; });
         if (vp.ok && sl.length === 1) {
@@ -471,6 +473,22 @@
     return { pieces: out, missing: missing, info: info, holeWhy: holeWhy };
   }
 
+  // 소매 기준선(자르지 않는 내부선): 실제 제도 construction 의 role center-line(소매 중심선) · elbow-line(EL)만 읽는다.
+  //   없으면 만들지 않는다(짧은 소매 등 EL 없는 조각 — 추측 금지). 선분(line)만 · 조각 외곽 y 범위 안일 때만(제도 밖으로 튀는 선 제외).
+  function sleeveRefMarks(cons, outline) {
+    var out = [], ys = [], T = 1e-6;
+    (outline || []).forEach(function (sg) { normSeg(sg).forEach(function (q) { segPts(q).forEach(function (pp) { ys.push(pp.y); }); }); });
+    if (!ys.length || !Array.isArray(cons)) return out;
+    var y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys), seen = {};
+    cons.forEach(function (c) {
+      if (!c || c.kind !== "line" || !c.from || !c.to || (c.role !== "center-line" && c.role !== "elbow-line") || seen[c.role]) return;
+      var a = c.from, b = c.to; if (![a.x, a.y, b.x, b.y].every(isFinite)) return;
+      if (Math.min(a.y, b.y) < y0 - T || Math.max(a.y, b.y) > y1 + T) return;
+      seen[c.role] = 1;
+      out.push({ kind: c.role === "center-line" ? "sleeve-center" : "sleeve-elbow", outline: [{ kind: "line", from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } }], label: c.role === "center-line" ? "소매 중심선" : "EL(팔꿈치선)" });
+    });
+    return out;
+  }
   // ── 조각 확정(정규화·검사·중복 제거) — 순수 ──
   function buildPieces(R, withEdges) {
     var cand = candidates(R), pieces = [], seenRef = [], seenHash = {}, sameShape = [], excluded = [], missing = cand.missing.slice(), holeWhy = cand.holeWhy.slice();
@@ -1185,7 +1203,7 @@
   // ══ 기본 표시선(자르지 않는 선) — 2026-11-20 ══
   //   앞판 앞중심 «C.F» · 뒤판 뒤중심 «C.B» · 앞·뒤판 가슴선(BL = 옆선 위끝 높이 = blYOf) · 허리선(WL = 원형 기준 형상 outline 의 waist 변 높이 · derive 가 refY 로 싣는다 — 새로 계산하지 않는다).
   //   모델은 조각 좌표의 {kind, a, b, line, ko, en, tx, ty, th} — 화면·인쇄·DXF 가 같은 값을 읽는다(글자 중심 tx,ty · 높이 th cm). 중심선은 이미 그려지는 선(여밈 «앞중심» 표시 · 골선)이 있으면 line:false(글자만).
-  var GUIDE_TEXT_CM = 0.4;
+  var GUIDE_TEXT_CM = 0.4, CENTER_TEXT_CM = 0.9;   // 앞중심·뒤중심 글자는 Optitex 에서 읽기 좋게 크게(실척 9mm)
   function hChord(pts, y) { var xs = []; for (var i = 0; i < pts.length; i++) { var a = pts[i], b = pts[(i + 1) % pts.length]; if ((a.y - y) * (b.y - y) < 0 || (a.y === y && b.y !== y)) { var t = (y - a.y) / (b.y - a.y); xs.push(a.x + (b.x - a.x) * t); } } return xs.length >= 2 ? { x0: Math.min.apply(null, xs), x1: Math.max.apply(null, xs) } : null; }
   function guidesOf(p, r, refY) {
     var out = [];
@@ -1199,7 +1217,7 @@
     }
     if (cfX != null && isFinite(cfX) && y0 != null && y1 > y0) {
       var inw = Math.abs(cxm - cfX) < 0.5 ? 1 : (cxm < cfX ? -1 : 1), nm = p.id === "front" ? "C.F" : "C.B";
-      out.push({ kind: p.id === "front" ? "cf" : "cb", a: { x: cfX, y: y0 }, b: { x: cfX, y: y1 }, line: !hasLine, ko: p.id === "front" ? "앞중심" : "뒤중심", en: nm, text: nm, tx: cfX + inw * 0.75, ty: y0 + (y1 - y0) * 0.55, th: th });
+      out.push({ kind: p.id === "front" ? "cf" : "cb", a: { x: cfX, y: y0 }, b: { x: cfX, y: y1 }, line: !hasLine, ko: p.id === "front" ? "앞중심" : "뒤중심", en: nm, text: nm, tx: cfX + inw * (0.35 + nm.length * CENTER_TEXT_CM * 0.32), ty: y0 + (y1 - y0) * 0.55, th: CENTER_TEXT_CM });
     }
     var bust = blYOf(p), waist = refY && refY[p.id] != null ? refY[p.id] : null;
     [["bust", bust, "가슴선", "BUST LINE"], ["waist", waist, "허리선", "WAIST LINE"]].forEach(function (g) {

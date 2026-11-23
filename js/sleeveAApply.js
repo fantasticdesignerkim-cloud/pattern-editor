@@ -62,12 +62,13 @@
   function isBlocked(project) { var w = work(project); return !!(w && w.sleeveA && w.sleeveA.blocked); }
 
   // 읽기 전용 입력으로 제도만 한다(상태 변경 없음). → draftSleeveA 결과 | { ok:false, reason, text }
-  function draft(project, sleeveLengthCm) {
+  //   elbowLengthCm(SP→팔꿈치선 · 선택) 이 있으면 Ⓐ 엔진이 elbow-line 을 construction 에 더한다(외곽·소매산·봉제 길이는 EL 과 무관 — 같은 값).
+  function draft(project, sleeveLengthCm, elbowLengthCm) {
     var SA = (typeof window !== "undefined") && window.designSleeveA, BC = window.bodiceCheckpoint;
     if (!SA || !BC) { var m = { ok: false, reason: "no-module" }; m.text = failText(m); return m; }
     var bodice = project && BC.latest(project);
     if (!bodice) { var n = { ok: false, reason: "no-bodice" }; n.text = failText(n); return n; }
-    var r = SA.draftSleeveA(bodice, { sleeveLengthCm: sleeveLengthCm });
+    var r = SA.draftSleeveA(bodice, fin(elbowLengthCm) ? { sleeveLengthCm: sleeveLengthCm, elbowLengthCm: elbowLengthCm } : { sleeveLengthCm: sleeveLengthCm });
     if (!r.ok) r.text = failText(r);
     return r;
   }
@@ -76,15 +77,23 @@
   //   cuff 없음 → draft(len) 그대로(기존 경로와 비트 동일). cuff 있음 → 입력 소매길이 = 커프스 포함 → 본체 = 입력 − 완성 폭으로 Ⓐ 제도 →
   //   그 geometry 를 읽기 전용으로 designCuff.draft. 어느 쪽이든 실패하면 사유만(자동 보정 없음).
   //   → { ok, sleeve: draftSleeveA 결과, cuff: designCuff 결과 | null } | { ok:false, reason, text, stage }
+  //   팔꿈치선 EL(params.elbowLengthCm · 선택): 본체 길이 안(소매산 높이 < EL < 본체 길이)에 들어갈 때만 쓴다. 짧은 소매처럼 들어가지 않으면
+  //   EL 선만 빼고(= EL 없는 Ⓐ 와 같은 형상) 제도하고 결과에 elbowOmitted 를 싣는다 — 소매 자체를 막지 않는다(추측해 EL 을 옮기지 않음).
+  function draftBody(project, bodyLen, elbow) {
+    if (!fin(elbow)) return draft(project, bodyLen);
+    var r = draft(project, bodyLen, elbow);
+    if (!r.ok && r.reason === "invalid-elbow-length") { var r2 = draft(project, bodyLen); if (r2.ok) r2.elbowOmitted = elbow; return r2; }
+    return r;
+  }
   function draftWith(project, params) {
-    var len = params && params.sleeveLengthCm, cuff = params && params.cuff;
-    if (!cuff) { var r0 = draft(project, len); return r0.ok ? { ok: true, sleeve: r0, cuff: null } : r0; }
+    var len = params && params.sleeveLengthCm, cuff = params && params.cuff, elbow = params && params.elbowLengthCm;
+    if (!cuff) { var r0 = draftBody(project, len, elbow); return r0.ok ? { ok: true, sleeve: r0, cuff: null } : r0; }
     var DCF = (typeof window !== "undefined") && window.designCuff;
     if (!DCF) { var m = { ok: false, reason: "no-module", stage: "cuff" }; m.text = "커프스 모듈을 불러오지 못함"; return m; }
     var v = DCF.validate(cuff); if (!v.ok) return { ok: false, reason: "cuff-" + v.reason, stage: "cuff", detail: v.detail, text: "커프스: " + v.text };
     var body = DCF.bodyLengthOf(len, cuff);
     if (body == null) return { ok: false, reason: "cuff-body-length-nonpositive", stage: "cuff", text: "커프스: " + DCF.TEXT["body-length-nonpositive"] };
-    var r = draft(project, body); if (!r.ok) return r;
+    var r = draftBody(project, body, elbow); if (!r.ok) return r;
     var c = DCF.draft(r.geometry, cuff);
     if (!c.ok) return { ok: false, reason: "cuff-" + c.reason, stage: "cuff", detail: c.detail, text: "커프스: " + c.text + cuffDetail(c) };
     return { ok: true, sleeve: r, cuff: c };
@@ -98,9 +107,12 @@
   }
 
   // cuff 가 없으면 parameters·state 키는 종전 그대로({ sleeveLengthCm } · cuff 키 없음).
+  //   elbowLengthCm 키는 EL 선이 실제로 그려졌을 때(meta.elbowLengthCm)만 든다 — EL 없는 옛 저장본·짧은 소매는 키가 없다(완료본 hash 불변).
   function stateOf(r, sleeveLengthCm, cuffInput, cuffRes) {
     var st = { presetId: PRESET_ID, sourceBodiceHash: r.sourceBodiceHash, parameters: { sleeveLengthCm: sleeveLengthCm },
       meta: clone(r.meta), warnings: r.warnings.slice(), blocked: null };
+    if (r.meta && fin(r.meta.elbowLengthCm)) st.parameters.elbowLengthCm = r.meta.elbowLengthCm;
+    if (fin(r.elbowOmitted)) st.warnings.push("elbow-omitted");
     if (cuffInput) { st.parameters.cuff = clone(cuffInput); st.cuff = clone(cuffRes); }
     return st;
   }
@@ -109,8 +121,8 @@
   function apply(project, params) {
     var w = work(project);
     if (!w || !w.geometry) { var e = { ok: false, reason: "no-project" }; e.text = failText(e); return e; }
-    var len = params && params.sleeveLengthCm, cuff = (params && params.cuff) || null;
-    var d = draftWith(project, { sleeveLengthCm: len, cuff: cuff });
+    var len = params && params.sleeveLengthCm, cuff = (params && params.cuff) || null, elbow = params && params.elbowLengthCm;
+    var d = draftWith(project, { sleeveLengthCm: len, cuff: cuff, elbowLengthCm: elbow });
     if (!d.ok) return d;
     w.sleeveA = stateOf(d.sleeve, len, cuff, d.cuff);
     w.geometry.sleeve = clone(d.sleeve.geometry);
@@ -122,8 +134,8 @@
   //   (body apply 가 덮어 둔 원형 소매가 그대로 보이지만 «차단»으로 표시된다 — 조용히 다른 소매로 바꾸지 않음).
   function rederive(project) {
     var w = work(project); if (!w || !w.sleeveA) return { ok: true, active: false };
-    var len = w.sleeveA.parameters.sleeveLengthCm, cuff = w.sleeveA.parameters.cuff || null;
-    var r = draftWith(project, { sleeveLengthCm: len, cuff: cuff });
+    var len = w.sleeveA.parameters.sleeveLengthCm, cuff = w.sleeveA.parameters.cuff || null, elbow = w.sleeveA.parameters.elbowLengthCm;
+    var r = draftWith(project, { sleeveLengthCm: len, cuff: cuff, elbowLengthCm: elbow });
     if (!r.ok) {
       w.sleeveA.blocked = { reason: r.reason, piece: r.piece || null, text: r.text };
       return r;
@@ -145,6 +157,8 @@
     var m = s.meta, a = m.armholeCm, et = m.easeTarget, ea = m.easeAfter;
     if (s.cuff) lines.push("소매산 높이 " + f2(m.capHeightCm) + " · 소매폭 " + f2(m.bicepCm) + " · 소매길이 " + f2(s.parameters.sleeveLengthCm) + "(커프스 포함) = 본체 " + f2(m.sleeveLengthCm) + " + 커프스 " + f2(s.parameters.cuff.widthCm) + " cm");
     else lines.push("소매산 높이 " + f2(m.capHeightCm) + " · 소매폭 " + f2(m.bicepCm) + " · 소매길이 " + f2(m.sleeveLengthCm) + " cm");
+    if (fin(s.parameters.elbowLengthCm)) lines.push("팔꿈치선 EL " + f2(s.parameters.elbowLengthCm) + " (SP 기준 · 표시선 — 외곽·봉제 길이 불변)");
+    else if (s.warnings.indexOf("elbow-omitted") >= 0) lines.push("⚠ 팔꿈치선 EL 생략 — 소매 본체 길이 안에 들어가지 않음(짧은 소매)");
     lines.push("AH 앞 " + f2(a.front) + " · 뒤 " + f2(a.back) + " · 총 " + f2(a.front + a.back) + " cm");
     lines.push("목표 이세 앞 " + f2(et.front) + " · 뒤 " + f2(et.back) + " · 총 " + f2(et.total) + " cm");
     lines.push("실제 이세 앞 " + sgn(ea.front) + " · 뒤 " + sgn(ea.back) + " · 총 " + sgn(ea.total) + " cm");

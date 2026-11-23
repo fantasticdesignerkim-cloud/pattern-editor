@@ -152,7 +152,9 @@ const model = (S, P) => { const d = S.CUT.derive(P, true), m = S.CUT.seam(d, P),
 
 const PR = S0 => S0.W.cutPrint, META = { version: "vTEST", createdAt: "2026-11-16 00:00" };
 
-const DX = S0 => S0.W.cutDxf;
+// 기존 검사는 «보이는 조각 = DXF 조각 1:1» 모델이다. 밴드·위 칼라 겉/안 분리(2026-11-23)는 designButtonHoleCheck §7 에서 따로 검증하고,
+//   여기서는 분리를 끈 채(collarFaces:false) 형상·너치·식서·블록 충실도를 그대로 본다.
+const DX = S0 => { const c = S0.W.cutDxf; return { build: (p, m, o) => c.build(p, m, Object.assign({ collarFaces: false }, o || {})), download: c.download, LAYERS: c.LAYERS, AAMA_LAYERS: c.AAMA_LAYERS, TOL_MM: c.TOL_MM, TURN_DEG: c.TURN_DEG }; };
 // ── 독립 DXF 파서(cutDxf 코드 미사용): 코드/값 쌍 → 머리 변수 · 레이어 표 · 도형 ──
 function parseDxf(text) {
   const raw = text.split("\r\n"); if (raw[raw.length - 1] === "") raw.pop();
@@ -257,8 +259,8 @@ const BN = pid => PN0(EX.m, pid).replace(/[^A-Za-z0-9]+/g, "_").toUpperCase() + 
   // ⑦ 보이는 조각 id(order)와 저장 조각 id 가 다르다: 앞판 거울 쪽 «front~m» = 표시 이름 front-left/right · 한글 이름(왼앞판/오른앞판) · 수량 1(Q.inst)
   const PN = pid => { const r1 = EX.m.D[pid]; return (r1.pair || r1.instMirrored) ? r1.base + "-" + (r1.side === "R" ? "right" : "left") : pid; };
   ok(order.every((pid, k) => { const p = PIECE(EX.m.d, pid.replace(/~m$/, "")), q = (EX.m.Q.inst && EX.m.Q.inst[pid]) || EX.m.Q.pieces[pid], lab = EX.m.D[pid].label || p.label, inside = tx.filter(e => inBB(e, bb(cut[k].pts), 0.01)).map(e => e.text);
-    return inside.indexOf("PIECE " + PN(pid)) >= 0 && inside.map(unesc).indexOf(lab) >= 0 && inside.indexOf("QTY " + q.qty + " (DEFAULT)") >= 0 && inside.some(s => /^GRAIN \d+(\.\d+)? DEG \(BOOK DEFAULT\)$/.test(s)) && (!EX.m.D[pid].unfolded || inside.indexOf("FOLD OPENED - ONE FULL PIECE") >= 0); }) && txt.filter(s => /^PIECE /.test(s)).length === order.length && tx.every(e => e.h >= 2 && e.h <= 6),
-    "2: 조각마다 재단선 범위 안에 «PIECE id» · 한글 이름(\\U+ 표기 → 복원 일치) · «QTY n (DEFAULT)» · 식서 상태 · 펼친 조각 표시 · 글자 높이 2~6mm");
+    return inside.indexOf("PIECE " + PN(pid)) >= 0 && inside.map(unesc).indexOf(lab) >= 0 && inside.indexOf("QTY " + q.qty + " (DEFAULT)") >= 0 && inside.some(s => /^GRAIN \d+(\.\d+)? DEG \(BOOK DEFAULT\)$/.test(s)) && (!EX.m.D[pid].unfolded || inside.indexOf("FOLD OPENED - ONE FULL PIECE") >= 0); }) && txt.filter(s => /^PIECE /.test(s)).length === order.length && tx.every(e => e.h >= 2 && e.h <= 9.0001),
+    "2: 조각마다 재단선 범위 안에 «PIECE id» · 한글 이름(\\U+ 표기 → 복원 일치) · «QTY n (DEFAULT)» · 식서 상태 · 펼친 조각 표시 · 글자 높이 2~9mm(C.F·C.B 9mm)");
   // 대표 조각: 긴 소매 · 골 펼친 카라 · 트임 작은 조각
   const dim = pid => { const e = bb(cut[order.indexOf(pid)].pts); return [+(e.x1 - e.x0).toFixed(1), +(e.y1 - e.y0).toFixed(1)]; };
   const sl = order.filter(id => /sleeve/.test(id))[0], small = order.filter(id => /vent/.test(id)), col = order.filter(id => /collar/.test(id) && EX.m.D[id].unfolded);
@@ -324,7 +326,7 @@ const BN = pid => PN0(EX.m, pid).replace(/[^A-Za-z0-9]+/g, "_").toUpperCase() + 
 // ══ §5 화면 · 옛 원형 DXF 동선 보존 ══
 {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), st = fs.readFileSync(path.join(ROOT, "js", "storage.js"), "utf8"), pr = fs.readFileSync(path.join(ROOT, "js", "cutPrint.js"), "utf8");
-  ok(/js\/cutDxf\.js\?v=2026112002/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
+  ok(/js\/cutDxf\.js\?v=2026112303/.test(html) && html.indexOf("js/cutDxf.js") > html.indexOf("js/cutPrint.js") && /id="btnCutPrint"[^>]*>인쇄·DXF</.test(html), "5: cutDxf.js 는 cutPrint.js 뒤에 로드 · 재단 화면 단추 «인쇄·DXF»");
   ok(/onclick="exportDXF\(\)">DXF 다운로드</.test(html) && /function exportDXF\(\)\{/.test(st) && !/cutDxf/.test(st), "5: 원형 단계의 «DXF 다운로드»(exportDXF) 동선은 그대로 — 재단 DXF 와 별개");
   ok(/data-cp=\\"dxf\\"/.test(pr) && /DXF 파일 저장/.test(pr) && /AAMA\/ASTM 규격 파일이 아니며/.test(pr) && /아직 확인하지 않았습니다/.test(pr) && /disabled aria-disabled/.test(pr), "5: 사전 점검 창에 «DXF 파일 저장» · 규격·호환을 과장하지 않는 문구 · 막히면 disabled");
 }
