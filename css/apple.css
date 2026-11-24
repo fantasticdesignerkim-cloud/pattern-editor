@@ -585,6 +585,7 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 #cutCv .cut-guide-label{fill:rgba(60,60,67,.9);font-family:var(--ax-font);pointer-events:none}
 #cutCv .cut-guide-label-cf,#cutCv .cut-guide-label-cb{fill:#0A5FD0;font-weight:600}
 #cutCv .cut-notch-dot{fill:#8E24AA;pointer-events:none}
+#cutCv .cut-notch-new{fill:none;stroke:#8E24AA;stroke-width:2px;vector-effect:non-scaling-stroke;pointer-events:none}
 #cutCv .cut-notch-held{fill:none;stroke:#C25E00;stroke-width:1.5px;stroke-dasharray:3 2;vector-effect:non-scaling-stroke}
 .cut-item-btn .ci-notch{font-size:12px;color:#8E24AA}
 .cut-seam-card .csc-notch{white-space:pre-line;color:#6A1B9A;max-height:6em;overflow-y:auto}

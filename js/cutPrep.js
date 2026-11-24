@@ -186,7 +186,7 @@
 
   // ── 완료 패키지 → 조각 후보(순수) ──
   var COLLAR_PIECES = {
-    "shirt-two-piece": [["stand", "밴드"], ["body", "위 칼라"]],
+    "shirt-two-piece": [["stand", "밴드"], ["body", "칼라"]],
     "shirt-one-piece": [["onePiece", "한 장 셔츠 칼라"]], "shirt-open-collar": [["openCollar", "오픈 칼라"]],
     "shirt-wing-collar": [["stand", "밴드"], ["tip", "윙 칼라 끝"]], "shirt-band-one-piece": [["joined", "밴드·위 칼라 한 장"]],
     "flat-collar": [["flat", "플랫 칼라"]], "flat-collar-overlap": [["flat", "플랫 칼라"]], "sailor-collar": [["sailor", "세일러 칼라"]],
@@ -414,9 +414,14 @@
       if (stray) missing.push({ id: "sleeve-stray", label: "소매", reason: "어느 소매 조각에도 속하지 않은 선 " + stray + "개 — 추측해 붙이지 않았습니다" });
     } else if (Array.isArray(g.outline) && g.outline.length) {
       var nm = (Array.isArray(g.pieces) && g.pieces.length === 1) ? g.pieces[0] : "sleeve";
+      var sRef = sleeveRefMarks(g.construction, g.outline), sPid = s.origin && s.origin.presetId;
+      // 기준선이 없는 이유를 숨기지 않는다(추측해 선을 만들지 않음 · 저장본 형상 불변) — 2026-11-24
+      if (!sPid && !sRef.length) info.push("소매 중심선·EL 없음 — 원형 소매 기준(라인 미적용)으로 완료된 소매라 제도 기준선이 없습니다 · 디자인 ▸ 소매에서 «라인 적용» 후 다시 완료하면 표시");
+      else if (sPid === "bunka-sleeve-A" && !sRef.some(function (m) { return m.kind === "sleeve-elbow"; }))
+        info.push("EL 없음 — 이 소매 Ⓐ 완료본에 EL 값이 없습니다(EL 도입 전 저장본이거나 소매길이가 EL 보다 짧아 생략) · 소매 탭에서 다시 적용하면 소매길이가 EL 보다 길 때 표시");
       add("sleeve", "sleeve-" + nm, SLEEVE_PIECE_LABEL[nm] || "소매", "designResult.sleeve.geometry", g.outline, { note: nm === "sleeve" && Array.isArray(g.pieces) ? "앞·뒤를 맞댄 한 장" : null, construction: g.construction,
         edgeNames: (s.origin && s.origin.presetId === "bunka-sleeve-A" && g.outline.length === 4) ? SLEEVE_A_EDGES : null,
-        marks: sleeveRefMarks(g.construction, g.outline) });   // 소매 Ⓐ 외곽 순서 계약 [소매산, 뒤 옆선, 앞 옆선, 소맷부리]
+        marks: sRef });   // 소매 Ⓐ 외곽 순서 계약 [소매산, 뒤 옆선, 앞 옆선, 소맷부리]
     } else if (g.sleevePiece === false) info.push("소매 조각 없음 — 몸판 일체형 소매" + (sym ? "(" + sym + ")" : "") + "라 소매는 몸판 조각 안에 있습니다");
     else missing.push({ id: "sleeve", label: "소매", reason: "소매 외곽이 비어 있습니다" });
     if (s && s.cuff && s.cuff.piece) {
@@ -1714,6 +1719,7 @@
       r.notches.forEach(function (n) {
         if (n.to) g.appendChild(el("path", { "class": "cut-notch", "data-notch": n.id, d: "M" + n.from.x + " " + n.from.y + " L" + n.to.x + " " + n.to.y }));
         else if (n.from) g.appendChild(el("circle", { "class": "cut-notch-dot", "data-notch": n.id, cx: n.from.x, cy: n.from.y, r: 0.25 }));
+        if (view.newNotch && n.id === view.newNotch && n.from) g.appendChild(el("circle", { "class": "cut-notch-new", "data-notch-new": n.id, cx: n.from.x, cy: n.from.y, r: 0.9 }));   // 방금 추가한 너치(표시 전용 · 2026-11-24)
       });
       (r.heldNotches || []).forEach(function (n) { var hc = el("circle", { "class": "cut-notch-held", "data-notch-held": n.id, cx: n.at.x, cy: n.at.y, r: 0.35 }); hc.appendChild(el("title", {}, "보류 — " + n.why)); g.appendChild(hc); });
       var gr = view.grain && view.grain.pieces[pid];
@@ -1966,10 +1972,12 @@
         (n.pair ? " · 짝: " + n.pair.a + " ↔ " + n.pair.b + (n.pair.diffCm != null ? " (" + (n.pair.diffText || "차이") + " " + c2s(n.pair.diffCm) + ")" : "") : " · 짝 없음(위치 표시)") + " · 근거: " + n.basis;
     }).join("\n"); }
     var ne = $("cutNotchEdit");
+    if (ne && ni && ne.parentNode === ni.parentNode && ne.nextElementSibling !== ni) ni.parentNode.insertBefore(ne, ni);   // «너치 추가»를 긴 기본 너치 설명보다 먼저 보이게(2026-11-24)
     if (ne) {
       var nlock = view.seam.notchSpec.state === "invalid", L = c.sm.edges && (function () { var f = c.piece.edges.filter(function (x) { return x.id === e.id; })[0]; return chainLen(sewnChain(c.piece, f)); })();
       var others = []; Object.keys(view.seam.pieces).forEach(function (pid) { (view.seam.pieces[pid].notches || []).forEach(function (n) { if (n.user) others.push(n); }); });
-      var h = "<div class=\"cne-head\"><b>사용자 맞춤 표시</b><button type=\"button\" class=\"btn\" data-act=\"nadd\"" + (nlock ? " disabled" : "") + ">＋ 누른 자리에 추가</button></div>";
+      var h = "<div class=\"cne-head\"><b>사용자 맞춤 표시(너치)</b><button type=\"button\" class=\"btn\" data-act=\"nadd\" title=\"이 변에서 마지막으로 누른 자리에 추가(누른 자리가 없으면 변 가운데) · 위치는 추가 뒤 cm 로 고침\"" + (nlock ? " disabled" : "") + ">＋ 너치 추가</button></div>";
+      if (e.widthCm === 0) h += "<p class=\"cne-note\">" + (e.kind === "fold" ? "골선(시접 0)" : "시접 0") + " 변 — 재단선이 없어 3mm I자 너치를 넣을 수 없습니다. 추가하면 완성선 위 점으로만 남습니다(일반 DXF = 원 · AAMA = 내부 점).</p>";
       if (nlock) h += "<p class=\"cne-note\">저장된 맞춤 표시 설정을 읽을 수 없어 수정이 잠겼습니다 — " + esc(view.seam.notchSpec.reason) + "</p>";
       users.forEach(function (n) {
         var opts = "<option value=\"\">짝 없음</option>" + others.filter(function (o) { return o.id !== n.id && !(o.pieceId === n.pieceId && o.edgeId === n.edgeId); }).map(function (o) { return "<option value=\"" + o.id + "\"" + (n.pairId === o.id ? " selected" : "") + ">" + esc(o.name + " · " + o.side) + "</option>"; }).join("");
@@ -1992,10 +2000,13 @@
   }
   function notchAct(t) {
     var act = t.getAttribute("data-act"), row = t.closest(".cne-row"), id = row && row.getAttribute("data-id"), r = null, c = curEdge(); if (!c) return;
+    if (act !== "nadd") view.newNotch = null;
     if (act === "nadd") {
       var ca = view.clickAt, at = ca && ca.piece === c.piece.id && ca.edge === c.e.id && ca.at != null ? ca.at : null;
       if (at == null) { var f = c.piece.edges.filter(function (x) { return x.id === c.e.id; })[0]; at = chainLen(sewnChain(c.piece, f)) / 2; }
-      r = addNotch(c.piece.id, c.e.id, at, view.proj); reseam(r.ok ? "맞춤 표시 추가 — 위치는 아래 칸에서 cm 로 고칠 수 있습니다 · 프로젝트를 저장해야 파일에 남습니다" : "추가 안 됨: " + r.reason); return;
+      r = addNotch(c.piece.id, c.e.id, at, view.proj); view.newNotch = r.ok ? r.id : null;
+      var pe0 = c.piece.edges, k1 = pe0.map(function (x) { return x.id; }).indexOf(c.e.id), endA0 = k1 >= 0 ? pe0[(k1 - 1 + pe0.length) % pe0.length].name : "";
+      reseam(r.ok ? "너치 추가됨 — «" + endA0 + "» 쪽 끝에서 " + c2s(r4(at)) + "cm" + (ca && ca.at != null && ca.piece === c.piece.id && ca.edge === c.e.id ? "(누른 자리)" : "(누른 자리 없음 → 변 가운데)") + " · 보라 원으로 표시 · 위치는 아래 칸에서 cm 로 고칠 수 있습니다 · 프로젝트를 저장해야 파일에 남습니다" : "추가 안 됨: " + r.reason); return;
     }
     if (act === "ndel") { r = removeNotch(id, view.proj); reseam(r.ok ? "맞춤 표시 삭제됨" : "삭제 안 됨: " + r.reason); return; }
     if (act === "nmove") { var v = t.value === "" ? NaN : Number(t.value); r = moveNotch(id, v, view.proj); reseam(r.ok ? "위치 바뀜 — 재단선 표시도 다시 그림" : "위치 안 바뀜: " + r.reason); return; }

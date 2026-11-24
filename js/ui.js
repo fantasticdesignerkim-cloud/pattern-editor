@@ -2269,6 +2269,9 @@
     if (!project || !window.designSleeve) return;
     if (!sleeveGateOk(project)) { setSleeveNote("몸판 완료 후 소매를 편집할 수 있습니다"); return; }
     if (sleeveCapInvalid(project)) { setSleeveNote("소매산 편집이 무효입니다 · 복구 또는 기본 소매산으로 돌아간 뒤 적용"); return; }
+    // 2026-11-24: 켜진 라인이 없는데 드롭다운이 원형 소매 기준이 아닌 라인(예: 스트레이트 소매)을 가리키면 «소매 적용» = 그 «라인 적용».
+    //   전에는 조용히 원형 소매 기준을 그려 중심선·EL 없는 소매가 완료됐다(재단·DXF 에서 빠짐). 이미 저장된 소매는 건드리지 않는다.
+    if (!sleeveLineOn(project) && selectedSleeveFamilyId() !== SLEEVE_BASE) { onApplySleevePreset(); return; }
     if (sleeveVOn(project)) {   // 소매 Ⓥ: 소매길이·설정값 입력 — 같은 몸판에서 다시 제도
       applySleeveV(project);
       updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project);

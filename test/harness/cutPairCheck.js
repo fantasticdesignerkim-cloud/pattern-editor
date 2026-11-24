@@ -249,7 +249,7 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
   ok(/id="cutDefaults"[^>]*>[^<]*1cm[^<]*0cm/.test(html), "6: 선택 없이 보이는 기본값 표시(시접 1cm · 골선 0cm)");
   ok(/id="btnCutWidths"[^>]*aria-pressed="false"/.test(html), "6: 시접 폭 보기 전환 단추");
   ok(/\.cut-seam-card\{[^}]*margin:0 auto[^}]*max-width:560px/.test(css) && /\.cut-seam-card\{left:8px;right:8px;bottom:8px;margin:0/.test(css), "6: 카드 = 하단 가운데(auto 여백) · 좁은 화면은 전체 폭 하단");
-  ok(/js\/cutPrep\.js\?v=2026112305/.test(html) && /js\/cutPrint\.js\?v=2026112303/.test(html) && /js\/cutDxf\.js\?v=2026112304/.test(html) && /css\/apple\.css\?v=2026112002/.test(html), "6: 캐시 버전 핀");
+  ok(/js\/cutPrep\.js\?v=2026112402/.test(html) && /js\/cutPrint\.js\?v=2026112303/.test(html) && /js\/cutDxf\.js\?v=2026112304/.test(html) && /css\/apple\.css\?v=2026112401/.test(html), "6: 캐시 버전 핀");
   // ── §7 2026-11-20 소매·커프스 좌우 쌍 · C.F / C.B · 가슴선 · 허리선 ──
   {
     const v7 = view(S, P), D7 = v7.D, Q7 = v7.Q, pairs = ["front", "sleeve-sleeve"].concat(D7.cuff ? ["cuff"] : []);   // 이 시험 셔츠에는 커프스가 없다(커프스 쌍은 cutLayoutCheck 가 확인)
@@ -323,6 +323,44 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
     ok(!pw || (pw.warnings || []).some(w => /반쪽으로 인쇄/.test(w) && /봉제선/.test(w)), "8: 인쇄 안내에 반쪽 이유");
     const gh = S.DXF.build(P, meta8); const bh = gh.ok && gh.stats.pieces.find(q => q.id === "back");
     ok(bh && /BUST LINE/.test(gh.dxf), "8: 반판 뒤판도 일반 DXF 에 가슴선 글자");
+  }
+  // ── §9 2026-11-24 표시명 «칼라» · 소매 Ⓐ 중심선/EL(새 적용 vs EL 없는 저장본) · «너치 추가» 카드 ──
+  {
+    const d9 = S.CUT.derive(P, true), cb9 = d9.pieces.find(q => q.id === "collar-body");
+    ok(cb9 && cb9.label === "칼라", "9: 위 칼라 표시명 = 칼라 (" + (cb9 && cb9.label) + ")");
+    ok(d9.pieces.find(q => q.id === "collar-stand").label === "밴드", "9: 밴드 표시명 그대로");
+    const sl9 = d9.pieces.find(q => q.id === "sleeve-sleeve"), k9 = (sl9 && sl9.marks || []).map(m => m.kind);
+    ok(k9.indexOf("sleeve-center") >= 0 && k9.indexOf("sleeve-elbow") < 0, "9: EL 입력 없는 Ⓐ(옛 저장본 형식) = 중심선만 · EL 추측 안 함");
+    ok((d9.info || []).some(t => /EL 없음/.test(t) && /저장본/.test(t)), "9: EL 이 없는 이유 안내");
+    // 새 적용(EL 31.4 기본값) — 중심선·EL·소매산 시작선 · 안내 없음 · DXF 두 형식
+    const S2 = makeSession(), P2 = start(S2), pp2 = { overlapCm: 1.2, facingWidthCm: 1.2, lengthMode: "full" }, pr2 = S2.W.designPlacket.compute(S2.BC.effectiveOutline(P2, "front"), pp2);
+    if (pr2.ok) P2.working.frontPlacket = { parameters: pp2, outline: pr2.outline, construction: pr2.construction };
+    const ok2 = S2.BC.complete(P2).ok && S2.W.sleeveAApply.apply(P2, { sleeveLengthCm: 52, elbowLengthCm: 31.4 }).ok && S2.SC.complete(P2).ok && setCollarM(S2).ok && S2.CC.complete(P2).ok && S2.DR.complete(P2).ok;
+    ok(ok2, "9: EL 포함 새 적용 셔츠 완료");
+    if (ok2) {
+      const e9 = S2.CUT.derive(P2, true), s9 = e9.pieces.find(q => q.id === "sleeve-sleeve"), m9 = (s9 && s9.marks || []).map(m => m.kind);
+      ok(m9.indexOf("sleeve-center") >= 0 && m9.indexOf("sleeve-elbow") >= 0, "9: 새 적용 = 중심선 + EL");
+      ok(!(e9.info || []).some(t => /EL 없음|중심선·EL 없음/.test(t)), "9: 새 적용엔 누락 안내 없음");
+      const el9 = (s9.marks || []).find(m => m.kind === "sleeve-elbow"), g9 = el9 && (el9.segs || el9.outline || [])[0], y9 = g9 && g9.from.y;
+      ok(near(y9, 31.4, 1e-6), "9: EL 높이 = 31.4 (" + y9 + ")");
+      const cnt = (txt, lay) => parseDxf(txt).filter(e => e.type === "LINE" && layerOf(e) === lay).length;
+      const g2 = S2.DXF.build(P2, {}), a2 = S2.DXF.build(P2, {}, { format: "aama" });
+      const hasLen = (txt, lay, mm) => parseDxf(txt).some(e => e.type === "LINE" && layerOf(e) === lay && Math.abs(Math.hypot(num(e, "11") - num(e, "10"), num(e, "21") - num(e, "20")) - mm) < 0.5);
+      const elW = el9 ? Math.abs(g9.to.x - g9.from.x) * 10 : NaN;
+      ok(g2.ok && hasLen(g2.dxf, "INTERNAL", 520) && hasLen(g2.dxf, "INTERNAL", elW), "9: 일반 DXF 소매 중심선 520mm · EL " + elW.toFixed(1) + "mm 선(INTERNAL)");
+      ok(a2.ok && hasLen(a2.dxf, "8", 520) && hasLen(a2.dxf, "8", elW), "9: AAMA DXF 소매 중심선 520mm · EL 선(층 8)");
+      // 사용자 너치: 소매산에 추가 → 두 형식 모두 3mm I자 +2(좌우 소매)
+      const before = [cnt(g2.dxf, "NOTCH"), cnt(a2.dxf, "4")], ad = S2.CUT.addNotch ? S2.CUT.addNotch("sleeve-sleeve", "cap", 13, P2) : null;
+      if (ad) {
+        ok(ad.ok, "9: 소매산 사용자 너치 추가");
+        const g3 = S2.DXF.build(P2, {}), a3 = S2.DXF.build(P2, {}, { format: "aama" });
+        ok(cnt(g3.dxf, "NOTCH") === before[0] + 2 && cnt(a3.dxf, "4") === before[1] + 2, "9: 사용자 너치 일반/AAMA +2 (" + before + " → " + [cnt(g3.dxf, "NOTCH"), cnt(a3.dxf, "4")] + ")");
+      }
+    }
+    const SRCC = fs.readFileSync(path.join(ROOT, "js", "cutPrep.js"), "utf8"), UI = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), CSS = fs.readFileSync(path.join(ROOT, "css", "apple.css"), "utf8");
+    ok(/>＋ 너치 추가</.test(SRCC) && /insertBefore\(ne, ni\)/.test(SRCC) && /cut-notch-new/.test(SRCC) && /#cutCv \.cut-notch-new\{/.test(CSS), "9: 카드 «＋ 너치 추가» 위로 · 새 너치 강조");
+    ok(/골선\(시접 0\)" : "시접 0"\) \+ " 변 — 재단선이 없어 3mm I자 너치를 넣을 수 없습니다/.test(SRCC), "9: 골선/시접 0 안내");
+    ok(/!sleeveLineOn\(project\) && selectedSleeveFamilyId\(\) !== SLEEVE_BASE\) \{ onApplySleevePreset\(\); return; \}/.test(UI), "9: 라인 선택 중 «소매 적용» = 그 라인 적용");
   }
 })();
 console.log("cutPairCheck: " + PASS + " 통과 / " + FAIL + " 실패");
