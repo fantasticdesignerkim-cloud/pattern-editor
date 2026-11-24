@@ -212,15 +212,15 @@ let M = model(S, P);
   ok(N.D.back.unfolded && P.working.cutSpec.edges["back|center"].widthCm === 1.5 && N.Q.pieces.back.qty === 1, "3: 다시 펼침 · 전에 적은 폭 1.5 보존 · 수량 1");
   ok(S.CUT.setEdge("back", "side-seam", { widthCm: 2 }, P).ok && (N = model(S, P)) && near(Math.max(...N.D.back.seam.map(q => q.x)), 23.053125 + 2, 1e-9) && near(Math.min(...N.D.back.seam.map(q => q.x)), -(23.053125 + 2), 1e-9), "3: 옆선 시접 2 = 원래 쪽·반사 쪽 둘 다 2(같은 설정 · 복제 아님)");
   S.CUT.setEdge("back", "side-seam", { widthCm: 1 }, P);
-  ok(S.CUT.setEdge("collar-stand", "cb-fold", { kind: "seam", widthCm: 1 }, P).ok && (N = model(S, P)) && !N.D["collar-stand"].unfolded && N.Q.pieces["collar-stand"].qty === 1, "3: 밴드 뒤중심 봉제선 = 반쪽 · 수량 기본 1");
+  ok(S.CUT.setEdge("collar-stand", "cb-fold", { kind: "seam", widthCm: 1 }, P).ok && (N = model(S, P)) && !N.D["collar-stand"].unfolded && N.Q.pieces["collar-stand"].qty === 2 && N.Q.pieces["collar-stand"].def === 2, "3: 밴드 뒤중심 봉제선 = 반쪽 · 수량 기본 2(겉 1 + 안 1)");
   S.CUT.setEdge("collar-stand", "cb-fold", { kind: "fold" }, P);
 }
 // ══ §4 재단 수량 ══
 {
   M = model(S, P);
-  const want = { back: 1, front: 1, "sleeve-sleeve": 1, cuff: 1, "collar-body": 1, "collar-stand": 1, "vent-placket": 1, "vent-bias": 1 };
-  ok(Object.keys(want).every(k => M.Q.pieces[k].qty === want[k] && !M.Q.pieces[k].explicit) && M.Q.state === "none", "4: 기본 수량 전부 1(2026-11-20 확정 · 좌우 조각은 한 쌍 = 1)");
-  ok(/골/.test(M.Q.pieces.back.how) && /겉감·안감/.test(M.Q.pieces["collar-body"].how) && /거울상 쌍/.test(M.Q.pieces.front.how) && /거울상 쌍/.test(M.Q.pieces["sleeve-sleeve"].how) && /거울상 쌍/.test(M.Q.pieces.cuff.how), "4: 표시 = 골 · 펼친 한 장 / 겉·안 / 앞판·소매·커프스 거울상 쌍");
+  const want = { back: 1, front: 1, "sleeve-sleeve": 1, cuff: 1, "collar-body": 2, "collar-stand": 2, "vent-placket": 1, "vent-bias": 1 };
+  ok(Object.keys(want).every(k => M.Q.pieces[k].qty === want[k] && !M.Q.pieces[k].explicit) && M.Q.state === "none", "4: 기본 수량 = 밴드·위 칼라 2(겉 1 + 안 1 · 2026-11-24) · 그 밖 전부 1(좌우 조각은 한 쌍 = 1)");
+  ok(/골/.test(M.Q.pieces.back.how) && /겉 1장 \+ 안 1장/.test(M.Q.pieces["collar-body"].how) && /겉 1장 \+ 안 1장/.test(M.Q.pieces["collar-stand"].how) && /거울상 쌍/.test(M.Q.pieces.front.how) && /거울상 쌍/.test(M.Q.pieces["sleeve-sleeve"].how) && /거울상 쌍/.test(M.Q.pieces.cuff.how), "4: 표시 = 골 · 펼친 한 장 / 겉·안 / 앞판·소매·커프스 거울상 쌍");
   const spec0 = J(P.working.cutSpec), nt0 = J(P.working.cutNotches || null);
   ok(S.CUT.setQty("front", 4, P).ok && J(P.working.cutQty) === J({ schema: 1, pieces: { front: 4 } }) && model(S, P).Q.pieces.front.explicit, "4: 앞판 4 로 수정 → working.cutQty 에 그 값만");
   const bad = [0, 100, 1.5, -1, NaN, "2", null === 0];

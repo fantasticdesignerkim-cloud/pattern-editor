@@ -315,7 +315,7 @@ const isHole13 = e => { if (e.type !== "LINE") return false; const m = lineMm(e)
         // 소매 좌·우 블록(AAMA)마다 레이어 8 에 EL(수평선) 1 · 중심선(수직선) 1
         const bl = a.stats.pieces.filter(q => q.base === "sleeve-sleeve").map(q => q.block);
         const hv = (E, blk) => { const L = E.filter(e => e.blk === blk && layerOf(e) === "8" && e.type === "LINE"), g = c => e => Number((e.f[c] || [])[0]); return { h: L.filter(e => Math.abs(g("21")(e) - g("20")(e)) < 1e-6).length, v: L.filter(e => Math.abs(g("11")(e) - g("10")(e)) < 1e-6).length }; };
-        ok(bl.length === 2 && bl.every(b => { const q = hv(A, b); return q.h === 1 && q.v >= 1; }), "7c: AAMA 좌·우 소매 블록마다 레이어 8 에 EL(수평) 정확히 1 + 수직선(중심선 · 트임 가위집 포함) ≥ 1");
+        ok(bl.length === 2 && bl.every(b => { const q = hv(A, b); return q.h === 2 && q.v >= 1; }), "7c: AAMA 좌·우 소매 블록마다 레이어 8 에 수평선 정확히 2(EL + 소매산 시작선 · 2026-11-24) + 수직선(중심선 · 트임 가위집 포함) ≥ 1");
         ok(!G.some(e => layerOf(e) === "CUT" && e.type !== "POLYLINE") && !A.some(e => layerOf(e) === "1" && e.type === "LINE") && A.filter(e => layerOf(e) === "4").every(e => e.type === "LINE" && Math.abs(lineMm(e).len - 3) < 0.05), "7c: EL 이 재단선·너치에 섞이지 않음 · 3mm I자 너치 유지");
         ok(G.filter(e => layerOf(e) === "INTERNAL" && isHole13(e)).length === 6, "7c: 13mm 단춧구멍 6개 유지");
       }
@@ -328,6 +328,47 @@ const isHole13 = e => { if (e.type !== "LINE") return false; const m = lineMm(e)
     // 다시 제도(rederive)도 같은 EL 유지 · 수정(36)도 적용
     const E2 = buildShirt("hole", true, null, 36);
     ok(E2.ok && E2.P.working.sleeveA.parameters.elbowLengthCm === 36 && (E2.S.W.sleeveAApply.rederive(E2.P), E2.P.working.sleeveA.parameters.elbowLengthCm === 36), "7c: EL 수정값(36) 적용 · 재제도 후에도 유지");
+  }
+
+  // ── §8 저장 → 열기 → 재출력(2026-11-23): 기본 긴소매 Ⓐ EL 31.4 + 커프스 + 13mm 구멍 셔츠 — 원본 세션과 열린 세션의 일반/AAMA 출력이 같은 조각·위치·수량 ──
+  {
+    const meta = { version: "t", createdAt: "2026-11-23T00:00:00" }, R0 = buildShirt("hole", true, null, 31.4);
+    ok(R0.ok, "8: EL 31.4 긴소매(+커프스·구멍) 완료 사슬");
+    if (R0.ok) {
+      const built = R0.S.PF.buildFileText({ savedAt: "2026-11-23T00:00:00.000Z" }), S8 = makeSession(), vv = S8.PF.verifyText(built.text);
+      ok(vv.ok, "8: 저장본 열기 검증 통과 (" + (vv.reason || "") + " " + (vv.detail || "") + ")");
+      if (vv.ok) {
+        S8.PF.commitCandidate(vv.candidate);
+        const Q = S8.P();
+        ok(Q.working.sleeveA && Q.working.sleeveA.parameters.elbowLengthCm === 31.4, "8: 열린 세션도 EL 31.4 유지");
+        const fp = (txt, rnd) => { const m = {}; parseDxf(txt).forEach(e => { const k = [e.type, layerOf(e), (e.f["1"] || [""])[0], ["10", "20", "11", "21"].map(c => (e.f[c] || []).map(v => Math.round(Number(v) * 100) / 100).join(",")).join("|"), e.verts.map(v => Number(v.f["10"][0]).toFixed(2) + "," + Number(v.f["20"][0]).toFixed(2)).join(";")].join("/"); m[k] = (m[k] || 0) + 1; }); return m; };
+        const pcs = r => JSON.stringify(r.stats.pieces.map(q => [q.id, q.side, q.qty]));
+        [["일반", undefined], ["AAMA", { format: "aama" }]].forEach(([tag, opt]) => {
+          const o = opt ? R0.S.DXF.build(R0.P, meta, opt) : R0.S.DXF.build(R0.P, meta), n = opt ? S8.DXF.build(Q, meta, opt) : S8.DXF.build(Q, meta);
+          ok(o.ok && n.ok, "8: " + tag + " DXF 원본·열린 세션 둘 다 생성" + (n.ok ? "" : " — " + n.reason));
+          if (!(o.ok && n.ok)) return;
+          ok(pcs(o) === pcs(n), "8: " + tag + " 조각 id·좌우·수량 동일");
+          const ids = n.stats.pieces.map(q => q.id);
+          ok(["collar-stand", "collar-body"].every(b => ids.includes(b + "-outer") && ids.includes(b + "-inner") && !ids.includes(b)) && n.stats.pieces.filter(q => /^collar-/.test(q.id)).every(q => q.qty === 1), "8: " + tag + " 밴드·위칼라 겉·안 구분 · 각 수량 1");
+          const fo = fp(o.dxf), fn = fp(n.dxf), ko = Object.keys(fo), kn = Object.keys(fn);
+          ok(ko.length === kn.length && ko.every(k => fo[k] === fn[k]), "8: " + tag + " 엔티티(레이어·종류·좌표 0.01mm·개수) 동일 — 차이 " + ko.filter(k => fo[k] !== fn[k]).length + "/" + kn.filter(k => !(k in fo)).length);
+          const N = parseDxf(n.dxf), inLay = opt ? "8" : "INTERNAL", notchLay = opt ? "4" : "NOTCH";
+          ok(N.filter(e => layerOf(e) === inLay && isHole13(e)).length === 6, "8: " + tag + " 13mm 구멍 6개");
+          if (opt) {
+            const pR = n.stats.pieces.find(q => q.id === "front-right"), pL = n.stats.pieces.find(q => q.id === "front-left");
+            ok(!!pR && !!pL && N.filter(e => e.blk === pR.block && layerOf(e) === "8" && isHole13(e)).length === 6 && N.filter(e => e.blk === pL.block && layerOf(e) === "8" && isHole13(e)).length === 0, "8: AAMA 구멍은 오른앞판 블록에만(왼앞판 0)");
+            const n4 = N.filter(e => layerOf(e) === "4");
+            ok(n4.length > 0 && n4.every(e => e.type === "LINE" && Math.abs(lineMm(e).len - 3) < 0.05), "8: AAMA I자 너치 3mm LINE");
+            const bl = n.stats.pieces.filter(q => q.base === "sleeve-sleeve").map(q => q.block), hv = blk => { const L = N.filter(e => e.blk === blk && layerOf(e) === "8" && e.type === "LINE"); return L.filter(e => Math.abs(Number(e.f["21"][0]) - Number(e.f["20"][0])) < 1e-6).length; };
+            ok(bl.length === 2 && bl.every(b => hv(b) === 2), "8: AAMA 좌·우 소매 블록마다 수평선 2(EL + 소매산 시작선)");
+          } else {
+            ok(N.filter(e => layerOf(e) === notchLay).length > 0, "8: 일반 너치 레이어 유지");
+          }
+        });
+        const dq = view(S8, Q), kd = (id, k) => !!dq.D[id] && dq.D[id].marks.some(m => m.kind === k);
+        ok(kd("sleeve-sleeve", "sleeve-elbow") && kd("sleeve-sleeve~m", "sleeve-elbow") && kd("cuff", "cuff-fold") && kd("cuff~m", "cuff-fold"), "8: 열린 세션 소매 EL·커프스 접는선 mark 좌우 유지");
+      }
+    }
   }
 
 })();

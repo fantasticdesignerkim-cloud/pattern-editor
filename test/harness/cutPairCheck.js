@@ -249,15 +249,15 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
   ok(/id="cutDefaults"[^>]*>[^<]*1cm[^<]*0cm/.test(html), "6: 선택 없이 보이는 기본값 표시(시접 1cm · 골선 0cm)");
   ok(/id="btnCutWidths"[^>]*aria-pressed="false"/.test(html), "6: 시접 폭 보기 전환 단추");
   ok(/\.cut-seam-card\{[^}]*margin:0 auto[^}]*max-width:560px/.test(css) && /\.cut-seam-card\{left:8px;right:8px;bottom:8px;margin:0/.test(css), "6: 카드 = 하단 가운데(auto 여백) · 좁은 화면은 전체 폭 하단");
-  ok(/js\/cutPrep\.js\?v=2026112303/.test(html) && /js\/cutPrint\.js\?v=2026112302/.test(html) && /js\/cutDxf\.js\?v=2026112303/.test(html) && /css\/apple\.css\?v=2026112002/.test(html), "6: 캐시 버전 핀");
+  ok(/js\/cutPrep\.js\?v=2026112305/.test(html) && /js\/cutPrint\.js\?v=2026112303/.test(html) && /js\/cutDxf\.js\?v=2026112304/.test(html) && /css\/apple\.css\?v=2026112002/.test(html), "6: 캐시 버전 핀");
   // ── §7 2026-11-20 소매·커프스 좌우 쌍 · C.F / C.B · 가슴선 · 허리선 ──
   {
     const v7 = view(S, P), D7 = v7.D, Q7 = v7.Q, pairs = ["front", "sleeve-sleeve"].concat(D7.cuff ? ["cuff"] : []);   // 이 시험 셔츠에는 커프스가 없다(커프스 쌍은 cutLayoutCheck 가 확인)
     ok(pairs.every(b => D7[b] && D7[b + "~m"] && D7[b].side !== D7[b + "~m"].side && Q7.inst[b].qty === 1 && Q7.inst[b + "~m"].qty === 1 && ptsMirror(D7[b].seam, D7[b + "~m"].seam) && segsMirror(D7[b].outline, D7[b + "~m"].outline)), "7: 앞판·소매·커프스 = 반사 쌍(각 1장 · 재단선·완성선이 x→−x)");
-    ok(!D7["back~m"] && !D7["collar-stand~m"] && !D7["collar-body~m"] && Q7.pieces.back.qty === 1 && Q7.pieces["collar-body"].qty === 1 && Q7.pieces["collar-stand"].qty === 1, "7: 골 조각(뒤판·칼라·밴드)은 쌍 아님 · 골 1장");
-    ok(Object.keys(Q7.pieces).every(k => Q7.pieces[k].qty === 1), "7: 모든 기본 수량 1");
+    ok(!D7["back~m"] && !D7["collar-stand~m"] && !D7["collar-body~m"] && Q7.pieces.back.qty === 1 && Q7.pieces["collar-body"].qty === 2 && Q7.pieces["collar-stand"].qty === 2, "7: 골 조각(뒤판·칼라·밴드)은 쌍 아님 · 뒤판 1 · 칼라·밴드 기본 2(겉 1 + 안 1)");
+    ok(Object.keys(Q7.pieces).every(k => Q7.pieces[k].qty === (/^collar-/.test(k) ? 2 : 1)), "7: 기본 수량 = 칼라·밴드 2 · 그 밖 1");
     const gF = D7.front.guides, gB = D7.back.guides, gM = D7["front~m"].guides, kinds = g => g.map(x => x.kind).sort().join(",");
-    ok(kinds(gF) === "bust,cf,waist" && kinds(gB) === "bust,cb,waist" && kinds(gM) === "bust,cf,waist" && !D7["sleeve-sleeve"].guides.length, "7: 앞판 C.F·가슴·허리 · 뒤판 C.B·가슴·허리 · 거울 쪽도 같이 · 소매는 없음");
+    ok(kinds(gF) === "bust,cf,waist" && kinds(gB) === "bust,cb,waist" && kinds(gM) === "bust,cf,waist" && kinds(D7["sleeve-sleeve"].guides) === "capbase" && kinds(D7["sleeve-sleeve~m"].guides) === "capbase", "7: 앞판 C.F·가슴·허리 · 뒤판 C.B·가슴·허리 · 거울 쪽도 같이 · 소매는 소매산 시작선만");
     const cf = gF.find(g => g.kind === "cf"), cfm = gM.find(g => g.kind === "cf"), bu = gF.find(g => g.kind === "bust"), wa = gF.find(g => g.kind === "waist"), wm = gM.find(g => g.kind === "waist");
     ok(cf.text === "C.F" && near(cf.a.x, cf.b.x, 1e-9) && near(cfm.a.x, -cf.a.x, 1e-9) && near(cfm.tx, -cf.tx, 1e-9) && cfm.text === "C.F", "7: 앞중심 C.F = 세로 직선 · 거울 쪽은 자기 앞중심(x→−x)");
     ok(near(wa.a.y, v7.d.refY.front, 1e-9) && near(wa.a.y, 38, 1e-9) && near(wa.a.y, wa.b.y, 1e-9) && near(bu.a.y, bu.b.y, 1e-9) && bu.a.y > 15 && bu.a.y < 25 && near(wm.a.x, -wa.a.x, 1e-9), "7: 허리선 = 원형 기준 형상 waist 변 높이(38) · 가슴선 = 옆선 위끝 높이 · 둘 다 수평");
@@ -274,6 +274,55 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
     ok(intl >= 3 * 2 && g7.stats.layers.INTERNAL >= 1, "7: 일반 DXF INTERNAL 레이어에 표시선(가슴·허리) 선 포함");
     const p7 = S.PRINT.build(P, {}, meta);
     ok(p7.ok && (p7.sheetSvg.match(/>C\.F</g) || []).length === 2 && (p7.sheetSvg.match(/>C\.B</g) || []).length === 1 && (p7.sheetSvg.match(/>가슴선</g) || []).length === 3 && (p7.sheetSvg.match(/>허리선</g) || []).length === 3, "7: 인쇄에도 C.F 2 · C.B 1 · 가슴선 3 · 허리선 3");
+  }
+  // ── §8 2026-11-24 밴드·위 칼라 기본 2(겉 1 + 안 1) · 뒤판 골/반판 이유 · 뒤판 가슴선 실제 LINE · 소매산 시작선 ──
+  {
+    const v8 = view(S, P), meta8 = { version: "t", createdAt: "2026-11-24" };
+    ok(v8.Q.pieces["collar-stand"].qty === 2 && v8.Q.pieces["collar-body"].qty === 2 && !v8.Q.pieces["collar-body"].explicit && /겉 1장 \+ 안 1장/.test(v8.Q.pieces["collar-body"].how), "8: 밴드·위 칼라 기본 수량 2 · 겉 1 + 안 1 로 식별");
+    const g8 = S.DXF.build(P, meta8), a8 = S.DXF.build(P, meta8, { format: "aama" });
+    for (const [nm, x] of [["일반", g8], ["AAMA", a8]]) {
+      const ids = x.stats.pieces.map(q => q.id + ":" + q.qty).sort().join(",");
+      ok(/collar-body-outer:1/.test(ids) && /collar-body-inner:1/.test(ids) && /collar-stand-outer:1/.test(ids) && /collar-stand-inner:1/.test(ids) && !/collar-(stand|body):/.test(ids), "8: " + nm + " DXF 밴드·위 칼라 = 겉·안 별도 조각 각 1장 (" + ids + ")");
+    }
+    ok(/Quantity: 1/.test(a8.dxf) && !/Quantity: 2/.test(a8.dxf), "8: AAMA 겉·안 각 Quantity 1");
+    // 명시 수동 수량 보존: 1 · 3 은 나누지 않고 그대로
+    const keep = JSON.stringify(P.working.cutQty || null);
+    S.CUT.setQty("collar-stand", 1, P); S.CUT.setQty("collar-body", 3, P);
+    const gx = S.DXF.build(P, meta8), ix = gx.stats.pieces.filter(q => /^collar-/.test(q.id)).map(q => q.id + ":" + q.qty + ":" + q.qtyKind).sort().join(",");
+    ok(ix === "collar-body:3:user,collar-stand:1:user", "8: 직접 지정 수량(1·3)은 한 조각 그대로 · 겉안 분리 안 함 (" + ix + ")");
+    S.CUT.setQty("collar-stand", null, P); S.CUT.setQty("collar-body", null, P); P.working.cutQty = keep === "null" ? P.working.cutQty : JSON.parse(keep);
+    // 뒤판: 직선 CB 골 = 펼침 · 같은 폭이 DXF 선으로 · 반판이면 이유
+    const bk = v8.D.back, bu = bk.guides.find(g => g.kind === "bust"), wa = bk.guides.find(g => g.kind === "waist");
+    ok(bk.unfolded && !bk.halfWhy && bu && wa && near(bu.a.x, -bu.b.x, 1e-6) && (bu.b.x - bu.a.x) > 40 && (bu.b.x - bu.a.x) < bk.bbox.maxX - bk.bbox.minX, "8: 직선 CB 뒤판 = 골 펼침 · 가슴선·허리선 모델 존재 · 양쪽 대칭 폭");
+    const hz = (E, lay) => E.filter(e => e.type === "LINE" && layerOf(e) === lay && Math.abs(num(e, "20") - num(e, "21")) < 1e-6).map(e => Math.abs(num(e, "11") - num(e, "10")));
+    const hg = hz(parseDxf(g8.dxf), "INTERNAL"), ha = hz(parseDxf(a8.dxf), "8");
+    const wBust = Math.round((bu.b.x - bu.a.x) * 10);
+    ok(hg.filter(w => Math.abs(w - wBust) < 1).length >= 1 && ha.filter(w => Math.abs(w - wBust) < 1).length >= 1, "8: 뒤판 가슴선 = 일반·AAMA 실제 LINE 엔티티(폭 " + wBust + "mm)");
+    ok(hg.length === 8 && ha.length === 8, "8: 가로 보조선 LINE = 앞 2×2 + 뒤 2 + 소매산 시작선 2 = 8 (일반 " + hg.length + " · AAMA " + ha.length + ")");
+    const sg = v8.D["sleeve-sleeve"].guides[0], capW = Math.round(Math.abs(sg.b.x - sg.a.x) * 10);
+    ok(sg.kind === "capbase" && near(sg.a.y, sg.b.y, 1e-6) && hg.filter(w => Math.abs(w - capW) < 1).length >= 2 && ha.filter(w => Math.abs(w - capW) < 1).length >= 2, "8: 소매산 시작선(앞뒤 진동 밑점 연결) = 좌우 소매 2개 · 일반·AAMA 실제 LINE");
+    ok(ptsMirror([sg.a, sg.b], [v8.D["sleeve-sleeve~m"].guides[0].a, v8.D["sleeve-sleeve~m"].guides[0].b]), "8: 거울 소매의 소매산 시작선 = 반사");
+    // 소매산점은 소매 1개당 1개(앞/뒤 분할점) + 진동 너치 4 = 5 · 임의 위치 생성 없음
+    const sm8 = v8.m.pieces["sleeve-sleeve"].notches;
+    ok(sm8.filter(n => n.kind === "cap-top").length === 1 && sm8.length === 5 && g8.stats.pieces.filter(q => /^sleeve-sleeve/.test(q.id)).every(q => q.notches === 5), "8: 소매산점 = 1개(앞뒤 분할점) · 그 밖 진동 너치 4 · DXF 소매 너치 5");
+    // 반판: CB 가 직선·골이 아니면 이유가 나온다(골선을 봉제선으로 바꿔 시험)
+    ok(S.CUT.setEdge("back", "center", { kind: "seam", widthCm: 1 }, P).ok, "8: (준비) 뒤중심선을 봉제선으로 지정");
+    const v9 = view(S, P);
+    ok(!v9.D.back.unfolded && /봉제선/.test(v9.D.back.halfWhy || "") && v9.D.back.guides.some(g => g.kind === "bust") && v9.D.back.guides.some(g => g.kind === "waist"), "8: 반판 뒤판 = 이유 표시(" + v9.D.back.halfWhy + ") · 가슴선·허리선 그대로");
+    // 시접 띠 클릭 → 가장 가까운 한 변(2026-11-24 실물: 뒤중심 붉은 선·띠를 눌러도 조각만 선택되던 문제)
+    {
+      const rb = v9.D.back, cb9 = rb.edges.find(e => e.id === "center").parts[0], mid = cb9[0].from, bot = cb9[cb9.length - 1].to, qy = (mid.y + bot.y) / 2;
+      const hit = S.CUT.seamBandEdge(rb, { x: -0.5, y: qy });
+      ok(hit && hit.id === "center" && !hit.mirrored, "8: 반판 뒤판 뒤중심 시접 띠(완성선 바깥 0.5cm) = 뒤중심 변 (" + (hit && hit.id) + ")");
+      const hem9 = rb.edges.find(e => e.id === "hem").parts[0], hy = hem9[0].from.y, hx = (hem9[0].from.x + hem9[hem9.length - 1].to.x) / 2;
+      const hh = S.CUT.seamBandEdge(rb, { x: hx, y: hy + 0.5 });
+      ok(hh && hh.id === "hem", "8: 밑단 시접 띠 = 밑단 변 (" + (hh && hh.id) + ")");
+      ok(S.CUT.seamBandEdge(null, { x: 0, y: 0 }) === null && S.CUT.seamBandEdge(rb, null) === null, "8: 입력 없으면 null");
+    }
+    const pw = S.PRINT.preflight ? S.PRINT.preflight(P) : null;
+    ok(!pw || (pw.warnings || []).some(w => /반쪽으로 인쇄/.test(w) && /봉제선/.test(w)), "8: 인쇄 안내에 반쪽 이유");
+    const gh = S.DXF.build(P, meta8); const bh = gh.ok && gh.stats.pieces.find(q => q.id === "back");
+    ok(bh && /BUST LINE/.test(gh.dxf), "8: 반판 뒤판도 일반 DXF 에 가슴선 글자");
   }
 })();
 console.log("cutPairCheck: " + PASS + " 통과 / " + FAIL + " 실패");

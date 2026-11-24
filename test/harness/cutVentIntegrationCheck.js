@@ -8,6 +8,8 @@
 //   node test/harness/cutVentIntegrationCheck.js
 // ══════════════════════════════════════════════
 "use strict";
+// 트임 표시만 센다 — 소매 중심선(sleeve-center)·EL(sleeve-elbow) 같은 별도 보조선은 트임이 아니므로 제외(2026-11-24)
+const ventMarks = ms => (ms || []).filter(m => !/^sleeve-(center|elbow)$/.test(m.kind));
 const vm = require("vm"), fs = require("fs"), path = require("path");
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
@@ -125,7 +127,7 @@ function foldsOnto(p, fx) {
   // 소매 위 표시: 가위집(실제로 자르는 선) + 완성 덧단 윤곽. 소매 외곽은 그대로.
   const slit = sl.marks.find(m => m.kind === "vent-slit"), finM = sl.marks.find(m => m.kind === "vent-placket");
   const hem = R.sleeve.geometry.outline[3], backX = hem.from.x;
-  ok(sl.marks.map(m => m.kind).join() === "vent-placket,vent-slit" && slit.segs.length === 1 && near(slit.segs[0].from.x, backX / 2, 1e-9) && near(slit.segs[0].from.y, hem.from.y, 1e-9) && near(slit.segs[0].to.x, backX / 2, 1e-9) && near(slit.segs[0].from.y - slit.segs[0].to.y, 7.5, 1e-9),
+  ok(ventMarks(sl.marks).map(m => m.kind).join() === "vent-placket,vent-slit" && slit.segs.length === 1 && near(slit.segs[0].from.x, backX / 2, 1e-9) && near(slit.segs[0].from.y, hem.from.y, 1e-9) && near(slit.segs[0].to.x, backX / 2, 1e-9) && near(slit.segs[0].from.y - slit.segs[0].to.y, 7.5, 1e-9),
     "1: 가위집 = 소맷부리 위 «소매 중심 → 뒤 옆선 1/2» 에서 위로 7.5(커프스 달림선에서 시작)");
   ok(finM.segs.length === 5 && near(slit.segs[0].to.y, V.placket[0].to.y + 1.5, 1e-9) && /7\.5/.test(slit.label), "1: 완성 덧단 윤곽 표시(닫힌 5변) · 가위집 끝 = 뾰족 어깨 아래 1.5");
   ok(sl.segs.length === 8 && near(sl.widthCm, R.sleeve.cuff.lengths.sleeveHemCm, 1e-4) && near(sl.heightCm, 49, 1e-6) && !sl.vent, "1: 소매 몸통 외곽 치수 그대로(표시만 추가 · 바이트 비교는 cutPlacketIntegrationCheck §1 지문)");
@@ -147,7 +149,7 @@ function foldsOnto(p, fx) {
 {
   const r = build({ lengthCm: 2.4, tipCm: 1 }), m = r.d.missing.find(x => x.id === "sleeve-vent");
   ok(r.ok && !r.pl && !r.bi && m && /가위집 길이를 정할 수 없습니다/.test(m.reason) && ids(r.d) === "front,back,sleeve-sleeve,cuff,collar-stand,collar-body", "3: 길이 2.4 · 끝 1 → 조각 없음 · 사유 안내 (" + (m && m.reason) + ")");
-  ok(r.sl.marks.length === 0 && r.unchanged, "3: 소매 위 가위집 표시도 없음(추측 없음) · 완료본 불변");
+  ok(ventMarks(r.sl.marks).length === 0 && r.unchanged, "3: 소매 위 가위집 표시도 없음(추측 없음) · 완료본 불변");
 }
 
 // ══ §4 순수 함수 거부 ══
@@ -164,7 +166,7 @@ function foldsOnto(p, fx) {
 // ══ §5 커프스 없음 ══
 {
   const r = build(null, true);
-  ok(r.ok && !r.pl && !r.bi && !r.d.pieces.some(p => p.id === "cuff") && !r.d.missing.some(m => m.id === "sleeve-vent") && r.sl.marks.length === 0, "5: 커프스 없는 소매 = 트임 조각·표시·누락 안내 없음 (" + ids(r.d) + ")");
+  ok(r.ok && !r.pl && !r.bi && !r.d.pieces.some(p => p.id === "cuff") && !r.d.missing.some(m => m.id === "sleeve-vent") && ventMarks(r.sl.marks).length === 0, "5: 커프스 없는 소매 = 트임 조각·표시·누락 안내 없음 (" + ids(r.d) + ")");
 }
 
 // ══ §6 수정 → 변경됨 → 재완료 · 저장 → 열기 ══

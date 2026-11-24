@@ -56,6 +56,7 @@
       if (r.seamWhy) { out.blockers.push("«" + p.label + "» 펼친 시접선 문제 — " + r.seamWhy); return; }
       shown++;
       (sm.notches || []).filter(function (n) { return n.held; }).forEach(function (n) { out.attention.push("«" + p.label + "» 맞춤 «" + n.name + "» 보류 — 다트 입구 정리로 그 자리 완성선이 바뀜(어긋남 " + n.heldDevCm + "cm · 기울기 " + n.heldDevDeg + "°) · 인쇄·DXF 에서 뺍니다(위치를 옮기지 않음 · 저장값 그대로)"); });
+      if (r.halfWhy) out.warnings.push("«" + p.label + "» 뒤판을 골로 펼치지 않고 반쪽으로 인쇄합니다 — " + r.halfWhy);
       if (r.foldWhy) out.warnings.push("«" + p.label + "» 골선을 펼치지 못해 반쪽으로 인쇄합니다(골선 표시) — " + r.foldWhy);
       if (r.buttonholeWhy) out.warnings.push("단춧구멍은 인쇄·DXF 에 넣지 않습니다(막는 문제 아님 · 어느 쪽에도 내보내지 않음) — 착용자 오른앞판을 확인하지 못했습니다: " + r.buttonholeWhy);
       // ⑦ 앞판 좌우 한 쌍: 보이는 조각마다 한 줄(각 1장 · 같은 설정을 반사). 쌍이 아닐 때는 예전과 같은 한 줄.

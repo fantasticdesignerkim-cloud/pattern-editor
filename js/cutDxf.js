@@ -50,14 +50,15 @@
     //   겉 = 원래 자리 · 안 = 같은 형상을 전체 배치 아래 한 줄에 놓는다(겹치지 않게). 수동 수량(explicit)은 그대로 한 조각 + Quantity n(저장본 존중).
     var faceItems = [], faceY = null, split = [];
     items.forEach(function (it) {
-      if ((it.id === "collar-stand" || it.id === "collar-body") && it.row && it.row.qty && it.row.qty.kind === "default" && it.row.qty.n === 1) split.push(it);
+      if ((it.id === "collar-stand" || it.id === "collar-body") && it.row && it.row.qty && it.row.qty.kind === "default") split.push(it);   // 기본 수량(총 2 = 겉 1 + 안 1)이면 n 값과 상관없이 나눈다 · 직접 지정(user)은 한 조각 + Quantity n 그대로
     });
     if (split.length && !(opt && opt.collarFaces === false)) {
       var gap = 2, bottom = maxY;   // bottom = 지금 가장 아래(y 는 아래로 커진다)
       split.forEach(function (it) {
         var bb = it.r.bbox, h = bb.maxY - bb.minY, nd = { dx: it.pos.dx, dy: (bottom + gap) - (bb.minY + 0) };
-        var cp = Object.assign({}, it, { pos: nd, pname: it.pname + "-inner", label: it.label + "(안)", face: "INNER", id: it.id + "~inner" });
-        it.pname = it.pname + "-outer"; it.label = it.label + "(겉)"; it.face = "OUTER";
+        var faceRow = Object.assign({}, it.row, { qty: Object.assign({}, it.row.qty, { n: 1 }) });   // 나뉜 겉·안 조각은 각각 1장
+        var cp = Object.assign({}, it, { pos: nd, row: faceRow, pname: it.pname + "-inner", label: it.label + "(안)", face: "INNER", id: it.id + "~inner" });
+        it.row = faceRow; it.pname = it.pname + "-outer"; it.label = it.label + "(겉)"; it.face = "OUTER";
         faceItems.push(cp); bottom += gap + h;
         it.r.seam.forEach(function (q) { var x = q.x + nd.dx, y = q.y + nd.dy; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; });
       });

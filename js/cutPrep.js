@@ -599,6 +599,7 @@
       var name = lab === "center" ? (/^back/.test(rec.id) ? "뒤중심" : "앞중심") : (EDGE_NAME[lab] || lab);
       var e = { roots: ix.map(function (k) { return it[k] && it[k].root || null; }), id: id, label: lab, name: name, segs: ix, darts: darts, positional: !!positional, foldCapable: foldable, defaultKind: foldable ? "fold" : "seam", sig: hashStr(canon(es)) };
       if (wholeWhy) { e.whole = true; e.wholeReason = wholeWhy; }
+      if (lab === "center" && rec.group === "bodice" && /^back/.test(rec.id) && !foldable) e.noFoldWhy = darts.length ? "뒤중심선 변에 다트가 있어 골로 펼칠 수 없음" : !straight ? "뒤중심선이 한 직선이 아니어서(곡선·꺾임) 골로 펼칠 수 없음" : "뒤중심선이 골 조건을 채우지 못함";
       return e;
     }
     for (i = 0; i < n; i++) if (!it[i]) return whole("변 이름을 알 수 없는 선이 있어 구간별로 나누지 않았습니다");
@@ -1207,6 +1208,13 @@
   function hChord(pts, y) { var xs = []; for (var i = 0; i < pts.length; i++) { var a = pts[i], b = pts[(i + 1) % pts.length]; if ((a.y - y) * (b.y - y) < 0 || (a.y === y && b.y !== y)) { var t = (y - a.y) / (b.y - a.y); xs.push(a.x + (b.x - a.x) * t); } } return xs.length >= 2 ? { x0: Math.min.apply(null, xs), x1: Math.max.apply(null, xs) } : null; }
   function guidesOf(p, r, refY) {
     var out = [];
+    if (r && p.id === "sleeve-sleeve" && p.edges && p.check && p.check.ok) {
+      // 소매산 시작선 = 소매산 변(cap)의 양 끝(뒤·앞 진동 밑점)을 잇는 선. 소매 형상(designSleeve)이 이미 가진 두 점뿐이라 새 위치를 만들지 않는다.
+      var cp0 = p.edges.filter(function (e) { return e.label === "cap"; })[0];
+      if (cp0) { var ca = p.segs[cp0.segs[0]].from, cz = p.segs[cp0.segs[cp0.segs.length - 1]].to, tsz = GUIDE_TEXT_CM;
+        if (Math.hypot(cz.x - ca.x, cz.y - ca.y) > 1) out.push({ kind: "capbase", a: { x: ca.x, y: ca.y }, b: { x: cz.x, y: cz.y }, line: true, ko: "소매산 시작선", en: "CAP START LINE", text: "CAP START LINE", tx: (ca.x + cz.x) / 2, ty: Math.min(ca.y, cz.y) - tsz * 0.6, th: tsz }); }
+      return out;
+    }
     if (!r || (p.id !== "front" && p.id !== "back") || !p.edges || !p.check || !p.check.ok) return out;
     var pts = sample(r.outline, 24), bb = r.bbox, cxm = (bb.minX + bb.maxX) / 2, th = GUIDE_TEXT_CM, cfX = null, y0 = null, y1 = null, hasLine = false;
     if (p.id === "front" && p.placket) { cfX = p.placket.cfX; y0 = p.placket.topY; y1 = p.placket.botY; hasLine = true; }
@@ -1240,6 +1248,10 @@
       var r = { id: p.id, unfolded: unf, foldEdge: fe ? fe.id : null, foldWhy: fe && !unf ? u.why : null, outline: unf ? u.outline : p.segs,
         seam: unf ? u.seam : (sm && sm.ok ? sm.points : null), seamParts: [], edges: [], notches: [], marks: [], fold: null, blY: blYOf(p), mirror: unf ? { A: u.A, B: u.B } : null };
       if (unf && u.seamWhy) r.seamWhy = u.seamWhy;
+      // 반쪽 재단 이유(뒤판): 골로 펼치려면 뒤중심선이 «한 직선 · 다트 없음 · 골선으로 지정» 이어야 한다. 아니면 어느 조건이 막았는지 남긴다(출력·화면 안내용 · 형상 무변경).
+      r.halfWhy = null;
+      if (!unf && !fe && p.id === "back" && p.edges) { var ce0 = p.edges.filter(function (e) { return e.label === "center"; })[0];
+        if (ce0) r.halfWhy = ce0.noFoldWhy || (ce0.foldCapable ? "뒤중심선이 골선이 아니라 봉제선(시접 있음)으로 지정되어 있음" : null); }
       // 접어 정리한 완성 외곽(역할: 정리 외곽) — 원래 완성선(r.outline · 열린 다트 긴 V)과 따로 든다. 골 펼친 조각은 같은 방식으로 반사해 한 장.
       r.trued = null; r.truedDarts = [];
       if (sm && sm.trued) { var tu = unf ? unfoldOf({ segs: sm.trued.ring }, fe, null) : null; r.trued = unf ? (tu && tu.ok ? tu.outline : null) : sm.trued.ring;
@@ -1288,6 +1300,21 @@
   }
   // 화면에서 누른 점(조각 좌표) → 그 변 위 봉제 경로 위치(호 길이). 반사 쪽 경로를 눌렀으면(mirrored) 먼저 골선에 대해 되돌린다.
   //   반사 여부는 «눌린 경로가 반사 쪽으로 그린 것인가»로만 정한다(축 위 점·부동소수점 판정에 기대지 않는다).
+  // 시접 띠 클릭 → 가장 가까운 변(표시 좌표 q). 두 변이 거의 같은 거리(모서리 · 5% 이내)면 고르지 않는다 — 엉뚱한 변에 붙이지 않고 조각 선택으로 둔다.
+  function seamBandEdge(r, q) {
+    if (!r || !r.edges || !q) return null;
+    var best = null, second = Infinity;
+    r.edges.forEach(function (e) {
+      e.parts.forEach(function (segs, pi) {
+        var pts = sample(segs, 24), d = Infinity; if (segs.length) pts.push(segs[segs.length - 1].to);
+        for (var i = 0; i + 1 < pts.length; i++) { var a = pts[i], b = pts[i + 1], vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy, t = l2 ? Math.max(0, Math.min(1, ((q.x - a.x) * vx + (q.y - a.y) * vy) / l2)) : 0; d = Math.min(d, Math.hypot(q.x - a.x - vx * t, q.y - a.y - vy * t)); }
+        if (!best || d < best.d) { if (best && best.id !== e.id) second = Math.min(second, best.d); best = { id: e.id, mirrored: pi === 1 || !!r.instMirrored, d: d }; }
+        else if (e.id !== best.id) second = Math.min(second, d);
+      });
+    });
+    if (!best || !isFinite(best.d) || (isFinite(second) && second - best.d < Math.max(0.05, best.d * 0.05))) return null;
+    return best;
+  }
   function clickArc(p, r, eid, q, mirrored) {
     if (mirrored && r && r.mirror) q = mirrorFn(r.mirror.A, r.mirror.B)(q);
     var e = p && p.edges && p.edges.filter(function (x) { return x.id === eid; })[0]; if (!e) return null;
@@ -1350,7 +1377,8 @@
   }
   //   2026-11-20 김님 확정: 모든 재단 수량 기본 1. 좌우가 있는 조각(앞판·소매·커프스)은 «왼 1 + 오른 1» 거울 쌍으로 보이고(수량 1 = 한 쌍), 골로 쓰는 조각(뒤판·칼라·밴드)은 골 1장.
   function defaultQty(id, folded) {
-    if (id === "back" || id === "front" || id === "pocket" || id === "cuff" || id === "vent-placket" || id === "vent-bias" || id === "collar-stand" || id === "collar-body" || /^sleeve-/.test(id)) return 1;
+    if (id === "collar-stand" || id === "collar-body") return 2;   // 2026-11-24: 밴드·위 칼라 = 겉 1 + 안 1(총 2). 재단·DXF 는 기본일 때 겉·안 별도 조각으로 나눈다
+    if (id === "back" || id === "front" || id === "pocket" || id === "cuff" || id === "vent-placket" || id === "vent-bias" || /^sleeve-/.test(id)) return 1;
     return null;
   }
   function qtyOf(d, disp, proj) {
@@ -1360,7 +1388,8 @@
       var folded = !!(disp[p.id] && disp[p.id].unfolded), def = defaultQty(p.id, folded), mine = q.pieces[p.id];
       out.pieces[p.id] = { qty: mine != null ? mine : def, explicit: mine != null, def: def, folded: folded,
         how: folded ? "골 · 펼친 한 장" : "" };
-      if (/^collar-/.test(p.id)) out.pieces[p.id].how = folded ? "골 1장 · 겉감·안감은 각각 재단" : "1장 · 겉감·안감은 각각 재단";   // 수량 1 = 조각 한 장(2026-11-21 김님: 수량은 1 로 두고 몇 장 자를지는 안내·재단 단계가 정한다)
+      if (p.id === "collar-stand" || p.id === "collar-body") out.pieces[p.id].how = mine != null ? (folded ? "골 · 직접 지정 " + mine + "장(겉·안 구분 없음)" : "직접 지정 " + mine + "장(겉·안 구분 없음)") : (folded ? "겉 1장 + 안 1장(총 2 · 골 펼친 한 장씩)" : "겉 1장 + 안 1장(총 2)");
+      else if (/^collar-/.test(p.id)) out.pieces[p.id].how = folded ? "골 1장 · 겉감·안감은 각각 재단" : "1장 · 겉감·안감은 각각 재단";   // 수량 1 = 조각 한 장(2026-11-21 김님: 수량은 1 로 두고 몇 장 자를지는 안내·재단 단계가 정한다)
     });
     Object.keys(q.pieces).forEach(function (k) { if (!out.pieces[k]) out.stale.push(k); });
     // ⑦ 쌍으로 펼친 앞판: 저장 수량(원본 id · 2)은 그대로 두고, 보이는 두 조각은 각 1장. out.inst = 조각 «표시 id» 별 재단 장 수(인쇄·DXF·화면 글자가 읽는다).
@@ -1600,7 +1629,7 @@
     var cx = (box.minX + box.maxX) / 2, cy = (box.minY + box.maxY) / 2, vcx = (vis.left + vis.right) / 2 - rect.left, vcy = (vis.top + vis.bottom) / 2 - rect.top;
     return { cam: { x: cx - vcx * s, y: cy - vcy * s, w: s * rect.width, h: s * rect.height }, cmPerPx: s, limited: limited };
   }
-  var model = { pairingOf: pairingOf, baseOf: baseOf, NOTCH_MAX_CM: NOTCH_MAX_CM, pieceCam: pieceCam, readDart: readDart, dartsOf: dartsOf, setDartMode: setDartMode, DART_MODES: DART_MODES, DART_MODE_LABEL: DART_MODE_LABEL, readGrain: readGrain, grainOf: grainOf, setGrain: setGrain, relinkGrain: relinkGrain, grainSig: grainSig, defaultGrain: defaultGrain, grainLine: grainLine, revealShift: revealShift, clickArc: clickArc,displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
+  var model = { seamBandEdge: seamBandEdge, pairingOf: pairingOf, baseOf: baseOf, NOTCH_MAX_CM: NOTCH_MAX_CM, pieceCam: pieceCam, readDart: readDart, dartsOf: dartsOf, setDartMode: setDartMode, DART_MODES: DART_MODES, DART_MODE_LABEL: DART_MODE_LABEL, readGrain: readGrain, grainOf: grainOf, setGrain: setGrain, relinkGrain: relinkGrain, grainSig: grainSig, defaultGrain: defaultGrain, grainLine: grainLine, revealShift: revealShift, clickArc: clickArc,displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
 
   // ══ 화면(읽기 전용 오버레이) ══ ─────────────────────────────────────
   var NS = "http://www.w3.org/2000/svg", GAP = 6;
@@ -2209,10 +2238,12 @@
         return; }
       if (!drag) return;
       if (!drag.moved) {
-        var g = e.target.closest && e.target.closest(".cut-piece"), h = e.target.closest && e.target.closest("[data-edge]");
-        if (g && h) { var pid0 = g.getAttribute("data-piece"), iid0 = g.getAttribute("data-inst") || pid0, eid0 = h.getAttribute("data-edge"), pos0 = view.layout && view.layout.pos[iid0], cm0 = toCm(e);
+        var g = e.target.closest && e.target.closest(".cut-piece"), h = e.target.closest && e.target.closest("[data-edge]"), sm0 = null;
+        // 시접 띠(붉은 재단선 ~ 완성선 사이 · 붉은 선 자체)를 눌렀을 때: 가장 가까운 «한 변»으로만 연결한다(완성선 위 누르는 자리는 그대로 · 조각 안쪽 채움은 조각 선택 그대로).
+        if (g && !h && e.target.closest(".cut-seam")) { var cmS = toCm(e), posS = view.layout && view.layout.pos[g.getAttribute("data-inst") || g.getAttribute("data-piece")]; sm0 = posS ? seamBandEdge(view.disp && view.disp[g.getAttribute("data-inst") || g.getAttribute("data-piece")], { x: cmS.x - posS.dx, y: cmS.y - posS.dy }) : null; }
+        if (g && (h || sm0)) { var pid0 = g.getAttribute("data-piece"), iid0 = g.getAttribute("data-inst") || pid0, eid0 = h ? h.getAttribute("data-edge") : sm0.id, pos0 = view.layout && view.layout.pos[iid0], cm0 = toCm(e);
           var q0 = pos0 ? { x: cm0.x - pos0.dx, y: cm0.y - pos0.dy } : null, pc0 = view.data && view.data.pieces.filter(function (x) { return x.id === pid0; })[0];
-          var mir0 = h.getAttribute("data-mirrored") === "1";
+          var mir0 = h ? h.getAttribute("data-mirrored") === "1" : sm0.mirrored;
           view.clickAt = q0 && pc0 ? { piece: pid0, edge: eid0, at: clickArc(pc0, view.disp && view.disp[iid0], eid0, q0, mir0), cm: cm0, mirrored: mir0, inst: iid0 } : null;
           selectEdge(pid0, eid0);
           // 손가락·펜으로 누른 경우: 바로 뜬 카드가 손가락 아래에 오면, 브라우저가 이어 보내는 «클릭»이 카드의 단추(«적용» 등)를 누른다(실측 390 · 2026-11-17).
