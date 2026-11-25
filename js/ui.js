@@ -1828,12 +1828,12 @@
   function sleeveLineNote() {
     const el = document.getElementById("designSleeveLineNote"); if (!el || !window.sleevePresets) return;
     const SP = window.sleevePresets, fid = selectedSleeveFamilyId(), vid = selectedSleeveVariantId();
-    if (fid === SLEEVE_BASE) { el.textContent = "원형 소매를 소매길이·부리·옆선·소매산으로 변형하는 기본 방식"; return; }
+    if (fid === SLEEVE_BASE) { el.textContent = "«라인 적용»으로 적용될 라인: 원형 소매 기준 — 원형 소매를 소매길이·부리·옆선·소매산으로 변형하는 기본 방식"; return; }
     const t = SP.displayTitle(fid, vid), v = SP.variant(fid, vid), parts = [];
     if (t) parts.push(t.familyLabel + (v ? " · " + presetDisplayName(v.label) : ""));   // 표식·교재 페이지는 화면에서 숨김(메타는 유지)
     if (v && v.availability !== "available") { if (v.blockedBy) parts.push("보류 사유: " + v.blockedBy); }   // «준비 중» 으로 뭉개지 않는다
     else { const f = SP.family(fid); if (f && f.familyNote) parts.push(f.familyNote); }
-    el.textContent = parts.join(" · ");
+    el.textContent = (parts.length && !(v && v.availability !== "available") ? "«라인 적용»으로 적용될 라인: " : "") + parts.join(" · ");
   }
   // Ⓐ 확인 정보(패턴명·소매산·소매폭·AH·목표/실제 이세). Ⓐ 가 꺼져 있으면 숨긴다.
   function renderSleeveAInfo(project) {
@@ -1850,7 +1850,7 @@
   function syncSleeveLineUI(project) {
     project = project || designProjectNow();
     rebuildSleeveFamilyOptions(); rebuildSleeveVariantOptions();
-    sleeveLineNote(); renderSleeveAInfo(project);
+    sleeveLineNote(); renderSleeveAInfo(project); syncSleeveApplyTarget(project);
     const btn = document.getElementById("btnApplySleevePreset"); if (!btn) return;
     const fid = selectedSleeveFamilyId();
     let ok = false;
@@ -2237,8 +2237,22 @@
     setSleeveNote("기본 소매산으로 복원됨 · 세션 전용");
     updateSleevePanel(project); updateSleeveEaseUI(project);
   }
+  // «소매 적용» 버튼 옆 안내: 누르면 실제로 적용될 라인(onApplySleeve 의 분기와 같은 조건 — 동작은 바꾸지 않고 말만 한다).
+  function syncSleeveApplyTarget(project) {
+    const el = document.getElementById("sleeveApplyTarget"); if (!el) return;
+    let t = "";
+    if (project) {
+      if (sleeveLineOn(project)) t = "«소매 적용»: 지금 켜진 소매 라인을 입력값으로 다시 제도합니다";
+      else if (selectedSleeveFamilyId() !== SLEEVE_BASE && window.sleevePresets) {
+        const fid = selectedSleeveFamilyId(), vid = selectedSleeveVariantId(), d = window.sleevePresets.displayTitle(fid, vid), v = window.sleevePresets.variant(fid, vid);
+        t = "«소매 적용»: 위에서 고른 라인을 적용합니다 — " + (d ? d.familyLabel + (v ? " · " + presetDisplayName(v.label) : "") : "선택한 라인");
+      } else t = "«소매 적용»: 원형 소매 기준(원형 소매를 입력값으로 변형)";
+    }
+    el.textContent = t; el.hidden = !t;
+  }
   function syncSleeveButtons() {
     const project = designProjectNow(), gate = sleeveGateOk(project);
+    syncSleeveApplyTarget(project);
     const manual = sleeveManual(project), invalid = sleeveCapInvalid(project);
     const apply = document.getElementById("btnApplySleeve"), reset = document.getElementById("btnResetSleeve");
     const applyCap = document.getElementById("btnApplyCap");

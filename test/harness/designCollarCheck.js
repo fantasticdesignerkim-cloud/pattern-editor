@@ -1358,5 +1358,25 @@ ok(J(C.referenceParams()) === J(BAND.M) && J(C.referenceBodyParams()) === J(UPPE
   }
 }
 
+// ── §SI 자기교차 판정(2026-11-25): 접촉·공선 겹침 포함 · 인접 접점 허용 · 32등분 ──
+{
+  const SI = C.outlineSelfIntersects, P = (x, y) => ({ x, y }), Ln = (a, b) => ({ kind: "line", from: a, to: b });
+  const poly = (...p) => p.map((q, i) => Ln(q, p[(i + 1) % p.length]));
+  ok(!SI(poly(P(0, 0), P(10, 0), P(10, 10), P(0, 10))), "SI1: 정상 사각형(인접 변 끝점 공유)은 허용");
+  ok(SI(poly(P(0, 0), P(10, 10), P(10, 0), P(0, 10))), "SI2: 나비넥타이(진짜 횡단)");
+  // T 접점: 꼭짓점이 비인접 변 위에 닿음 — 두 진행 방향 모두 잡혀야 한다(전엔 부호 0 처리로 한쪽만 잡힘)
+  const tUp = [P(0, 0), P(10, 0), P(10, 10), P(5, 0), P(0, 10)], tDn = [P(0, 0), P(10, 0), P(10, -10), P(5, 0), P(0, -10)];
+  ok(SI(poly(...tUp)) && SI(poly(...tDn)), "SI3: T 접점(위·아래 두 방향 모두)");
+  // 꼭짓점-꼭짓점 접촉(비인접 두 점이 같은 자리)
+  ok(SI(poly(P(0, 0), P(10, 0), P(5, 5), P(10, 10), P(0, 10), P(5, 5))), "SI4: 비인접 꼭짓점 접촉(나비 매듭)");
+  // 공선 겹침(전엔 전부 0 이라 못 잡음)
+  ok(SI(poly(P(0, 0), P(10, 0), P(10, 5), P(6, 0), P(2, 0), P(0, 5))), "SI5: 공선 겹침");
+  // 얇은 곡선-직선 스침: 곡선이 직선을 0.01cm 깊이로 침범 — 16등분 현은 못 보고 32등분은 본다
+  const bump = { kind: "cubic", from: P(0, 0), c1: P(3, 4), c2: P(7, 4), to: P(10, 0) };
+  const thin = [bump, Ln(P(10, 0), P(10, 3.0)), Ln(P(10, 3.0), P(0, 3.0)), Ln(P(0, 3.0), P(0, 0))];
+  const peak = 0.75 * 4;   // 곡선 정점 높이 3.0(t=.5: 3*.25*4*... = 3)
+
+}
+
 console.log(`designCollarCheck: ${PASS} PASS, ${FAIL} FAIL`);
 if (FAIL) { console.log("FAILURES:\n  " + fails.join("\n  ")); process.exit(1); }

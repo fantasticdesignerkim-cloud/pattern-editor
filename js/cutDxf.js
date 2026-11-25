@@ -34,6 +34,9 @@
   }
   function closedRing(pts) { var p = pts.slice(); if (p.length > 2 && Math.hypot(p[0].x - p[p.length - 1].x, p[0].y - p[p.length - 1].y) < 1e-6) p.pop(); return p; }
 
+  // 겉·안 분리 대상 판정 = cutPrep 의 칼라 수량 표(COLLAR_FACED_QTY) 한 곳. 모듈이 없으면 분리하지 않는다.
+  function facedCollar(id) { var P = W().cutPrep; return !!(P && P.facedCollar && P.facedCollar(id)); }
+
   // 사전 점검(cutPrint.preflight 한 벌) + 조각 묶음 + 전체 범위 — 두 형식(일반 · AAMA 구조)이 같이 쓴다
   function collect(proj, opt) {
     var CP = W().cutPrint; if (!CP || !CP.preflight) return { ok: false, reason: "사전 점검 모듈을 불러오지 못했습니다", blockers: ["사전 점검 모듈을 불러오지 못했습니다"] };
@@ -50,7 +53,7 @@
     //   겉 = 원래 자리 · 안 = 같은 형상을 전체 배치 아래 한 줄에 놓는다(겹치지 않게). 수동 수량(explicit)은 그대로 한 조각 + Quantity n(저장본 존중).
     var faceItems = [], faceY = null, split = [];
     items.forEach(function (it) {
-      if ((it.id === "collar-stand" || it.id === "collar-body") && it.row && it.row.qty && it.row.qty.kind === "default") split.push(it);   // 기본 수량(총 2 = 겉 1 + 안 1)이면 n 값과 상관없이 나눈다 · 직접 지정(user)은 한 조각 + Quantity n 그대로
+      if (facedCollar(it.id) && it.row && it.row.qty && it.row.qty.kind === "default") split.push(it);   // 기본 수량(총 2 = 겉 1 + 안 1)이면 n 값과 상관없이 나눈다 · 직접 지정(user)은 한 조각 + Quantity n 그대로
     });
     if (split.length && !(opt && opt.collarFaces === false)) {
       var gap = 2, bottom = maxY;   // bottom = 지금 가장 아래(y 는 아래로 커진다)

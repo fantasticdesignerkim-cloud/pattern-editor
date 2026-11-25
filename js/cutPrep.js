@@ -1381,8 +1381,13 @@
     return { state: "ok", pieces: s.pieces };
   }
   //   2026-11-20 김님 확정: 모든 재단 수량 기본 1. 좌우가 있는 조각(앞판·소매·커프스)은 «왼 1 + 오른 1» 거울 쌍으로 보이고(수량 1 = 한 쌍), 골로 쓰는 조각(뒤판·칼라·밴드)은 골 1장.
+  //   칼라 조각별 기본 수량·겉안 분리 — 확정 근거가 있는 것만 여기 한 곳에 둔다(수량·화면 문구·DXF 겉/안 분리가 이 표를 읽는다).
+  //   확정(2026-11-24 김님): 밴드·위 칼라(shirt-two-piece 의 stand·body) = 겉 1 + 안 1(총 2).
+  //   근거 없어 보류(기본값 없음/일반 칼라 문구 유지 — 새 근거 생기면 이 표에만 추가): 한 장 셔츠(onePiece)·오픈(openCollar)·윙 끝(tip)·밴드 한 장(joined)·플랫(flat)·세일러 등 그 밖 전부.
+  var COLLAR_FACED_QTY = { "collar-stand": { total: 2, outer: 1, inner: 1 }, "collar-body": { total: 2, outer: 1, inner: 1 } };
+  function facedCollar(id) { return Object.prototype.hasOwnProperty.call(COLLAR_FACED_QTY, id) ? COLLAR_FACED_QTY[id] : null; }
   function defaultQty(id, folded) {
-    if (id === "collar-stand" || id === "collar-body") return 2;   // 2026-11-24: 밴드·위 칼라 = 겉 1 + 안 1(총 2). 재단·DXF 는 기본일 때 겉·안 별도 조각으로 나눈다
+    if (facedCollar(id)) return facedCollar(id).total;   // 2026-11-24: 밴드·위 칼라 = 겉 1 + 안 1(총 2). 재단·DXF 는 기본일 때 겉·안 별도 조각으로 나눈다
     if (id === "back" || id === "front" || id === "pocket" || id === "cuff" || id === "vent-placket" || id === "vent-bias" || /^sleeve-/.test(id)) return 1;
     return null;
   }
@@ -1393,7 +1398,7 @@
       var folded = !!(disp[p.id] && disp[p.id].unfolded), def = defaultQty(p.id, folded), mine = q.pieces[p.id];
       out.pieces[p.id] = { qty: mine != null ? mine : def, explicit: mine != null, def: def, folded: folded,
         how: folded ? "골 · 펼친 한 장" : "" };
-      if (p.id === "collar-stand" || p.id === "collar-body") out.pieces[p.id].how = mine != null ? (folded ? "골 · 직접 지정 " + mine + "장(겉·안 구분 없음)" : "직접 지정 " + mine + "장(겉·안 구분 없음)") : (folded ? "겉 1장 + 안 1장(총 2 · 골 펼친 한 장씩)" : "겉 1장 + 안 1장(총 2)");
+      if (facedCollar(p.id)) out.pieces[p.id].how = mine != null ? (folded ? "골 · 직접 지정 " + mine + "장(겉·안 구분 없음)" : "직접 지정 " + mine + "장(겉·안 구분 없음)") : (folded ? "겉 1장 + 안 1장(총 2 · 골 펼친 한 장씩)" : "겉 1장 + 안 1장(총 2)");
       else if (/^collar-/.test(p.id)) out.pieces[p.id].how = folded ? "골 1장 · 겉감·안감은 각각 재단" : "1장 · 겉감·안감은 각각 재단";   // 수량 1 = 조각 한 장(2026-11-21 김님: 수량은 1 로 두고 몇 장 자를지는 안내·재단 단계가 정한다)
     });
     Object.keys(q.pieces).forEach(function (k) { if (!out.pieces[k]) out.stale.push(k); });
@@ -1634,7 +1639,7 @@
     var cx = (box.minX + box.maxX) / 2, cy = (box.minY + box.maxY) / 2, vcx = (vis.left + vis.right) / 2 - rect.left, vcy = (vis.top + vis.bottom) / 2 - rect.top;
     return { cam: { x: cx - vcx * s, y: cy - vcy * s, w: s * rect.width, h: s * rect.height }, cmPerPx: s, limited: limited };
   }
-  var model = { seamBandEdge: seamBandEdge, pairingOf: pairingOf, baseOf: baseOf, NOTCH_MAX_CM: NOTCH_MAX_CM, pieceCam: pieceCam, readDart: readDart, dartsOf: dartsOf, setDartMode: setDartMode, DART_MODES: DART_MODES, DART_MODE_LABEL: DART_MODE_LABEL, readGrain: readGrain, grainOf: grainOf, setGrain: setGrain, relinkGrain: relinkGrain, grainSig: grainSig, defaultGrain: defaultGrain, grainLine: grainLine, revealShift: revealShift, clickArc: clickArc,displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
+  var model = { facedCollar: facedCollar, COLLAR_FACED_QTY: COLLAR_FACED_QTY, seamBandEdge: seamBandEdge, pairingOf: pairingOf, baseOf: baseOf, NOTCH_MAX_CM: NOTCH_MAX_CM, pieceCam: pieceCam, readDart: readDart, dartsOf: dartsOf, setDartMode: setDartMode, DART_MODES: DART_MODES, DART_MODE_LABEL: DART_MODE_LABEL, readGrain: readGrain, grainOf: grainOf, setGrain: setGrain, relinkGrain: relinkGrain, grainSig: grainSig, defaultGrain: defaultGrain, grainLine: grainLine, revealShift: revealShift, clickArc: clickArc,displayOf: displayOf, layoutOf: layoutOf, orderOf: orderOf, readQty: readQty, qtyOf: qtyOf, setQty: setQty, defaultQty: defaultQty, readNotchSpec: readNotchSpec, addNotch: addNotch, moveNotch: moveNotch, removeNotch: removeNotch, pairNotches: pairNotches, setEaseSplit: setEaseSplit, reconnectNotch: reconnectNotch, EASE_BOOK: EASE_BOOK, sewnChain: sewnChain, notchesOf: notchesOf, peek: peek, foldMeasure: foldMeasure, edgesOf: edgesOf, readSpec: readSpec, seam: seamOf, setEdge: setEdge, clearOrphans: clearOrphans, SEAM_DEFAULT_CM: SEAM_DEFAULT_CM, ventPieces: ventPieces, composePlacket: composePlacket, ringOf: ringOf, derive: derive, candidates: candidates, buildPieces: buildPieces, normOutline: normOutline, paperCheck: paperCheck, FAIL_TEXT: FAIL_TEXT, TAB_LABEL: TAB_LABEL };
 
   // ══ 화면(읽기 전용 오버레이) ══ ─────────────────────────────────────
   var NS = "http://www.w3.org/2000/svg", GAP = 6;
@@ -2260,7 +2265,8 @@
           // 손가락·펜으로 누른 경우: 바로 뜬 카드가 손가락 아래에 오면, 브라우저가 이어 보내는 «클릭»이 카드의 단추(«적용» 등)를 누른다(실측 390 · 2026-11-17).
           //   그 한 번의 뒤따르는 클릭만 삼킨다(같은 자리 근처 · 짧은 시간) — 사용자가 일부러 누르는 다음 클릭은 그대로.
           if (e.pointerType && e.pointerType !== "mouse") ghostGuard = { x: e.clientX, y: e.clientY, until: Date.now() + 700 }; }
-        else { clearEdge(); select(g ? g.getAttribute("data-piece") : view.sel); }
+        else { var ambig = !!(g && !h && !sm0 && e.target.closest(".cut-seam")); clearEdge(); select(g ? g.getAttribute("data-piece") : view.sel);
+          if (ambig) setNote("시접 모서리라 두 변 중 어느 쪽인지 알 수 없습니다 — 변 선을 직접 누르거나 모서리에서 조금 떨어진 시접 띠를 누르세요"); }
       }
       drag = null;
     };

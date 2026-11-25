@@ -134,7 +134,7 @@ const N0 = build(false, 0, 0), NC = build(true, 0, 0);
 {
   ok(N0.ok && N0.d.state === "ready" && N0.front.label === "앞판" && !N0.front.placket && !N0.front.marks.length && !N0.d.missing.some(m => m.id === "placket"), "1: 여밈 없음 = 앞판 그대로(합성·표시·누락 없음)");
   // 2026-11-14 트임 덧단·바이어스 조각 추가 뒤: 그 두 조각과 소매 위 트임 표시를 빼면 나머지 6조각은 종전 지문 그대로여야 한다.
-  const base6 = N0.d.pieces.filter(p => !/^vent-/.test(p.id)).map(p => Object.assign({}, p, { marks: p.marks.filter(m => !/^vent-/.test(m.kind)) }));
+  const base6 = N0.d.pieces.filter(p => !/^vent-/.test(p.id)).map(p => Object.assign({}, p, { label: p.id === "collar-body" ? "위 칼라" : p.label, marks: p.marks.filter(m => !/^vent-/.test(m.kind) && !/^(sleeve-center|sleeve-elbow|cuff-fold)$/.test(m.kind)) }));
   const sha = crypto.createHash("sha256").update(J(base6)).digest("hex").slice(0, 16);
   ok(sha === "f25330fbe974e137" && N0.d.pieces.length === 8, "1: 여밈 없는 6조각 = 합성 도입 전(HEAD 33669e6) 지문과 바이트 동일 — 트임 2조각·소매 위 트임 표시 제외 (" + sha + ")");
   ok(N0.front.segs.filter(isCF).length === 2, "1: 여밈 없는 앞판 외곽에는 앞중심 변이 그대로 있다");

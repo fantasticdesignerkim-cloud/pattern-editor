@@ -299,9 +299,10 @@ const dv = S.CUT.derive(P, true), sm = S.CUT.seam(dv, P), D = S.CUT.displayOf(dv
 {
   const pr = S.W.cutPrint.build(P, null, META), nTr = (pr.sheetSvg.match(/class="cp-fin cp-trued"/g) || []).length, trD = /class="cp-fin cp-trued"[^>]* d="([^"]+)"/.exec(pr.sheetSvg);
   ok(pr.ok && nTr === 3 && /fill="none" stroke="#000" stroke-width="\.025"/.test(pr.sheetSvg.match(/class="cp-fin cp-trued"[^>]*/)[0]) && (pr.sheetSvg.match(/class="cp-fin"/g) || []).length === 13, "5: 인쇄 — 완성선 13(긴 V 포함 · 앞판·소매·트임 좌우 쌍) + 정리 외곽 3(앞 좌·우 + 뒤) · 같은 선 굵기 · 채움 없음");
+  { const F = S.W.cutPrep; ok(F.facedCollar("collar-stand").total === 2 && F.facedCollar("collar-body").total === 2 && F.facedCollar("collar-flat") === null && F.facedCollar("back") === null && /facedCollar\(it\.id\)/.test(SRC["cutDxf.js"] || ""), "5: 칼라 겉·안 표 한 곳(cutPrep.facedCollar) — DXF 분리 판정이 같은 표를 읽는다 · 확정 밖 조각은 null"); }
   const gx = S.W.cutDxf.build(P, META), ax = S.W.cutDxf.build(P, META, { format: "aama" });
   const cnt = (t, re) => (t.match(re) || []).length;
-  ok(gx.ok && gx.stats.layers.FINISHED === 13 && gx.stats.layers.FINISHED_TRUED === 3 && gx.stats.layers.CUT === 13, "5: 일반 DXF — FINISHED 13 · FINISHED_TRUED 3(앞 좌·우 + 뒤) · CUT 13 (앞판·소매·커프스 좌우 각 1장)");
+  ok(gx.ok && gx.stats.layers.FINISHED === 15 && gx.stats.layers.FINISHED_TRUED === 3 && gx.stats.layers.CUT === 15 && gx.stats.pieces.filter(q => /^collar-(stand|body)-inner$/.test(q.id)).length === 2, "5: 일반 DXF — FINISHED 15 · FINISHED_TRUED 3(앞 좌·우 + 뒤) · CUT 15 (앞판·소매·커프스 좌우 각 1장 + 밴드·위 칼라 겉/안 분리 2026-11-24: 안 조각 -inner 2개 추가)");
   // AAMA: 블록별 레이어 14 닫힌 선 개수와 차이
   const blk = name => { const a = ax.dxf.indexOf("BLOCK\r\n8\r\n1\r\n2\r\n" + name), b = ax.dxf.indexOf("ENDBLK", a); return ax.dxf.slice(a, b); };
   const polys = (txt, layer) => txt.split("\r\n0\r\nPOLYLINE\r\n").slice(1).filter(x => x.startsWith("8\r\n" + layer + "\r\n")).map(x => ({ closed: /\r\n70\r\n1\r\n/.test(x.split("VERTEX")[0] + "\r\n"), pts: x.split("\r\n0\r\nVERTEX\r\n").slice(1).map(v => { const m = /10\r\n(-?[\d.]+)\r\n20\r\n(-?[\d.]+)/.exec(v); return { x: +m[1], y: +m[2] }; }) }));
@@ -348,8 +349,9 @@ const dv = S.CUT.derive(P, true), sm = S.CUT.seam(dv, P), D = S.CUT.displayOf(dv
   const nShow = ["front", "back"].reduce((a, pid) => a + V6.D6[pid].notches.length, 0) + Object.keys(V6.D6).filter(k => k !== "front" && k !== "back").reduce((a, k) => a + V6.D6[k].notches.length, 0);
   const nPrint = (pr.sheetSvg.match(/class="cp-notch"/g) || []).length + (pr.sheetSvg.match(/class="cp-notch-dot"/g) || []).length, nDxf = (gx.dxf.match(/\r\nNOTCH\r\n(10|39|40)/g) || []).length, nDxfAll = gx.stats.layers.NOTCH;
   const lineN = Object.keys(V6.D6).reduce((a, k) => a + V6.D6[k].notches.filter(n => n.to).length, 0), nAama = Object.values(ax.stats.layers ? { a: ax.stats.layers["4"] } : {}).reduce((a, b) => a + (b || 0), 0);
-  ok(pre.ok && pre.attention.filter(x => /맞춤 «맞춤 \d+» 보류/.test(x)).length === 2 && nPrint === nShow && nDxfAll === nShow && nAama === lineN && /맞춤 «맞춤 \d+» 보류/.test(pr.body.split("cp-pg")[0]),
-    "6: 사전 점검 = 막지 않고 알림 2건(안내 쪽에도) · 인쇄 너치 " + nPrint + " = DXF 너치 " + nDxfAll + " = 표시 모델(보류 제외) · AAMA 너치 점 " + nAama + " = 선 있는 너치");
+  const innerP = ["collar-stand", "collar-body"].map(k => V6.D6[k]).filter(Boolean), innerN = innerP.reduce((a, d) => a + d.notches.length, 0), innerLineN = innerP.reduce((a, d) => a + d.notches.filter(n => n.to).length, 0);   // DXF 는 밴드·위 칼라 안(-inner) 복제 조각의 너치도 낸다(인쇄·표시 모델은 한 조각)
+  ok(pre.ok && pre.attention.filter(x => /맞춤 «맞춤 \d+» 보류/.test(x)).length === 2 && nPrint === nShow && nDxfAll === nShow + innerN && nAama === lineN + innerLineN && /맞춤 «맞춤 \d+» 보류/.test(pr.body.split("cp-pg")[0]),
+    "6: 사전 점검 = 막지 않고 알림 2건(안내 쪽에도) · 인쇄 너치 " + nPrint + " = DXF 너치 " + nDxfAll + " = 표시 모델(보류 제외) + 안 조각 " + innerN + " · AAMA 너치 점 " + nAama + " = 선 있는 너치 + 안 조각 " + innerLineN);
   const heldPts = hb.map(n => n.at), pos = V6.d.pieces ? null : null;
   ok(!heldPts.some(q => [...pr.sheetSvg.matchAll(/class="cp-notch"[^>]* d="M(-?[\d.]+) (-?[\d.]+) /g)].some(m => Math.hypot(+m[1] - q.x, +m[2] - q.y) < 1e-3)), "6: 보류 너치의 옛 자리는 인쇄 너치에 없음");
   // 방향 전환 · 시접 폭 · 되돌리기

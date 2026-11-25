@@ -412,10 +412,11 @@ lap("s7");
   const a = UI_SRC.indexOf("  function onApplySleevePreset() {"), b = UI_SRC.indexOf("  // Ⓐ 해제 뒤 기존 경로의 소매 형상으로 복원"), body = a > 0 && b > a ? UI_SRC.slice(a, b) : "";
   const branches = body.match(/if \(applySleeve[A-Z]\(project\)\) \{[^\n]*\n/g) || [];
   ok(branches.length === 25 && branches.every(l => /\} else noteSleeveKept\(project, selSym\);\n$/.test(l)), "6a: Ⓑ~Ⓩ 25 분기 전부 실패 시 안내(" + branches.length + ")");
-  // Ⓐ 경로 실패 분기 3 — 소매길이 범위 · 커프스 입력(2026-11-10 추가) · 엔진 차단. 분기마다 원문을 정확히 지정하고, 각 분기가 사유 표시 → 기존 소매 보존 안내 → 즉시 return 인지 확인.
+  // Ⓐ 경로 실패 분기 4 — 소매길이 범위 · 커프스 입력 · 팔꿈치 길이 EL · 엔진 차단. 분기마다 원문을 정확히 지정하고, 각 분기가 사유 표시 → 기존 소매 보존 안내 → 즉시 return 인지 확인.
   const aFails = [
     ["소매길이 범위", /if \(!len\.valid \|\| !\(len\.v > 0\)\) \{ setSleeveNote\("소매길이 10–90 범위를 확인하세요"\); noteSleeveKept\(project, selSym\); return; \}/],
     ["커프스 입력", /if \(!cf\.valid\) \{ setSleeveNote\("커프스 입력 확인: " \+ cf\.why \+ " · 이전 소매 유지"\); noteSleeveKept\(project, selSym\); return; \}/],
+    ["팔꿈치 길이 EL", /if \(!eA\.valid\) \{ setSleeveNote\("팔꿈치 길이 EL " \+ eA\.why \+ " 를 확인하세요 · 이전 소매 유지"\); noteSleeveKept\(project, selSym\); return; \}/],
     ["엔진 차단", /if \(!a\.ok\) \{ setSleeveNote\("소매 Ⓐ 차단: " \+ a\.text \+ " · 이전 소매 유지"\); noteSleeveKept\(project, selSym\); return; \}/]
   ];
   aFails.forEach(([nm, re]) => ok(re.test(body), "6a: Ⓐ 경로 실패 안내 — " + nm));

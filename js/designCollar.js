@@ -85,30 +85,46 @@
     return r;
   }
 
-  // 자기교차(원자적 실패): outline 을 조밀 점열로 펴서 비인접 선분 교차.
+  // 자기교차(원자적 실패): outline 을 조밀 점열로 펴서 비인접 선분끼리 «만나는가» 를 본다.
+  //   · 곡선 = FLATTEN_N 등분(2026-11-25: 16 → 32. 얇게 스치는 곡선-직선 접근을 16등분 현 오차로 놓치던 것을 줄임).
+  //   · 판정 = 교차뿐 아니라 접촉(T 접점·꼭짓점 접촉·겹침)도 잡는다 — 두 선분 사이 최단거리 ≤ CONTACT_EPS. 전에는 부호 > 0 비교라
+  //     0(접촉·공선)이 «음수» 로 처리되어 같은 접촉이 방향에 따라 잡히기도 놓치기도 했고, 공선 겹침은 아예 못 잡았다.
+  //   · 허용 = 점열에서 이웃한 선분(공유 끝점 · 윤곽 이음 포함, 닫힘 이음도). 이웃의 이웃부터는 «비인접» 이라 접촉도 실패다.
+  //   · 한계: FLATTEN_N 등분 선분 사이의 거리라 곡선 한 현(약 곡선길이/32) 안쪽의 더 작은 스침은 여전히 못 본다.
+  var FLATTEN_N = 32, CONTACT_EPS = 1e-7;
   function flattenSeg(s) {
     if (s.kind === "line") return [cp(s.from), cp(s.to)];
     var out = [], p0 = s.from, p1 = s.c1, p2 = s.c2, p3 = s.to;
-    for (var i = 0; i <= 16; i++) { var t = i / 16, u = 1 - t;
+    for (var i = 0; i <= FLATTEN_N; i++) { var t = i / FLATTEN_N, u = 1 - t;
       out.push({ x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
                  y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y }); }
     return out;
   }
   function crossSign(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
-  function segCross(a, b, c, d) {
+  function ptSegDist(p, a, b) {
+    var vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy, t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / l2)) : 0;
+    return Math.hypot(p.x - (a.x + t * vx), p.y - (a.y + t * vy));
+  }
+  // 두 선분이 교차하거나 CONTACT_EPS 안으로 닿는가(접촉·공선 겹침 포함)
+  function segTouch(a, b, c, d) {
     var d1 = crossSign(c, d, a), d2 = crossSign(c, d, b), d3 = crossSign(a, b, c), d4 = crossSign(a, b, d);
-    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+    if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;   // 진짜 횡단
+    return ptSegDist(a, c, d) <= CONTACT_EPS || ptSegDist(b, c, d) <= CONTACT_EPS || ptSegDist(c, a, b) <= CONTACT_EPS || ptSegDist(d, a, b) <= CONTACT_EPS;
   }
   function outlineSelfIntersects(outline) {
-    var pts = [];
-    outline.forEach(function (s, i) { var f = flattenSeg(s); pts = pts.concat(i === 0 ? f : f.slice(1)); });
+    var raw = [];
+    outline.forEach(function (s, i) { var f = flattenSeg(s); raw = raw.concat(i === 0 ? f : f.slice(1)); });
+    var pts = [];   // 길이 0 인 선분(같은 점 반복)은 «이웃» 판정을 어긋나게 하므로 제거
+    raw.forEach(function (p) { if (!pts.length || Math.hypot(p.x - pts[pts.length - 1].x, p.y - pts[pts.length - 1].y) > 1e-9) pts.push(p); });
     var n = pts.length;
     for (var i = 0; i < n - 1; i++) for (var j = i + 2; j < n - 1; j++) {
-      if (i === 0 && j === n - 2) continue;
-      if (segCross(pts[i], pts[i + 1], pts[j], pts[j + 1])) return true;
+      if (i === 0 && j === n - 2) continue;   // 닫힘 이음(첫·끝 선분은 이웃)
+      if (segTouch(pts[i], pts[i + 1], pts[j], pts[j + 1])) return true;
     }
     return false;
   }
+  // 테스트·진단용(순수): 외곽선이 자기교차·비인접 접촉이면 true
+  function _selfIntersects(outline) { return outlineSelfIntersects(outline); }
 
   // 반환 길이 조립(전부 실제 primitive 측정값). parts 그룹별 합.
   function measured(outline, straightPart, arcPart, extPart, topStraightPart, topArcPart, topExtPart) {
@@ -2289,6 +2305,7 @@
 
   window.designCollar = Object.freeze({
     BAND_METHOD: BAND_METHOD,
+    outlineSelfIntersects: _selfIntersects,
     referenceParams: referenceParams,
     referenceBodyParams: referenceBodyParams,
     readBodice: readBodice,

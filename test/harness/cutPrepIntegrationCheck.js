@@ -133,7 +133,7 @@ let TEXT = null, D_DONE = null;
   // 누락 = 이유만(대체 직사각형 없음)
   ok(d.missing.length === 0, "1: 누락 0 — 여밈은 앞판에 합쳐지고 트임 덧단·바이어스는 재단 조각으로 나옴(2026-11-14 · 상세는 cutVentIntegrationCheck)");
   ok(!d.pieces.some(p => /^placket/.test(p.id)), "1: 여밈 전용 조각(대체 직사각형) 없음");
-  ok(pf.marks.map(m => m.kind).join() === "zone-overlap,zone-facing,cf,fold" && d.pieces.filter(p => p.marks && p.marks.length).map(p => p.id).join() === "front,sleeve-sleeve,vent-placket,vent-bias" && pf.placket && pf.placket.fold.ok, "1: 여밈·안단 = 앞판에 합친 외곽 + 영역 2칸·앞중심선·접는선 표시(앞판에만 · 상세는 cutPlacketIntegrationCheck)");
+  ok(pf.marks.map(m => m.kind).join() === "zone-overlap,zone-facing,cf,fold" && d.pieces.filter(p => p.marks && p.marks.length).map(p => p.id).join() === "front,sleeve-sleeve,cuff,vent-placket,vent-bias" && pf.placket && pf.placket.fold.ok, "1: 여밈·안단 = 앞판에 합친 외곽 + 영역 2칸·앞중심선·접는선 표시(앞판에만 · 상세는 cutPlacketIntegrationCheck)");
   ok(d.pieces.find(p => p.id === "collar-stand").note === "뒤중심 접힘 반쪽(펼치기 전)", "1: 카라 반쪽 = 완료본 symmetry 사실만 적음");
   // 원본 별칭 없음 · 동결
   const srcObjs = allObjs(R); ok(![...allObjs(d.pieces)].some(o => srcObjs.has(o)), "2: 조각 객체가 완료본 객체를 하나도 가리키지 않음(새 복사본)");
