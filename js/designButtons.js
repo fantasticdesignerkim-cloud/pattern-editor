@@ -67,6 +67,20 @@
     return out;
   }
 
+  // 구멍 때문에만 실패하는지 판정(순수). 여밈이 좁아져 구멍이 안 맞아도 단추 위치가 유효하면 그 계산(구멍 없음)을 fallback 으로 돌려준다.
+  //   → {ok:true, result} | {ok:false, holeOnly:true, reason, fallback} | {ok:false, reason}
+  //   holeOnly = 구멍(hole-exceeds-placket · hole-on-edge)만 문제 · 구멍을 빼면 위치가 유효. 호출자가 사용자 확인 뒤 fallback 을 쓴다(자동 제거 금지).
+  var HOLE_FIT_REASONS = ["hole-exceeds-placket", "hole-on-edge"];
+  function resolve(params, frame) {
+    var r = compute(params, frame);
+    if (r.ok) return { ok: true, result: r };
+    if (!params || params.holeLengthCm == null || HOLE_FIT_REASONS.indexOf(r.reason) < 0) return { ok: false, reason: r.reason };
+    var p2 = {}, k;
+    for (k in params) if (Object.prototype.hasOwnProperty.call(params, k) && k !== "holeLengthCm") p2[k] = params[k];
+    var r2 = compute(p2, frame);
+    return r2.ok ? { ok: false, holeOnly: true, reason: r.reason, fallback: r2 } : { ok: false, reason: r2.reason };
+  }
+
   // 저장본 엄격 검증(고쳐 쓰지 않음). null/undefined = 단추 없음.
   function validateStored(v) {
     if (v == null) return { ok: true };
@@ -141,7 +155,7 @@
     return v.ok ? { ok: true, spec: spec } : v;
   }
 
-  window.designButtons = Object.freeze({ compute: compute, validateStored: validateStored, frameFromPlacket: frameFromPlacket, verifyAgainstPlacket: verifyAgainstPlacket, validateSpec: validateSpec, holeSpecOf: holeSpecOf,
+  window.designButtons = Object.freeze({ compute: compute, validateStored: validateStored, frameFromPlacket: frameFromPlacket, verifyAgainstPlacket: verifyAgainstPlacket, validateSpec: validateSpec, holeSpecOf: holeSpecOf, resolve: resolve,
     MAX_COUNT: MAX_COUNT, DEFAULT_DIAMETER: DEFAULT_DIAMETER, LEGACY_DIAMETER: LEGACY_DIAMETER, MIN_DIAMETER: MIN_DIAMETER, MAX_DIAMETER: MAX_DIAMETER,
     DEFAULT_HOLE: DEFAULT_HOLE, MAX_HOLE: MAX_HOLE });
 })();

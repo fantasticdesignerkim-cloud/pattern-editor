@@ -17,7 +17,7 @@
     <span class="app-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M5 19c3-1 4.5-13 8-13 2.6 0 3.4 4.6 6 5"/></svg></span>
     <span class="brand">DOROBO</span>
     <!-- 앱 버전 단일 원천: 배포할 때 이 번호만 올린다 (docs/STATUS.md § 앱 버전 표시) -->
-    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.25.1">v2026.11.25.1</span>
+    <span class="brand-ver" id="appVersion" title="지금 이 화면에 불러온 앱 버전입니다. 다른 컴퓨터에서 이 번호가 같으면 같은 판입니다." aria-label="앱 버전 2026.11.26.1">v2026.11.26.1</span>
     <span class="brand-sub">문화식 원형</span>
   </div>
 
@@ -344,6 +344,7 @@
         <div class="row"><label for="inpButtonCount">단추 개수</label><input id="inpButtonCount" type="number" min="1" max="40" step="1"></div>
         <div class="row"><label for="inpButtonDiameter">단추 지름 (cm)</label><input id="inpButtonDiameter" type="number" min="0.5" max="5" step="0.01" placeholder="1.15" title="빈칸 = 1.15 (11.5mm · 이번 셔츠 사용자 확정)"></div>
         <div class="row"><label for="inpButtonHole">단춧구멍 길이 (cm)</label><input id="inpButtonHole" type="number" min="0.5" max="6" step="0.01" placeholder="1.3" title="빈칸 = 1.3 (13mm · 이번 셔츠 사용자 확정). 앞중심을 가운데로 한 수평 표시 · 오른앞판에만 출력"></div>
+        <div class="row"><label for="chkButtonNoHole">단춧구멍 없음</label><input id="chkButtonNoHole" type="checkbox" title="체크 = 단추 위치만 지정(구멍 없음). 좁은 여밈에서 구멍이 안 맞을 때 사용 · 재단·DXF 에는 구멍이 나가지 않음"></div>
         <div class="row" style="gap:4px">
           <button class="btn action-primary" id="btnApplyButtons" disabled>단추 적용</button>
           <button class="btn" id="btnClearButtons" disabled>단추 제거</button>
@@ -783,7 +784,7 @@
 <script src="js/designRenderer.js?v=2026100303"></script>
 <!-- 앞중심 여밈 파생(computeGeometry 밖): window.designPlacket. 현재 유효 앞판 외곽에서 파생. -->
 <script src="js/designPlacket.js?v=2026082001"></script>
-<script src="js/designButtons.js?v=2026112302"></script>
+<script src="js/designButtons.js?v=2026112501"></script>
 <!-- 소매 모양 파생(S1 하부 실루엣): window.designSleeve. cap+진동밑 고정, 하부만 변형. -->
 <script src="js/designSleeve.js?v=2026102001"></script>
 <!-- 디자인 작업 화면 배치(piece layout): window.designLayout. 형상 불변, 표시 offset·카메라만. -->
@@ -898,7 +899,7 @@
 <script src="js/init.js?v=2026111105"></script>
 <!-- UI 노출 상태 중앙화 (stage/tool). 기능 함수는 호출하지 않는다. -->
 <script src="js/projectFile.js?v=2026112302"></script>
-<script src="js/ui.js?v=2026112501"></script>
+<script src="js/ui.js?v=2026112502"></script>
 <!-- 라이트 테마 크롬(UI 전용): 확대 알약 · 폰 하단 시트 · 화면 모드. 기존 전역 함수만 호출. -->
 <script src="js/appleChrome.js?v=2026111302"></script>
 <!-- 원형 이세 배지·계산 노트 · 원형/디자인 비교(읽기 전용 · UI 전용). -->

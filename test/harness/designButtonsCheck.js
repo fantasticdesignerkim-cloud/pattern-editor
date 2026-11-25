@@ -110,5 +110,24 @@ ok(B.verifyAgainstPlacket(h1b, PK).ok && B.verifyAgainstPlacket(legacy, null).ok
 const PK2 = JSON.parse(JSON.stringify(PK)); PK2.parameters.overlapCm = 0.5;
 ok(!B.verifyAgainstPlacket(h1b, PK2).ok && !B.verifyAgainstPlacket(h1b, null).ok, "56: 여밈분이 줄면 불일치 · 여밈 없음 불일치");
 
+// 좁은 여밈에서 단추 위치 보존 — resolve(구멍만 실패하면 holeOnly + 구멍 없는 fallback · 위치까지 무효면 일반 거부)
+{ const NF = { cfX: 47.5, topY: 5, botY: 45, overlapCm: 0.5 }, P = { startCm: 4, endCm: 36, count: 5, diameterCm: 1.15, holeLengthCm: 1.3 };
+  const rs = B.resolve(P, NF);
+  ok(!rs.ok && rs.holeOnly === true && rs.reason === "hole-exceeds-placket", "57: 여밈분 0.5 + 구멍 1.3 → holeOnly");
+  const base = B.compute({ startCm: 4, endCm: 36, count: 5, diameterCm: 1.15 }, NF);
+  ok(rs.fallback && rs.fallback.ok && !rs.fallback.holes && !("holeLengthCm" in rs.fallback.parameters) && JSON.stringify(rs.fallback.marks) === JSON.stringify(base.marks), "58: fallback = 같은 단추 좌표 · 구멍·구멍 길이 키 없음");
+  const wide = B.resolve(P, { cfX: 47.5, topY: 5, botY: 45, overlapCm: 1.5 });
+  ok(wide.ok && wide.result.holes && wide.result.holes.length === 5, "59: 구멍이 맞으면 그대로(구멍 유지)");
+  const edge = B.resolve({ startCm: 0, endCm: 36, count: 2, holeLengthCm: 1.3 }, { cfX: 47.5, topY: 5, botY: 45, overlapCm: 1.5 });
+  ok(!edge.ok && edge.holeOnly && edge.reason === "hole-on-edge" && edge.fallback.marks[0].y === 5, "60: 가장자리에 닿는 구멍 → holeOnly(단추 위치 보존)");
+  const oor = B.resolve({ startCm: 4, endCm: 99, count: 2, holeLengthCm: 1.3 }, NF);
+  ok(!oor.ok && !oor.holeOnly && oor.reason === "out-of-range", "61: 위치까지 무효면 holeOnly 아님(일반 거부)");
+  ok(!B.resolve({ startCm: 4, endCm: 36, count: 2, diameterCm: 1.15, holeLengthCm: 1.0 }, NF).holeOnly && B.resolve({ startCm: 4, endCm: 36, count: 2, diameterCm: 1.15, holeLengthCm: 1.0 }, NF).reason === "hole-shorter-than-diameter", "62: 구멍 < 지름은 여밈 문제가 아니라 일반 거부");
+  const nohole = B.resolve({ startCm: 4, endCm: 36, count: 5, diameterCm: 1.15 }, NF);
+  ok(nohole.ok && !nohole.result.holes, "63: 구멍 길이 생략 = 좁은 여밈에서도 단추 위치 정상");
+  const pin = JSON.stringify(P); B.resolve(P, NF); ok(JSON.stringify(P) === pin, "64: 입력 불변");
+  ok(B.validateStored({ parameters: rs.fallback.parameters, marks: rs.fallback.marks }).ok, "65: fallback 은 저장 검증 통과");
+}
+
 console.log(`designButtonsCheck: ${PASS} pass, ${FAIL} fail`);
 if (FAIL) { console.log(fails.join("\n")); process.exit(1); }

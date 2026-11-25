@@ -883,11 +883,14 @@
     const cb = committedButtons(project); if (!cb.has) return;
     const DB = window.designButtons;
     // 지름 키 없는 옛 저장 단추는 1.3 을 유지(소급 변경 금지) · 구멍 길이 키가 없으면 구멍을 새로 만들지 않는다.
-    const r = DB ? DB.compute({ startCm: cb.start, endCm: cb.end, count: cb.count, diameterCm: cb.diameter == null ? DB.LEGACY_DIAMETER : cb.diameter, holeLengthCm: cb.hole == null ? undefined : cb.hole }, placketFrame(project)) : { ok: false };
+    const rs = DB ? DB.resolve({ startCm: cb.start, endCm: cb.end, count: cb.count, diameterCm: cb.diameter == null ? DB.LEGACY_DIAMETER : cb.diameter, holeLengthCm: cb.hole == null ? undefined : cb.hole }, placketFrame(project)) : { ok: false };
+    // 구멍만 안 맞고 단추 위치는 유효 = 위치를 보존하고 구멍만 뺀다(조용히 지우지 않고 반드시 안내 — 사용자 확인이 필요한 경로는 onApplyPlacket 이 먼저 막는다)
+    const r = rs.holeOnly ? rs.fallback : (rs.ok ? rs.result : rs);
     if (r.ok) {
       const fb = { parameters: r.parameters, marks: r.marks }; if (r.holes) fb.holes = r.holes;
       if (cb.diameter == null) delete fb.parameters.diameterCm;   // 옛 저장본은 지름 키 없는 채로 유지(렌더·열기가 1.3 으로 읽는다)
       project.working.frontButtons = fb;
+      if (rs.holeOnly) setButtonsNote("여밈이 바뀌어 단춧구멍은 뺐습니다 · 단추 위치는 그대로 유지 · " + buttonsNoteFor(rs.reason) + " · 구멍이 필요하면 여밈을 조정한 뒤 «단추 적용» 으로 다시 만드세요");
     } else {
       project.working.frontButtons = null;   // 실패 시 stale 유지 금지
       setButtonsNote("여밈이 바뀌어 단추를 다시 만들 수 없어 지웠습니다 · " + buttonsNoteFor(r.reason));
@@ -902,17 +905,19 @@
       "invalid-position": "시작·끝 거리를 숫자로 입력하세요", "out-of-range": "시작·끝은 0 이상, 여밈 길이(목점~밑단) 이하여야 합니다",
       "start-equals-end": "개수 2 이상은 시작과 끝이 달라야 합니다", "reversed": "끝이 시작보다 아래(큰 값)여야 합니다" })[reason] || "단추를 적용할 수 없습니다";
   }
+  function noHoleChecked() { const c = document.getElementById("chkButtonNoHole"); return !!(c && c.checked); }   // «단춧구멍 없음» = 단추 위치만(구멍 길이 생략 → compute 가 구멍을 만들지 않는다)
   function readButtonInputs() {
     const raw = id => { const el = document.getElementById(id); return el ? String(el.value).trim() : ""; };
     return { startCm: raw("inpButtonStart") === "" ? NaN : Number(raw("inpButtonStart")), endCm: raw("inpButtonEnd") === "" ? NaN : Number(raw("inpButtonEnd")), count: raw("inpButtonCount") === "" ? NaN : Number(raw("inpButtonCount")), diameterCm: raw("inpButtonDiameter") === "" ? undefined : Number(raw("inpButtonDiameter")),   // 지름 빈칸 = 기본 1.15(11.5mm 사용자 확정)
-      holeLengthCm: raw("inpButtonHole") === "" ? (window.designButtons ? window.designButtons.DEFAULT_HOLE : 1.3) : Number(raw("inpButtonHole")) };   // 구멍 빈칸 = 기본 1.3(13mm 사용자 확정) — 적용하면 구멍이 생긴다(명시 적용)
+      holeLengthCm: noHoleChecked() ? undefined : (raw("inpButtonHole") === "" ? (window.designButtons ? window.designButtons.DEFAULT_HOLE : 1.3) : Number(raw("inpButtonHole"))) };   // 구멍 빈칸 = 기본 1.3(13mm 사용자 확정) — 적용하면 구멍이 생긴다(명시 적용)
   }
   function onApplyButtons() {
     const project = designProjectNow(); if (!project || !window.designButtons) return;
     const q = readButtonInputs();
     if (q.count === 1 && isNaN(q.endCm)) q.endCm = q.startCm;   // 개수 1 은 끝 입력이 필요 없다
-    const r = window.designButtons.compute(q, placketFrame(project));
-    if (!r.ok) { setButtonsNote(buttonsNoteFor(r.reason)); return; }
+    const rs = window.designButtons.resolve(q, placketFrame(project));
+    if (!rs.ok) { setButtonsNote(buttonsNoteFor(rs.reason) + (rs.holeOnly ? " · 단추 위치만 필요하면 «단춧구멍 없음» 을 체크하고 다시 적용하세요" : "")); return; }   // 구멍을 몰래 빼고 적용하지 않는다(적용 상태 보존)
+    const r = rs.result;
     const fbNew = { parameters: r.parameters, marks: r.marks }; if (r.holes) fbNew.holes = r.holes;   // 구멍이 없으면 holes 키 자체를 두지 않는다
     project.working.frontButtons = fbNew;
     if (typeof render === "function") render();
@@ -925,6 +930,7 @@
     const project = designProjectNow(); if (!project) return;
     project.working.frontButtons = null;
     ["inpButtonStart", "inpButtonEnd", "inpButtonCount", "inpButtonDiameter", "inpButtonHole"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    const nh = document.getElementById("chkButtonNoHole"); if (nh) nh.checked = false;
     if (typeof render === "function") render();
     setButtonsNote("단추 제거됨"); syncButtonButtons();
     updateDesignResultUI(project);
@@ -946,8 +952,28 @@
     if (!project || !window.designPlacket) return;
     const st = readPlacketInputs();
     if (!st.valid) { setPlacketNote("여밈분 0–10 · 안단 폭 0–15 범위를 확인하세요"); return; }
+    const prevPk = project.working.frontPlacket, cb = committedButtons(project);
     const r = computeFrontPlacket(project, { overlapCm: st.overlap.v, facingWidthCm: st.facing.v, lengthMode: "full" });
     if (!r.ok) { setPlacketNote(placketNoteFor(r.reason)); if (typeof render === "function") render(); return; }
+    // 구멍이 있는 단추: 새 여밈에서 구멍만 안 맞게 되면 막고 사용자에게 확인(취소 = 여밈·단추·구멍 모두 그대로)
+    if (cb.has && cb.hole != null && window.designButtons) {
+      const DB = window.designButtons;
+      const rs = DB.resolve({ startCm: cb.start, endCm: cb.end, count: cb.count, diameterCm: cb.diameter == null ? DB.LEGACY_DIAMETER : cb.diameter, holeLengthCm: cb.hole }, placketFrame(project));
+      if (rs.holeOnly) {
+        const msg = "여밈분을 " + fmtL(st.overlap.v) + "cm 로 바꾸면 단춧구멍(" + fmtMm(cb.hole) + "mm)이 완성 앞단에 맞지 않습니다.\n" + buttonsNoteFor(rs.reason) + "\n\n확인 = 구멍을 빼고 단추 위치만 유지\n취소 = 여밈 변경을 하지 않음";
+        const go = typeof confirm === "function" ? confirm(msg) : false;
+        if (!go) {
+          project.working.frontPlacket = prevPk;   // 롤백(단추·구멍은 건드리지 않았다)
+          const pp = (prevPk && prevPk.parameters) || {};
+          const eo = document.getElementById("inpPlacketOverlap"), ef = document.getElementById("inpPlacketFacing");
+          if (eo && typeof pp.overlapCm === "number") eo.value = String(pp.overlapCm); if (ef && typeof pp.facingWidthCm === "number") ef.value = String(pp.facingWidthCm);
+          if (typeof render === "function") render();
+          setPlacketNote("여밈 변경을 취소했습니다 · 단춧구멍이 새 여밈에 맞지 않습니다"); syncPlacketButtons();
+          return;
+        }
+      }
+    }
+    refreshFrontButtons(project);   // 새 여밈에 맞춰 단추 위치 재계산(구멍만 안 맞으면 위치 보존 + 구멍 제거 안내 · 위치까지 무효면 제거 + 사유)
     if (typeof render === "function") render();
     setPlacketNote("여밈 " + fmtL(st.overlap.v) + "cm · 안단 " + fmtL(st.facing.v) + "cm(컷온) · 세션 전용");
     syncPlacketButtons();
@@ -963,7 +989,7 @@
     setPlacketNote("여밈 제거됨"); syncPlacketButtons();
     updateBodiceCheckpointUI(project);
   }
-  function onButtonsGone() { ["inpButtonStart", "inpButtonEnd", "inpButtonCount", "inpButtonDiameter", "inpButtonHole"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; }); setButtonsNote(""); }
+  function onButtonsGone() { ["inpButtonStart", "inpButtonEnd", "inpButtonCount", "inpButtonDiameter", "inpButtonHole"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; }); const nh = document.getElementById("chkButtonNoHole"); if (nh) nh.checked = false; setButtonsNote(""); }
   function syncPlacketButtons() {
     const project = designProjectNow();
     const apply = document.getElementById("btnApplyPlacket"), clear = document.getElementById("btnClearPlacket");
