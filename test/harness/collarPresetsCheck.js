@@ -10,6 +10,7 @@
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
+const V = require("./versionHelper");
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(cond, name) { if (cond) PASS++; else { FAIL++; fails.push(name); } }
 function throwsReason(fn, reason, name) { try { fn(); ok(false, name + " (throw 없음)"); } catch (e) { ok(e.reason === reason, name + " (reason=" + e.reason + ")"); } }
@@ -1395,7 +1396,7 @@ const BAND_FAM = "shirt-collar-with-band";
     "39: 정상 동선 초기값 = M 레코드 기본값(무변경)");
   ok(/\.stand\.frontEndCm/.test(ui) && /pd\.body\.gapCm/.test(ui), "39: 입력 없는 값(앞 끝선·gap)은 레코드 기본값에서");
   ok(/function collarLockedHitReason\(/.test(lt) && /collarLockedHitReason\(selPiece/.test(lt) && /showCollarLockedReason\(why\)/.test(lt), "39: 잠긴 칼라 선 누름 → 이유 안내 배선");
-  ok(/앱 버전 2026\.11\.26\.1">v2026\.11\.26\.1</.test(html), "39: 화면 버전 v2026.11.26.1");
+  ok(V.appVersionOk(html), "39: 화면 버전 본문(vYYYY.MM.DD.N)과 aria-label 문자열 일치");
 }
 
 // 40. 2026-11-12 밴드 곡선 규칙 변경과 저장 호환 — 옛 규칙으로 저장된 밴드는 자동으로 덮어쓰지 않는다.

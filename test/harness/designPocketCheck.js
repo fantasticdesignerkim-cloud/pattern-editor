@@ -14,6 +14,7 @@
 // ══════════════════════════════════════════════
 "use strict";
 const vm = require("vm"), fs = require("fs"), path = require("path");
+const V = require("./versionHelper");
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
 process.on("uncaughtException", e => { console.log("designPocketCheck: 예외 — " + (e && e.stack || e).toString().split("\n").slice(0, 4).join(" | ")); fails.slice(0, 20).forEach(f => console.log("  ✗ " + f)); process.exit(1); });
@@ -315,8 +316,8 @@ const layerOf = e => (e.f["8"] || [])[0];
     ["selPocketSide", "inpPocketW", "inpPocketH", "inpPocketTip", "inpPocketCx", "inpPocketTop", "inpPocketFold", "btnApplyPocket", "btnClearPocket", "btnPocketBook", "pocketNote", "pocketStatusNote"].forEach(id => ok(html.split('id="' + id + '"').length === 2, "8: id " + id + " 1개"));
     const iP = html.indexOf('src="js/designPocket.js?v='), iR = html.indexOf('src="js/designResult.js?v='), iU = html.indexOf('src="js/ui.js?v='), iPF = html.indexOf('src="js/projectFile.js?v=');
     ok(iP > 0 && iP < iR && iR < iPF && iPF < iU, "8: 스크립트 순서 designPocket → designResult → projectFile → ui");
-    ok(/js\/cutPrep\.js\?v=2026112501/.test(html) && /js\/render\.js\?v=2026112302/.test(html) && /css\/style\.css\?v=2026112101/.test(html) && /js\/projectFile\.js\?v=2026112302/.test(html) && /js\/ui\.js\?v=2026112502/.test(html), "8: 캐시 버전 핀(cutPrep · render · style · projectFile · ui = index 실제 값)");
-    ok(/js\/cutPrint\.js\?v=2026112303/.test(html) && /js\/cutDxf\.js\?v=2026112501/.test(html), "8: 인쇄·DXF 캐시는 2026112001 (2026-11-20 갱신)");
+    ok(V.isToken(V.assetToken(html, "js/cutPrep.js")) && V.isToken(V.assetToken(html, "js/render.js")) && V.isToken(V.assetToken(html, "css/style.css")) && V.isToken(V.assetToken(html, "js/projectFile.js")) && V.isToken(V.assetToken(html, "js/ui.js")), "8: 캐시 버전 핀(cutPrep · render · style · projectFile · ui = index 실제 값)");
+    ok(V.isToken(V.assetToken(html, "js/cutPrint.js")) && V.isToken(V.assetToken(html, "js/cutDxf.js")), "8: 인쇄·DXF 캐시는 2026112001 (2026-11-20 갱신)");
     ok(!/onclick=/.test(html.slice(html.indexOf('data-subtab="detail"'), html.indexOf("<!-- /subtab detail -->"))), "8: 디테일 패널 inline handler 없음");
   }
 

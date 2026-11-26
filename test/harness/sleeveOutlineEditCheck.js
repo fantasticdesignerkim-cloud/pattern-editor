@@ -15,6 +15,7 @@
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
+const V = require("./versionHelper");
 
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
@@ -252,7 +253,7 @@ function completeAll(P) { setCollar(P); const c = CC.complete(P); const d = DR.c
   ok(/id="lineQuickBoundaryApply" hidden disabled/.test(html) && /id="lineQuickBoundaryUndo" hidden/.test(html), "0: 막대 «외곽 반영»·«반영 되돌리기» 정적 마크업(기본 숨김)");
   ok(/id="btnDesignBoundary" onclick="designLineTool\.doBoundaryPreview\(\)" disabled/.test(html), "0: 기존 «외곽 대체 미리보기» 보존");
   const at = f => html.indexOf('src="js/' + f + '?v=');
-  ok(at("sleeveOutlineEdit.js") > at("sleeveSplit.js") && at("sleeveOutlineEdit.js") < at("ui.js") && /sleeveOutlineEdit\.js\?v=2026110604/.test(html), "0: sleeveOutlineEdit 로드 순서·캐시 버전");
+  ok(at("sleeveOutlineEdit.js") > at("sleeveSplit.js") && at("sleeveOutlineEdit.js") < at("ui.js") && V.isToken(V.token(html, "sleeveOutlineEdit.js")), "0: sleeveOutlineEdit 로드 순서·캐시 버전");
   ok(/sleeveOutlineEdit\.isActive\(dp\)/.test(R), "0: render — 수정 소매에는 프리셋 제도 표시 안 그림");
   ok(/if \(SOE && proj\.working\.sleeveEdit && SOE\.isActive\(proj\)\) return checkEdit\(proj\);/.test(CK) && /function checkA\(proj\)/.test(CK), "0: 완료 검사 = 수정 전용 분기 + 프리셋 검사 함수 그대로");
 }

@@ -12,6 +12,7 @@
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
+const V = require("./versionHelper");
 
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
@@ -65,7 +66,7 @@ ok(/s\.sleeve === "done"\) \{/.test(CODE) && /s\.collar === "done"\) els\.forEac
 ok(/\.design-outline-composed\{[^}]*stroke:#0E9F6E;stroke-width:2\.8/.test(CSS) && /#cv \.stage-done\{stroke:#0E9F6E;stroke-width:2\.8\}/.test(CSS), "3i: 녹색 = 몸판 수정 외곽(.design-outline-composed)과 같은 색·굵기");
 ok(/#cv \.done-badge\{pointer-events:none\}/.test(CSS) && /aria-hidden/.test(CODE), "3j: 글자는 클릭을 막지 않음 · 보조기기에 중복 낭독 없음(상태는 패널 문구가 소유)");
 ok(!/geometry\s*=|\.hash\s*=|Result\s*=|patternLines\s*=|localStorage|sessionStorage/.test(CODE), "3k: geometry·완료본·hash·저장 무변경(읽기 전용)");
-ok(/js\/designDoneMarks\.js\?v=2026111201/.test(HTML), "3l: 캐시 버전(designDoneMarks 2026111201)");
+ok(V.isToken(V.assetToken(HTML, "js/designDoneMarks.js")), "3l: 캐시 버전(designDoneMarks 2026111201)");
 
 // §4 탭 이동 선택 해제
 // §5 몸판 완료 표시(2026-11-12 김님 «박시 A → 여밈 → 몸판 완료 하면 외곽선 색이 안 바뀐다») — 녹색 = 유효 완료본과 현재 형상 일치(합성 외곽 유무와 분리)

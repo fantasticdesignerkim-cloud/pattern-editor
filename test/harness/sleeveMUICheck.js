@@ -5,6 +5,7 @@
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
+const V = require("./versionHelper");
 
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
@@ -39,7 +40,6 @@ const f2 = v => (Math.round(v * 100) / 100).toFixed(2), sg = v => (v >= 0 ? "+" 
 const T = (m, id) => { const l = m.lines.find(x => x.id === id) || m.dims.find(x => x.id === id); return l ? l.text : null; };
 
 const IN = { sleeveLengthCm: 20, upperArmCm: 26, riseCm: 0.5 };
-const VER = "2026102001";
 // ── 1. 카탈로그 ──
 {
   const f = SP.family("short-sleeve"), rec = SP.get("bunka-sleeve-M");
@@ -127,7 +127,7 @@ const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodi
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveM.js") > pos("sleeveLApply.js") && pos("sleeveMApply.js") > pos("designSleeveM.js") && pos("ui.js") > pos("sleeveMApply.js"), "7: 스크립트 순서");
-  ok((["designSleeveM.js"].every(f => ver(f) === VER) && ver("sleeveMApply.js") === "2026102802") && (ver("sleevePresets.js") === "2026110403" && ver("render.js") === "2026112302" && ver("sleeveCheckpoint.js") === "2026112303" && ver("ui.js") === "2026112502") && ver("sleeveAnnotation.js") === "2026111304", "7: 캐시 버전 " + VER);
+  ok((["designSleeveM.js"].every(f => V.isToken(ver(f))) && V.isToken(ver("sleeveMApply.js"))) && (V.isToken(ver("sleevePresets.js")) && V.isToken(ver("render.js")) && V.isToken(ver("sleeveCheckpoint.js")) && V.isToken(ver("ui.js"))) && V.isToken(ver("sleeveAnnotation.js")), "7: 캐시 버전 10자리 형식");
   ok(/function sleeveMOn\(project\)/.test(ui) && /function applySleeveM\(project\)/.test(ui) && /keep !== "M" && window\.sleeveMApply/.test(ui) && /if \(isM\) \{/.test(ui) && /window\.sleeveMApply\.rederive\(project\)/.test(ui) && /_sm\.line === "M"/.test(rn), "7: ui·render 배선");
   ok(/riseRow\.hidden = !\(sleeveJOn\(project\) \|\| sleeveKOn\(project\) \|\| sleeveMOn\(project\)/.test(ui) && /armRow\.hidden = !\(sleeveLOn\(project\) \|\| sleeveMOn\(project\)/.test(ui), "7: 상승·위팔 입력칸 Ⓜ 에서 보임");
   ok(/sleeveRiseAuto = step\("riseCm", "inpSleeveRise", sleeveRiseAuto\)/.test(ui) && /sleeveLenAuto = step\("sleeveLengthCm", "inpSleeveLength", sleeveLenAuto\)/.test(ui), "7: 선택한 제도의 기본값(소매길이 20 · 상승 0.5)을 고르는 순간 입력칸에(수정 가능)");

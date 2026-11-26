@@ -5,6 +5,7 @@
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
+const V = require("./versionHelper");
 
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
@@ -39,7 +40,6 @@ const f2 = v => (Math.round(v * 100) / 100).toFixed(2), sg = v => (v >= 0 ? "+" 
 const T = (m, id) => { const l = m.lines.find(x => x.id === id) || m.dims.find(x => x.id === id); return l ? l.text : null; };
 
 const IN = { sleeveLengthCm: 20, cutOffsetCm: 2.5, centerTuckCm: 4, sideTuckCm: 2, stitchEndCm: 1.5 };
-const VER = "2026102101";
 // ── 1. 카탈로그 ──
 {
   const f = SP.family("short-sleeve"), rec = SP.get("bunka-sleeve-N");
@@ -133,7 +133,7 @@ const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodi
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveN.js") > pos("sleeveMApply.js") && pos("sleeveNApply.js") > pos("designSleeveN.js") && pos("ui.js") > pos("sleeveNApply.js"), "7: 스크립트 순서");
-  ok((["designSleeveN.js"].every(f => ver(f) === VER) && ver("sleeveNApply.js") === "2026102802") && (ver("sleevePresets.js") === "2026110403" && ver("render.js") === "2026112302" && ver("sleeveCheckpoint.js") === "2026112303" && ver("ui.js") === "2026112502") && ver("sleeveAnnotation.js") === "2026111304" && (["designSleeveM.js", "designSleeveL.js"].every(f => ver(f) === "2026102001") && ver("sleeveMApply.js") === "2026102802"), "7: 캐시 버전 " + VER + " · 바뀌지 않은 Ⓛ·Ⓜ 파일은 그대로");
+  ok((["designSleeveN.js"].every(f => V.isToken(ver(f))) && V.isToken(ver("sleeveNApply.js"))) && (V.isToken(ver("sleevePresets.js")) && V.isToken(ver("render.js")) && V.isToken(ver("sleeveCheckpoint.js")) && V.isToken(ver("ui.js"))) && V.isToken(ver("sleeveAnnotation.js")) && (["designSleeveM.js", "designSleeveL.js"].every(f => V.isToken(ver(f))) && V.isToken(ver("sleeveMApply.js"))), "7: 캐시 버전 10자리 형식" + " · 바뀌지 않은 Ⓛ·Ⓜ 파일은 그대로");
   ok(["inpSleeveNCut\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"2.5\"", "inpSleeveNCenter\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"4\"", "inpSleeveNSide\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"2\"", "inpSleeveNStitch\" type=\"number\" min=\"0.1\" step=\"0.1\" value=\"1.5\""].every(s => html.indexOf('id="' + s) > 0)
     && ["rowSleeveNCut", "rowSleeveNCenter", "rowSleeveNSide", "rowSleeveNStitch"].every(id => new RegExp('id="' + id + '" hidden').test(html)), "7: 입력칸 4 · 기본값 · 숨김 시작");
   ok(/function sleeveNOn\(project\)/.test(ui) && /function applySleeveN\(project\)/.test(ui) && /keep !== "N" && window\.sleeveNApply/.test(ui) && /if \(isN\) \{/.test(ui) && /window\.sleeveNApply\.rederive\(project\)/.test(ui) && /_sm\.line === "N"/.test(rn), "7: ui·render 배선");

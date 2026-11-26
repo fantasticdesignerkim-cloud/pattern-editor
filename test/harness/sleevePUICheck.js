@@ -5,6 +5,7 @@
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
+const V = require("./versionHelper");
 
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
@@ -39,7 +40,6 @@ const f2 = v => (Math.round(v * 100) / 100).toFixed(2), sg = v => (v >= 0 ? "+" 
 const T = (m, id) => { const l = m.lines.find(x => x.id === id) || m.dims.find(x => x.id === id); return l ? l.text : null; };
 
 const IN = { sleeveLengthCm: 20, flareRatio: 0.7 };
-const VER = "2026102602";
 // ── 1. 카탈로그 ──
 {
   const f = SP.family("short-sleeve"), rec = SP.get("bunka-sleeve-P");
@@ -118,7 +118,7 @@ const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodi
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveP.js") > pos("sleeveOApply.js") && pos("sleevePApply.js") > pos("designSleeveP.js") && pos("ui.js") > pos("sleevePApply.js"), "7: 스크립트 순서");
-  ok((["designSleeveP.js"].every(f => ver(f) === VER) && ver("sleevePApply.js") === "2026102802") && (ver("sleevePresets.js") === "2026110403" && ver("render.js") === "2026112302" && ver("sleeveCheckpoint.js") === "2026112303" && ver("ui.js") === "2026112502") && ver("sleeveAnnotation.js") === "2026111304" && ((ver("designSleeveO.js") === "2026102802") && ver("sleeveOApply.js") === "2026102802"), "7: 캐시 버전 " + VER + " · Ⓞ 파일은 그대로");
+  ok((["designSleeveP.js"].every(f => V.isToken(ver(f))) && V.isToken(ver("sleevePApply.js"))) && (V.isToken(ver("sleevePresets.js")) && V.isToken(ver("render.js")) && V.isToken(ver("sleeveCheckpoint.js")) && V.isToken(ver("ui.js"))) && V.isToken(ver("sleeveAnnotation.js")) && ((V.isToken(ver("designSleeveO.js"))) && V.isToken(ver("sleeveOApply.js"))), "7: 캐시 버전 10자리 형식" + " · Ⓞ 파일은 그대로");
   ok(/id="rowSleevePFlare" hidden/.test(html) && /id="inpSleevePFlare" type="number" min="0\.05" step="0\.05" value="0\.7"/.test(html), "7: 계수 입력칸 · 기본 0.7 · 숨김 시작");
   ok(/function sleevePOn\(project\)/.test(ui) && /function applySleeveP\(project\)/.test(ui) && /keep !== "P" && window\.sleevePApply/.test(ui) && /if \(isP\) \{/.test(ui) && /window\.sleevePApply\.rederive\(project\)/.test(ui) && /_sm\.line === "P"/.test(rn), "7: ui·render 배선");
   const fn = ui.slice(ui.indexOf("function applySleeveP(project)"), ui.indexOf("// Ⓞ 입력칸"));

@@ -6,6 +6,7 @@
 // ══════════════════════════════════════════════
 const fs = require("fs");
 const path = require("path");
+const V = require("./versionHelper");
 const vm = require("vm");
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(cond, name) { if (cond) PASS++; else { FAIL++; fails.push(name); } }
@@ -25,7 +26,7 @@ const ui = read("js/ui.js");
 
 // 2. 현재 기능 보존: 버전 표시 · 카라 초기화 버튼 없음 · «곡선으로» · 빠른 도구 막대 원형 그대로
 {
-  ok(/id="appVersion"[^>]*aria-label="앱 버전 \d{4}\.\d{2}\.\d{2}\.\d+">v\d{4}\.\d{2}\.\d{2}\.\d+</.test(html), "2: 앱 버전 표시(#appVersion)");
+  ok(V.appVersionOk(html), "2: 앱 버전 표시(#appVersion) — 본문 vYYYY.MM.DD.N 과 aria 일치");
   ok(!/btnCollarBaseM/.test(html) && !/btnCollarBaseM/.test(ui), "2: 카라 «기본형으로 초기화» 버튼 없음");
   ok(/id="lineQuickToCurve"/.test(html) && /id="lineQuickMore"/.test(html) && /id="lineQuickBar"/.test(html), "2: 빠른 도구 «곡선으로»·«더보기» 유지");
   ok(!/id="lineQuickCollapse"/.test(html) && !/lqb-grabber/.test(css) && !/data-collapsed/.test(css) && !/\.line-quickbar\{[^}]*max-height/.test(css),

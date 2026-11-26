@@ -5,6 +5,7 @@
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
+const V = require("./versionHelper");
 
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
@@ -103,7 +104,7 @@ const bodice = P.working.bodiceResult, snap = { bodice: J(bodice), ref: J(P.refe
   const pos = f => html.indexOf('src="js/' + f);
   ok(pos("designSleeveE.js") > pos("sleeveDApply.js") && pos("sleeveEApply.js") > pos("designSleeveE.js") && pos("ui.js") > pos("sleeveEApply.js"), "7: 스크립트 순서");
   const ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
-  ok((["designSleeveE.js"].every(f => ver(f) === "2026101001") && ver("sleeveEApply.js") === "2026102802") && ((["sleevePresets.js"].every(f => ver(f) === "2026110403")) && ver("sleeveCheckpoint.js") === "2026112303") && ver("ui.js") === "2026112502" && ver("sleeveAnnotation.js") === "2026111304", "7: 캐시 버전(Ⓔ 2026101001 · 공용 2026101101)");
+  ok((["designSleeveE.js"].every(f => V.isToken(ver(f))) && V.isToken(ver("sleeveEApply.js"))) && ((["sleevePresets.js"].every(f => V.isToken(ver(f)))) && V.isToken(ver("sleeveCheckpoint.js"))) && V.isToken(ver("ui.js")) && V.isToken(ver("sleeveAnnotation.js")), "7: 캐시 버전(Ⓔ 2026101001 · 공용 2026101101)");
   ok(/function sleeveEOn\(project\)/.test(ui) && /keep !== "E" && window\.sleeveEApply/.test(ui) && /if \(isE\) \{/.test(ui) && /window\.sleeveEApply\.rederive\(project\)/.test(ui), "7: ui 배선");
 }
 

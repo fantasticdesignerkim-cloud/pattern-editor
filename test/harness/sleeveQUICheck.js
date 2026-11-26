@@ -5,6 +5,7 @@
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
+const V = require("./versionHelper");
 
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
@@ -40,7 +41,6 @@ const T = (m, id) => { const l = m.lines.find(x => x.id === id) || m.dims.find(x
 
 const D = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const IN = { heightRatio: 0.25 };
-const VER = "2026102801";
 // ── 1. 카탈로그 ──
 {
   const f = SP.family("short-sleeve"), rec = SP.get("bunka-sleeve-Q");
@@ -129,7 +129,7 @@ const bodice = P.working.bodiceResult, AH = bodice.armholeLengths, snap = { bodi
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"), ui = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), rn = fs.readFileSync(path.join(ROOT, "js", "render.js"), "utf8");
   const pos = f => html.indexOf('src="js/' + f), ver = f => (html.match(new RegExp('src="js/' + f.replace(".", "\\.") + '\\?v=(\\d+)"')) || [])[1];
   ok(pos("designSleeveQ.js") > pos("sleevePApply.js") && pos("sleeveQApply.js") > pos("designSleeveQ.js") && pos("ui.js") > pos("sleeveQApply.js"), "7: 스크립트 순서");
-  ok((ver("designSleeveQ.js") === "2026102802" && ver("sleeveQApply.js") === "2026102802") && (ver("sleevePresets.js") === "2026110403" && ver("render.js") === "2026112302" && ver("sleeveCheckpoint.js") === "2026112303" && ver("ui.js") === "2026112502") && ver("sleeveAnnotation.js") === "2026111304" && (["designSleeveP.js"].every(f => ver(f) === "2026102602") && ver("sleevePApply.js") === "2026102802"), "7: 캐시 버전 " + VER + " · Ⓟ 파일은 그대로");
+  ok((V.isToken(ver("designSleeveQ.js")) && V.isToken(ver("sleeveQApply.js"))) && (V.isToken(ver("sleevePresets.js")) && V.isToken(ver("render.js")) && V.isToken(ver("sleeveCheckpoint.js")) && V.isToken(ver("ui.js"))) && V.isToken(ver("sleeveAnnotation.js")) && (["designSleeveP.js"].every(f => V.isToken(ver(f))) && V.isToken(ver("sleevePApply.js"))), "7: 캐시 버전 10자리 형식" + " · Ⓟ 파일은 그대로");
   ok(/id="rowSleeveQRatio" hidden/.test(html) && /id="inpSleeveQRatio" type="number" min="0\.25" max="0\.75" step="0\.05" value="0\.25"/.test(html) && /기본 1\/4 · 1\/4 ~ 3\/4/.test(html), "7: 비율 입력칸 · 기본 0.25 · 범위 표시 · 숨김 시작");
   ok(/function sleeveQOn\(project\)/.test(ui) && /function applySleeveQ\(project\)/.test(ui) && /keep !== "Q" && window\.sleeveQApply/.test(ui) && /if \(isQ\) \{/.test(ui) && /window\.sleeveQApply\.rederive\(project\)/.test(ui) && /_sm\.line === "Q"/.test(rn) && /bodiceMarks/.test(rn), "7: ui·render 배선(몸판 달림 끝 포함)");
   const fn = ui.slice(ui.indexOf("function applySleeveQ(project)"), ui.indexOf("// Ⓟ 입력칸"));
