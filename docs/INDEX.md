@@ -8,7 +8,7 @@
 | 문서 | 내용 |
 |---|---|
 | [../CLAUDE.md](../CLAUDE.md) | 비전·제1법칙·잠긴 아키텍처·작업 스타일·**안전 계약**·단계 경계 |
-| **[STATUS.md](STATUS.md)** | **현재 상태·다음 후보·열린 이슈·미확정 목록** |
+| **[STATUS.md](STATUS.md)** | **현재 버전·진행 작업·승인 대기 후보·미확정 값·열린 이슈**. 지난 작업은 [history/](history/) 참고. |
 | [TESTING.md](TESTING.md) | 회귀 하네스 스위트·테스트 전용 장치·환경 이전 절차 |
 | [SANDBOX.md](SANDBOX.md) | 계약 밖 실험 영역의 규칙과 승격 절차 |
 | [../GOAL.md](../GOAL.md) | 작업 목표·완료 기준 파일 — CLAUDE.md 「작업 보고·자율 진행 규칙」이 참조(마지막 갱신 2026-09-28) |
@@ -42,3 +42,4 @@
 | [history/design-collar.md](history/design-collar.md) | 카라 C1~C3·교재 M형 |
 | [history/design-result.md](history/design-result.md) | 세 완료본 통합 |
 | [history/design-lines-layout.md](history/design-lines-layout.md) | piece 배치·패턴선 도구·절개·외곽 대체 |
+| [history/2026-11.md](history/2026-11.md) | 재단·출력 및 통합 기록 |
