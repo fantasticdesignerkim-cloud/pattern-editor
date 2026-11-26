@@ -59,7 +59,8 @@
   }
 
 
-  // ── adaptive de Casteljau: cubic 실제 호길이 + 조밀 점열(측정·자기교차 공용, 고정 N분할 금지) ──
+  // ── adaptive de Casteljau: cubic 실제 호길이 측정(길이 측정 전용 — 고정 N분할 금지) ──
+  //   ※ 자기교차 판정의 점열은 이것이 아니라 아래 flattenSeg 의 **고정 FLATTEN_N(32)등분**이다(adaptive 아님).
   function distPtLine(p, a, b) {
     var dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
     if (L2 === 0) return lineLen(p, a);

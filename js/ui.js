@@ -306,7 +306,10 @@
     if (!bw.hasCompleted() || busyTool()) { refresh(); return; }
     let project = null, reason = null;
     try {
-      project = dw.hasProject() ? dw.current() : dw.startFromBlock(bw.latest());
+      const fresh = !dw.hasProject();
+      project = fresh ? dw.startFromBlock(bw.latest()) : dw.current();
+      // 새 프로젝트의 «아직 저장 안 한 변경 없음» 기준점(저장하지 않은 작업 보호 · projectFile.hasUnsavedChanges)
+      if (fresh && project && window.projectFile && window.projectFile.markSaved) window.projectFile.markSaved();
     } catch (e) { reason = (e && e.reason) || "start-failed"; }
     if (!project) {
       const note = document.getElementById("blockStatusNote");
@@ -2264,14 +2267,24 @@
     updateSleevePanel(project); updateSleeveEaseUI(project);
   }
   // «소매 적용» 버튼 옆 안내: 누르면 실제로 적용될 라인(onApplySleeve 의 분기와 같은 조건 — 동작은 바꾸지 않고 말만 한다).
+  // «소매 적용» 의 분기 판정 — onApplySleeve 와 안내(syncSleeveApplyTarget)가 **같은 함수**를 쓴다(안내와 실제 동작이 갈라지지 않게).
+  //   "line-on" = 켜진 라인 재제도 · "preset" = 고른 라인 적용(→ onApplySleevePreset) · "base" = 원형 소매 기준.
+  function sleeveApplyRoute(project) {
+    if (sleeveLineOn(project)) return "line-on";
+    return selectedSleeveFamilyId() !== SLEEVE_BASE ? "preset" : "base";
+  }
   function syncSleeveApplyTarget(project) {
     const el = document.getElementById("sleeveApplyTarget"); if (!el) return;
     let t = "";
     if (project) {
-      if (sleeveLineOn(project)) t = "«소매 적용»: 지금 켜진 소매 라인을 입력값으로 다시 제도합니다";
-      else if (selectedSleeveFamilyId() !== SLEEVE_BASE && window.sleevePresets) {
+      const route = sleeveApplyRoute(project);
+      if (route === "line-on") t = "«소매 적용»: 지금 켜진 소매 라인을 입력값으로 다시 제도합니다";
+      else if (route === "preset" && window.sleevePresets) {
         const fid = selectedSleeveFamilyId(), vid = selectedSleeveVariantId(), d = window.sleevePresets.displayTitle(fid, vid), v = window.sleevePresets.variant(fid, vid);
-        t = "«소매 적용»: 위에서 고른 라인을 적용합니다 — " + (d ? d.familyLabel + (v ? " · " + presetDisplayName(v.label) : "") : "선택한 라인");
+        const label = d ? d.familyLabel + (v ? " · " + presetDisplayName(v.label) : "") : "선택한 라인";
+        // 실제 적용 판정(onApplySleevePreset 과 같은 resolve) — 준비 중·보류 라인은 «적용합니다» 라고 말하지 않는다.
+        if (window.sleevePresets.resolve(fid, vid).ok) t = "«소매 적용»: 위에서 고른 라인을 적용합니다 — " + label;
+        else t = "«소매 적용»: 위에서 고른 라인은 아직 제도할 수 없어 적용되지 않습니다 — " + label;
       } else t = "«소매 적용»: 원형 소매 기준(원형 소매를 입력값으로 변형)";
     }
     el.textContent = t; el.hidden = !t;
@@ -2311,7 +2324,7 @@
     if (sleeveCapInvalid(project)) { setSleeveNote("소매산 편집이 무효입니다 · 복구 또는 기본 소매산으로 돌아간 뒤 적용"); return; }
     // 2026-11-24: 켜진 라인이 없는데 드롭다운이 원형 소매 기준이 아닌 라인(예: 스트레이트 소매)을 가리키면 «소매 적용» = 그 «라인 적용».
     //   전에는 조용히 원형 소매 기준을 그려 중심선·EL 없는 소매가 완료됐다(재단·DXF 에서 빠짐). 이미 저장된 소매는 건드리지 않는다.
-    if (!sleeveLineOn(project) && selectedSleeveFamilyId() !== SLEEVE_BASE) { onApplySleevePreset(); return; }
+    if (sleeveApplyRoute(project) === "preset") { onApplySleevePreset(); return; }
     if (sleeveVOn(project)) {   // 소매 Ⓥ: 소매길이·설정값 입력 — 같은 몸판에서 다시 제도
       applySleeveV(project);
       updateSleevePanel(project); updateSleeveEaseUI(project); updateSleeveCheckpointUI(project);

@@ -40,6 +40,19 @@
     e.reason = reason; if (detail !== undefined) e.detail = detail;
     throw e;
   }
+  // UTF-8 바이트 수(할당 없음) — 크기 제한은 문자 수(String.length, UTF-16)가 아니라 바이트로 잰다(한글 = 3바이트).
+  //   utf8() 의 인코딩 규칙과 같다(짝 맞는 대리쌍 = 4바이트, 짝 없는 대리 = 3바이트).
+  function utf8ByteLength(str) {
+    var n = 0;
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      if (c < 0x80) n += 1;
+      else if (c < 0x800) n += 2;
+      else if (c >= 0xd800 && c <= 0xdbff && i + 1 < str.length && str.charCodeAt(i + 1) >= 0xdc00 && str.charCodeAt(i + 1) <= 0xdfff) { n += 4; i++; }
+      else n += 3;
+    }
+    return n;
+  }
   function pathStr(path) { return path.length ? path.join(".") : "(root)"; }
 
   // ── SHA-256(동기 · UTF-8) ──
@@ -270,7 +283,7 @@
   }
   function verifyTextOrThrow(text) {
     if (typeof text !== "string" || !text.length) fail("empty-file");
-    if (text.length > MAX_BYTES) fail("too-large");
+    if (text.length > MAX_BYTES || utf8ByteLength(text) > MAX_BYTES) fail("too-large");   // 길이(UTF-16)는 바이트의 하한 → 빠른 거절 뒤 정확한 바이트 검사
     var file;
     try { file = JSON.parse(text); } catch (e) { fail("broken-json"); }
     if (Array.isArray(file) || (file && typeof file === "object" && (file.version !== undefined || file.entries !== undefined || file.armhole_data !== undefined) && file.format === undefined))
@@ -377,6 +390,47 @@
     }
   }
 
+  // ── 저장하지 않은 작업 보호 ──
+  // «마지막 성공한 저장·열기(또는 프로젝트 시작) 이후 디자인 데이터가 실제로 바뀌었나» 만 본다.
+  //   · 비교 대상 = 저장 파일의 graph(원형 완료본 + designProject 전체)와 같은 직렬화의 지문. 화면 단계·탭·카메라·미적용 입력칸 등 UI 전용 값은 제외.
+  //   · 지문은 **기준점을 잡을 때(저장·열기·시작)와 닫기·새로고침 이벤트 때만** 계산한다 — 렌더·편집 중에는 계산하지 않는다.
+  //   · 기준점을 못 잡았거나(project 가 있는데 baseline 없음) 지문 계산이 실패하면 «바뀜(안전쪽)» 으로 본다.
+  //   · 저장은 다운로드 클릭까지만 알 수 있다(브라우저가 실제로 파일을 썼는지는 알 수 없음) — 파일 생성·클릭이 성공한 뒤에만 기준점을 옮긴다.
+  var _baseFp = null;   // 문자열 | null(기준점 없음)
+  function fpOfText(str) {   // 53비트 비암호 해시 + 길이(변경 감지용 — 무결성 해시 sha256 과 별개)
+    var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (var i = 0; i < str.length; i++) {
+      var ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h2 >>> 0).toString(16) + (h1 >>> 0).toString(16) + ":" + str.length;
+  }
+  function currentFingerprint() {
+    try {
+      var dw = window.designWorkflow, proj = dw && dw.current();
+      if (!proj) return null;
+      var block = sourceBlockOf(proj);
+      if (!block) return null;
+      return fpOfText(JSON.stringify(encodeGraph({ block: block, project: proj })));
+    } catch (e) { return null; }
+  }
+  function markSaved() { _baseFp = currentFingerprint(); }   // 지금 상태를 «저장된 상태» 로 기록(실패하면 null → 안전쪽으로 «바뀜»)
+  function hasUnsavedChanges() {
+    var dw = window.designWorkflow;
+    if (!dw || !dw.hasProject()) return false;   // 저장할 디자인 프로젝트가 없으면 보호할 것도 없다(원형만은 이 파일 형식 밖)
+    if (_baseFp === null) return true;
+    var fp = currentFingerprint();
+    return fp === null || fp !== _baseFp;
+  }
+  function onBeforeUnload(ev) {
+    if (!hasUnsavedChanges()) return;
+    ev.preventDefault();
+    ev.returnValue = "";   // 일부 브라우저는 이 값이 있어야 확인창을 띄운다(문구는 브라우저가 정한다)
+    return "";
+  }
+
   // ── 제품 UI(파일 메뉴) ──
   var REASON_TEXT = {
     "no-project": "디자인 프로젝트가 없습니다 · 원형 완료 → «디자인 시작» 뒤 저장할 수 있습니다",
@@ -427,6 +481,7 @@
     a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    markSaved();   // 파일 생성·다운로드 시작까지 성공한 뒤에만 «저장됨» 기준 이동(buildFileText 실패면 위에서 이미 return)
     note("프로젝트 저장: " + name + " · " + statusLine(built.status));
   }
 
@@ -474,6 +529,7 @@
         : "열지 않음(현재 작업 그대로 — 화면 갱신 실패로 되돌림) · " + ((e && e.reason) || "error"));
       sync(); return;
     }
+    markSaved();   // 열기 성공 = 열린 파일이 새 기준(실패·취소는 위에서 return 하므로 기준 유지)
     note("프로젝트 열기 완료: " + desc);
     sync();
   }
@@ -498,6 +554,7 @@
     var menu = (typeof document.querySelector === "function") ? document.querySelector('details[data-menu="file"]') : null;
     if (menu) menu.addEventListener("toggle", function () { if (menu.open) sync(); });
     sync();
+    if (typeof window.addEventListener === "function") window.addEventListener("beforeunload", onBeforeUnload);
   }
   if (typeof document !== "undefined" && document.addEventListener) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bindMenu);
@@ -508,6 +565,8 @@
     FORMAT: FORMAT, SCHEMA_VERSION: SCHEMA_VERSION,
     buildFileText: buildFileText, verifyText: verifyText, commitCandidate: commitCandidate,
     encodeGraph: encodeGraph, decodeGraph: decodeGraph, sha256: sha256, computeStatus: computeStatus,
+    utf8ByteLength: utf8ByteLength, MAX_BYTES: MAX_BYTES,
+    markSaved: markSaved, hasUnsavedChanges: hasUnsavedChanges, _onBeforeUnload: onBeforeUnload,
     onSave: onSave, onOpenFile: onOpenFile, onConfirmOpen: onConfirmOpen, onCancelOpen: onCancelOpen, sync: sync
   });
 })();

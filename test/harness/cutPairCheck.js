@@ -9,6 +9,7 @@
 // ══════════════════════════════════════════════
 "use strict";
 const vm = require("vm"), fs = require("fs"), path = require("path");
+const V = require("./versionHelper");
 let PASS = 0, FAIL = 0; const fails = [];
 function ok(c, n) { if (c) PASS++; else { FAIL++; fails.push(n); } }
 process.on("uncaughtException", e => { console.log("cutPairCheck: 예외 — " + (e && e.stack || e).toString().split("\n").slice(0, 4).join(" | ")); fails.slice(0, 20).forEach(f => console.log("  ✗ " + f)); process.exit(1); });
@@ -249,7 +250,7 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
   ok(/id="cutDefaults"[^>]*>[^<]*1cm[^<]*0cm/.test(html), "6: 선택 없이 보이는 기본값 표시(시접 1cm · 골선 0cm)");
   ok(/id="btnCutWidths"[^>]*aria-pressed="false"/.test(html), "6: 시접 폭 보기 전환 단추");
   ok(/\.cut-seam-card\{[^}]*margin:0 auto[^}]*max-width:560px/.test(css) && /\.cut-seam-card\{left:8px;right:8px;bottom:8px;margin:0/.test(css), "6: 카드 = 하단 가운데(auto 여백) · 좁은 화면은 전체 폭 하단");
-  ok(/js\/cutPrep\.js\?v=2026112501/.test(html) && /js\/cutPrint\.js\?v=2026112303/.test(html) && /js\/cutDxf\.js\?v=2026112501/.test(html) && /css\/apple\.css\?v=2026112401/.test(html), "6: 캐시 버전 핀");
+  ok(V.isToken(V.assetToken(html, "js/cutPrep.js")) && V.isToken(V.assetToken(html, "js/cutPrint.js")) && V.isToken(V.assetToken(html, "js/cutDxf.js")) && V.isToken(V.assetToken(html, "css/apple.css")), "6: 캐시 버전 핀");
   // ── §7 2026-11-20 소매·커프스 좌우 쌍 · C.F / C.B · 가슴선 · 허리선 ──
   {
     const v7 = view(S, P), D7 = v7.D, Q7 = v7.Q, pairs = ["front", "sleeve-sleeve"].concat(D7.cuff ? ["cuff"] : []);   // 이 시험 셔츠에는 커프스가 없다(커프스 쌍은 cutLayoutCheck 가 확인)
@@ -360,7 +361,7 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
     const SRCC = fs.readFileSync(path.join(ROOT, "js", "cutPrep.js"), "utf8"), UI = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), CSS = fs.readFileSync(path.join(ROOT, "css", "apple.css"), "utf8");
     ok(/>＋ 너치 추가</.test(SRCC) && /insertBefore\(ne, ni\)/.test(SRCC) && /cut-notch-new/.test(SRCC) && /#cutCv \.cut-notch-new\{/.test(CSS), "9: 카드 «＋ 너치 추가» 위로 · 새 너치 강조");
     ok(/골선\(시접 0\)" : "시접 0"\) \+ " 변 — 재단선이 없어 3mm I자 너치를 넣을 수 없습니다/.test(SRCC), "9: 골선/시접 0 안내");
-    ok(/!sleeveLineOn\(project\) && selectedSleeveFamilyId\(\) !== SLEEVE_BASE\) \{ onApplySleevePreset\(\); return; \}/.test(UI), "9: 라인 선택 중 «소매 적용» = 그 라인 적용");
+    ok(/if \(sleeveApplyRoute\(project\) === "preset"\) \{ onApplySleevePreset\(\); return; \}/.test(UI) && /return selectedSleeveFamilyId\(\) !== SLEEVE_BASE \? "preset" : "base"/.test(UI), "9: 라인 선택 중 «소매 적용» = 그 라인 적용");
   }
 })();
 console.log("cutPairCheck: " + PASS + " 통과 / " + FAIL + " 실패");
