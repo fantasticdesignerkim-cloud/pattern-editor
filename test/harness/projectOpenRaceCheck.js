@@ -185,6 +185,20 @@ const el = (S, id) => S.W.document ? S.W.document.getElementById(id) : null;
       ok(/지원하지 않는 원형 버전/.test(d.note()) && /v6/.test(d.note()) && /v8/.test(d.note()) && !d.confirm() && J(S.PF.encodeGraph({ block: S.BW.latest(), project: S.P() })) === g0, "8: 원형 v6 파일 = 열지 않음 + 버전 명시 안내 · 현재 작업 바이트 동일 (" + d.note().slice(0, 60) + ")"); }
     else ok(/self-verify-failed/.test(why), "8: 원형 v6 은 이 앱이 저장 단계에서 이미 거부(" + why + ") — 그런 파일은 이 판으로 만들 수 없어 열기 안내 문구는 여기서 재현 불가"); }
 
+  // §9 확인 문구: 저장 범위 내 실제 변경이 있을 때만 «저장하지 않은 변경» 경고
+  { const mk = async (dirty, mut) => { const S = fresh(true), d = doc(S); if (!dirty) S.PF.markSaved(); if (mut) S.P().working.parameters.body = { bustEaseCm: 9 };
+      const F = deferred(TA); S.PF.onOpenFile(F.input); F.ok(); await flush(); return { S, d }; };
+    let r = await mk(false, false);
+    ok(r.d.confirm() && /바꿉니다/.test(r.d.ctext()) && !/저장하지 않은 변경/.test(r.d.ctext()) && mark(r.S) === 9, "9: 저장 직후 = 중립 교체 문구(경고 없음) · 아직 안 바뀜");
+    r.S.PF.onCancelOpen(); ok(!r.d.confirm() && mark(r.S) === 9, "9: 취소 = 그대로");
+    r = await mk(false, true);
+    ok(r.S.PF.hasUnsavedChanges() && /저장하지 않은 변경/.test(r.d.ctext()) && /먼저 «프로젝트 저장»/.test(r.d.ctext()), "9: 실제 변경 = 손실·먼저 저장 안내");
+    r.S.PF.onConfirmOpen(); ok(!r.d.confirm() && mark(r.S) === 2 && !r.S.PF.hasUnsavedChanges(), "9: 확인 = 교체 · 새 기준 깨끗");
+    const S = makeSession(); S.doc = id => S.sandboxDoc.getElementById(id); const d = doc(S);
+    S.BW.complete(); ok(S.BW.hasCompleted() && !S.DW.hasProject(), "9: 원형만 fixture");
+    { const F = deferred(TA); S.PF.onOpenFile(F.input); F.ok(); await flush();
+      ok(d.confirm() && /바꿉니다/.test(d.ctext()) && !/저장하지 않은 변경/.test(d.ctext()), "9: 원형만 = 교체 안내 유지(경고 없음)"); } }
+
   console.log("projectOpenRaceCheck: " + PASS + " passed, " + FAIL + " failed");
   fails.forEach(f => console.log("  FAIL " + f));
   process.exit(FAIL ? 1 : 0);

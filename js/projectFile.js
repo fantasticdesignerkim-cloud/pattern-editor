@@ -514,7 +514,9 @@
       var desc = "B" + s.B + "/W" + s.W + "/BL" + s.BL + " · 원형 v" + s.blockVersion + " · " + statusLine(c.status) + " · 저장 " + (c.savedAt || "?");
       if (!sessionHasWork()) { openCommit(c, desc); return; }
       _pending = { candidate: c, desc: desc, tok: tok };
-      showConfirm(true, "현재 디자인 프로젝트·원형 완료본을 이 파일로 바꿉니다(저장하지 않은 현재 작업은 사라집니다 · 필요하면 먼저 «프로젝트 저장»). 파일: " + desc);
+      showConfirm(true, hasUnsavedChanges()
+        ? "저장하지 않은 변경 내용이 있습니다. 이 파일을 열면 그 내용이 사라집니다 · 필요하면 취소하고 먼저 «프로젝트 저장». 파일: " + desc
+        : "현재 디자인 프로젝트·원형 완료본을 이 파일로 바꿉니다. 파일: " + desc);
       note("확인 대기 · 아직 아무것도 바뀌지 않았습니다");
     }, function () { if (tok !== _openReq) return; reset(); note("열지 않음 · 파일을 읽을 수 없습니다"); });
   }
