@@ -188,22 +188,34 @@
       y: u * u * u * seg.from.y + 3 * u * u * t * seg.c1.y + 3 * u * t * t * seg.c2.y + t * t * t * seg.to.y
     };
   }
-  // 세그먼트가 수평선 y=Ys 와 만나는 내부 t(0<t<1) 목록 — 끝점 접촉은 호출부가 정점으로 본다.
-  function interiorCrossings(seg, Ys) {
-    var f0 = yAt(seg, 0) - Ys, f1 = yAt(seg, 1) - Ys, N = 64, out = [];
-    if (Math.abs(f0) <= Y_TOL && Math.abs(f1) <= Y_TOL) fail("seam-collinear", seg.edge || null);
-    for (var k = 0; k < N; k++) {
-      var ta = k / N, tb = (k + 1) / N, fa = yAt(seg, ta) - Ys, fb = yAt(seg, tb) - Ys;
-      if (!(fa * fb < 0)) continue;
-      if ((k === 0 && Math.abs(f0) <= Y_TOL) || (k === N - 1 && Math.abs(f1) <= Y_TOL)) continue;
-      var lo = ta, hi = tb, flo = fa;
-      for (var it = 0; it < 60; it++) {
-        var mid = (lo + hi) / 2, fm = yAt(seg, mid) - Ys;
-        if (flo * fm <= 0) hi = mid; else { lo = mid; flo = fm; }
+  // 스칼라 함수 g(t) 의 내부 부호 변화 근(0<t<1) — 64등분 표본 + 이분법. 직선도 같은 경로(이분법 결과가 기존 Ⓠ–Ⓥ 골든과 바이트 동일해야 하므로 교점 공식으로 바꾸지 않는다).
+  //   표본이 정확히 0 인 내부 격자점도 근으로 센다(양쪽 이웃의 0 아닌 부호가 반대일 때만 — 접촉은 절개 아님).
+  //   skipFirst/skipLast: 첫/마지막 구간의 끝점 근방 교차는 호출부가 정점으로 보므로 건너뛴다.
+  function signChangeRoots(g, skipFirst, skipLast) {
+    var N = 64, out = [], v = [], k;
+    for (k = 0; k <= N; k++) v.push(g(k / N));
+    for (k = 0; k < N; k++) {
+      if (v[k] * v[k + 1] < 0) {
+        if ((k === 0 && skipFirst) || (k === N - 1 && skipLast)) continue;
+        var lo = k / N, hi = (k + 1) / N, flo = v[k];
+        for (var it = 0; it < 60; it++) {
+          var mid = (lo + hi) / 2, fm = g(mid);
+          if (flo * fm <= 0) hi = mid; else { lo = mid; flo = fm; }
+        }
+        out.push((lo + hi) / 2);
+      } else if (k > 0 && v[k] === 0 && v[k - 1] !== 0) {
+        var j = k + 1;
+        while (j < N && v[j] === 0) j++;
+        if (j <= N && v[j] !== 0 && v[k - 1] * v[j] < 0) out.push(k / N);
       }
-      out.push((lo + hi) / 2);
     }
     return out;
+  }
+  // 세그먼트가 수평선 y=Ys 와 만나는 내부 t(0<t<1) 목록 — 끝점 접촉은 호출부가 정점으로 본다.
+  function interiorCrossings(seg, Ys) {
+    var f0 = yAt(seg, 0) - Ys, f1 = yAt(seg, 1) - Ys;
+    if (Math.abs(f0) <= Y_TOL && Math.abs(f1) <= Y_TOL) fail("seam-collinear", seg.edge || null);
+    return signChangeRoots(function (t) { return yAt(seg, t) - Ys; }, Math.abs(f0) <= Y_TOL, Math.abs(f1) <= Y_TOL);
   }
 
   // ── 원래 path 프리미티브 복원(designWaistSeam.restorePaths 와 같은 계약 — 그쪽은 export 하지 않으므로 복제) ──
@@ -805,20 +817,7 @@
   // 어깨선과 평행한 직선 n·(X − S0) = c 와 세그먼트의 교차 t(0<t<1).
   function lineCrossings(seg, S0, n, c) {
     var g = function (tt) { var q = ptAt(seg, tt); return (q.x - S0.x) * n.x + (q.y - S0.y) * n.y - c; };
-    var N = 64, out = [], prevT = 0, prevG = g(0);
-    for (var k = 1; k <= N; k++) {
-      var tb = k / N, gb = g(tb);
-      if (prevG * gb < 0) {
-        var lo = prevT, hi = tb, glo = prevG;
-        for (var it = 0; it < 60; it++) {
-          var mid = (lo + hi) / 2, gm = g(mid);
-          if (glo * gm <= 0) hi = mid; else { lo = mid; glo = gm; }
-        }
-        out.push((lo + hi) / 2);
-      }
-      prevT = tb; prevG = gb;
-    }
-    return out;
+    return signChangeRoots(g, false, false);
   }
   // 무순서 세그먼트(방향 제각각) → 이어진 폐곡선 체인. 안 닫히면 fail.
   function orderRing(segs, what) {
