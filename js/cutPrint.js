@@ -124,7 +124,8 @@
     o.push("<g class=\"cp-piece\" data-piece=\"" + esc(row.id || p.id) + "\" transform=\"translate(" + n4(pos.dx) + " " + n4(pos.dy) + ")\">");
     o.push("<path class=\"cp-cut\" d=\"" + polyD(r.seam) + "\"/>");
     o.push("<path class=\"cp-fin\" d=\"" + pathD(r.outline) + " Z\"/>");
-    if (r.trued) o.push("<path class=\"cp-fin cp-trued\" d=\"" + pathD(r.trued) + " Z\"/>");   // 접어 정리한 완성 외곽(다트 긴 V 는 위 완성선에 그대로)
+    if (r.trued) o.push("<path class=\"cp-fin cp-trued\" d=\"" + pathD(r.trued) + " Z\"/>");   // 접어 정리한 완성 외곽(앞 진동 다트 — 긴 V 는 위 완성선에 그대로)
+    (r.dartLegs || []).forEach(function (l) { o.push("<path class=\"cp-fin cp-dart-leg\" d=\"M" + n4(l.a.x) + " " + n4(l.a.y) + " L" + n4(l.b.x) + " " + n4(l.b.y) + "\"/>"); });   // 뒤 어깨 다트 봉제선(최종 모델 · 꼭짓점 → 새 입구점)
     var cut = r.seam.map(T); shapes.push({ pts: cut, bb: bbOf(cut) });
     var fo = sample(r.outline, 24).map(T); shapes.push({ pts: fo, bb: bbOf(fo) });
     r.marks.forEach(function (mk) {

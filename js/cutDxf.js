@@ -4,7 +4,7 @@
 //   재단 파생 모델(cutPrep derive → seam → displayOf → layoutOf → qtyOf → grainOf)만 읽는다. 사전 점검 = cutPrint.preflight 한 벌(규칙을 복사하지 않음).
 //   형식(결정 기록): ASCII DXF R12(AC1009) — 가장 넓게 읽히는 판. 단위 mm · 1:1 · Y 위쪽이 +(화면 y 를 뒤집음) · 왼쪽 아래 = (0,0).
 //     곡선 = 직선 조각으로 나눈 POLYLINE(R12 에는 SPLINE 이 없다) · 현 오차 ≤ 0.01mm · 좌표 소수 4자리(0.0001mm).
-//     재단선·완성선 = 닫힌 POLYLINE(70=1). 레이어: CUT · FINISHED · FINISHED_TRUED(접어 정리한 완성 외곽 — 있을 때만) · FOLD · NOTCH · GRAIN · GRAIN_HELD · INTERNAL · TEXT.
+//     재단선·완성선 = 닫힌 POLYLINE(70=1). 레이어: CUT · FINISHED · FINISHED_TRUED(접어 정리한 완성 외곽 — 앞 진동 다트처럼 긴 V 와 함께 둘 때만) · (뒤 어깨 다트 최종 모델의 두 다리 = INTERNAL) · FOLD · NOTCH · GRAIN · GRAIN_HELD · INTERNAL · TEXT.
 //     단위 표시: $INSUNITS=4(mm) · $MEASUREMENT=1(미터법) — R12 정식 머리 변수는 아니라 읽는 쪽이 무시할 수 있다(그때는 «단위 없음 = mm»로 연다).
 //   AAMA/ASTM 재단 DXF 규격이 아니다(블록·규격 레이어 번호를 쓰지 않음) — 일반 DXF.
 //   골 펼친 조각 = 한 장 · 수량만큼 복제하지 않음 · 원본·hash·저장값을 바꾸지 않음 · 전송 없음(이 기기에서 파일 저장만).
@@ -90,6 +90,7 @@
       poly("CUT", closedRing(r.seam), pos, true);
       var fin = chains(r.outline); fin.forEach(function (c, i) { poly("FINISHED", fin.length === 1 ? closedRing(c) : c, pos, fin.length === 1); });
       if (r.trued) { var tr0 = chains(r.trued); tr0.forEach(function (c) { poly("FINISHED_TRUED", tr0.length === 1 ? closedRing(c) : c, pos, tr0.length === 1); }); }
+      (r.dartLegs || []).forEach(function (l) { line("INTERNAL", l.a, l.b, pos); });   // 뒤 어깨 다트(최종 재단선 모델): FINISHED = 정리 외곽 · 두 다리 = INTERNAL(AAMA 레이어 8 과 같은 수)
       (r.marks || []).forEach(function (mk) { var zone = mk.kind.indexOf("zone-") === 0; chains(mk.segs).forEach(function (c) { if (c.length === 2 && !zone) line("INTERNAL", c[0], c[1], pos); else poly("INTERNAL", zone ? closedRing(c) : c, pos, zone); }); });
       // 기본 표시선(자르지 않음 · INTERNAL) + 글자(TEXT): C.F · C.B · BUST LINE · WAIST LINE — 화면·인쇄와 같은 모델 값(r.guides)
       (r.guides || []).forEach(function (gd) { if (gd.line) line("INTERNAL", gd.a, gd.b, pos); text({ x: gd.tx, y: gd.ty }, pos, gd.th * 10, gd.text, 0); });
@@ -167,6 +168,7 @@
       var fin = chains(r.outline); fin.forEach(function (ch) { poly("14", fin.length === 1 ? closedRing(ch) : ch, fin.length === 1); });
       // 접어 정리한 완성 외곽도 레이어 14 의 닫힌 선으로(master 확정: 다트 봉제선과 정리 외곽 둘 다 필요 — 한쪽을 중복으로 지우지 않는다)
       if (r.trued) { var tr1 = chains(r.trued); tr1.forEach(function (ch) { poly("14", tr1.length === 1 ? closedRing(ch) : ch, tr1.length === 1); }); }
+      (r.dartLegs || []).forEach(function (l) { line("8", l.a, l.b); });   // 뒤 어깨 다트 두 다리 = 안쪽 선(레이어 8 · Optitex 미검증) — 14 는 최종 정리 외곽 닫힌 선 하나
       (r.marks || []).forEach(function (mk) { var zone = mk.kind.indexOf("zone-") === 0; chains(mk.segs).forEach(function (ch) { if (ch.length === 2 && !zone) line("8", ch[0], ch[1]); else poly("8", zone ? closedRing(ch) : ch, zone); }); });
       (r.guides || []).forEach(function (gd) { if (gd.line) line("8", gd.a, gd.b); add("15", ["0", "TEXT", "8", "15", "10", X({ x: gd.tx, y: gd.ty }, pos), "20", Y({ x: gd.tx, y: gd.ty }, pos), "30", "0.0", "40", f4(gd.th * 10), "1", gd.text, "72", "1", "11", X({ x: gd.tx, y: gd.ty }, pos), "21", Y({ x: gd.tx, y: gd.ty }, pos), "31", "0.0"]); });
       var foldN = 0;

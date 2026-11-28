@@ -567,6 +567,7 @@ html[data-cut-view="open"] .workspace > .canvas-wrap,html[data-cut-view="open"] 
 .ci-grain .ci-grain-err{flex:1 1 100%;color:#B3261E;font-size:12px}
 .ci-grain input[aria-invalid="true"]{border-color:#B3261E;box-shadow:0 0 0 1px #B3261E}
 #cutCv .cut-trued{fill:none;stroke:#0A6B3D;stroke-width:1.1px;vector-effect:non-scaling-stroke;stroke-linejoin:miter;pointer-events:none}
+#cutCv .cut-dart-leg{fill:none;stroke:#1D1D1F;stroke-width:1.1px;vector-effect:non-scaling-stroke;pointer-events:none}
 .ci-dart label{display:flex;flex-direction:column;gap:4px}
 .ci-dart select{width:100%;max-width:100%;min-width:0;min-height:32px;font-size:12px}
 @media (max-width:640px){.ci-dart select{min-height:44px;width:100%}}

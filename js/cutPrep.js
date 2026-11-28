@@ -745,7 +745,9 @@
       var plans = [];
       var res = SA.build({ ring: p.segs, edges: p.edges.map(function (e, k) { return { id: e.id, segs: e.segs, widthCm: es[k].widthCm, darts: e.darts.map(function (x) { var pl = dartPlan(p, x, dsp); plans.push(Object.assign({ edgeId: e.id }, pl)); return pl.method ? { legs: x.legs, topFirst: pl.topFirst, method: pl.method } : { legs: x.legs, topFirst: pl.topFirst }; }) }; }) });
       if (res.ok) out.done++;
-      out.pieces[p.id] = { notches: allNotches.filter(function (n) { return n.pieceId === p.id; }).map(function (n) { var h = truedHold(p, n, res.trued); return h ? Object.assign({}, n, { from: h.pt, sewnAt: h.pt, to: null, held: true, heldWhy: h.why, why: h.why, heldDevCm: h.devCm, heldDevDeg: h.devDeg }) : Object.assign({}, n, notchLine(p, n, { ok: res.ok, edges: es, edgePaths: res.edgePaths })); }), edges: es, ok: res.ok, points: res.points, edgePaths: res.edgePaths, refusals: res.refusals, darts: res.darts, stats: res.stats, trued: res.trued || null, dartPlans: plans };
+      out.pieces[p.id] = { notches: allNotches.filter(function (n) { return n.pieceId === p.id; }).map(function (n) { var ne = n.user ? es.filter(function (x) { return x.id === n.edgeId; })[0] : null;
+        if (ne && seamNarrow(ne.widthCm)) { var at0 = pointAtArc(sewnChain(p, p.edges.filter(function (x) { return x.id === n.edgeId; })[0]), n.atCm); return Object.assign({}, n, { from: at0 ? at0.pt : null, sewnAt: at0 ? at0.pt : null, to: null, held: true, heldNarrow: true, heldWhy: narrowWhy(ne.widthCm, ne.kind), why: narrowWhy(ne.widthCm, ne.kind) }); }   // 시접 3mm 이하: 사용자 너치 보류(삭제·이동 없음)
+        var h = truedHold(p, n, res.trued); return h ? Object.assign({}, n, { from: h.pt, sewnAt: h.pt, to: null, held: true, heldWhy: h.why, why: h.why, heldDevCm: h.devCm, heldDevDeg: h.devDeg }) : Object.assign({}, n, notchLine(p, n, { ok: res.ok, edges: es, edgePaths: res.edgePaths })); }), edges: es, ok: res.ok, points: res.points, edgePaths: res.edgePaths, refusals: res.refusals, darts: res.darts, stats: res.stats, trued: res.trued || null, dartPlans: plans };
     });
     Object.keys(sp.edges).forEach(function (k) {
       if (hit[k]) return;
@@ -938,7 +940,13 @@
   // ── 다트 입구 정리 뒤 너치 확인(2026-11-17 Codex 검토) ──
   //   너치 위치는 원래 완성선(정리 전) 기준 호 길이다. 정리 외곽이 그 자리에서 바뀌었으면(점이 외곽 위에 없거나 방향이 다르면) 옛 자리를 정상 너치로 내지 않는다:
   //   보류(이유 표시) · 인쇄·DXF 에서 뺀다 · 위치를 옮기지 않는다 · 저장값 그대로. 영향 없는 너치는 그대로 둔다(같은 자리·같은 방향이면 보류 안 함).
-  var HOLD_POS_CM = 0.002, HOLD_DEG = 0.1, NOTCH_MAX_CM = 0.3;   // NOTCH_MAX_CM = 맞춤 표시 선 최대 길이 3mm(재단선에서 안으로 · 2026-11-20 김님: Optitex 검수 후 7→3mm)
+  var HOLD_POS_CM = 0.002, HOLD_DEG = 0.1, NOTCH_MAX_CM = 0.3;
+  // 2026-11-28 master 확정: 시접 3mm 이하(3mm 포함 · 0 포함)인 변 = 사용자 너치 추가·위치 지정 금지 · 저장된 사용자 너치는 삭제 없이 보류(미출력) · 뒤 어깨 자동 다트 너치 미생성.
+  //   3mm 초과 = 기존 규칙. 기본(자동) 맞춤점(WL·진동 등)은 이 규칙의 범위 밖(그대로).
+  var NOTCH_MIN_SEAM_CM = 0.3;
+  function seamNarrow(w) { return typeof w === "number" && isFinite(w) && w <= NOTCH_MIN_SEAM_CM + 1e-9; }
+  function narrowWhy(w, kind) { return (kind === "fold" ? "골선(시접 0)" : "시접 " + c2s(r4(w * 10)) + "mm") + " — 3mm 이하라 너치를 넣지 않습니다(3mm 초과로 바꾸면 그대로 돌아옴)"; }
+  function edgeSeamOf(d, proj, pid, eid) { var p = d.pieces.filter(function (x) { return x.id === pid && x.check.ok && x.edges; })[0], e = p && p.edges.filter(function (x) { return x.id === eid; })[0]; return e ? resolveEdge(p, e, readSpec(proj)) : null; }   // NOTCH_MAX_CM = 맞춤 표시 선 최대 길이 3mm(재단선에서 안으로 · 2026-11-20 김님: Optitex 검수 후 7→3mm)
   function nearestOnRing(ring, q) {
     var best = [];
     ring.forEach(function (g) {
@@ -1031,6 +1039,7 @@
   function addNotch(pid, eid, atCm, proj) {
     proj = proj || project(); var d = derive(proj, true); if (d.state !== "ready") return { ok: false, reason: d.reason };
     var f = findEdge(d, pid, eid); if (!f) return { ok: false, reason: "이 변을 찾을 수 없습니다" };
+    var sw = edgeSeamOf(d, proj, pid, eid); if (sw && seamNarrow(sw.widthCm)) return { ok: false, code: "seam-narrow", reason: narrowWhy(sw.widthCm, sw.kind) };
     if (!(typeof atCm === "number" && isFinite(atCm) && atCm >= 0 && atCm <= f.L)) return { ok: false, reason: "위치는 0~" + c2s(r4(f.L)) + "cm 사이 숫자여야 합니다" };
     var st = notchStore(proj); if (st.err) return { ok: false, reason: st.err };
     var n = 1; Object.keys(st.s.notches).forEach(function (k) { n = Math.max(n, Number(k.slice(1)) + 1); });
@@ -1042,6 +1051,7 @@
     var n = sp.notches[id]; if (!n) return { ok: false, reason: "이 맞춤 표시가 없습니다" };
     var d = derive(proj, true); if (d.state !== "ready") return { ok: false, reason: d.reason };
     var f = findEdge(d, n.piece, n.edge); if (!f) return { ok: false, reason: "이 변이 지금 조각에 없습니다(연결 끊김)" };
+    var sw = edgeSeamOf(d, proj, n.piece, n.edge); if (sw && seamNarrow(sw.widthCm)) return { ok: false, code: "seam-narrow", reason: narrowWhy(sw.widthCm, sw.kind) + " — 위치도 바꾸지 않습니다(저장값 그대로)" };
     if (!(typeof atCm === "number" && isFinite(atCm) && atCm >= 0 && atCm <= f.L)) return { ok: false, reason: "위치는 0~" + c2s(r4(f.L)) + "cm 사이 숫자여야 합니다" };
     n.atCm = r4(atCm); n.sig = f.e.sig;   // 사용자가 지금 변 위에서 정했다 = 지금 모양에 다시 연결
     return { ok: true };
@@ -1196,11 +1206,13 @@
     o.id = pr.mirrorId; o.base = pr.base; o.instMirrored = true; o.pair = null; o.pairRole = "mirror"; o.side = pr.mirrorSide; o.label = pr.labels[pr.mirrorId];
     o.outline = r.outline.map(Ms); o.seam = r.seam ? r.seam.map(Mx) : r.seam; o.seamParts = (r.seamParts || []).map(function (pl) { return pl.map(Mx); });
     o.edges = (r.edges || []).map(function (e) { return { id: e.id, parts: e.parts.map(function (ps) { return ps.map(Ms); }), fold: e.fold }; });
-    o.notches = (r.notches || []).map(function (n) { return { id: n.id, from: Mx(n.from), to: n.to ? Mx(n.to) : null }; });
+    o.notches = (r.notches || []).map(function (n) { var c = { id: n.id, from: Mx(n.from), to: n.to ? Mx(n.to) : null }; if (n.dart) c.dart = true; return c; });
     o.heldNotches = (r.heldNotches || []).map(function (n) { return { id: n.id, name: n.name, at: Mx(n.at), why: n.why }; });
     o.marks = (r.marks || []).map(function (mk) { var c = { kind: mk.kind, segs: mk.segs.map(Ms) }; if (mk.label) c.label = mk.label; if (mk.side) c.side = mk.side; return c; });
     o.guides = (r.guides || []).map(function (gd) { return Object.assign({}, gd, { a: Mx(gd.a), b: Mx(gd.b), tx: -gd.tx === 0 ? 0 : -gd.tx }); });
     o.trued = r.trued ? r.trued.map(Ms) : null;
+    if (r.draftOutline) o.draftOutline = r.draftOutline.map(Ms);
+    o.dartLegs = (r.dartLegs || []).map(function (l) { return Object.assign({}, l, { a: Mx(l.a), b: Mx(l.b) }); });
     o.truedDarts = (r.truedDarts || []).map(function (q) { return Object.assign({}, q, { cap: q.cap.map(Mx), apex: Mx(q.apex) }); });
     o.mirror = { A: { x: 0, y: 0 }, B: { x: 0, y: 1 } };   // 눌린 점을 원본 좌표로 되돌릴 때(clickArc) 쓰는 같은 축
     o.bbox = bboxOf([o.outline], [o.seam].concat(o.seamParts));
@@ -1242,6 +1254,32 @@
     });
     return out;
   }
+  // ══ 뒤 어깨 다트(center-chord) 최종 재단선 모델 — 2026-11-27 master 확정(수정 후 Optitex 사진) ══
+  //   정리한 완성 외곽(trued)이 곧 최종 봉제 외곽이다 → 수정 전 어깨선(원래 입구까지 긴 V)은 출력에서 뺀다.
+  //   다트 봉제선 = 기존 꼭짓점(apex) → 정리된 봉제선 위 새 입구점(newMouthA/B) 두 다리.
+  //   너치 = 각 다리의 연장선(apex→새 입구 방향)이 재단선(시접 바깥선)과 처음 만나는 점에서 다리 방향을 따라 안으로 I자 3mm(시접이 3mm 보다 좁으면 새 입구점에서 멈춤).
+  //   순수 기하(반직선 × 재단 다각형). 만나지 않으면 너치를 만들지 않고 이유를 남긴다(지어내지 않음).
+  function rayHitPoly(o, dir, poly) {
+    var best = null, n = poly.length;
+    for (var i = 0; i < n; i++) { var a = poly[i], b = poly[(i + 1) % n], rx = b.x - a.x, ry = b.y - a.y, den = dir.x * ry - dir.y * rx; if (Math.abs(den) < 1e-12) continue;
+      var wx = a.x - o.x, wy = a.y - o.y, t = (wx * ry - wy * rx) / den, u = (wx * dir.y - wy * dir.x) / den;
+      if (t > 1e-9 && u >= -1e-9 && u <= 1 + 1e-9 && (!best || t < best.t)) best = { t: t, pt: { x: o.x + dir.x * t, y: o.y + dir.y * t } }; }
+    return best;
+  }
+  function chordDartFinal(q, seamPts) {
+    var legs = [], notches = [], why = [];
+    [["A", q.newMouthA], ["B", q.newMouthB]].forEach(function (lg) {
+      var m = lg[1], vx = m.x - q.apex.x, vy = m.y - q.apex.y, L = Math.hypot(vx, vy);
+      if (!(L > 1e-6)) { why.push("다리 " + lg[0] + " 길이 0"); return; }
+      var dir = { x: vx / L, y: vy / L }, id = "dart:" + q.edgeId + ":" + (q.legs || []).join("-") + ":" + lg[0];
+      legs.push({ id: id, a: pt(q.apex), b: pt(m) });
+      if (!seamPts || seamPts.length < 3) { why.push("시접 미완 — 다트 너치 없음"); return; }
+      var hit = rayHitPoly(m, dir, seamPts); if (!hit) { why.push("다리 " + lg[0] + " 연장선이 재단선과 만나지 않음 — 너치 없음"); return; }
+      var len = Math.min(NOTCH_MAX_CM, hit.t), inner = hit.t <= NOTCH_MAX_CM ? pt(m) : { x: hit.pt.x - dir.x * len, y: hit.pt.y - dir.y * len };
+      notches.push({ id: id, from: inner, to: hit.pt, dart: true, lenCm: r4(len), seamCm: r4(hit.t) });
+    });
+    return { legs: legs, notches: notches, why: why };
+  }
   // 조각별 표시 데이터. d = derive(proj, true) · m = seam(d, proj)
   function displayOf(d, m) {
     var out = {};
@@ -1261,9 +1299,21 @@
       r.trued = null; r.truedDarts = [];
       if (sm && sm.trued) { var tu = unf ? unfoldOf({ segs: sm.trued.ring }, fe, null) : null; r.trued = unf ? (tu && tu.ok ? tu.outline : null) : sm.trued.ring;
         sm.trued.darts.forEach(function (q) { var cap = [q.newMouthA, q.peak, q.newMouthB]; r.truedDarts.push({ edgeId: q.edgeId, method: q.method, cap: cap, apex: q.apex }); if (unf) r.truedDarts.push({ edgeId: q.edgeId, method: q.method, cap: cap.map(u.M), apex: u.M(q.apex), mirrored: true }); }); }
+      // 뒤 어깨 다트 최종 재단선(center-chord): 정리 외곽 = 최종 완성선(수정 전 어깨선 제외) · 두 다리 봉제선 · 다리 연장 I자 너치 2개.
+      var fq = sm && sm.trued ? sm.trued.darts.filter(function (q) { return q.method === "chord"; }) : [], fin = fq.length && r.trued && sm.trued.darts.every(function (q) { return q.method === "chord"; });
+      var fRing = fin ? sm.trued.ring : null, dartNotches = [];
+      r.dartLegs = []; r.dartWhy = [];
+      if (fin) {
+        r.finalTrued = true; r.draftOutline = r.outline; r.outline = r.trued; r.trued = null;
+        fq.forEach(function (q) { var qe = (sm.edges || []).filter(function (x) { return x.id === q.edgeId; })[0], nar = qe && seamNarrow(qe.widthCm), f = chordDartFinal(q, sm.ok && !nar ? sm.points : null);
+          if (nar) { f.notches = []; f.why = f.why.filter(function (w) { return !/^시접 미완/.test(w); }).concat(["다트 너치 — " + narrowWhy(qe.widthCm, qe.kind)]); }
+          f.legs.forEach(function (l) { r.dartLegs.push(l); if (unf) r.dartLegs.push({ id: l.id, a: u.M(l.a), b: u.M(l.b), mirrored: true }); });
+          f.notches.forEach(function (n) { dartNotches.push(n); if (unf) dartNotches.push(Object.assign({}, n, { from: u.M(n.from), to: u.M(n.to), mirrored: true })); });
+          f.why.forEach(function (w) { r.dartWhy.push(w); }); });
+      }
       if (sm && !sm.ok) Object.keys(sm.edgePaths || {}).forEach(function (k) { r.seamParts.push(sm.edgePaths[k]); if (unf && k !== fe.id) r.seamParts.push(sm.edgePaths[k].map(u.M)); });
       (p.edges || []).forEach(function (e) {
-        var segs = e.segs.map(function (i) { return p.segs[i]; });
+        var segs = e.segs.map(function (i) { return fRing ? fRing[i] : p.segs[i]; });   // 최종 정리 조각: 변 선도 정리 외곽 기준(같은 순서·같은 개수)
         if (unf && e.id === fe.id) { r.fold = { edgeId: e.id, segs: segs }; r.edges.push({ id: e.id, parts: [segs], fold: true }); return; }
         r.edges.push({ id: e.id, parts: unf ? [segs, segs.map(function (g) { return mirSeg(g, u.M); })] : [segs] });
       });
@@ -1273,6 +1323,7 @@
         r.notches.push({ id: n.id, from: n.from, to: n.to });
         if (unf && n.edgeId !== fe.id && n.from) r.notches.push({ id: n.id, from: u.M(n.from), to: n.to ? u.M(n.to) : null, mirrored: true });
       });
+      dartNotches.forEach(function (n) { r.notches.push(n); });
       (p.marks || []).forEach(function (mk) { r.marks.push(mk); if (unf) r.marks.push({ kind: mk.kind, segs: mk.segs.map(function (g) { return mirSeg(g, u.M); }), label: mk.label, side: mk.side, mirrored: true }); });
       r.bbox = bboxOf([r.outline], [r.seam].concat(r.seamParts));
       out[p.id] = r;
@@ -1699,6 +1750,7 @@
       if (r.seam) g.appendChild(el("path", { "class": "cut-seam", d: polyD(r.seam, true) }));
       if (r.trued) g.appendChild(el("path", { "class": "cut-trued", d: pathD(r.trued) + " Z" }));   // 접어 정리한 완성 외곽(다트 긴 V 는 변 선으로 그대로 그린다)
       g.appendChild(el("path", { "class": "cut-piece-outline", d: pathD(r.outline) + " Z" }));
+      (r.dartLegs || []).forEach(function (l) { g.appendChild(el("path", { "class": "cut-dart-leg", "data-dart-leg": l.id, d: "M" + l.a.x + " " + l.a.y + " L" + l.b.x + " " + l.b.y })); });   // 뒤 어깨 다트 봉제선(꼭짓점 → 새 입구점)
       r.seamParts.forEach(function (pl) { g.appendChild(el("path", { "class": "cut-seam cut-seam-part", d: polyD(pl, false) })); });
       r.marks.forEach(function (m) { g.appendChild(el("path", { "class": (m.kind.indexOf("zone-") === 0 ? "cut-zone cut-" : "cut-mark cut-mark-") + m.kind, d: pathD(m.segs) + (m.kind.indexOf("zone-") === 0 ? " Z" : "") })); });
       r.marks.forEach(function (m) {   // 주머니 표시 이름: 가로로(입구 접는선 = 윗변 위 · 달림선 = 오각형 가운데)
@@ -1828,6 +1880,15 @@
     if (sm.edges.length === 1 && sm.edges[0].whole) t += "<span class=\"ci-note\">" + esc(sm.edges[0].wholeReason) + " — 조각 전체 한 값</span>";
     if (sm.notches && sm.notches.length) t += "<span class=\"ci-notch\">맞춤 표시 " + sm.notches.length + " — " + esc(sm.notches.map(function (n) { return n.name + (n.held ? "(보류)" : n.to ? "" : "(재단선 없음)"); }).join(" · ")) + "</span>";
     sm.notches.filter(function (n) { return n.held; }).forEach(function (n) { t += "<span class=\"ci-bad\">맞춤 «" + esc(n.name) + "» 보류 — " + esc(n.heldWhy) + "</span>"; });
+    // 실제 출력 너치(화면·인쇄·DXF 가 읽는 같은 표시 모델) 수·길이 + 막힌 이유 — 2026-11-28
+    var dp = (view.disp && view.disp[p.id]) || (view.data ? displayOf(view.data, view.seam)[p.id] : null);
+    if (dp) {
+      var outN = (dp.notches || []).filter(function (n) { return !n.mirrored && n.to; }), dotN = (dp.notches || []).filter(function (n) { return !n.mirrored && !n.to && n.from; }).length, dN = outN.filter(function (n) { return n.dart; });
+      var lens = {}; outN.forEach(function (n) { var L = c2s(r4(Math.hypot(n.to.x - n.from.x, n.to.y - n.from.y) * 10)) + "mm"; lens[L] = (lens[L] || 0) + 1; });
+      t += "<span class=\"ci-notch\" data-notch-out=\"" + outN.length + "\">출력 너치 " + outN.length + "개" + (outN.length ? "(I자 " + Object.keys(lens).map(function (k) { return k + " × " + lens[k]; }).join(" · ") + ")" : "") + (dotN ? " · 점 표시 " + dotN : "") + (dp.unfolded ? " · 반쪽 기준(펼친 한 장은 반대쪽 반사 포함)" : "") + "</span>";
+      if (dp.finalTrued) t += dN.length ? "<span class=\"ci-notch\" data-dart-notch=\"" + dN.length + "\">뒤 어깨 다트 너치 " + dN.length + "개 — 다리 연장선 × 재단선에서 안으로 " + dN.map(function (n) { return c2s(r4(n.lenCm * 10)) + "mm"; }).join(" · ") + "</span>" : "";
+      (dp.dartWhy || []).forEach(function (w) { t += "<span class=\"ci-bad\" data-dart-notch-why=\"1\">" + esc(w) + "</span>"; });
+    }
     var lockD = view.seam && view.seam.dartSpec && view.seam.dartSpec.state === "invalid";
     (sm.dartPlans || []).forEach(function (pl) {
       var tq = (sm.trued ? sm.trued.darts : []).filter(function (q) { return q.legs && pl.kind && q.edgeId === pl.edgeId; }), lq = sm.darts.filter(function (q) { return q.edgeId === pl.edgeId; })[0];
@@ -1835,7 +1896,7 @@
       var opts = DART_MODES[pl.kind].map(function (m) { return "<option value=\"" + m + "\"" + (m === pl.mode ? " selected" : "") + ">" + esc(DART_MODE_LABEL[m]) + "</option>"; }).join("");
       t += "<span class=\"ci-note ci-dart\"><label>" + (pl.kind === "ah" ? "진동 다트" : "어깨 다트") + " 입구 정리 <select data-dart-mode=\"" + esc(p.id) + "\" data-dart-id=\"" + esc(pl.id) + "\"" + (lockD ? " disabled" : "") + ">" + opts + "</select></label>" +
         (pl.legacyProject ? " <em>이전에 만든 프로젝트 — 예전 방식 유지(바꾸면 이 프로젝트에 저장)</em>" : pl.explicit ? " <em>직접 고름</em>" : " <em>기본</em>") +
-        (pl.method ? " · 긴 V(다트 봉제선)는 그대로 두고, 정리한 완성 외곽과 그 바깥 재단선을 따로 만듭니다" : "") + (pl.method === "chord" ? (function () { var tq0 = (sm.trued ? sm.trued.darts : []).filter(function (q) { return q.edgeId === pl.edgeId && q.method === "chord"; })[0]; return tq0 && tq0.mouthShiftCm > 0.0005 ? " · 입구가 다리 연장선 위로 " + c2s(r4(tq0.mouthShiftCm)) + "cm 늘었지만 긴 V 는 원래 입구까지만 그립니다(연장 표시는 master 미확정 — 자동으로 더하지 않음)" : ""; })() : "") + (pl.why ? " · " + esc(pl.why) : "") +
+        (pl.method === "extend-lower" ? " · 긴 V(다트 봉제선)는 그대로 두고, 정리한 완성 외곽과 그 바깥 재단선을 따로 만듭니다" : "") + (pl.method === "chord" ? (function () { var tq0 = (sm.trued ? sm.trued.darts : []).filter(function (q) { return q.edgeId === pl.edgeId && q.method === "chord"; })[0]; return " · 정리한 외곽이 최종 완성선(수정 전 어깨선은 그리지 않음) · 다트 봉제선 = 꼭짓점에서 새 입구점 두 곳까지" + (tq0 && tq0.mouthShiftCm > 0.0005 ? "(입구가 다리 연장선 위로 " + c2s(r4(tq0.mouthShiftCm)) + "cm 이동)" : "") + " · 다리 연장선이 재단선과 만나는 곳에 I자 3mm 너치 2개"; })() : "") + (pl.why ? " · " + esc(pl.why) : "") +
         (lq && lq.legMismatchCm > 0.005 ? " · 다트 두 다리 길이 차 " + c2s(lq.legMismatchCm) + "cm 는 고치지 않음(맞춤 = 패턴 확정 단계)" : "") + "</span>";
     });
     if (lockD) t += "<span class=\"ci-bad\">저장된 다트 정리 설정을 읽을 수 없습니다 — " + esc(view.seam.dartSpec.reason) + "</span>";
@@ -1981,12 +2042,14 @@
     if (ne) {
       var nlock = view.seam.notchSpec.state === "invalid", L = c.sm.edges && (function () { var f = c.piece.edges.filter(function (x) { return x.id === e.id; })[0]; return chainLen(sewnChain(c.piece, f)); })();
       var others = []; Object.keys(view.seam.pieces).forEach(function (pid) { (view.seam.pieces[pid].notches || []).forEach(function (n) { if (n.user) others.push(n); }); });
-      var h = "<div class=\"cne-head\"><b>사용자 맞춤 표시(너치)</b><button type=\"button\" class=\"btn\" data-act=\"nadd\" title=\"이 변에서 마지막으로 누른 자리에 추가(누른 자리가 없으면 변 가운데) · 위치는 추가 뒤 cm 로 고침\"" + (nlock ? " disabled" : "") + ">＋ 너치 추가</button></div>";
-      if (e.widthCm === 0) h += "<p class=\"cne-note\">" + (e.kind === "fold" ? "골선(시접 0)" : "시접 0") + " 변 — 재단선이 없어 3mm I자 너치를 넣을 수 없습니다. 추가하면 완성선 위 점으로만 남습니다(일반 DXF = 원 · AAMA = 내부 점).</p>";
+      var narrow0 = seamNarrow(e.widthCm);
+      var h = "<div class=\"cne-head\"><b>사용자 맞춤 표시(너치)</b><button type=\"button\" class=\"btn\" data-act=\"nadd\" title=\"" + (narrow0 ? esc(narrowWhy(e.widthCm, e.kind)) : "이 변에서 마지막으로 누른 자리에 추가(누른 자리가 없으면 변 가운데) · 위치는 추가 뒤 cm 로 고침") + "\"" + (nlock || narrow0 ? " disabled aria-disabled=\"true\"" : "") + ">＋ 너치 추가</button></div>";
+      var narrow = seamNarrow(e.widthCm), nTip = narrow ? narrowWhy(e.widthCm, e.kind) : "";
+      if (narrow) h += "<p class=\"cne-note\" data-notch-narrow=\"1\">" + esc(nTip) + " — 너치 추가·위치 지정이 막힙니다. 이 변에 저장된 너치는 지우지 않고 보류(인쇄·DXF 에 안 나감) · 삭제와 짝 해제는 됩니다.</p>";
       if (nlock) h += "<p class=\"cne-note\">저장된 맞춤 표시 설정을 읽을 수 없어 수정이 잠겼습니다 — " + esc(view.seam.notchSpec.reason) + "</p>";
       users.forEach(function (n) {
         var opts = "<option value=\"\">짝 없음</option>" + others.filter(function (o) { return o.id !== n.id && !(o.pieceId === n.pieceId && o.edgeId === n.edgeId); }).map(function (o) { return "<option value=\"" + o.id + "\"" + (n.pairId === o.id ? " selected" : "") + ">" + esc(o.name + " · " + o.side) + "</option>"; }).join("");
-        h += "<div class=\"cne-row\" data-id=\"" + n.id + "\"><b>" + esc(n.name) + "</b><label>«" + esc(endA) + "» 쪽 끝에서 <input type=\"number\" inputmode=\"decimal\" step=\"0.1\" min=\"0\" max=\"" + r4(L) + "\" value=\"" + n.atCm + "\" data-act=\"nmove\"" + (nlock ? " disabled" : "") + "> cm</label>" +
+        h += "<div class=\"cne-row\" data-id=\"" + n.id + "\"><b>" + esc(n.name) + "</b><label>«" + esc(endA) + "» 쪽 끝에서 <input type=\"number\" inputmode=\"decimal\" step=\"0.1\" min=\"0\" max=\"" + r4(L) + "\" value=\"" + n.atCm + "\" data-act=\"nmove\"" + (nlock || narrow ? " disabled aria-disabled=\"true\"" + (narrow ? " title=\"" + esc(nTip) + "\"" : "") : "") + "> cm</label>" +
           "<span class=\"cne-note\">«" + esc(endB) + "» 쪽 끝에서 " + c2s(r4(L - n.atCm)) + " · " + (n.to ? "재단선에서 안으로 " + c2s(n.lenCm) + "cm" + (n.narrow ? "(시접이 좁아 봉제선에서 멈춤)" : "") : esc(n.why || "")) + "</span>" +
           "<label>짝 <select data-act=\"npair\"" + (nlock ? " disabled" : "") + ">" + opts + "</select></label><button type=\"button\" class=\"btn\" data-act=\"ndel\"" + (nlock ? " disabled" : "") + ">삭제</button>" +
           (n.pair ? "<span class=\"cne-note\">짝: " + esc(n.pair.a + " ↔ " + n.pair.b) + " (자동 이즈 판단 없음 — 위치는 각각 직접 지정)</span>" : "") + "</div>";

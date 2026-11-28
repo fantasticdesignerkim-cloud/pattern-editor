@@ -250,9 +250,19 @@ const dv = S.CUT.derive(P, true), sm = S.CUT.seam(dv, P), D = S.CUT.displayOf(dv
   const cutF = D.front.seam, TF = polyOf(ft.ring), dmin = Math.min(...cutF.map(q => dRing(q, TF))), pkCut = Math.max(...cutF.map(q => d2(q, ft.darts[0].apex))), wF = fs2.edges.find(e => e.id === "armhole").widthCm;
   ok(dmin > wF - 0.011 && crossCount(cutF) === 0 && fs2.darts.length === 0 && pkCut > d2(ft.darts[0].peak, ft.darts[0].apex) + wF - 1e-6, "3: 앞판 재단선 = 정리 외곽의 바깥(가장 가까운 곳 " + dmin.toFixed(3) + "cm ≥ 폭 " + wF + ") · 자기교차 0 · 다트 산 재단 꼭짓점은 산에서 폭 이상 바깥");
   const bkp = PIECE(dv, "back"), bs = sm.pieces.back, bt = bs.trued, n = bkp.segs.length;
-  ok(bs.ok && bt && bt.darts.length === 1 && ringClosed(bt.ring) && bt.darts.every(q => q.method === "chord" && q.mouthShiftCm > 0.05 && q.peakOutCm > q.mouthShiftCm * 0.5 && Math.abs(d2(q.newMouthA, q.apex) - d2(q.newMouthB, q.apex)) < 1e-9 && dLine(q.newMouthA, q.apex, q.mouthA) < 1e-9 && dLine(q.newMouthB, q.apex, q.mouthB) < 1e-9) && D.back.unfolded && D.back.trued && ringClosed(D.back.trued) && D.back.truedDarts.length === 2,
-    "3: 뒤판 — 어깨 다트 정리(입구점이 다리 연장선 위로 " + bt.darts.map(q => (q.mouthShiftCm * 10).toFixed(2)).join("/") + "mm 이동 · 산) · 골 펼친 한 장으로 닫힌 정리 외곽 · 재단선 닫힘");
-  ok(D.back.outline.filter(g => g.kind === "line" && bt.darts.some(q => d2(g.to, q.apex) < 1e-9 || d2(g.from, q.apex) < 1e-9)).length === 2 && D.back.outline.length === D.back.trued.length && crossCount(D.back.seam) === 0, "3: 뒤판도 긴 V(다트 봉제선) 보존 · 재단선 자기교차 0");
+  ok(bs.ok && bt && bt.darts.length === 1 && ringClosed(bt.ring) && bt.darts.every(q => q.method === "chord" && q.mouthShiftCm > 0.05 && q.peakOutCm > q.mouthShiftCm * 0.5 && Math.abs(d2(q.newMouthA, q.apex) - d2(q.newMouthB, q.apex)) < 1e-9 && dLine(q.newMouthA, q.apex, q.mouthA) < 1e-9 && dLine(q.newMouthB, q.apex, q.mouthB) < 1e-9) && D.back.unfolded && D.back.finalTrued && !D.back.trued && ringClosed(D.back.outline) && D.back.truedDarts.length === 2,
+    "3: 뒤판 — 어깨 다트 정리(입구점이 다리 연장선 위로 " + bt.darts.map(q => (q.mouthShiftCm * 10).toFixed(2)).join("/") + "mm 이동 · 산) · 골 펼친 한 장으로 닫힌 정리 외곽 = 최종 완성선(2026-11-27) · 재단선 닫힘");
+  // 2026-11-27 master 확정(수정 후 Optitex 사진): 뒤 어깨 = 정리 외곽이 최종 완성선 · 수정 전 어깨선 제외 · 두 다리 = 꼭짓점 → 새 입구점 · 다리 연장선 × 재단선에서 안으로 I자 3mm 너치 하나씩
+  { const B = D.back, q = bt.darts[0], M = pq => pq, ends = []; B.outline.forEach(g => { ends.push(g.from, g.to); });
+    const touchOld = ends.some(e => d2(e, q.apex) < 1e-6 || d2(e, q.mouthA) < 1e-6 || d2(e, q.mouthB) < 1e-6);
+    const legsOk = B.dartLegs.length === 4 && B.dartLegs.filter(l => !l.mirrored).every(l => d2(l.a, q.apex) < 1e-12 && (d2(l.b, q.newMouthA) < 1e-12 || d2(l.b, q.newMouthB) < 1e-12)) && B.dartLegs.filter(l => !l.mirrored).map(l => l.b).some(b => d2(b, q.newMouthA) < 1e-12) && B.dartLegs.filter(l => !l.mirrored).map(l => l.b).some(b => d2(b, q.newMouthB) < 1e-12);
+    const dn = B.notches.filter(n => n.dart), dnO = dn.filter(n => !n.mirrored);
+    const notchOk = dn.length === 4 && dnO.every(n => { const m = [q.newMouthA, q.newMouthB].find(mm => dLine(n.to, q.apex, mm) < 1e-9 && d2(n.to, q.apex) > d2(mm, q.apex)); return m && dLine(n.from, q.apex, m) < 1e-9 && Math.abs(d2(n.from, n.to) - 0.3) < 1e-9 && d2(n.from, q.apex) > d2(m, q.apex) - 1e-9 && dRing(n.to, B.seam) < 1e-6 && dRing(n.from, B.seam) > 0.29; }) && dnO.length === 2 && d2(dnO[0].to, dnO[1].to) > 0.1;
+    // 독립 검산: 새 입구점 → 너치 바깥점 사이에 재단선과 다른 교차가 없다(처음 만나는 점) · 거울 쪽은 원본의 반사
+    const firstHit = dnO.every(n => { const m = [q.newMouthA, q.newMouthB].find(mm => dLine(n.to, q.apex, mm) < 1e-9); for (let k = 1; k < 200; k++) { const t = k / 200, pq = { x: m.x + (n.to.x - m.x) * t * 0.999, y: m.y + (n.to.y - m.y) * t * 0.999 }; if (dRing(pq, B.seam) < 1e-7) return false; } return true; });
+    ok(!touchOld && legsOk && B.draftOutline && B.draftOutline.length === B.outline.length && crossCount(B.seam) === 0, "3: 뒤판 최종 — 완성선에 수정 전 어깨선(원래 입구·긴 V 꼭짓점) 없음 · 두 다리 = 꼭짓점 → 새 입구점 A/B(골 펼친 반대쪽 포함 4) · 재단선 자기교차 0");
+    ok(notchOk && firstHit, "3: 뒤판 다트 너치 — 다리마다 하나(반쪽 2 · 펼친 한 장 4) · 연장선 위 · 재단선 위 바깥점에서 다리 방향으로 안으로 3mm · 처음 만나는 재단선 · 두 너치 서로 다른 자리(시접 " + dnO.map(n => (n.seamCm * 10).toFixed(2)).join("/") + "mm)");
+    ok(J(B.notches.filter(n => !n.dart).map(n => n.id)) === J((sm.pieces.back.notches || []).filter(n => !n.held).reduce((a, n) => a.concat(n.edgeId !== B.foldEdge ? [n.id, n.id] : [n.id]), [])), "3: 뒤판 다른 너치(기본·사용자) 목록은 그대로 — 다트 너치는 따로 덧붙임"); }
   S.CUT.derive(P, true); S.CUT.seam(dv, P); S.CUT.dartsOf(dv, P);
   ok(hashes(P) === H0 && graph(S) === G0 && J(P.working) === W0, "3: 읽기만 — 완료 hash · 저장 그래프 · working 그대로");
   // 실제 조각에서 시접 폭 스윕
@@ -295,14 +305,16 @@ const dv = S.CUT.derive(P, true), sm = S.CUT.seam(dv, P), D = S.CUT.displayOf(dv
   const src = SRC["cutPrep.js"]; ok(/p\.id === "front" && d\.boundary === "armhole"/.test(src) && /p\.id === "back" && d\.boundary === "shoulder"/.test(src) && /a\.kind !== "line" \|\| b\.kind !== "line"/.test(src), "4: 지원 대상 = 앞판 진동 다트 · 뒤판 어깨 다트(양옆 직선일 때만 직선 정리)로 한정 — 소스 확인");
 }
 
+// 일반 DXF 에서 뒤판 다리(조각 좌표 길이와 같은 INTERNAL LINE) 개수 — 배치 이동과 무관하게 길이로 센다
+const legsInDxf = (gx, B) => { const Ls = B.dartLegs.map(l => d2(l.a, l.b) * 10); return gx.dxf.split("\r\n0\r\nLINE\r\n8\r\nINTERNAL\r\n").slice(1).map(x => { const m = /10\r\n(-?[\d.]+)\r\n20\r\n(-?[\d.]+)\r\n30\r\n[\d.]+\r\n11\r\n(-?[\d.]+)\r\n21\r\n(-?[\d.]+)/.exec(x); return m ? Math.hypot(m[3] - m[1], m[4] - m[2]) : -1; }).filter(L => Ls.some(q => Math.abs(q - L) < 1e-3)).length; };
 // ══ §5 출력 ══
 {
   const pr = S.W.cutPrint.build(P, null, META), nTr = (pr.sheetSvg.match(/class="cp-fin cp-trued"/g) || []).length, trD = /class="cp-fin cp-trued"[^>]* d="([^"]+)"/.exec(pr.sheetSvg);
-  ok(pr.ok && nTr === 3 && /fill="none" stroke="#000" stroke-width="\.025"/.test(pr.sheetSvg.match(/class="cp-fin cp-trued"[^>]*/)[0]) && (pr.sheetSvg.match(/class="cp-fin"/g) || []).length === 13, "5: 인쇄 — 완성선 13(긴 V 포함 · 앞판·소매·트임 좌우 쌍) + 정리 외곽 3(앞 좌·우 + 뒤) · 같은 선 굵기 · 채움 없음");
+  ok(pr.ok && nTr === 2 && /fill="none" stroke="#000" stroke-width="\.025"/.test(pr.sheetSvg.match(/class="cp-fin cp-trued"[^>]*/)[0]) && (pr.sheetSvg.match(/class="cp-fin"/g) || []).length === 13 && (pr.sheetSvg.match(/class="cp-fin cp-dart-leg"/g) || []).length === 4, "5: 인쇄 — 완성선 13(앞 긴 V · 뒤 = 정리 외곽이 최종 완성선) + 앞 정리 외곽 2(좌·우) + 뒤 어깨 다트 다리 4(펼친 한 장) · 같은 선 굵기 · 채움 없음");
   { const F = S.W.cutPrep; ok(F.facedCollar("collar-stand").total === 2 && F.facedCollar("collar-body").total === 2 && F.facedCollar("collar-flat") === null && F.facedCollar("back") === null && /facedCollar\(it\.id\)/.test(SRC["cutDxf.js"] || ""), "5: 칼라 겉·안 표 한 곳(cutPrep.facedCollar) — DXF 분리 판정이 같은 표를 읽는다 · 확정 밖 조각은 null"); }
   const gx = S.W.cutDxf.build(P, META), ax = S.W.cutDxf.build(P, META, { format: "aama" });
   const cnt = (t, re) => (t.match(re) || []).length;
-  ok(gx.ok && gx.stats.layers.FINISHED === 15 && gx.stats.layers.FINISHED_TRUED === 3 && gx.stats.layers.CUT === 15 && gx.stats.pieces.filter(q => /^collar-(stand|body)-inner$/.test(q.id)).length === 2, "5: 일반 DXF — FINISHED 15 · FINISHED_TRUED 3(앞 좌·우 + 뒤) · CUT 15 (앞판·소매·커프스 좌우 각 1장 + 밴드·위 칼라 겉/안 분리 2026-11-24: 안 조각 -inner 2개 추가)");
+  ok(gx.ok && gx.stats.layers.FINISHED === 15 && gx.stats.layers.FINISHED_TRUED === 2 && legsInDxf(gx, D.back) === 4 && gx.stats.pieces.find(q => q.base === "back").notches === D.back.notches.length && gx.stats.layers.CUT === 15 && gx.stats.pieces.filter(q => /^collar-(stand|body)-inner$/.test(q.id)).length === 2, "5: 일반 DXF — FINISHED 15 · FINISHED_TRUED 2(앞 좌·우) · 뒤 다트 다리 4 = INTERNAL(AAMA 레이어 8 과 같은 수) · 뒤판 NOTCH = 화면 모델(다트 너치 포함) · CUT 15 (앞판·소매·커프스 좌우 각 1장 + 밴드·위 칼라 겉/안 분리 2026-11-24: 안 조각 -inner 2개 추가)");
   // AAMA: 블록별 레이어 14 닫힌 선 개수와 차이
   const blk = name => { const a = ax.dxf.indexOf("BLOCK\r\n8\r\n1\r\n2\r\n" + name), b = ax.dxf.indexOf("ENDBLK", a); return ax.dxf.slice(a, b); };
   const polys = (txt, layer) => txt.split("\r\n0\r\nPOLYLINE\r\n").slice(1).filter(x => x.startsWith("8\r\n" + layer + "\r\n")).map(x => ({ closed: /\r\n70\r\n1\r\n/.test(x.split("VERTEX")[0] + "\r\n"), pts: x.split("\r\n0\r\nVERTEX\r\n").slice(1).map(v => { const m = /10\r\n(-?[\d.]+)\r\n20\r\n(-?[\d.]+)/.exec(v); return { x: +m[1], y: +m[2] }; }) }));
@@ -310,7 +322,7 @@ const dv = S.CUT.derive(P, true), sm = S.CUT.seam(dv, P), D = S.CUT.displayOf(dv
   const FB = ["FRONT_RIGHT_BASE", "FRONT_LEFT_BASE"].map(n => ({ n, f14: polys(blk(n), "14"), f1: polys(blk(n), "1")[0] }));
   const b14 = polys(blk("BACK_BASE"), "14"), s14 = polys(blk("SLEEVE_SLEEVE_RIGHT_BASE"), "14"), s14L = polys(blk("SLEEVE_SLEEVE_LEFT_BASE"), "14");
   const diffOf = f14 => f14.length === 2 && f14[0].pts.length === f14[1].pts.length ? f14[0].pts.filter((q, i) => d2(q, f14[1].pts[i]) > 1e-3).length : -1;
-  ok(ax.ok && !/BLOCK\r\n8\r\n1\r\n2\r\nFRONT_BASE\r\n/.test(ax.dxf) && FB.every(b => b.f14.length === 2 && b.f14.every(x => x.closed) && diffOf(b.f14) === 1) && b14.length === 2 && b14.every(x => x.closed) && s14.length === 1 && s14L.length === 1, "5: AAMA 구조 — 앞판 좌·우 블록 각각 레이어 14 에 닫힌 선 2개(긴 V · 정리 외곽 — 다른 점은 다트 꼭짓점 하나) · 뒤판 2개 · 다트 없는 소매는 1개(중복으로 지우지 않음)");
+  ok(ax.ok && !/BLOCK\r\n8\r\n1\r\n2\r\nFRONT_BASE\r\n/.test(ax.dxf) && FB.every(b => b.f14.length === 2 && b.f14.every(x => x.closed) && diffOf(b.f14) === 1) && b14.length === 1 && b14.every(x => x.closed) && ax.stats.pieces.find(q => q.base === "back").notches === D.back.notches.filter(n => n.to).length && s14.length === 1 && s14L.length === 1, "5: AAMA 구조 — 앞판 좌·우 블록 각각 레이어 14 에 닫힌 선 2개(긴 V · 정리 외곽 — 다른 점은 다트 꼭짓점 하나) · 뒤판 1개(정리 외곽 = 최종 완성선 · 수정 전 어깨선 없음) · 뒤판 레이어 4 너치 = 화면 모델 · 다트 없는 소매는 1개(중복으로 지우지 않음)");
   const cutMins = FB.map(b => Math.min(...b.f1.pts.map(q => dRing(q, b.f14[1].pts))));
   ok(cutMins.every(c => c > 9.89) && FB.every(b => Math.min(...b.f1.pts.map(q => dRing(q, b.f14[0].pts))) > 9.89), "5: AAMA 앞판 좌·우 재단선(레이어 1) = 정리 외곽에서 " + cutMins.map(c => c.toFixed(2)).join("/") + "mm 이상(시접 1cm)");
   const L5 = buildP(), P5 = L5.P; delete P5.working.cutDart; const g5 = L5.S.W.cutDxf.build(P5, META), p5 = L5.S.W.cutPrint.build(P5, null, META);
@@ -363,13 +375,55 @@ const dv = S.CUT.derive(P, true), sm = S.CUT.seam(dv, P), D = S.CUT.displayOf(dv
   const fdart = S6.CUT.dartsOf(V7.d, P6).list.find(x => x.pieceId === "front"); S6.CUT.setDartMode("front", fdart.id, "down-legacy", P6); V7 = view6(); const fNow = V7.m.pieces.front.notches; S6.CUT.setDartMode("front", fdart.id, "up-extend", P6); const fUp = view6().m.pieces.front.notches;
   ok(fNow.every(n => !n.held) && fUp.every(n => !n.held) && J(fNow.map(n => [n.id, n.sewnAt])) === J(fUp.map(n => [n.id, n.sewnAt])), "6: 앞 진동 다트 위↔아래 = 앞판 너치 보류 0 · 너치 자리 같음(연장 방식은 진동선을 바꾸지 않음)");
   ok(J(P6.working.cutNotches) === nsSaved && hashes(P6) === h6, "6: 저장된 너치(위치·서명) 그대로 · 삭제·재배치 없음 · 완료 hash 그대로");
-  // 뒤 어깨 입구 연장 — 긴 V 를 자동으로 늘리지 않고 한계 안내
+  // 뒤 어깨 입구 연장(2026-11-27 master 확정으로 대체) — 다리 봉제선은 새 입구점까지 · 디자인 원본(조각 segs)의 원래 다리는 그대로
   const bd = V7.D6.back, bt = V7.m.pieces.back.trued.darts[0];
   const legSeg = PIECE(V7.d, "back").segs[bt.legs[0]];
-  ok(bt.mouthShiftCm > 0.05 && bd.outline.some(g => J(g) === J(legSeg)) && !bd.outline.some(g => g.kind === "line" && ((d2(g.from, bt.newMouthA) < 1e-9 && d2(g.to, bt.apex) < 1e-9) || (d2(g.from, bt.apex) < 1e-9 && d2(g.to, bt.newMouthB) < 1e-9))), "6: 뒤 어깨 입구가 " + (bt.mouthShiftCm * 10).toFixed(2) + "mm 늘어도 긴 V(원래 완성선)는 그대로 — 연장선을 자동으로 더하지 않음");
-  ok(/긴 V 는 원래 입구까지만 그립니다\(연장 표시는 master 미확정/.test(SRC["cutPrep.js"]), "6: 재단 목록에 그 한계를 적음");
+  ok(bt.mouthShiftCm > 0.05 && legSeg.kind === "line" && d2(legSeg.from, bt.mouthA) < 1e-9 && bd.finalTrued && !bd.outline.some(g => J(g) === J(legSeg)) && bd.dartLegs.some(l => d2(l.b, bt.newMouthA) < 1e-12) && bd.dartLegs.some(l => d2(l.b, bt.newMouthB) < 1e-12), "6: 뒤 어깨 입구가 " + (bt.mouthShiftCm * 10).toFixed(2) + "mm 늘어난 새 입구점까지 다리 봉제선 · 원래 다리(디자인 원본)는 조각 데이터에 그대로");
+  ok(/다트 봉제선 = 꼭짓점에서 새 입구점 두 곳까지/.test(SRC["cutPrep.js"]) && !/긴 V 는 원래 입구까지만 그립니다/.test(SRC["cutPrep.js"]), "6: 재단 목록 안내 = 최종 모델(예전 «연장 미확정» 문구 제거)");
+  { const held = bd.heldNotches.filter(n => !n.mirrored); ok(held.length >= 1 && bd.notches.every(n => !held.some(h => h.id === n.id)), "6: 뒤 어깨 사용자 너치 = 계속 보류(출력에 안 나감 · " + held.length + "개) — 다트 너치와 별개"); }
   const cp = SRC["cutPrep.js"];
   ok(/e\.pointerType && e\.pointerType !== "mouse"\) ghostGuard = \{ x: e\.clientX, y: e\.clientY, until: Date\.now\(\) \+ 700 \}/.test(cp) && /tg\.closest\("#cutSeamCard"\)/.test(cp) && /> 24\) return;/.test(cp), "6: 손가락으로 변을 고르면 바로 뜬 카드에 떨어지는 뒤따르는 클릭 한 번만 삼킨다(실측 390: 그 클릭이 «적용»을 눌러 시접 폭을 «직접 지정»으로 저장하던 문제) — 마우스·나중의 일부러 누름은 그대로");
+}
+
+// ══ §7 시접 3mm 이하 너치 규칙(2026-11-28 master 확정) — 경계 0 / 0.1 / 0.3(포함) / 0.31 / 1cm ══
+//   ≤3mm: 사용자 너치 추가·위치 지정 금지 · 저장 너치 삭제 없이 보류·미출력 · 뒤 어깨 자동 다트 너치 미생성 · >3mm: 기존 규칙(복원). 기본 맞춤점은 범위 밖.
+{
+  const L = buildP(), S7 = L.S, P7 = L.P, C = S7.CUT; ok(L.ok, "7: 셔츠 한 벌 완료");
+  const side = C.derive(P7, true).pieces.find(p => p.id === "back").edges.find(e => e.label === "side" || /옆/.test(e.name));
+  const uS = C.addNotch("back", side.id, 5, P7), uH = C.addNotch("back", "shoulder", 2.5, P7);
+  ok(uS.ok && uH.ok, "7: 시접 1cm(기본)에서 뒤 옆선·뒤 어깨에 사용자 너치 추가 가능");
+  const defIds = () => { const m = model(S7, P7); return m.m.pieces.back.notches.filter(n => !n.user).map(n => n.id + (n.held ? "!" : "")).join(","); }, def0 = defIds();
+  const dxfBack = () => { const g = S7.W.cutDxf.build(P7, META), a = S7.W.cutDxf.build(P7, META, { format: "aama" }); return { g: g.ok ? g.stats.pieces.find(q => q.base === "back").notches : -1, a: a.ok ? a.stats.pieces.find(q => q.base === "back").notches : -1, gx: g }; };
+  const rows = [];
+  [0, 0.1, 0.3, 0.31, 1].forEach(w => {
+    const a = C.setEdge("back", side.id, { widthCm: w }, P7), b = C.setEdge("back", "shoulder", { widthCm: w }, P7);
+    const store0 = J(P7.working.cutNotches), m = model(S7, P7), B = m.D.back, sb = m.m.pieces.back;
+    const nS = sb.notches.find(n => n.id === uS.id), nH = sb.notches.find(n => n.id === uH.id), dn = B.notches.filter(n => n.dart);
+    const add = C.addNotch("back", side.id, 7, P7), store1 = J(P7.working.cutNotches); if (add.ok) C.removeNotch(add.id, P7);
+    const mv = C.moveNotch(uS.id, 6, P7), store2 = J(P7.working.cutNotches); if (mv.ok) C.moveNotch(uS.id, 5, P7);
+    const X = dxfBack(), narrow = w <= 0.3;
+    rows.push({ w, a: a.ok && b.ok, narrow, nS, nH, dn, add, mv, X, B, sameStoreAdd: store1 === store0, sameStoreMove: store2 === store0, def: defIds() });
+  });
+  rows.forEach(r => {
+    const tag = "7: 시접 " + (r.w * 10) + "mm — ";
+    if (r.narrow) {
+      ok(r.a && !r.add.ok && r.add.code === "seam-narrow" && /3mm 이하/.test(r.add.reason) && r.sameStoreAdd && !r.mv.ok && r.mv.code === "seam-narrow" && r.sameStoreMove, tag + "사용자 너치 추가·위치 지정 막힘(이유 «3mm 이하») · 저장값 그대로");
+      ok(r.nS && r.nS.held && r.nS.heldNarrow && !r.nS.to && r.nH && r.nH.held && r.nH.heldNarrow && !r.B.notches.some(n => n.id === r.nS.id || n.id === r.nH.id) && r.B.heldNotches.some(h => h.id === r.nS.id), tag + "저장 너치(옆선·어깨) = 삭제 없이 보류 · 출력 모델에 없음 · 화면 보류 표시");
+      ok(r.dn.length === 0 && (r.B.dartWhy || []).some(x => /다트 너치 — .*3mm 이하/.test(x)) && !(r.B.dartWhy || []).some(x => /시접 미완/.test(x)) && r.B.dartLegs.length === 4, tag + "뒤 어깨 다트 너치 미생성 + 이유 · 다리 봉제선은 그대로 4");
+    } else {
+      const sh = r.dn.filter(n => !n.mirrored);
+      ok(r.a && r.add.ok && r.mv.ok && r.nS && !r.nS.held && r.nS.to && r.B.notches.some(n => n.id === r.nS.id), tag + "기존 규칙 복원 — 추가·이동 가능 · 옆선 저장 너치 다시 출력");
+      ok(r.nH && r.nH.held && !r.nH.heldNarrow && /접어 정리/.test(r.nH.heldWhy), tag + "어깨 사용자 너치 = 기존 다트 정리 보류 사유로 돌아감(3mm 사유 아님)");
+      ok(r.dn.length === 4 && sh.length === 2 && sh.every(n => Math.abs(d2(n.from, n.to) - 0.3) < 1e-9 && n.seamCm > 0.3) && !(r.B.dartWhy || []).length, tag + "뒤 어깨 다트 너치 2(펼친 한 장 4) · I자 3mm");
+    }
+    ok(r.X.g === r.B.notches.length && r.X.a === r.B.notches.filter(n => n.to).length, tag + "DXF 일반·AAMA 뒤판 너치 수 = 출력 모델(" + r.X.g + "/" + r.X.a + ")");
+  });
+  ok(rows.every(r => r.def === rows[4].def), "7: 기본 맞춤점(WL·진동)은 범위 밖 — 시접 폭과 무관하게 같은 목록·보류 없음(시접 0 의 점 표시는 기존 규칙)");
+  ok(J(Object.keys(P7.working.cutNotches.notches).sort()) === J([uS.id, uH.id].sort()) && P7.working.cutNotches.notches[uS.id].atCm === 5 && P7.working.cutNotches.notches[uH.id].atCm === 2.5, "7: 경계 왕복 뒤 저장 너치 2개·위치 그대로(삭제·이동 없음)");
+  // 저장→열기 바이트 동일(보류 상태에서) — 보류는 계산 결과일 뿐 저장값이 아니다
+  C.setEdge("back", side.id, { widthCm: 0.2 }, P7); const sv = J(P7.working.cutNotches), rt = JSON.parse(J(P7.working));
+  ok(J(rt.cutNotches) === sv && !/held/.test(sv), "7: 보류 상태 저장값에 보류 표시가 들어가지 않음(저장 형식 그대로)");
+  ok(/narrow0 \? esc\(narrowWhy/.test(SRC["cutPrep.js"]) && /aria-disabled/.test(SRC["cutPrep.js"]) && /출력 너치 /.test(SRC["cutPrep.js"]), "7: 재단 카드 = 추가 버튼 disabled+aria-disabled+이유 tooltip · 목록에 실제 출력 너치 수·길이");
 }
 
 console.log("cutDartTrueCheck: " + PASS + " passed, " + FAIL + " failed");

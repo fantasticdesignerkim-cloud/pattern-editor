@@ -360,7 +360,7 @@ const verts = e => e.verts.map(v => ({ x: Number(v.f["10"][0]), y: Number(v.f["2
     }
     const SRCC = fs.readFileSync(path.join(ROOT, "js", "cutPrep.js"), "utf8"), UI = fs.readFileSync(path.join(ROOT, "js", "ui.js"), "utf8"), CSS = fs.readFileSync(path.join(ROOT, "css", "apple.css"), "utf8");
     ok(/>＋ 너치 추가</.test(SRCC) && /insertBefore\(ne, ni\)/.test(SRCC) && /cut-notch-new/.test(SRCC) && /#cutCv \.cut-notch-new\{/.test(CSS), "9: 카드 «＋ 너치 추가» 위로 · 새 너치 강조");
-    ok(/골선\(시접 0\)" : "시접 0"\) \+ " 변 — 재단선이 없어 3mm I자 너치를 넣을 수 없습니다/.test(SRCC), "9: 골선/시접 0 안내");
+    ok(/3mm 이하라 너치를 넣지 않습니다/.test(SRCC) && /너치 추가·위치 지정이 막힙니다/.test(SRCC), "9: 골선/시접 0 포함 3mm 이하 안내(2026-11-28 master — 추가·위치 지정 막힘)");
     ok(/if \(sleeveApplyRoute\(project\) === "preset"\) \{ onApplySleevePreset\(\); return; \}/.test(UI) && /return selectedSleeveFamilyId\(\) !== SLEEVE_BASE \? "preset" : "base"/.test(UI), "9: 라인 선택 중 «소매 적용» = 그 라인 적용");
   }
 })();

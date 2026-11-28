@@ -158,7 +158,7 @@ let M = model(S, P);
 {
   ["back", "collar-stand", "collar-body"].forEach(id => {
     const x = M.D[id], p = M.d.pieces.find(q => q.id === id), A = x.mirror.A, B = x.mirror.B, Mf = mir(A, B), OL = onLine(A, B);
-    const full = dense2(x.outline), half = dense2(p.segs);
+    const full = dense2(x.outline), half = dense2(x.finalTrued ? M.m.pieces[id].trued.ring : p.segs);   // 뒤 어깨 다트 최종 모델(2026-11-27): 완성선 = 정리 외곽
     ok(x.unfolded && near(area(full), 2 * area(half), 1e-6), "2: " + id + " 펼침 면적 = 반쪽 × 2 (" + area(full).toFixed(3) + " = 2 × " + area(half).toFixed(3) + ")");
     ok(Math.hypot(x.outline[0].from.x - x.outline[x.outline.length - 1].to.x, x.outline[0].from.y - x.outline[x.outline.length - 1].to.y) < 1e-9 && x.outline.every((g, i) => i === 0 || Math.hypot(g.from.x - x.outline[i - 1].to.x, g.from.y - x.outline[i - 1].to.y) < 1e-9), "2: " + id + " 펼친 외곽 = 끊김 없는 폐곡선");
     ok(full.every(q => dPolyC(Mf(q), full) < 2e-3), "2: " + id + " 골선 대칭(반사한 점이 모두 외곽 위)");
@@ -168,7 +168,7 @@ let M = model(S, P);
     const mirEdges = x.edges.filter(e => !e.fold && e.parts.length === 2).length, nonFold = p.edges.length - 1;
     ok(mirEdges === nonFold && x.edges.find(e => e.fold).id === x.foldEdge, "2: " + id + " 반사 쪽 변 " + mirEdges + "개 = 원래 변 id 그대로(골선은 안쪽 표시 1개)");
   });
-  ok(M.D.back.notches.filter(n => n.mirrored).length === M.m.pieces.back.notches.filter(n => n.edgeId !== "center" && n.from).length && M.D.back.notches.filter(n => n.mirrored).every(n => M.m.pieces.back.notches.some(o => o.id === n.id)), "2: 뒤판 너치 반사 = 원래 너치 id(골선 위 WL 은 반사 없음)");
+  ok(M.D.back.notches.filter(n => n.mirrored && !n.dart).length === M.m.pieces.back.notches.filter(n => n.edgeId !== "center" && n.from).length && M.D.back.notches.filter(n => n.mirrored && !n.dart).every(n => M.m.pieces.back.notches.some(o => o.id === n.id)), "2: 뒤판 너치 반사 = 원래 너치 id(골선 위 WL 은 반사 없음)");
   ok(["front", "sleeve-sleeve", "cuff", "vent-placket", "vent-bias"].every(id => !M.D[id].unfolded), "2: 골선 없는 조각은 펼치지 않음");
   ok(J(S.CUT.derive(P, true).pieces) === PIECES0 && hashes(P) === H0 && !("cutQty" in P.working), "2: 표시 모델은 원본 조각·완료 hash·저장 항목 무변경");
 }
@@ -206,7 +206,7 @@ let M = model(S, P);
 {
   ok(S.CUT.setEdge("back", "center", { kind: "seam", widthCm: 1.5 }, P).ok, "3: 뒤중심 → 봉제선 1.5");
   let N = model(S, P), p = N.d.pieces.find(q => q.id === "back");
-  ok(!N.D.back.unfolded && J(N.D.back.outline) === J(p.segs) && near(Math.min(...N.D.back.seam.map(q => q.x)), -1.5, 1e-9) && N.Q.pieces.back.qty === 1 && N.Q.pieces.back.def === 1, "3: 봉제선 = 반쪽 표시 · 중심 시접 1.5 · 수량 기본 1");
+  ok(!N.D.back.unfolded && J(N.D.back.outline) === J(N.m.pieces.back.trued && N.D.back.finalTrued ? N.m.pieces.back.trued.ring : p.segs) && near(Math.min(...N.D.back.seam.map(q => q.x)), -1.5, 1e-9) && N.Q.pieces.back.qty === 1 && N.Q.pieces.back.def === 1, "3: 봉제선 = 반쪽 표시 · 중심 시접 1.5 · 수량 기본 1");
   ok(S.CUT.setEdge("back", "center", { kind: "fold" }, P).ok, "3: 다시 골");
   N = model(S, P);
   ok(N.D.back.unfolded && P.working.cutSpec.edges["back|center"].widthCm === 1.5 && N.Q.pieces.back.qty === 1, "3: 다시 펼침 · 전에 적은 폭 1.5 보존 · 수량 1");
